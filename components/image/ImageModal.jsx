@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { X, Trash2 } from "lucide-react";
 import ImageViewer from "./ImageViewer";
 import CommentBox from "./CommentBox";
-import axios from "axios"; // ⚠️ 確保有引入 axios
+import axios from "axios";
 
 const defaultAvatarUrl =
   "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
@@ -57,7 +57,7 @@ export default function ImageModal({
 
     try {
       const res = await axios.delete("/api/delete-image", {
-        data: { imageId }, // ✅ 把 imageId 傳在 data 裡
+        data: { imageId },
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status < 200 || res.status >= 300) throw new Error("刪除失敗");
@@ -72,7 +72,6 @@ export default function ImageModal({
 
   if (!image) return null;
 
-  // ✅ 判斷頭像用預設圖還是 Cloudflare 連結
   const hasValidImage =
     typeof image?.user?.image === "string" && image.user.image.trim().length > 0;
 
@@ -159,6 +158,10 @@ export default function ImageModal({
                 src={userImageUrl}
                 alt="User Avatar"
                 className="w-20 h-20 rounded-full object-cover border border-white shadow"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = defaultAvatarUrl;
+                }}
               />
               <span className="text-sm mt-2 text-center text-white">
                 {image.user?.username || "未命名用戶"}
