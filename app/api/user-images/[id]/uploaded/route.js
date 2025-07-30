@@ -1,5 +1,5 @@
 // /api/user-images/[id]/uploaded/route.js
-import { connectToDB } from "@/lib/mongoose";
+import { connectToDB } from "@/lib/db";
 import Image from "@/models/Image";
 import { NextResponse } from "next/server";
 
