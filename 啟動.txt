@@ -3,6 +3,7 @@ npm run dev
 
 更新網站用
 git add .
-git commit -m "修正 mongoose 匯入路徑錯誤"
+git commit -m "更新說明"
 git push
 
+aicreateaworld.com

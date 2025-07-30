@@ -1,35 +1,30 @@
-// app/verify/page.js
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter } from "next/navigation";
+import SearchParamsVerify from "@/components/common/SearchParamsVerify";
 
 export default function VerifyPage() {
+  const [token, setToken] = useState("");
   const [status, setStatus] = useState("loading");
-  const searchParams = useSearchParams();
   const router = useRouter();
 
   useEffect(() => {
     const verifyToken = async () => {
-      const token = searchParams.get("token");
-
-      console.log("🎯 token：", token);
-
       if (!token) {
         setStatus("missing");
         return;
-      }  
+      }
+
+      console.log("🎯 token：", token);
 
       const url = `${window.location.origin}/api/auth/verify?token=${token}`;
-
-      // ✅ 再加這一行
       console.log("🔗 驗證 API 呼叫：", url);
 
       try {
-        const res = await fetch(url); // ✅ 使用上面定義的變數
+        const res = await fetch(url);
         if (res.ok) {
           setStatus("success");
-          // ✅ 驗證成功後跳轉到 success 畫面
           setTimeout(() => router.push("/verify-success"), 2000);
         } else {
           setStatus("failed");
@@ -41,10 +36,14 @@ export default function VerifyPage() {
     };
 
     verifyToken();
-  }, [searchParams, router]);
+  }, [token, router]);
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-zinc-950 text-white">
+      <Suspense fallback={null}>
+        <SearchParamsVerify onTokenRead={setToken} />
+      </Suspense>
+
       {status === "loading" && <p>⏳ 驗證中，請稍候...</p>}
       {status === "success" && <p>✅ 驗證成功！即將跳轉...</p>}
       {status === "failed" && <p>❌ 驗證失敗，請確認連結是否正確</p>}
