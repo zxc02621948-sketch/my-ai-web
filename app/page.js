@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, Suspense } from "react";
 import UploadModal from "@/components/upload/UploadModal";
 import ImageModal from "@/components/image/ImageModal";
 import LoginModal from "@/components/auth/LoginModal";
 import RegisterModal from "@/components/auth/RegisterModal";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
 import Header from "@/components/common/Header";
 import FilterPanel from "@/components/common/FilterPanel";
@@ -13,6 +13,7 @@ import ImageGrid from "@/components/image/ImageGrid";
 import AdminPanel from "@/components/homepage/AdminPanel";
 import BackToTopButton from "@/components/common/BackToTopButton";
 import axios from "axios";
+import SearchParamsProvider from "@/components/homepage/SearchParamsProvider";
 
 function getTokenFromCookie() {
   const match = document.cookie.match(/token=([^;]+)/);
@@ -37,14 +38,6 @@ export default function HomePage() {
   const [currentUser, setCurrentUser] = useState(undefined);
   const [suggestions, setSuggestions] = useState([]);
   const loadMoreRef = useRef(null);
-  const searchParams = useSearchParams();
-  const searchFromUrl = searchParams.get("q");
-
-  useEffect(() => {
-    if (searchFromUrl && typeof searchFromUrl === "string") {
-      setSearch(searchFromUrl);
-    }
-  }, [searchFromUrl]);
 
   const fetchImages = async (pageToFetch = 1) => {
     setIsLoading(true);
@@ -188,9 +181,15 @@ export default function HomePage() {
       return matchLevel && matchCategory && matchSearch;
     });
   }, [images, levelFilters, categoryFilters, search]);
+
   console.log("🐞 currentUser:", currentUser);
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-4">
+      <Suspense fallback={null}>
+        <SearchParamsProvider onSearchChange={setSearch} />
+      </Suspense>
+
       <Header
         currentUser={currentUser}
         onSearch={(q) => setSearch(q)}
