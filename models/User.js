@@ -1,0 +1,28 @@
+import mongoose from "mongoose";
+
+const userSchema = new mongoose.Schema(
+  {
+    lastVerificationEmailSentAt: { type: Date, default: null },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    username: { type: String, required: true, unique: true },
+    isVerified: { type: Boolean, default: false },
+    isAdmin: { type: Boolean, default: false },
+    image: { type: String, default: '' },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'hidden'],
+      default: 'hidden',
+    },
+    verificationToken: { type: String },
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date }
+  },
+  {
+    timestamps: true
+  }
+);
+
+const User = mongoose.models.User || mongoose.model("User", userSchema);
+
+export default User;

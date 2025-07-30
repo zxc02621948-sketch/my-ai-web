@@ -1,0 +1,193 @@
+"use client";
+
+import { useEffect, useState, useMemo, useRef } from "react";
+import UploadModal from "@/components/UploadModal";
+import ImageModal from "@/components/ImageModal";
+import LoginModal from "@/components/LoginModal";
+import RegisterModal from "@/components/RegisterModal";
+import { useRouter } from "next/navigation";
+import { jwtDecode } from "jwt-decode";
+import Header from "@/components/Header";
+import FilterPanel from "@/components/FilterPanel"; // 記得加這行
+import ImageGrid from "@/components/ImageGrid";
+import AdminPanel from "@/components/AdminPanel";
+
+export default function HomePage() {
+  const router = useRouter();
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [levelFilters, setLevelFilters] = useState(["一般圖片", "15+ 圖片", "18+ 圖片"]);
+  const [categoryFilters, setCategoryFilters] = useState([]);
+  const [viewMode, setViewMode] = useState("default");
+  const [search, setSearch] = useState("");
+  const [images, setImages] = useState([]);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [showProcessingCard, setShowProcessingCard] = useState(false);
+  const [currentUser, setCurrentUser] = useState(undefined);
+  const [suggestions, setSuggestions] = useState([]);
+  const loadMoreRef = useRef(null);
+
+  const fetchImages = async (pageToFetch = 1) => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/cloudflare-images?page=${pageToFetch}&limit=20`);
+      const data = await res.json();
+
+      if (res.ok && Array.isArray(data.images)) {
+        const newImages = data.images;
+        if (pageToFetch === 1) {
+          setImages(newImages);
+        } else {
+          setImages((prev) => [...prev, ...newImages]);
+        }
+        setHasMore(pageToFetch < data.totalPages);
+        setPage(pageToFetch);
+
+        const allStrings = newImages.flatMap((img) => [
+          img.title ?? "",
+          img.author ?? "",
+          ...(Array.isArray(img.tags) ? img.tags : []),
+        ]);
+        setSuggestions((prev) => {
+          const set = new Set([...prev, ...allStrings.map((s) => s.trim()).filter(Boolean)]);
+          return Array.from(set);
+        });
+      } else {
+        console.warn("資料格式錯誤", data);
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error("載入圖片失敗：", err);
+      setHasMore(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchCurrentUser = () => {
+    const cookieStr = document.cookie;
+    const match = cookieStr.match(/token=([^;]+)/);
+    if (match) {
+      try {
+        const decoded = jwtDecode(match[1])
+        setCurrentUser(decoded);
+      } catch (err) {
+        console.error("token 解碼失敗：", err);
+        setCurrentUser(null);
+      }
+    } else {
+      setCurrentUser(null);
+    }
+  };
+
+  useEffect(() => {
+    fetchImages();
+    fetchCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    if (!hasMore || isLoading) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        fetchImages(page + 1);
+      }
+    }, {
+      root: null,
+      rootMargin: "0px",
+      threshold: 1.0,
+    });
+    if (loadMoreRef.current) observer.observe(loadMoreRef.current);
+    return () => {
+      if (loadMoreRef.current) observer.unobserve(loadMoreRef.current);
+    };
+  }, [hasMore, isLoading, page]);
+
+  const toggleLevelFilter = (label) => {
+    setLevelFilters((prev) => prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]);
+  };
+
+  const toggleCategoryFilter = (label) => {
+    setCategoryFilters((prev) => prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label]);
+  };
+
+  const handleLogout = () => {
+    document.cookie = "token=; path=/; max-age=0";
+    setCurrentUser(null);
+    alert("您已登出");
+    location.reload();
+  };
+
+  const filteredImages = useMemo(() => {
+    return images.filter((img) => {
+      const rating = typeof img.rating === "string" ? img.rating : "all";
+      const matchLevel = levelFilters.length === 0 ||
+        (levelFilters.includes("一般圖片") && rating === "all") ||
+        (levelFilters.includes("15+ 圖片") && rating === "15") ||
+        (levelFilters.includes("18+ 圖片") && rating === "18");
+      const safeCategory = typeof img.category === "string" ? img.category : "";
+      const matchCategory = categoryFilters.length === 0 || categoryFilters.includes(safeCategory);
+      const safeTitle = typeof img.title === "string" ? img.title.toLowerCase() : "";
+      const safeAuthor = typeof img.author === "string" ? img.author.toLowerCase() : "";
+      const tagsArray = Array.isArray(img.tags) ? img.tags.map((t) => t.toLowerCase()) : [];
+      const keyword = search.toLowerCase().trim();
+      const matchSearch = keyword === "" || safeTitle.includes(keyword) || safeAuthor.includes(keyword) || tagsArray.some((tag) => tag.includes(keyword));
+      return matchLevel && matchCategory && matchSearch;
+    });
+  }, [images, levelFilters, categoryFilters, search]);
+
+  return (
+    <main className="min-h-screen bg-zinc-950 text-white p-4">
+      <Header
+        currentUser={currentUser}
+        onSearch={(q) => setSearch(q)}
+        onLogout={handleLogout}
+        onLoginOpen={() => setIsLoginOpen(true)}
+        onRegisterOpen={() => setIsRegisterOpen(true)}
+        suggestions={suggestions}
+      />
+
+      {/* 篩選器 */}
+      <FilterPanel
+        filterMenuOpen={filterMenuOpen}
+        setFilterMenuOpen={setFilterMenuOpen}
+        levelFilters={levelFilters}
+        categoryFilters={categoryFilters}
+        viewMode={viewMode}
+        toggleLevelFilter={toggleLevelFilter}
+        toggleCategoryFilter={toggleCategoryFilter}
+        setViewMode={setViewMode}
+      />
+
+      <ImageGrid
+        filteredImages={filteredImages}
+        viewMode={viewMode}
+        showProcessingCard={showProcessingCard}
+        isLoading={isLoading}
+        hasMore={hasMore}
+        setSelectedImage={setSelectedImage}
+        loadMoreRef={loadMoreRef}
+      />
+
+      {/* 其餘元件請參考 components 拆分項目 */}
+
+      <UploadModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onUpload={() => fetchImages(1)} />
+      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} onSuccess={fetchCurrentUser} />
+      <RegisterModal isOpen={isRegisterOpen} onClose={() => setIsRegisterOpen(false)} onSuccess={fetchCurrentUser} />
+      {selectedImage && (
+        <ImageModal
+          image={selectedImage}
+          onClose={() => setSelectedImage(null)}
+          currentUser={currentUser}
+          isOwner={currentUser?._id === selectedImage?.userId}
+        />
+      )}
+
+      {currentUser?.isAdmin && <AdminPanel />}
+    </main>
+  );
+}
