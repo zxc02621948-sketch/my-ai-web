@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, Suspense } from "react";
+import SearchParamsReset from "@/components/common/SearchParamsReset";
 
 export default function ResetPasswordPage() {
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token");
-
+  const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [status, setStatus] = useState("idle");
@@ -52,6 +50,11 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+      {/* ✅ Suspense 包裹 token 初始化 */}
+      <Suspense fallback={null}>
+        <SearchParamsReset onTokenRead={setToken} />
+      </Suspense>
+
       <div className="bg-white shadow-md rounded px-8 pt-6 pb-8 w-full max-w-md">
         <h1 className="text-2xl font-semibold mb-4 text-gray-800">重設密碼</h1>
 
