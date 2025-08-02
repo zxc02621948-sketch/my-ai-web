@@ -11,22 +11,45 @@ export default function NotificationBell({ currentUser }) {
   const [unread, setUnread] = useState(false);
   const bellRef = useRef(null);
 
-  // 頁面載入就抓通知清單
+  // ✅ 每 30 秒輪詢一次未讀狀態
   useEffect(() => {
-    axios.get("/api/notifications").then((res) => {
-      const list = res.data.notifications || [];
-      setNotifications(list);
-      setUnread(list.some((n) => !n.isRead));
-    });
-  }, []);
+    if (!currentUser?._id) return;
 
-  // 點開鈴鐺就自動設為已讀
+    const fetchUnread = async () => {
+      try {
+        const res = await axios.get("/api/notifications/unread-count");
+        setUnread(res.data?.count > 0);
+      } catch (err) {
+        console.warn("🔔 無法取得未讀通知數", err);
+      }
+    };
+
+    fetchUnread(); // 初次啟動先抓一次
+    const interval = setInterval(fetchUnread, 30000);
+
+    // ✅ 支援外部強制刷新紅點
+    window.addEventListener("refreshNotifications", fetchUnread);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("refreshNotifications", fetchUnread);
+    };
+  }, [currentUser]);
+
+  // ✅ 點開鈴鐺後載入完整通知列表
   useEffect(() => {
     if (open) {
+      axios.get("/api/notifications").then((res) => {
+        const list = res.data.notifications || [];
+        setNotifications(list);
+        setUnread(list.some((n) => !n.isRead));
+      });
+
+      // ✅ 自動標記為已讀
       axios.post("/api/notifications/mark-all-read").then(() => {
-        // 將本地狀態也同步更新
-        const updated = notifications.map((n) => ({ ...n, isRead: true }));
-        setNotifications(updated);
+        setNotifications((prev) =>
+          prev.map((n) => ({ ...n, isRead: true }))
+        );
         setUnread(false);
       });
     }
@@ -46,10 +69,8 @@ export default function NotificationBell({ currentUser }) {
   const handleNotificationClick = async (imageId) => {
     const cleanId = String(imageId).trim();
     try {
-      console.log("📡 準備請求 API 圖片");
       const res = await axios.get(`/api/images/${cleanId}`);
       const image = res.data?.image;
-      console.log("🐞 最終拿到的 image 資料：", image);
 
       if (image?._id) {
         window.dispatchEvent(

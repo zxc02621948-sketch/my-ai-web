@@ -92,6 +92,9 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
         setComments((prevComments) => [...prevComments, newCommentObj]);
         setNewComment("");
       }
+
+      window.dispatchEvent(new Event("refreshNotifications"));
+
     } catch (err) {
       console.error("留言發送錯誤：", err);
     }
