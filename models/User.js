@@ -1,3 +1,4 @@
+// models/User.js
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
@@ -9,11 +10,18 @@ const userSchema = new mongoose.Schema(
     isVerified: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
     image: { type: String, default: '' },
+    avatar: { type: String, default: '' }, // ✅ 新增
+
     gender: {
       type: String,
       enum: ['male', 'female', 'hidden'],
       default: 'hidden',
     },
+
+    bio: { type: String, default: '' },           // ✅ 新增
+    backupEmail: { type: String, default: '' },   // ✅ 新增
+    isBackupEmailVerified: { type: Boolean, default: false },
+
     verificationToken: { type: String },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date }

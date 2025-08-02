@@ -1,3 +1,4 @@
+// app/api/current-user/route.js
 import { dbConnect } from "@/lib/db";
 import { verifyJWT } from "@/lib/jwt";
 import User from "@/models/User";
@@ -15,17 +16,17 @@ export async function GET() {
     ?.split("=")[1];
 
   if (!token) {
-    return NextResponse.json({ message: "未登入" }, { status: 401 });
+    return NextResponse.json(null, { status: 200 }); // ✅ 回傳 null（或你也可改為 {}）
   }
 
   const decoded = verifyJWT(token);
   if (!decoded) {
-    return NextResponse.json({ message: "無效的 token" }, { status: 401 });
+    return NextResponse.json(null, { status: 200 });
   }
 
   const user = await User.findById(decoded.id).select("-password");
   if (!user) {
-    return NextResponse.json({ message: "使用者不存在" }, { status: 404 });
+    return NextResponse.json(null, { status: 200 });
   }
 
   return NextResponse.json({
@@ -35,6 +36,6 @@ export async function GET() {
     image: user.image,
     isVerified: user.isVerified,
     isAdmin: user.isAdmin,
-    createdAt: user.createdAt?.toISOString() ?? null, // ✅ 這一行是核心
+    createdAt: user.createdAt?.toISOString() ?? null,
   });
 }

@@ -9,6 +9,7 @@ import ImageModal from "@/components/image/ImageModal";
 import UserHeader from "@/components/user/UserHeader";
 import UserImageGrid from "@/components/user/UserImageGrid";
 import UserModals from "@/components/user/UserModals";
+import UserEditModal from "@/components/user/UserEditModal";
 
 export default function UserProfilePage() {
   const { id } = useParams();
@@ -29,6 +30,7 @@ export default function UserProfilePage() {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
+  const [isEditModalOpen, setEditModalOpen] = useState(false); // ✅ 加這行
   const [avatarFile, setAvatarFile] = useState(null);
 
   const handleSearch = useCallback((q) => {
@@ -202,6 +204,7 @@ export default function UserProfilePage() {
               setUserData(res.data);
             });
           }}
+          onEditOpen={() => setEditModalOpen(true)} // ✅ 加這行
         />
 
         <div className="flex gap-4 mb-6">
@@ -254,6 +257,14 @@ export default function UserProfilePage() {
           onRegisterClose={() => setRegisterOpen(false)}
         />
       </main>
+      <UserEditModal
+        isOpen={isEditModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        currentUser={currentUser}
+        onUpdate={(updated) => {
+          setUserData((prev) => ({ ...prev, ...updated }));
+        }}
+      />
     </>
   );
 }

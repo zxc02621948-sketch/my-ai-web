@@ -4,12 +4,13 @@ import Image from "next/image";
 import axios from "axios";
 import AvatarCropModal from "./AvatarCropModal";
 import { uploadToCloudflare } from "@/lib/uploadToCloudflare";
+import { DEFAULT_AVATAR_IDS } from "@/lib/constants";
+import { Pencil } from "lucide-react";
 
-const defaultAvatarUrl = "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
 const cloudflarePrefix = "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/";
 
-export default function UserHeader({ userData, currentUser, onUpdate }) {
-  const isOwnProfile = currentUser && (currentUser._id === userData._id);
+export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen }) {
+  const isOwnProfile = currentUser && currentUser._id === userData._id;
 
   const [showCropModal, setShowCropModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -27,7 +28,7 @@ export default function UserHeader({ userData, currentUser, onUpdate }) {
 
   const handleCropComplete = async (croppedFile) => {
     try {
-      const imageId = await uploadToCloudflare(croppedFile);
+      const imageId = await uploadToCloudflare(croppedFile); // ✅ 用剛上傳的 ID
       await axios.put("/api/update-avatar", { imageUrl: imageId });
       onUpdate(); // 🔁 更新用戶資料（重新 fetch）
     } catch (error) {
@@ -35,10 +36,12 @@ export default function UserHeader({ userData, currentUser, onUpdate }) {
     }
   };
 
-  const imageUrl =
+  const imageId =
     typeof userData.image === "string" && userData.image.trim() !== ""
-      ? `${cloudflarePrefix}${userData.image}/avatar`
-      : defaultAvatarUrl;
+      ? userData.image
+      : DEFAULT_AVATAR_IDS[userData.gender] || DEFAULT_AVATAR_IDS.hidden;
+
+  const imageUrl = `${cloudflarePrefix}${imageId}/avatar`;
 
   return (
     <div className="flex items-center gap-4 mb-4 mt-[-55px]">
@@ -91,6 +94,16 @@ export default function UserHeader({ userData, currentUser, onUpdate }) {
               })
             : "未知"}
         </p>
+
+        {isOwnProfile && (
+          <button
+            onClick={() => onEditOpen?.()}
+            className="mt-2 px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-sm flex items-center gap-1"
+          >
+            <Pencil size={14} />
+            編輯資料
+          </button>
+        )}
       </div>
     </div>
   );

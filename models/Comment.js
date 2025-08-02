@@ -12,12 +12,18 @@ const CommentSchema = new mongoose.Schema({
     required: true,
   },
   userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  userName: {
     type: String,
     default: "匿名用戶",
   },
-    userName: {
-    type: String,
-    default: "匿名用戶", // ✅ 可以預設一下
+  parentCommentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Comment",
+    default: null,
   },
   createdAt: {
     type: Date,

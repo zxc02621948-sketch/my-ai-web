@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import Image from "@/models/Image";
 import User from "@/models/User";
+import Comment from "@/models/Comment";
 import jwt from "jsonwebtoken";
 import axios from "axios";
 
@@ -42,7 +43,6 @@ export async function DELETE(req) {
 
     const isAdmin = user?.isAdmin === true;
 
-    // ✅ 管理員可直接刪除，跳過擁有者比對
     if (!isAdmin) {
       const isOwner = image.user?.toString?.() === currentUserId;
       if (!isOwner) {
@@ -50,6 +50,7 @@ export async function DELETE(req) {
       }
     }
 
+    // ✅ 刪除 Cloudflare 圖片
     try {
       await axios.delete(
         `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/images/v1/${image.imageId}`,
@@ -66,9 +67,23 @@ export async function DELETE(req) {
       );
     }
 
+    // ✅ 刪除所有該圖片留言，並記錄是誰刪的
+    await Comment.updateMany(
+      { imageId },
+      {
+        $set: {
+          isDeleted: true,
+          deletedBy: currentUserId,
+          deletedAt: new Date(),
+          text: "[圖片已刪除，此留言已清空]",
+        },
+      }
+    );
+
+    // ✅ 刪除圖片記錄
     await Image.findByIdAndDelete(imageId);
 
-    return NextResponse.json({ message: "圖片刪除成功" });
+    return NextResponse.json({ message: "圖片與留言刪除成功" });
   } catch (error) {
     console.error("刪除圖片錯誤：", error);
     return NextResponse.json({ message: "伺服器錯誤" }, { status: 500 });

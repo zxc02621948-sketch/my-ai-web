@@ -8,7 +8,9 @@ export default function ImageCard({ img, viewMode, onClick, currentUser, isLiked
   // ✅ 圖片 URL fallback 處理
   const imageUrl =
     img.imageUrl ||
-    (img.imageId ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/${img.variant || 'public'}` : '/default-image.png');
+    (img.imageId
+      ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/${img.variant || "public"}`
+      : "/default-image.png");
 
   return (
     <div
@@ -19,7 +21,7 @@ export default function ImageCard({ img, viewMode, onClick, currentUser, isLiked
       <div
         className="absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1"
         onClick={(e) => {
-          e.stopPropagation(); // 避免觸發圖片點擊
+          e.stopPropagation(); // ✅ 放正確位置
           if (canLike && onToggleLike) {
             onToggleLike(img._id);
           }

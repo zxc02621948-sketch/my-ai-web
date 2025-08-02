@@ -1,7 +1,5 @@
-// ❌ 移除這一行！不要寫 "use client"
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Header from "@/components/common/Header";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,11 +25,15 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-white`}
       >
-        <Header /> {/* ✅ 把登入邏輯搬到這裡處理 */}
-        <main className="min-h-screen pt-[80px] px-4">
+        <main className="min-h-screen pt-[80px] px-4 pb-32">
           {children}
-          <div className="h-20" />
+
+          <div className="text-center text-sm text-gray-500 mt-10">
+            版本 v0.7.3（2025-08-02）｜
+            <a href="/changelog" className="underline hover:text-white">查看更新內容</a>
+          </div>
         </main>
+
         <div className="fixed bottom-0 left-0 w-full bg-zinc-800 text-white text-center py-3 border-t border-zinc-700 z-50">
           📢 廣告區｜這邊可以放 Google AdSense 或橫幅合作
         </div>

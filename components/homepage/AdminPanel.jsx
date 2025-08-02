@@ -1,3 +1,8 @@
+// components/homepage/AdminPanel.jsx
+"use client";
+
+import Link from "next/link";
+
 export default function AdminPanel() {
   const handleCreateTestUser = async () => {
     const res = await fetch("/api/dev-create-user", {
@@ -12,9 +17,10 @@ export default function AdminPanel() {
     });
 
     const data = await res.json();
-    alert(data.success
-      ? `✅ 建立成功：${data.user.email}`
-      : `❌ 失敗：${data.message || data.error}`
+    alert(
+      data.success
+        ? `✅ 建立成功：${data.user.email}`
+        : `❌ 失敗：${data.message || data.error}`
     );
   };
 
@@ -27,6 +33,11 @@ export default function AdminPanel() {
       >
         ➕ 建立測試帳號
       </button>
+
+      {/* 👇 流量後台入口，低調版 */}
+      <div className="mt-3 text-yellow-400 underline hover:text-yellow-300">
+        <Link href="/admin/analytics">👉 查看流量紀錄（僅限管理員）</Link>
+      </div>
     </div>
   );
 }

@@ -14,6 +14,7 @@ export async function POST(req) {
       username,
       birthday,
       gender = "hidden",
+      image, // ✅ 改為 image
     } = await req.json();
 
     if (!email || !password || !username || !birthday) {
@@ -51,16 +52,6 @@ export async function POST(req) {
     const hashedPassword = await bcrypt.hash(password, 10);
     const verifyToken = uuidv4();
 
-    // 根據性別設定預設頭像 ID
-    let imageId = "";
-    if (gender === "male") {
-      imageId = "81af16c0-d8e7-49d5-c359-7a7be2f92c00";
-    } else if (gender === "female") {
-      imageId = "a607f9aa-b1e5-484c-bee3-02191abee13e";
-    } else {
-      imageId = "1d7c9efe-cc6d-4e85-9624-096f35b75b00";
-    }
-
     await User.create({
       email,
       backupEmail,
@@ -68,7 +59,7 @@ export async function POST(req) {
       username,
       birthday,
       gender,
-      image: imageId,
+      image, // ✅ 儲存到 image 欄位
       isVerified: false,
       verificationToken: verifyToken,
     });

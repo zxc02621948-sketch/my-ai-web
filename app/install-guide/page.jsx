@@ -41,7 +41,7 @@ export default function InstallGuide() {
       pros: "操作更順、批量處理快、UI 友善",
       cons: "更新不一定穩、說明較少。僅限 PC 使用",
       recommended: "有 SDWebUI 基礎、想優化流程的人",
-      url: "https://www.youtube.com/watch?v=BBvjHMbkqxw&t=410s",
+      url: "https://www.youtube.com/watch?v=BBvjHMbkqxw",
     },
     {
       id: "comfyui",

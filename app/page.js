@@ -14,6 +14,7 @@ import AdminPanel from "@/components/homepage/AdminPanel";
 import BackToTopButton from "@/components/common/BackToTopButton";
 import axios from "axios";
 import SearchParamsProvider from "@/components/homepage/SearchParamsProvider";
+import NotificationBell from "@/components/common/NotificationBell";
 
 function getTokenFromCookie() {
   const match = document.cookie.match(/token=([^;]+)/);
@@ -24,11 +25,12 @@ export default function HomePage() {
   const router = useRouter();
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [likeUpdateTrigger, setLikeUpdateTrigger] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-  const [levelFilters, setLevelFilters] = useState([]);
+  const [levelFilters, setLevelFilters] = useState(["一般圖片", "15+ 圖片"]);
   const [categoryFilters, setCategoryFilters] = useState([]);
   const [viewMode, setViewMode] = useState("default");
   const [search, setSearch] = useState("");
@@ -95,11 +97,16 @@ export default function HomePage() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const updatedImage = res.data;
-      setImages((prevImages) =>
-        prevImages.map((img) =>
-          img._id === updatedImage._id ? { ...img, likes: updatedImage.likes } : img
-        )
-      );
+
+      setImages((prevImages) => {
+        const newImages = prevImages.map((img) =>
+          img._id === updatedImage._id
+            ? { ...img, likes: updatedImage.likes }
+            : img
+        );
+        return [...newImages]; // ✅ 強制更新 reference，讓 useMemo 的 filteredImages 重新計算
+      });
+
       if (selectedImage?._id === updatedImage._id) {
         setSelectedImage((prev) => ({ ...prev, likes: updatedImage.likes }));
       }
@@ -108,6 +115,7 @@ export default function HomePage() {
       alert("更新愛心失敗：" + (error.response?.data?.message || "未知錯誤"));
     }
   };
+
 
   const isLikedByCurrentUser = (img) => {
     if (!currentUser || !img.likes) return false;
@@ -118,6 +126,45 @@ export default function HomePage() {
   useEffect(() => {
     fetchImages();
     fetchCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    const handleImageLiked = (event) => {
+      const updatedImage = event.detail;
+      setImages((prevImages) =>
+        prevImages.map((img) =>
+          img._id === updatedImage._id ? { ...img, likes: updatedImage.likes } : img
+        )
+      );
+    };
+
+    window.addEventListener("image-liked", handleImageLiked);
+
+    return () => {
+      window.removeEventListener("image-liked", handleImageLiked);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenImageModal = (e) => {
+      const image = e.detail;
+      setSelectedImage(image);
+    };
+
+    window.addEventListener("openImageModal", handleOpenImageModal);
+    return () => window.removeEventListener("openImageModal", handleOpenImageModal);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/track-visit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ pathname: window.location.pathname }),
+    }).catch((err) => {
+      console.warn("⚠️ 訪問紀錄上傳失敗", err);
+    });
   }, []);
 
   useEffect(() => {
@@ -180,7 +227,8 @@ export default function HomePage() {
         tagsArray.some((tag) => tag.includes(keyword));
       return matchLevel && matchCategory && matchSearch;
     });
-  }, [images, levelFilters, categoryFilters, search]);
+  }, [images, levelFilters, categoryFilters, search, likeUpdateTrigger]);
+
 
   console.log("🐞 currentUser:", currentUser);
 
@@ -191,6 +239,7 @@ export default function HomePage() {
       </Suspense>
 
       <Header
+        setCurrentUser={setCurrentUser} // ✅ 傳進來！
         currentUser={currentUser}
         onSearch={(q) => setSearch(q)}
         onLogout={handleLogout}
@@ -215,7 +264,7 @@ export default function HomePage() {
       )}
 
       <ImageGrid
-        filteredImages={filteredImages}
+        images={filteredImages}
         viewMode={viewMode}
         showProcessingCard={showProcessingCard}
         isLoading={isLoading}
@@ -239,11 +288,26 @@ export default function HomePage() {
       {selectedImage && currentUser !== undefined && (
         <ImageModal
           key={selectedImage?._id}
-          image={selectedImage}
+          imageId={selectedImage._id}
           onClose={() => setSelectedImage(null)}
           currentUser={currentUser}
-          isLikedByCurrentUser={isLikedByCurrentUser}
-          onToggleLike={handleToggleLike}
+          onLikeUpdate={(updated) => {
+            console.log("🔥 接收到 modal updated:", updated);
+
+            setImages((prev) => {
+              const found = prev.find((img) => 
+                img._id === updated._id ? updated : img
+              );
+              const updatedList = prev.map((img) =>
+                img._id === updated._id ? updated : img
+              );
+              const idx = updatedList.findIndex((i) => i._id === updated._id);
+              console.log("🧩 替換位置 index：", idx, "更新後資料：", updatedList[idx]);
+              return updatedList;
+            });
+
+            setLikeUpdateTrigger((n) => n + 1);
+          }}
         />
       )}
     </main>

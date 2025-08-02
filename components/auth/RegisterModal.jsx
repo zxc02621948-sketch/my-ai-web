@@ -1,8 +1,10 @@
+// components/auth/RegisterModal.jsx
 'use client';
 
 import { useState } from 'react';
 import Modal from '@/components/common/Modal';
 import Mailcheck from 'mailcheck';
+import { DEFAULT_AVATAR_IDS } from "@/lib/constants";
 
 export default function RegisterModal({ isOpen, onClose }) {
   const [email, setEmail] = useState('');
@@ -119,6 +121,8 @@ export default function RegisterModal({ isOpen, onClose }) {
       return;
     }
 
+    const selectedAvatar = DEFAULT_AVATAR_IDS[gender];
+
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -129,6 +133,7 @@ export default function RegisterModal({ isOpen, onClose }) {
           username,
           password,
           gender,
+          image: selectedAvatar, // ✅ 這樣就好
           birthday: birthday.toISOString().split('T')[0],
         })
       });
