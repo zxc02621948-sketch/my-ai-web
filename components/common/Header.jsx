@@ -57,6 +57,23 @@ export default function Header({
   }, []);
 
   useEffect(() => {
+    const handleClickOutsideFilter = (e) => {
+      if (
+        filterButtonRef.current &&
+        !filterButtonRef.current.contains(e.target)
+      ) {
+        const filterPanel = document.querySelector(".filter-panel-wrapper");
+        if (filterPanel && !filterPanel.contains(e.target)) {
+          setFilterMenuOpen(false);
+        }
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutsideFilter);
+    return () => document.removeEventListener("mousedown", handleClickOutsideFilter);
+  }, []);
+
+
+  useEffect(() => {
     if (filterMenuOpen && filterButtonRef.current) {
       const rect = filterButtonRef.current.getBoundingClientRect();
       setPanelPos({
@@ -225,8 +242,8 @@ export default function Header({
           </div>
 
           {showFilterButton && filterMenuOpen && (
-            <div className="fixed top-[70px] left-1/2 transform -translate-x-1/2 ml-[-192px] z-50">
-              <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-4 max-w-md w-[17.5vw]">
+            <div className="fixed top-[70px] left-1/2 transform -translate-x-1/2 ml-[-195px] z-50">
+              <div className="filter-panel-wrapper bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-4 max-w-md w-[17.5vw]">
                 <FilterPanel
                   filterMenuOpen={filterMenuOpen}
                   setFilterMenuOpen={setFilterMenuOpen}
