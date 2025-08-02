@@ -224,9 +224,9 @@ export default function Header({
             </div>
           </div>
 
-          {showFilterButton && filterMenuOpen && panelPos.top !== 0 && panelPos.left !== 0 && (
-            <div className="fixed z-50" style={{ top: `${panelPos.top}px`, left: `${panelPos.left}px` }}>
-              <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-4">
+          {showFilterButton && filterMenuOpen && (
+            <div className="fixed top-[70px] left-1/2 transform -translate-x-1/2 ml-[-192px] z-50">
+              <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-4 max-w-md w-[17.5vw]">
                 <FilterPanel
                   filterMenuOpen={filterMenuOpen}
                   setFilterMenuOpen={setFilterMenuOpen}
