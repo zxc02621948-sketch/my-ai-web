@@ -30,7 +30,7 @@ export default function UserProfilePage() {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
-  const [isEditModalOpen, setEditModalOpen] = useState(false); // ✅ 加這行
+  const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [avatarFile, setAvatarFile] = useState(null);
 
   const handleSearch = useCallback((q) => {
@@ -97,8 +97,10 @@ export default function UserProfilePage() {
       const matchCategory = categoryFilters.length === 0 || categoryFilters.includes(safeCategory);
 
       const safeTitle = typeof img.title === "string" ? img.title.toLowerCase() : "";
+      const safeAuthor = typeof img.user?.username === "string" ? img.user.username.toLowerCase() : "";
       const keyword = searchQuery.toLowerCase().trim();
-      const matchSearch = keyword === "" || safeTitle.includes(keyword);
+      const matchSearch =
+        keyword === "" || safeTitle.includes(keyword) || safeAuthor.includes(keyword);
 
       return matchLevel && matchCategory && matchSearch;
     });
@@ -204,7 +206,7 @@ export default function UserProfilePage() {
               setUserData(res.data);
             });
           }}
-          onEditOpen={() => setEditModalOpen(true)} // ✅ 加這行
+          onEditOpen={() => setEditModalOpen(true)}
         />
 
         <div className="flex gap-4 mb-6">

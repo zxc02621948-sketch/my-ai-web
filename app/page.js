@@ -217,7 +217,11 @@ export default function HomePage() {
       const safeCategory = typeof img.category === "string" ? img.category : "";
       const matchCategory = categoryFilters.length === 0 || categoryFilters.includes(safeCategory);
       const safeTitle = typeof img.title === "string" ? img.title.toLowerCase() : "";
-      const safeAuthor = typeof img.author === "string" ? img.author.toLowerCase() : "";
+      const safeAuthor =
+        typeof img.user?.username === "string"
+          ? img.user.username.toLowerCase()
+          : "";
+
       const tagsArray = Array.isArray(img.tags) ? img.tags.map((t) => t.toLowerCase()) : [];
       const keyword = search.toLowerCase().trim();
       const matchSearch =
