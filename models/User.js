@@ -22,6 +22,14 @@ const userSchema = new mongoose.Schema(
     backupEmail: { type: String, default: '' },   // ✅ 新增
     isBackupEmailVerified: { type: Boolean, default: false },
 
+    // ✅ 加入追蹤欄位
+    following: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+
     verificationToken: { type: String },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date }

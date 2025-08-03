@@ -1,12 +1,40 @@
 "use client";
-import { useRef, useState } from "react";
-import Link from "next/link"; 
+import { useRef, useState, useEffect } from "react";
+import axios from "axios";
+import { X, Trash2 } from "lucide-react";
 
-export default function ImageInfoBox({ image, currentUser }) {
+export default function ImageInfoBox({ image, currentUser, onClose }) {
   const positiveRef = useRef();
   const negativeRef = useRef();
-
   const [copiedField, setCopiedField] = useState(null);
+
+  const handleDelete = async () => {
+    const confirmed = window.confirm("你確定要刪除這張圖片嗎？");
+    if (!confirmed) return;
+
+    const token = document.cookie.match(/token=([^;]+)/)?.[1];
+    if (!token) return;
+
+    try {
+      const res = await axios.delete("/api/delete-image", {
+        data: { imageId: image._id },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 200) {
+        alert("圖片刪除成功！");
+        onClose?.();
+        window.scrollTo(0, 0);  // ✅ 強制拉頂部
+        setTimeout(() => {
+          window.location.reload();  // ✅ 延遲 reload 避免 race condition
+        }, 50);
+      } else {
+        alert("刪除失敗，請稍後再試。");
+      }
+    } catch (err) {
+      console.error("❌ 刪除圖片失敗", err);
+      alert("刪除失敗，請稍後再試。");
+    }
+  };
 
   const copyToClipboard = (ref, field) => {
     if (ref.current) {
@@ -29,24 +57,60 @@ export default function ImageInfoBox({ image, currentUser }) {
 
   return (
     <div className="relative w-full max-h-[90vh] overflow-y-auto overflow-x-hidden pr-1">
-      <div className="mt-2">
-        {/* ✅ 分級標籤 + 頭像＋名稱 同列顯示 */}
-        <div className="mb-3">
-          {getRatingLabel(image.rating)}
+      {/* 🔥 上方：標題 + 操作按鈕 */}
+      <div className="flex justify-between items-start mb-3">
+        <div className="text-xl font-bold leading-tight text-white">
+          {image.title || "（無標題）"}
         </div>
+
+        <div className="flex items-center gap-2">
+          {currentUser &&
+            (currentUser._id === image.user?._id || currentUser.isAdmin) && (
+              <button
+                onClick={handleDelete}
+                className="flex items-center gap-1 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded shadow transition"
+                title="刪除圖片"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+          <button
+            onClick={onClose}
+            className="text-white hover:text-red-400 transition"
+            title="關閉視窗"
+          >
+            <X size={20} />
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-2">
+        {/* ✅ 分級標籤 */}
+        <div className="mb-3">{getRatingLabel(image.rating)}</div>
 
         <div className="text-sm text-gray-300 mb-3">
           平台：{image.platform || "未指定"}
         </div>
 
+        {/* ✅ 原本「描述」的欄位 → 改為模型與 LORA */}
         <div className="text-sm text-gray-300 mb-3">
-          描述：{image.description || "（無）"}
+          模型名稱：
+          <span className="text-white ml-1">
+            {image.modelName || "（無）"}
+          </span>
+          <br />
+          LoRA 名稱：
+          <span className="text-white ml-1">
+            {image.loraName || "（無）"}
+          </span>
         </div>
 
+        {/* ✅ 分類（保持原位） */}
         <div className="text-sm text-gray-300 mb-3">
           分類：{image.category || "未分類"}
         </div>
 
+        {/* ✅ 標籤（保持原位） */}
         <div className="text-sm text-gray-300 mb-3">
           標籤：
           {Array.isArray(image.tags) && image.tags.length > 0
@@ -61,7 +125,7 @@ export default function ImageInfoBox({ image, currentUser }) {
             : "（無標籤）"}
         </div>
 
-        {/* 正面提示詞 */}
+        {/* ✅ 正面提示詞 */}
         <div className="mb-3">
           <div className="flex justify-between items-center mb-1">
             <strong className="text-sm text-white">正面提示詞：</strong>
@@ -80,7 +144,7 @@ export default function ImageInfoBox({ image, currentUser }) {
           </div>
         </div>
 
-        {/* 負面提示詞 */}
+        {/* ✅ 負面提示詞 */}
         <div className="mb-4">
           <div className="flex justify-between items-center mb-1">
             <strong className="text-sm text-white">負面提示詞：</strong>
@@ -96,6 +160,16 @@ export default function ImageInfoBox({ image, currentUser }) {
             className="bg-neutral-900 border border-white/20 text-gray-200 text-xs p-2 rounded-lg max-h-[80px] overflow-y-auto whitespace-pre-wrap break-words"
           >
             {image.negativePrompt || "（無）"}
+          </div>
+        </div>
+
+        {/* ✅ 描述搬到這裡 */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-1">
+            <strong className="text-base text-white">描述：</strong>
+          </div>
+          <div className="bg-neutral-900 border border-white/20 text-gray-200 text-base p-3 rounded-lg whitespace-pre-wrap break-words">
+            {image.description || "（無）"}
           </div>
         </div>
       </div>

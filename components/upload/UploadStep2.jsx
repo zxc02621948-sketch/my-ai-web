@@ -20,12 +20,14 @@ export default function UploadStep2({
 }) {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
-  const [category, setCategory] = useState("人物");
+  const [category, setCategory] = useState(""); // 🔧 改為無預設
   const [platform, setPlatform] = useState("Stable Diffusion WebUI");
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
   const [description, setDescription] = useState("");
   const [tagsInput, setTagsInput] = useState("");
+  const [modelName, setModelName] = useState("");
+  const [loraName, setLoraName] = useState("");
   const [originalSize, setOriginalSize] = useState(0);
   const [compressedSize, setCompressedSize] = useState(0);
 
@@ -76,14 +78,16 @@ export default function UploadStep2({
       alert("請輸入圖片標題！");
       return;
     }
+    if (!category) {
+      alert("請選擇圖片分類！");
+      return;
+    }
 
     setIsUploading(true);
-    let imageId = null; // ✅ 作用域提前宣告
+    let imageId = null;
 
     try {
-      const urlRes = await fetch("/api/cloudflare-upload-url", { method: "POST" }); // ✅ 加 method: POST
-      console.log("🐞 Cloudflare 上傳網址 response:", urlRes);
-
+      const urlRes = await fetch("/api/cloudflare-upload-url", { method: "POST" });
       if (!urlRes.ok) throw new Error("Cloudflare upload URL API 回應失敗");
 
       const urlData = await urlRes.json();
@@ -94,8 +98,7 @@ export default function UploadStep2({
 
       const cloudflareRes = await fetch(urlData.uploadURL, { method: "POST", body: formData });
       const cloudflareData = await cloudflareRes.json();
-      const imageId = cloudflareData?.result?.id;
-
+      imageId = cloudflareData?.result?.id;
       if (!imageId) throw new Error("Cloudflare 上傳失敗");
 
       const imageUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageId}/public`;
@@ -113,6 +116,8 @@ export default function UploadStep2({
         category,
         rating,
         platform,
+        modelName,
+        loraName,
         positivePrompt: prompt,
         negativePrompt,
         description,
@@ -137,17 +142,15 @@ export default function UploadStep2({
     } catch (err) {
       console.error("上傳失敗：", err);
       alert("上傳失敗，請稍後再試！");
-
       if (imageId) {
         try {
           await fetch(`/api/delete-cloudflare-image?id=${imageId}`, { method: "DELETE" });
-          console.log("✅ Cloudflare 殘影已刪除");
         } catch (delErr) {
           console.error("❌ 刪除殘影圖片失敗：", delErr);
         }
       }
     }
-    setIsUploading(false); // ✅ 正確名稱
+    setIsUploading(false);
   };
 
   return (
@@ -159,7 +162,7 @@ export default function UploadStep2({
         <select
           className="p-2 rounded bg-zinc-700"
           value={rating}
-          onChange={(e) => setRating(e.target.value)} // ✅ 改這裡
+          onChange={(e) => setRating(e.target.value)}
         >
           <option value="all">一般（All）</option>
           <option value="15">15+（清涼）</option>
@@ -172,8 +175,21 @@ export default function UploadStep2({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="text-sm text-zinc-400">📁 圖片分類</label>
-          <select className="p-2 rounded bg-zinc-700 w-full" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <label
+            className={`text-sm font-semibold ${
+              category === "" ? "text-red-400" : "text-zinc-400"
+            }`}
+          >
+            📁 圖片分類（必選）
+          </label>
+          <select
+            className={`p-2 rounded w-full bg-zinc-700 ${
+              category === "" ? "border border-red-500" : ""
+            }`}
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            <option value="" disabled hidden>請選擇分類</option>
             <option value="人物">人物</option>
             <option value="風景">風景</option>
             <option value="食物">食物</option>
@@ -194,6 +210,8 @@ export default function UploadStep2({
 
       <textarea placeholder="正面提詞（Prompt）" className="w-full p-2 rounded bg-zinc-700 h-20" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
       <textarea placeholder="負面提詞（Negative Prompt）" className="w-full p-2 rounded bg-zinc-700 h-20" value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} />
+      <input type="text" placeholder="模型名稱（選填）" className="w-full p-2 rounded bg-zinc-700" value={modelName} onChange={(e) => setModelName(e.target.value)} />
+      <input type="text" placeholder="LoRA 名稱（選填）" className="w-full p-2 rounded bg-zinc-700" value={loraName} onChange={(e) => setLoraName(e.target.value)} />
       <textarea placeholder="內文說明（可選填）" className="w-full p-2 rounded bg-zinc-700 h-20" value={description} onChange={(e) => setDescription(e.target.value)} />
       <input type="text" placeholder="標籤（空格 / # 分隔）" className="w-full p-2 rounded bg-zinc-700" value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} />
 
@@ -209,21 +227,11 @@ export default function UploadStep2({
           </div>
           <div className="flex gap-4 pt-1">
             <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="uploadMode"
-                checked={!useOriginal}
-                onChange={() => setUseOriginal(false)}
-              />
+              <input type="radio" name="uploadMode" checked={!useOriginal} onChange={() => setUseOriginal(false)} />
               使用壓縮圖（推薦）
             </label>
             <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="uploadMode"
-                checked={useOriginal}
-                onChange={() => setUseOriginal(true)}
-              />
+              <input type="radio" name="uploadMode" checked={useOriginal} onChange={() => setUseOriginal(true)} />
               上傳原圖（需消耗積分）
             </label>
           </div>

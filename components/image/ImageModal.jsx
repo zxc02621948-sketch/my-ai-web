@@ -4,9 +4,9 @@
 import { Dialog } from "@headlessui/react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Trash2 } from "lucide-react";
 import ImageViewer from "./ImageViewer";
 import CommentBox from "./CommentBox";
+import ImageInfoBox from "./ImageInfoBox";
 import axios from "axios";
 
 const defaultAvatarUrl =
@@ -16,19 +16,38 @@ export default function ImageModal({
   imageId,
   onClose,
   currentUser,
-  onLikeUpdate, // ⬅️ 要加這行
+  onLikeUpdate,
 }) {
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
   const [showScrollTop, setShowScrollTop] = useState(false);
   const scrollRef = useRef(null);
   const router = useRouter();
+  const [isFollowing, setIsFollowing] = useState(false);
 
-  const positiveRef = useRef();
-  const negativeRef = useRef();
-  const [copiedField, setCopiedField] = useState(null);
+  useEffect(() => {
+    if (!currentUser || !image?.user) return;
+    const userId = image.user._id || image.user;
+    setIsFollowing(currentUser.following?.includes(userId));
+  }, [currentUser, image]);
+
+  const handleFollowToggle = async () => {
+    if (!image?.user) return;
+    const targetId = image.user._id || image.user;
+    try {
+      if (isFollowing) {
+        await axios.delete("/api/follow", {
+          data: { userIdToUnfollow: targetId },
+        });
+      } else {
+        await axios.post("/api/follow", { userIdToFollow: targetId });
+      }
+      setIsFollowing(!isFollowing);
+    } catch (error) {
+      console.error("❌ 追蹤切換失敗", error);
+    }
+  };
 
   useEffect(() => {
     const fetchImage = async () => {
@@ -36,7 +55,6 @@ export default function ImageModal({
       try {
         const res = await fetch(`/api/images/${imageId}`);
         const data = await res.json();
-        console.log("✅ API 回傳資料：", data); // ⬅️ 加這行
         if (!res.ok) throw new Error("找不到該圖片，可能已被刪除");
         setImage(data.image);
       } catch (err) {
@@ -49,14 +67,6 @@ export default function ImageModal({
 
     if (imageId) fetchImage();
   }, [imageId]);
-
-  const handleCopy = (ref, field) => {
-    if (ref.current) {
-      navigator.clipboard.writeText(ref.current.innerText);
-      setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 1500);
-    }
-  };
 
   const handleScroll = () => {
     const top = scrollRef.current?.scrollTop || 0;
@@ -106,167 +116,111 @@ export default function ImageModal({
   if (!imageId) return null;
 
   return (
-    <Dialog open={!!imageId} onClose={onClose}>
-      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="absolute inset-0" onClick={onClose} />
+    <Dialog open={!!imageId} onClose={onClose} className="relative z-50">
+      {/* 遮罩背景 */}
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
 
-        <div
-          className="relative z-10 w-full max-w-6xl bg-[#1a1a1a] text-white rounded-xl shadow-lg flex flex-col lg:flex-row overflow-hidden"
+      {/* 點空白關閉容器 */}
+      <div className="fixed inset-0 flex items-center justify-center p-4">
+        <Dialog.Panel
           onClick={(e) => e.stopPropagation()}
+          className="relative w-full max-w-6xl bg-[#1a1a1a] text-white rounded-xl shadow-lg flex flex-col lg:flex-row overflow-hidden"
         >
-          {/* 左邊圖片顯示區 */}
-          <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
-            {loading ? (
-              <div className="text-gray-400">載入中...</div>
-            ) : error ? (
-              <div className="text-red-400 font-bold text-lg text-center">{error}</div>
-            ) : (
-              <ImageViewer
-                key={image._id + (image.likes?.length || 0)}
-                image={image}
-                currentUser={currentUser}
-                isLiked={image.likes.includes(currentUser?._id)}
-                onToggleLike={async () => {
-                  try {
-                    const token = document.cookie.match(/token=([^;]+)/)?.[1];
-                    if (!token || !currentUser?._id) return;
-
-                    const res = await axios.put(`/api/like-image?id=${image._id}`, null, {
-                      headers: { Authorization: `Bearer ${token}` },
-                    });
-
-                    if (res.status === 200 && res.data) {
-                      const updated = {
-                        ...image,
-                        likes: res.data.likes,
-                      };
-                      setImage(updated);            // ✅ 更新 modal 狀態
-                      onLikeUpdate?.(updated);      // ✅ 通知首頁同步
+          {/* 左側圖片區 */}
+          <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
+            <div style={{ zIndex: 10, position: "relative" }}>
+              {loading ? (
+                <div className="text-gray-400">載入中...</div>
+              ) : error ? (
+                <div className="text-red-500">{error}</div>
+              ) : (
+                <ImageViewer
+                  key={image._id + (image.likes?.length || 0)}
+                  image={image}
+                  currentUser={currentUser}
+                  isLiked={image.likes.includes(currentUser?._id)}
+                  onToggleLike={async () => {
+                    try {
+                      const token = document.cookie.match(/token=([^;]+)/)?.[1];
+                      if (!token || !currentUser?._id) return;
+                      const res = await axios.put(
+                        `/api/like-image?id=${image._id}`,
+                        null,
+                        {
+                          headers: { Authorization: `Bearer ${token}` },
+                        }
+                      );
+                      if (res.status === 200 && res.data) {
+                        const updated = {
+                          ...image,
+                          likes: res.data.likes,
+                        };
+                        setImage(updated);
+                        onLikeUpdate?.(updated);
+                      }
+                    } catch (err) {
+                      console.error("❌ 點讚失敗", err);
                     }
-                  } catch (err) {
-                    console.error("❌ 點讚失敗", err);
-                  }
-                }}
-              />
-            )}
+                  }}
+                />
+              )}
+            </div>
           </div>
 
-          {/* 右側留言與資訊欄 */}
+          {/* 右側資訊與留言區 */}
           <div className="w-full lg:w-[400px] max-h-[90vh] border-l border-white/10 flex flex-col relative">
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative">
               {image && (
                 <>
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex flex-col">
-                      <div className="text-xl font-bold leading-tight">
-                        {image.title || "（無標題）"}
-                      </div>
-                      {image.rating && (
-                        <div
-                          className={`mt-1 px-2 py-0.5 rounded text-xs font-bold w-fit ${
-                            image.rating === "18"
-                              ? "bg-red-600 text-white"
-                              : image.rating === "15"
-                              ? "bg-yellow-400 text-black"
-                              : "bg-green-600 text-white"
-                          }`}
-                        >
-                          {image.rating === "18"
-                            ? "18+"
-                            : image.rating === "15"
-                            ? "15+"
-                            : "一般"}
-                        </div>
-                      )}
+                  {/* 頭像區塊 */}
+                  <div className="absolute top-15 right-10 flex flex-col items-center z-50">
+                    {/* 頭像可點 */}
+                    <div onClick={handleUserClick} className="cursor-pointer">
+                      <img
+                        src={
+                          image.user?.image
+                            ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
+                            : defaultAvatarUrl
+                        }
+                        alt="User Avatar"
+                        className="w-20 h-20 rounded-full object-cover border border-white shadow"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = defaultAvatarUrl;
+                        }}
+                      />
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {currentUser &&
-                        (currentUser._id === image.user?._id || currentUser.isAdmin) && (
-                          <button
-                            onClick={() => handleDelete(image._id)}
-                            className="flex items-center gap-1 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded shadow transition"
-                            title="刪除圖片"
-                          >
-                            <Trash2 size={16} />
-                            刪除
-                          </button>
-                        )}
-                      <button
-                        onClick={onClose}
-                        className="text-white hover:text-red-400 transition"
-                        title="關閉視窗"
-                      >
-                        <X size={24} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div
-                    className="absolute top-15 right-10 flex flex-col items-center cursor-pointer"
-                    onClick={handleUserClick}
-                  >
-                    <img
-                      src={
-                        image.user?.image
-                          ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
-                          : defaultAvatarUrl
-                      }
-                      alt="User Avatar"
-                      className="w-20 h-20 rounded-full object-cover border border-white shadow"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = defaultAvatarUrl;
-                      }}
-                    />
-                    <span className="text-sm mt-2 text-center text-white">
+                    {/* 名字不點擊 */}
+                    <span className="text-sm mt-2 text-center text-white select-none">
                       {image.user?.username || "未命名用戶"}
                     </span>
+
+                    {/* 追蹤按鈕 */}
+                    {currentUser &&
+                      image?.user &&
+                      currentUser._id !== (image.user._id || image.user) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFollowToggle();
+                          }}
+                          className={`mt-2 px-3 py-1 text-sm rounded ${
+                            isFollowing
+                              ? "bg-red-600 hover:bg-red-700"
+                              : "bg-blue-600 hover:bg-blue-700"
+                          }`}
+                        >
+                          {isFollowing ? "取消追蹤" : "追蹤作者"}
+                        </button>
+                      )}
                   </div>
 
-                  <div className="text-sm text-gray-300 mb-2">平台：{image.platform || "未知"}</div>
-                  <div className="text-sm text-gray-300 mb-2">分類：{image.category || "未分類"}</div>
-                  <div className="text-sm text-gray-300 mb-2">
-                    標籤：{(image.tags?.length ?? 0) > 0 ? image.tags.join(", ") : "（無標籤）"}
-                  </div>
-                  <div className="text-sm text-gray-400 mb-4">描述：{image.description || "（無）"}</div>
-
-                  <div className="mt-2 mb-2">
-                    <div className="flex justify-between items-center text-sm font-bold mb-1">
-                      <span>正面提示詞：</span>
-                      <button
-                        onClick={() => handleCopy(positiveRef, "positive")}
-                        className="text-xs px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded"
-                      >
-                        {copiedField === "positive" ? "✔ 已複製" : "複製"}
-                      </button>
-                    </div>
-                    <div
-                      ref={positiveRef}
-                      className="bg-gray-800 p-2 rounded max-h-24 overflow-y-auto text-xs whitespace-pre-wrap break-words"
-                    >
-                      {image.positivePrompt || "（無）"}
-                    </div>
-                  </div>
-
-                  <div className="mt-2 mb-4">
-                    <div className="flex justify-between items-center text-sm font-bold mb-1">
-                      <span>負面提示詞：</span>
-                      <button
-                        onClick={() => handleCopy(negativeRef, "negative")}
-                        className="text-xs px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded"
-                      >
-                        {copiedField === "negative" ? "✔ 已複製" : "複製"}
-                      </button>
-                    </div>
-                    <div
-                      ref={negativeRef}
-                      className="bg-gray-800 p-2 rounded max-h-24 overflow-y-auto text-xs whitespace-pre-wrap break-words"
-                    >
-                      {image.negativePrompt || "（無）"}
-                    </div>
-                  </div>
-
+                  <ImageInfoBox
+                    image={{ ...image, user: image.user || image.userId }}
+                    currentUser={currentUser}
+                    onClose={onClose}
+                  />
                   <CommentBox currentUser={currentUser} imageId={image._id} />
                 </>
               )}
@@ -282,7 +236,7 @@ export default function ImageModal({
               </button>
             )}
           </div>
-        </div>
+        </Dialog.Panel>
       </div>
     </Dialog>
   );

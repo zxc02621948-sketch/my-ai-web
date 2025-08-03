@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "AI 創界所",
+  title: "AI 創界",
   description: "一個為創作者與生成愛好者打造的分享平台",
   icons: {
     icon: "/ai_logo_icon.png?v=2",

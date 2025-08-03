@@ -13,18 +13,23 @@ const ImageSchema = new mongoose.Schema(
     },
     category: String,
     description: String,
+
+    // ✅ 新增欄位
+    modelName: String,
+    loraName: String,
+
     tags: [String],
     imageId: String,
     imageUrl: String,
     variant: String,
 
-    // ✅ 新增欄位：關聯 user 物件（populate 用）
+    // ✅ 關聯 user
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
 
-    // ✅ 保留欄位：原本的 userId 字串（刪除圖片等比對用）
+    // ✅ 保留 userId 用於刪除等功能
     userId: {
       type: String,
       required: true,

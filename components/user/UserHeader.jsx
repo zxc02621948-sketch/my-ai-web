@@ -1,5 +1,5 @@
 // components/user/UserHeader.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import axios from "axios";
 import AvatarCropModal from "./AvatarCropModal";
@@ -14,13 +14,20 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
 
   const [showCropModal, setShowCropModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+
+  useEffect(() => {
+    if (currentUser && userData) {
+      setIsFollowing(currentUser.following?.includes(userData._id));
+    }
+  }, [currentUser, userData]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onloadend = () => {
-      setSelectedImage(reader.result); // base64
+      setSelectedImage(reader.result);
       setShowCropModal(true);
     };
     reader.readAsDataURL(file);
@@ -28,11 +35,28 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
 
   const handleCropComplete = async (croppedFile) => {
     try {
-      const imageId = await uploadToCloudflare(croppedFile); // ✅ 用剛上傳的 ID
+      const imageId = await uploadToCloudflare(croppedFile);
       await axios.put("/api/update-avatar", { imageUrl: imageId });
-      onUpdate(); // 🔁 更新用戶資料（重新 fetch）
+      onUpdate();
     } catch (error) {
       console.error("❌ 頭像更新失敗:", error);
+    }
+  };
+
+  const handleFollowToggle = async () => {
+    try {
+      if (isFollowing) {
+        await axios.delete("/api/follow", {
+          data: { userIdToUnfollow: userData._id },
+        });
+      } else {
+        await axios.post("/api/follow", {
+          userIdToFollow: userData._id,
+        });
+      }
+      setIsFollowing(!isFollowing);
+    } catch (error) {
+      console.error("❌ 切換追蹤失敗:", error);
     }
   };
 
@@ -95,13 +119,24 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
             : "未知"}
         </p>
 
-        {isOwnProfile && (
+        {isOwnProfile ? (
           <button
             onClick={() => onEditOpen?.()}
             className="mt-2 px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-sm flex items-center gap-1"
           >
             <Pencil size={14} />
             編輯資料
+          </button>
+        ) : (
+          <button
+            onClick={handleFollowToggle}
+            className={`mt-2 px-3 py-1 text-sm rounded ${
+              isFollowing
+                ? "bg-red-600 hover:bg-red-700"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
+          >
+            {isFollowing ? "取消追蹤" : "追蹤"}
           </button>
         )}
       </div>

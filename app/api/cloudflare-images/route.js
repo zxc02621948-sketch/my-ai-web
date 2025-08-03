@@ -22,7 +22,6 @@ export async function GET(req) {
     const images = rawImages.map((img) => {
       const populatedUser = img.user && typeof img.user === "object" ? img.user : null;
 
-      // ✅ 強制補預設頭像 ID
       const fallbackImageId = "a607f9aa-b1e5-484c-bee3-02191abee13e";
       const userImage =
         populatedUser?.image && populatedUser.image.trim() !== ""
@@ -41,11 +40,13 @@ export async function GET(req) {
         category: img.category,
         description: img.description,
         tags: img.tags,
+        modelName: img.modelName || null,   // ✅ 加入欄位
+        loraName: img.loraName || null,     // ✅ 加入欄位
         user: populatedUser
           ? {
               _id: populatedUser._id?.toString(),
               username: populatedUser.username || "未命名用戶",
-              image: userImage, // ✅ 修正後的安全 fallback
+              image: userImage,
             }
           : null,
         createdAt: img.createdAt,
@@ -83,6 +84,8 @@ export async function POST(req) {
       description,
       tags,
       userId,
+      modelName,   // ✅ 加入解構
+      loraName     // ✅ 加入解構
     } = body;
 
     if (!imageId || !title) {
@@ -102,6 +105,8 @@ export async function POST(req) {
       category,
       description,
       tags,
+      modelName,  // ✅ 寫入
+      loraName,   // ✅ 寫入
       userId,
       user: userId,
     });

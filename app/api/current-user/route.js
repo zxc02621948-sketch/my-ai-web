@@ -16,7 +16,7 @@ export async function GET() {
     ?.split("=")[1];
 
   if (!token) {
-    return NextResponse.json(null, { status: 200 }); // ✅ 回傳 null（或你也可改為 {}）
+    return NextResponse.json(null, { status: 200 });
   }
 
   const decoded = verifyJWT(token);
@@ -37,5 +37,6 @@ export async function GET() {
     isVerified: user.isVerified,
     isAdmin: user.isAdmin,
     createdAt: user.createdAt?.toISOString() ?? null,
+    following: user.following ?? [], // ✅ 加上這行就能讓前端知道追蹤清單！
   });
 }
