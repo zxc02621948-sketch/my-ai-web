@@ -239,7 +239,7 @@ export default function UserProfilePage() {
 
         {selectedImage && (
           <ImageModal
-            image={selectedImage}
+            imageId={selectedImage._id}
             currentUser={currentUser}
             isLikedByCurrentUser={isLikedByCurrentUser}
             onToggleLike={handleToggleLike}
