@@ -1,7 +1,7 @@
 import { connectToDatabase } from "@/lib/mongodb";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { generateToken } from "@/lib/serverAuth"; // ✅ 正確
+import { generateToken } from "@/lib/serverAuth";
 import User from "@/models/User";
 
 export async function POST(req) {
@@ -36,19 +36,19 @@ export async function POST(req) {
       );
     }
 
+    // ✅ 不再寄驗證信！只提示未驗證狀態
     if (!user.isVerified) {
       return NextResponse.json(
-        { success: false, message: "帳號尚未驗證，請先至信箱點擊驗證連結" },
+        { success: false, message: "尚未驗證", reason: "unverified" },
         { status: 403 }
       );
     }
 
-    // ✅ 生成包含 username 的 token
     const payload = {
-      id: user._id, // ✅ 改這裡，把資料庫的 _id 存成 JWT 的 id 欄位
+      id: user._id,
       email: user.email,
       username: user.username,
-      isAdmin: user.isAdmin || false, // ✅ 加入 isAdmin 權限資訊
+      isAdmin: user.isAdmin || false,
     };
 
     console.log("🎯 token payload：", payload);
@@ -62,7 +62,7 @@ export async function POST(req) {
       user: {
         _id: user._id,
         username: user.username,
-        isAdmin: user.isAdmin || false, // ✅ 回傳給前端
+        isAdmin: user.isAdmin || false,
       },
     });
 

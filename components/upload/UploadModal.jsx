@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import UploadStep1 from "./UploadStep1";
 import UploadStep2 from "./UploadStep2";
 
-const UploadModal = ({ isOpen, onClose, onUpload, currentUser }) => {
+const UploadModal = () => {
+  const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [rating, setRating] = useState("");
   const [platform, setPlatform] = useState("");
@@ -21,7 +22,19 @@ const UploadModal = ({ isOpen, onClose, onUpload, currentUser }) => {
   const [compressionInfo, setCompressionInfo] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
+  // ✅ 用事件觸發開啟 modal
+  useEffect(() => {
+    const open = (e) => {
+      if (e.detail?.user) setCurrentUser(e.detail.user); // 可以額外傳使用者進來
+      setIsOpen(true);
+    };
+    window.addEventListener("openUploadModal", open);
+    return () => window.removeEventListener("openUploadModal", open);
+  }, []);
+
+  const onClose = () => setIsOpen(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -39,12 +52,18 @@ const UploadModal = ({ isOpen, onClose, onUpload, currentUser }) => {
       setUseOriginal(false);
       setCompressionInfo(null);
       setIsUploading(false);
-      setPreview(null); // ✅ 清除預覽，避免殘留
+      setPreview(null);
+      setCurrentUser(null);
     }
   }, [isOpen]);
 
   const handleNextStep = () => {
     setStep(2);
+  };
+
+  const handleUpload = () => {
+    // TODO: 可加入 upload API 呼叫
+    console.log("執行上傳邏輯...");
   };
 
   return (
@@ -57,16 +76,16 @@ const UploadModal = ({ isOpen, onClose, onUpload, currentUser }) => {
 
           {step === 1 && (
             <UploadStep1
-              rating={rating} 
+              rating={rating}
               setRating={setRating}
-              onNext={handleNextStep} 
+              onNext={handleNextStep}
             />
           )}
 
           {step === 2 && (
             <UploadStep2
               imageFile={imageFile}
-              setStep={setStep} 
+              setStep={setStep}
               setImageFile={setImageFile}
               compressedImage={compressedImage}
               setCompressedImage={setCompressedImage}
@@ -77,8 +96,8 @@ const UploadModal = ({ isOpen, onClose, onUpload, currentUser }) => {
               title={title}
               setTitle={setTitle}
               platform={platform}
-              preview={preview}              // ✅ 加這行
-              setPreview={setPreview}        // ✅ 加這行
+              preview={preview}
+              setPreview={setPreview}
               setPlatform={setPlatform}
               description={description}
               setDescription={setDescription}
@@ -94,7 +113,7 @@ const UploadModal = ({ isOpen, onClose, onUpload, currentUser }) => {
               setNegativePrompt={setNegativePrompt}
               isUploading={isUploading}
               setIsUploading={setIsUploading}
-              onUpload={onUpload}
+              onUpload={handleUpload}
               onClose={onClose}
               currentUser={currentUser}
             />

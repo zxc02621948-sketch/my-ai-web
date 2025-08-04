@@ -6,13 +6,23 @@ import { X } from "lucide-react";
 import axios from "axios";
 import ForgotPasswordModal from "./ForgotPasswordModal";
 
-export default function LoginModal({ isOpen, onClose }) {
+export default function LoginModal() {
+  const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showResendButton, setShowResendButton] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+
+  useEffect(() => {
+    const open = () => setIsOpen(true);
+    window.addEventListener("openLoginModal", open);
+    return () => window.removeEventListener("openLoginModal", open);
+  }, []);
+
+  const onClose = () => setIsOpen(false);
 
   const handleLogin = async () => {
     setIsLoading(true);
@@ -22,7 +32,7 @@ export default function LoginModal({ isOpen, onClose }) {
     try {
       const response = await axios.post("/api/auth/login", { email, password });
       if (response.status === 200) {
-        localStorage.setItem("token", response.data.token); // ✅ 新增這行！
+        localStorage.setItem("token", response.data.token);
         window.location.reload();
       }
     } catch (err) {
@@ -40,21 +50,31 @@ export default function LoginModal({ isOpen, onClose }) {
     try {
       await axios.post("/api/auth/resend-verification", { email });
       alert("驗證信已重新寄出，請至信箱確認。");
+      setCooldown(60); // 開始冷卻倒數
     } catch (err) {
       alert("重新寄送驗證信失敗，請稍後再試。\n錯誤訊息：" + (err.response?.data?.message || "未知錯誤"));
     }
   };
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown((prev) => prev - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") handleLogin();
   };
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
       setEmail("");
       setPassword("");
       setError("");
+      setIsLoading(false);
       setShowResendButton(false);
+      setCooldown(0);
     }
   }, [isOpen]);
 
@@ -89,9 +109,12 @@ export default function LoginModal({ isOpen, onClose }) {
             {showResendButton && (
               <button
                 onClick={handleResendVerification}
-                className="mb-2 text-sm text-blue-400 hover:underline"
+                disabled={cooldown > 0}
+                className={`mb-2 text-sm ${
+                  cooldown > 0 ? "text-gray-500 cursor-not-allowed" : "text-blue-400 hover:underline"
+                }`}
               >
-                重新寄送驗證信
+                {cooldown > 0 ? `請稍候 ${cooldown} 秒後再試` : "重新寄送驗證信"}
               </button>
             )}
 

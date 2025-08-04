@@ -2,6 +2,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { NextResponse } from "next/server";
 import Image from "@/models/Image";
 import User from "@/models/User";
+import { Notification } from "@/models/Notification"; // ✅ 加入這行
 
 export async function GET(req) {
   try {
@@ -110,6 +111,23 @@ export async function POST(req) {
       userId,
       user: userId,
     });
+
+// 改成（正確）：
+const followers = await User.find({ following: { $in: [userId] } });
+    const author = await User.findById(userId);
+
+    await Promise.all(
+      followers.map((follower) =>
+        Notification.create({
+          userId: follower._id,
+          fromUserId: author._id,
+          type: "new_image",
+          text: `${author.username} 發布了新圖片《${title}》`,
+          imageId: newImage._id,
+          isRead: false,
+        })
+      )
+    );
 
     return NextResponse.json({ message: "圖片資料已儲存", insertedId: newImage._id });
   } catch (error) {

@@ -1,12 +1,13 @@
 // components/auth/RegisterModal.jsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal from '@/components/common/Modal';
 import Mailcheck from 'mailcheck';
 import { DEFAULT_AVATAR_IDS } from "@/lib/constants";
 
 export default function RegisterModal({ isOpen, onClose }) {
+  const [internalOpen, setIsOpen] = useState(isOpen || false); // 🔧 使用內部控制
   const [email, setEmail] = useState('');
   const [backupEmail, setBackupEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -20,6 +21,12 @@ export default function RegisterModal({ isOpen, onClose }) {
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [domainSuggestion, setDomainSuggestion] = useState(null);
+
+  useEffect(() => {
+    const handleOpen = () => setIsOpen(true);
+    window.addEventListener("openRegisterModal", handleOpen);
+    return () => window.removeEventListener("openRegisterModal", handleOpen);
+  }, []);
 
   const resetForm = () => {
     setEmail('');
@@ -149,7 +156,8 @@ export default function RegisterModal({ isOpen, onClose }) {
       setSuccess(true);
       setTimeout(() => {
         resetForm();
-        onClose();
+        setIsOpen(false); // ✅ 關閉內部 modal 狀態
+        if (onClose) onClose();
       }, 2000);
     } catch (err) {
       console.error('❌ 發生錯誤：', err);
@@ -161,11 +169,12 @@ export default function RegisterModal({ isOpen, onClose }) {
   const handleClose = () => {
     resetForm();
     setDomainSuggestion(null);
-    onClose();
+    setIsOpen(false); // 👈 關閉 modal 狀態
+    if (onClose) onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="註冊帳號">
+    <Modal isOpen={internalOpen} onClose={handleClose} title="註冊帳號">
       <form
         onSubmit={(e) => {
           e.preventDefault();

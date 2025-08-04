@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Header from "@/components/common/Header";
 import { jwtDecode } from "jwt-decode";
 import { getTokenFromCookie } from "@/lib/cookie";
 
 export default function InstallGuide() {
   const [currentUser, setCurrentUser] = useState(undefined);
+  const [isLoginOpen, setLoginOpen] = useState(false);
+  const [isRegisterOpen, setRegisterOpen] = useState(false);
 
   useEffect(() => {
     const token = getTokenFromCookie();
@@ -57,7 +58,6 @@ export default function InstallGuide() {
 
   return (
     <>
-      <Header currentUser={currentUser} />
 
       <div className="max-w-3xl mx-auto py-10 px-4 text-white">
         <h1 className="text-2xl font-bold mb-6">📦 安裝教學導引</h1>

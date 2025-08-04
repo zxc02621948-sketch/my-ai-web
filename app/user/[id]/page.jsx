@@ -1,6 +1,5 @@
 "use client";
 
-import Header from "@/components/common/Header";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import axios from "axios";
 import { useParams } from "next/navigation";
@@ -8,7 +7,6 @@ import { getTokenFromCookie } from "@/lib/cookie";
 import ImageModal from "@/components/image/ImageModal";
 import UserHeader from "@/components/user/UserHeader";
 import UserImageGrid from "@/components/user/UserImageGrid";
-import UserModals from "@/components/user/UserModals";
 import UserEditModal from "@/components/user/UserEditModal";
 import FollowListButton from "@/components/user/FollowListButton";
 
@@ -171,30 +169,6 @@ export default function UserProfilePage() {
 
   return (
     <>
-      <Header
-        currentUser={currentUser}
-        onLogout={async () => {
-          try {
-            await axios.get("/api/auth/logout");
-            location.reload();
-          } catch (err) {
-            console.error("❌ 登出失敗", err);
-          }
-        }}
-        onLoginOpen={() => setLoginOpen(true)}
-        onRegisterOpen={() => setRegisterOpen(true)}
-        onUploadClick={() => setUploadOpen(true)}
-        onGuideClick={() => window.open("/install-guide", "_blank")}
-        onSearch={handleSearch}
-        onFilterToggle={() => setFilterMenuOpen((prev) => !prev)}
-        showFilterButton={true}
-        isUserPage={true}
-        toggleLevelFilter={handleToggleLevelFilter}
-        toggleCategoryFilter={handleToggleCategoryFilter}
-        levelFilters={levelFilters}
-        categoryFilters={categoryFilters}
-      />
-
       <main className="min-h-screen bg-zinc-950 text-white p-4 mt-[80px]">
         <UserHeader
           userData={userData}
@@ -251,15 +225,6 @@ export default function UserProfilePage() {
           />
         )}
 
-        <UserModals
-          currentUser={currentUser}
-          isUploadOpen={isUploadOpen}
-          onUploadClose={() => setUploadOpen(false)}
-          isLoginOpen={isLoginOpen}
-          onLoginClose={() => setLoginOpen(false)}
-          isRegisterOpen={isRegisterOpen}
-          onRegisterClose={() => setRegisterOpen(false)}
-        />
       </main>
       <UserEditModal
         isOpen={isEditModalOpen}

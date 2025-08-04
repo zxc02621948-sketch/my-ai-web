@@ -1,13 +1,9 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef, Suspense } from "react";
-import UploadModal from "@/components/upload/UploadModal";
 import ImageModal from "@/components/image/ImageModal";
-import LoginModal from "@/components/auth/LoginModal";
-import RegisterModal from "@/components/auth/RegisterModal";
 import { useRouter } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
-import Header from "@/components/common/Header";
 import FilterPanel from "@/components/common/FilterPanel";
 import ImageGrid from "@/components/image/ImageGrid";
 import AdminPanel from "@/components/homepage/AdminPanel";
@@ -15,6 +11,7 @@ import BackToTopButton from "@/components/common/BackToTopButton";
 import axios from "axios";
 import SearchParamsProvider from "@/components/homepage/SearchParamsProvider";
 import NotificationBell from "@/components/common/NotificationBell";
+import { useFilterContext, labelToRating } from "@/components/context/FilterContext";
 
 function getTokenFromCookie() {
   const match = document.cookie.match(/token=([^;]+)/);
@@ -30,26 +27,34 @@ export default function HomePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-  const [levelFilters, setLevelFilters] = useState(["一般圖片", "15+ 圖片"]);
-  const [categoryFilters, setCategoryFilters] = useState([]);
-  const [viewMode, setViewMode] = useState("default");
   const [search, setSearch] = useState("");
   const [images, setImages] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [showProcessingCard, setShowProcessingCard] = useState(false);
   const [currentUser, setCurrentUser] = useState(undefined);
   const [suggestions, setSuggestions] = useState([]);
+  const [searchKeyReset, setSearchKeyReset] = useState(0);
   const loadMoreRef = useRef(null);
+
+  const {
+    levelFilters,
+    toggleLevelFilter,
+    categoryFilters,
+    toggleCategoryFilter,
+    viewMode,
+    setViewMode,
+  } = useFilterContext();
 
   const fetchImages = async (pageToFetch = 1) => {
     setIsLoading(true);
     try {
       const res = await fetch(`/api/cloudflare-images?page=${pageToFetch}&limit=20`);
       const data = await res.json();
+
       if (res.ok && Array.isArray(data.images)) {
         const newImages = data.images;
         if (pageToFetch === 1) {
-          setImages(newImages);
+          setImages([...data.images]);
         } else {
           setImages((prev) => [...prev, ...newImages]);
         }
@@ -104,7 +109,7 @@ export default function HomePage() {
             ? { ...img, likes: updatedImage.likes }
             : img
         );
-        return [...newImages]; // ✅ 強制更新 reference，讓 useMemo 的 filteredImages 重新計算
+        return [...newImages];
       });
 
       if (selectedImage?._id === updatedImage._id) {
@@ -116,7 +121,6 @@ export default function HomePage() {
     }
   };
 
-
   const isLikedByCurrentUser = (img) => {
     if (!currentUser || !img.likes) return false;
     const userId = currentUser._id || currentUser.id;
@@ -124,8 +128,33 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    const handleGlobalSearch = (e) => {
+      const keyword = e.detail?.keyword ?? "";
+      setSearch(keyword);
+      setSearchKeyReset((n) => n + 1);
+    };
+
+    window.addEventListener("global-search", handleGlobalSearch);
+    return () => window.removeEventListener("global-search", handleGlobalSearch);
+  }, []);
+
+  useEffect(() => {
     fetchImages();
     fetchCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    const handleHomepageReset = () => {
+      setSearch("");
+      fetchImages(1);
+      setLikeUpdateTrigger((n) => n + 1);
+      setSearchKeyReset((n) => n + 1);
+    };
+
+    window.addEventListener("reset-homepage", handleHomepageReset);
+    return () => {
+      window.removeEventListener("reset-homepage", handleHomepageReset);
+    };
   }, []);
 
   useEffect(() => {
@@ -139,28 +168,15 @@ export default function HomePage() {
     };
 
     window.addEventListener("image-liked", handleImageLiked);
-
     return () => {
       window.removeEventListener("image-liked", handleImageLiked);
     };
   }, []);
 
   useEffect(() => {
-    const handleOpenImageModal = (e) => {
-      const image = e.detail;
-      setSelectedImage(image);
-    };
-
-    window.addEventListener("openImageModal", handleOpenImageModal);
-    return () => window.removeEventListener("openImageModal", handleOpenImageModal);
-  }, []);
-
-  useEffect(() => {
     fetch("/api/track-visit", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pathname: window.location.pathname }),
     }).catch((err) => {
       console.warn("⚠️ 訪問紀錄上傳失敗", err);
@@ -183,22 +199,6 @@ export default function HomePage() {
     };
   }, [hasMore, isLoading, page]);
 
-  const toggleLevelFilter = (label) => {
-    if (label === "18+ 圖片" && currentUser === null) {
-      alert("請先登入才能查看 18+ 圖片");
-      return;
-    }
-    setLevelFilters((prev) =>
-      prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]
-    );
-  };
-
-  const toggleCategoryFilter = (label) => {
-    setCategoryFilters((prev) =>
-      prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label]
-    );
-  };
-
   const handleLogout = () => {
     document.cookie = "token=; path=/; max-age=0";
     setCurrentUser(null);
@@ -207,59 +207,44 @@ export default function HomePage() {
   };
 
   const filteredImages = useMemo(() => {
-    return images.filter((img) => {
-      const rating = typeof img.rating === "string" ? img.rating : "all";
-      const matchLevel =
-        (levelFilters.length === 0 && rating !== "18") || 
-        (levelFilters.includes("一般圖片") && rating === "all") ||
-        (levelFilters.includes("15+ 圖片") && rating === "15") ||
-        (levelFilters.includes("18+ 圖片") && rating === "18");
-      const safeCategory = typeof img.category === "string" ? img.category : "";
-      const matchCategory = categoryFilters.length === 0 || categoryFilters.includes(safeCategory);
-      const safeTitle = typeof img.title === "string" ? img.title.toLowerCase() : "";
-      const safeAuthor =
-        typeof img.user?.username === "string"
-          ? img.user.username.toLowerCase()
-          : "";
+    const selectedRatings = levelFilters.map((label) => labelToRating[label]);
 
-      const tagsArray = Array.isArray(img.tags) ? img.tags.map((t) => t.toLowerCase()) : [];
+    return images.filter((img) => {
+      const rating = img.rating || "all";
+      const matchLevel =
+        selectedRatings.length === 0
+          ? rating !== "18" // 預設不顯示 18+
+          : selectedRatings.includes(rating);
+
+      const matchCategory =
+        categoryFilters.length === 0 || categoryFilters.includes(img.category);
+
       const keyword = search.toLowerCase().trim();
       const matchSearch =
         keyword === "" ||
-        safeTitle.includes(keyword) ||
-        safeAuthor.includes(keyword) ||
-        tagsArray.some((tag) => tag.includes(keyword));
+        (img.title?.toLowerCase() || "").includes(keyword) ||
+        (img.user?.username?.toLowerCase() || "").includes(keyword) ||
+        (Array.isArray(img.tags) ? img.tags.some((tag) => tag.toLowerCase().includes(keyword)) : false);
+
       return matchLevel && matchCategory && matchSearch;
     });
-  }, [images, levelFilters, categoryFilters, search, likeUpdateTrigger]);
-
-
-  console.log("🐞 currentUser:", currentUser);
+  }, [images, levelFilters, categoryFilters, search, likeUpdateTrigger, searchKeyReset]);
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-4">
       <Suspense fallback={null}>
-        <SearchParamsProvider onSearchChange={setSearch} />
+        <SearchParamsProvider
+          onSearchChange={(val) => {
+            setSearch(val);
+            if (val === "") {
+              router.push("/");
+              fetchImages(1);
+              setLikeUpdateTrigger((n) => n + 1);
+              setSearchKeyReset((n) => n + 1);
+            }
+          }}
+        />
       </Suspense>
-
-      <Header
-        setCurrentUser={setCurrentUser} // ✅ 傳進來！
-        currentUser={currentUser}
-        onSearch={(q) => setSearch(q)}
-        onLogout={handleLogout}
-        onLoginOpen={() => setIsLoginOpen(true)}
-        onRegisterOpen={() => setIsRegisterOpen(true)}
-        suggestions={suggestions}
-        onUploadClick={() => setIsModalOpen(true)}
-        onGuideClick={() => router.push("/install-guide")}
-        showFilterButton={true}
-        levelFilters={levelFilters}
-        categoryFilters={categoryFilters}
-        viewMode={viewMode}
-        toggleLevelFilter={toggleLevelFilter}
-        toggleCategoryFilter={toggleCategoryFilter}
-        setViewMode={setViewMode}
-      />
 
       {currentUser?.isAdmin && (
         <div className="mb-4">
@@ -284,11 +269,6 @@ export default function HomePage() {
         {hasMore ? "載入更多中..." : "已經到底囉"}
       </div>
 
-      <BackToTopButton />
-      <UploadModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onUpload={() => fetchImages(1)} />
-      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} onSuccess={fetchCurrentUser} />
-      <RegisterModal isOpen={isRegisterOpen} onClose={() => setIsRegisterOpen(false)} onSuccess={fetchCurrentUser} />
-
       {selectedImage && currentUser !== undefined && (
         <ImageModal
           key={selectedImage?._id}
@@ -296,24 +276,14 @@ export default function HomePage() {
           onClose={() => setSelectedImage(null)}
           currentUser={currentUser}
           onLikeUpdate={(updated) => {
-            console.log("🔥 接收到 modal updated:", updated);
-
-            setImages((prev) => {
-              const found = prev.find((img) => 
-                img._id === updated._id ? updated : img
-              );
-              const updatedList = prev.map((img) =>
-                img._id === updated._id ? updated : img
-              );
-              const idx = updatedList.findIndex((i) => i._id === updated._id);
-              console.log("🧩 替換位置 index：", idx, "更新後資料：", updatedList[idx]);
-              return updatedList;
-            });
-
+            setImages((prev) =>
+              prev.map((img) => (img._id === updated._id ? updated : img))
+            );
             setLikeUpdateTrigger((n) => n + 1);
           }}
         />
       )}
+      <BackToTopButton />
     </main>
   );
 }

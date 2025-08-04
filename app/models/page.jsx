@@ -4,10 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import Header from "@/components/common/Header";
-import LoginModal from "@/components/auth/LoginModal";
-import RegisterModal from "@/components/auth/RegisterModal"; // ✅ 新增
-import UploadModal from "@/components/upload/UploadModal";
 import axios from "axios"; // ✅ 你有用 axios 卻沒 import
 
 export default function ModelInfoPage() {
@@ -39,38 +35,6 @@ export default function ModelInfoPage() {
 
   return (
     <>
-      <Header
-        onUploadClick={() => setIsUploadOpen(true)}
-        onGuideClick={() => router.push("/install-guide")} 
-        onLoginOpen={() => {
-          console.log("登入畫面開啟");
-          setIsLoginOpen(true);
-        }}
-        onRegisterOpen={() => {
-          console.log("註冊畫面開啟");
-          setIsRegisterOpen(true);
-        }}
-        onLogout={async () => {
-          try {
-            await axios.get("/api/auth/logout"); // ✅ 改為 GET
-            setCurrentUser(null); // ✅ 清空使用者狀態
-            location.reload(); // ✅ 重整畫面刷新 Header 狀態（可選）
-          } catch (err) {
-            console.error("登出失敗", err);
-          }
-        }}  
-        currentUser={currentUser}
-      />
-
-      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
-      <RegisterModal isOpen={isRegisterOpen} onClose={() => setIsRegisterOpen(false)} />
-      <UploadModal
-        isOpen={isUploadOpen}
-        onClose={() => setIsUploadOpen(false)}
-        onUpload={() => console.log("圖片已上傳！")}
-        currentUser={currentUser}
-      />
-
       <div className="max-w-4xl mx-auto px-4 py-8 text-white mt-24">
         <h1 className="text-3xl font-bold mb-6 text-center">模型介紹與獲取</h1>
 

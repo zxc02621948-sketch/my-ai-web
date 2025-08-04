@@ -1,4 +1,3 @@
-// Header.jsx
 "use client";
 
 import Link from "next/link";
@@ -9,6 +8,9 @@ import { useRouter } from "next/navigation";
 import FilterPanel from "@/components/common/FilterPanel";
 import axios from "axios";
 import NotificationBell from "@/components/common/NotificationBell";
+import { usePortalContainer } from "@/components/common/usePortal";
+import { createPortal } from "react-dom";
+import { useFilterContext } from "@/components/context/FilterContext";
 
 const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr: false });
 
@@ -22,13 +24,6 @@ export default function Header({
   suggestions = [],
   onUploadClick,
   onGuideClick,
-  showFilterButton = false,
-  levelFilters = [],
-  categoryFilters = [],
-  viewMode = "default",
-  toggleLevelFilter = () => {},
-  toggleCategoryFilter = () => {},
-  setViewMode = () => {},
   isUserPage = false,
 }) {
   const router = useRouter();
@@ -38,40 +33,53 @@ export default function Header({
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [panelPos, setPanelPos] = useState({ top: 0, left: 0 });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const stableSuggestions = useMemo(() => suggestions, [suggestions]);
 
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImageId, setSelectedImageId] = useState(null);
 
   const filterButtonRef = useRef(null);
+  const filterPanelRef = useRef(null);
   const userMenuRef = useRef(null);
+  const portalContainer = usePortalContainer();
+
+  const stableSuggestions = useMemo(() => suggestions, [suggestions]);
+
+  const {
+    levelFilters,
+    toggleLevelFilter,
+    categoryFilters,
+    toggleCategoryFilter,
+    viewMode,
+    setViewMode,
+  } = useFilterContext();
+
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed === "") {
+      window.dispatchEvent(new Event("reset-homepage"));
+      router.push("/");
+    } else {
+      window.dispatchEvent(new CustomEvent("global-search", { detail: { keyword: trimmed } }));
+    }
+  }, [searchQuery]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
         setUserMenuOpen(false);
       }
+      if (
+        filterMenuOpen &&
+        filterPanelRef.current &&
+        !filterPanelRef.current.contains(e.target) &&
+        !filterButtonRef.current.contains(e.target)
+      ) {
+        setFilterMenuOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    const handleClickOutsideFilter = (e) => {
-      if (
-        filterButtonRef.current &&
-        !filterButtonRef.current.contains(e.target)
-      ) {
-        const filterPanel = document.querySelector(".filter-panel-wrapper");
-        if (filterPanel && !filterPanel.contains(e.target)) {
-          setFilterMenuOpen(false);
-        }
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutsideFilter);
-    return () => document.removeEventListener("mousedown", handleClickOutsideFilter);
-  }, []);
-
+  }, [filterMenuOpen]);
 
   useEffect(() => {
     if (filterMenuOpen && filterButtonRef.current) {
@@ -83,28 +91,25 @@ export default function Header({
     }
   }, [filterMenuOpen]);
 
-  // ✅ 即時搜尋建議下拉選單
   useEffect(() => {
-    const delayDebounce = setTimeout(() => {
-      if (searchQuery.trim() !== "") {
-        const lower = searchQuery.toLowerCase();
-        const filtered = stableSuggestions
-          .filter((s) => s.toLowerCase().includes(lower))
-          .slice(0, 6);
-        setFilteredSuggestions(filtered);
-        setShowDropdown(filtered.length > 0);
-      } else {
+    const delayDebounce = setTimeout(async () => {
+      const input = searchQuery.toLowerCase().trim();
+      if (!input) {
+        setFilteredSuggestions([]);
+        setShowDropdown(false);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(input)}`);
+        if (!res.ok) throw new Error("API 錯誤");
+        const data = await res.json();
+        setFilteredSuggestions(data.slice(0, 6));
+        setShowDropdown(data.length > 0);
+      } catch (err) {
         setShowDropdown(false);
       }
     }, 200);
     return () => clearTimeout(delayDebounce);
-  }, [searchQuery, stableSuggestions]);
-
-  // ✅ 即時搜尋：輸入時立即觸發 onSearch
-  useEffect(() => {
-    if (typeof onSearch === "function") {
-      onSearch(searchQuery.trim());
-    }
   }, [searchQuery]);
 
   const logSearch = async (keyword) => {
@@ -148,6 +153,9 @@ export default function Header({
     setSearchQuery("");
     if (onSearch) onSearch("");
     setShowDropdown(false);
+    setTimeout(() => {
+      window.dispatchEvent(new Event("reset-homepage"));
+    }, 100);
   };
 
   const handleLogoClick = (e) => {
@@ -164,15 +172,13 @@ export default function Header({
     setShowDropdown(false);
   };
 
-  // ✅ 接收全站觸發的圖片彈窗事件
   useEffect(() => {
     const handleOpenImage = (e) => {
       const { imageId } = e.detail;
-      if (imageId === selectedImageId && showImageModal) return; 
+      if (imageId === selectedImageId && showImageModal) return;
       setSelectedImageId(imageId);
       setShowImageModal(true);
     };
-
     window.addEventListener("openImageModal", handleOpenImage);
     return () => window.removeEventListener("openImageModal", handleOpenImage);
   }, []);
@@ -188,23 +194,21 @@ export default function Header({
           </Link>
         </div>
 
-        {/* 中間區塊：篩選 + 搜尋列 */}
+        {/* 篩選＋搜尋 */}
         <div className="flex-1 flex items-center justify-center max-w-6xl w-full min-w-[600px]">
           <div className="flex items-center gap-2 w-full max-w-md">
-            {/* 篩選按鈕區塊 */}
+            {/* 篩選按鈕 */}
             <div className="w-[80px] shrink-0">
               <button
                 ref={filterButtonRef}
                 onClick={() => setFilterMenuOpen((prev) => !prev)}
-                className={`w-full px-4 py-2 rounded text-white text-base font-medium transition duration-200 ${
-                  showFilterButton ? "bg-blue-600 hover:bg-blue-700" : "invisible"
-                }`}
+                className="w-full px-4 py-2 rounded text-white text-base font-medium transition duration-200 bg-blue-600 hover:bg-blue-700"
               >
                 篩選
               </button>
             </div>
 
-            {/* 搜尋列區域 */}
+            {/* 搜尋列 */}
             <div className="relative w-full">
               <form
                 onSubmit={handleSubmit}
@@ -215,7 +219,7 @@ export default function Header({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="搜尋標題、作者、標籤…"
-                  className="flex-1 pl-4 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 pl-4 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none"
                 />
                 <button
                   type="submit"
@@ -241,42 +245,48 @@ export default function Header({
             </div>
           </div>
 
-          {showFilterButton && filterMenuOpen && (
-            <div className="fixed top-[70px] left-1/2 transform -translate-x-1/2 ml-[-195px] z-50">
-              <div className="filter-panel-wrapper bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-4 max-w-md w-[17.5vw]">
-                <FilterPanel
-                  filterMenuOpen={filterMenuOpen}
-                  setFilterMenuOpen={setFilterMenuOpen}
-                  levelFilters={levelFilters}
-                  categoryFilters={categoryFilters}
-                  viewMode={viewMode}
-                  toggleLevelFilter={toggleLevelFilter}
-                  toggleCategoryFilter={toggleCategoryFilter}
-                  setViewMode={setViewMode}
-                />
-              </div>
-            </div>
-          )}
+          {/* 篩選面板 */}
+          {filterMenuOpen && panelPos.top !== 0 && panelPos.left !== 0 &&
+            createPortal(
+              <div
+                ref={filterPanelRef}
+                className="fixed z-[99999]"
+                style={{
+                  top: `${panelPos.top}px`,
+                  left: `${panelPos.left}px`,
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-4">
+                  <FilterPanel
+                    currentUser={currentUser}
+                    filterMenuOpen={filterMenuOpen}
+                    setFilterMenuOpen={setFilterMenuOpen}
+                    levelFilters={levelFilters}
+                    categoryFilters={categoryFilters}
+                    viewMode={viewMode}
+                    toggleLevelFilter={toggleLevelFilter}
+                    toggleCategoryFilter={toggleCategoryFilter}
+                    setViewMode={setViewMode}
+                  />
+                </div>
+              </div>,
+              portalContainer || document.body
+            )
+          }
         </div>
 
         {/* 右側操作區 */}
         <div className="flex items-center gap-2">
-          <button onClick={onUploadClick} className="px-4 py-2 text-base rounded bg-green-600 text-white hover:bg-green-700 font-medium">
-            上傳圖片
-          </button>
-
+          <button onClick={onUploadClick} className="px-4 py-2 text-base rounded bg-green-600 text-white hover:bg-green-700 font-medium">上傳圖片</button>
           <Link href="/models">
-            <button className="px-4 py-2 text-base rounded bg-sky-600 text-white hover:bg-sky-700 font-medium">
-              獲取模型
-            </button>
+            <button className="px-4 py-2 text-base rounded bg-sky-600 text-white hover:bg-sky-700 font-medium">獲取模型</button>
           </Link>
-
-          <button onClick={onGuideClick} className="px-4 py-2 text-base rounded bg-purple-600 text-white hover:bg-purple-700 font-medium">
-            安裝教學
-          </button>
+          <button onClick={onGuideClick} className="px-4 py-2 text-base rounded bg-purple-600 text-white hover:bg-purple-700 font-medium">安裝教學</button>
 
           {currentUser && <NotificationBell currentUser={currentUser} />}
 
+          {/* ✅ 補上登入 / 註冊按鈕 */}
           <div className="relative" ref={userMenuRef}>
             {currentUser === undefined ? (
               <div className="px-4 py-2 bg-zinc-800 text-gray-400 rounded text-sm">🔄 載入中...</div>
@@ -287,8 +297,8 @@ export default function Header({
                   className="px-4 py-2 bg-zinc-800 text-white rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[140px] text-left"
                 >
                   {currentUser?.username
-                    ? `👤 ${currentUser.username} ▼`
-                    : "🔑 登入 / 註冊 ▼"}
+          ? `👤 ${currentUser.username} ▼`
+          : "🔑 登入 / 註冊 ▼"}
                 </button>
 
                 {userMenuOpen && (
@@ -301,7 +311,6 @@ export default function Header({
                         <button
                           onClick={async () => {
                             await axios.post("/api/auth/logout", {}, { withCredentials: true });
-                            setCurrentUser(null);
                             location.reload();
                           }}
                           className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-red-400"
@@ -337,3 +346,4 @@ export default function Header({
     </>
   );
 }
+

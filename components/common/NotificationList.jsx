@@ -45,8 +45,14 @@ export default function NotificationList({
         >
           <div className="flex-1">
             <div className="text-sm">
-              <strong className="text-yellow-400">{n.fromUserId?.username}</strong>{" "}
-              {n.type === "comment" ? "留言了你的圖片" : "回覆了你的留言"}
+              <strong className="text-yellow-400">{n.fromUserId?.username || "某位用戶"}</strong>{" "}
+              {n.type === "new_image"
+                ? "發布了新圖片"
+                : n.type === "comment"
+                ? "留言了你的圖片"
+                : n.type === "reply"
+                ? "回覆了你的留言"
+                : "發送了通知"}
             </div>
             <div className="text-xs text-zinc-400 line-clamp-1">{n.text}</div>
             <div className="text-xs text-zinc-500 mt-1">
