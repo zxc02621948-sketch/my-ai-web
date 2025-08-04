@@ -1,8 +1,6 @@
-// app/api/track-visit/route.js
 import { dbConnect } from "@/lib/db";
 import VisitorLog from "@/models/VisitorLog";
 import { verifyToken } from "@/lib/serverAuth";
-import { cookies } from "next/headers";
 import { nanoid } from "nanoid";
 
 export async function POST(req) {
@@ -12,20 +10,18 @@ export async function POST(req) {
   const ip = req.headers.get("x-forwarded-for") || req.headers.get("host");
   const userAgent = req.headers.get("user-agent") || "";
   const cookieHeader = req.headers.get("cookie") || "";
+
+  // 讀取 token
   const token = cookieHeader.match(/token=([^;]+)/)?.[1];
   const tokenData = token ? verifyToken(token) : null;
   const userId = tokenData?.id || null;
 
-  // ✅ 讀取或產生 visitId
-  const cookieStore = cookies();
-  let visitId = cookieStore.get("visit_id")?.value;
+  // ✅ 從 header 中讀取 visitId（cookie）
+  let visitId = cookieHeader.match(/visit_id=([^;]+)/)?.[1];
 
+  // ✅ 如果沒有就先給一個（不寫 cookie，純紀錄用）
   if (!visitId) {
-    visitId = nanoid();
-    cookieStore.set("visit_id", visitId, {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30, // 30天
-    });
+    visitId = nanoid(); // 還是給統計用識別
   }
 
   try {
@@ -36,6 +32,7 @@ export async function POST(req) {
       userAgent,
       userId,
     });
+
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (err) {
     console.error("❌ 寫入訪問紀錄失敗", err);

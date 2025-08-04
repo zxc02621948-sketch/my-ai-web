@@ -21,16 +21,15 @@ export async function GET(req) {
   const summary = [];
 
   for (let i = 0; i < 7; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
+    const localDate = new Date();
+    localDate.setDate(localDate.getDate() - i);
 
-    const start = new Date(date);
-    start.setHours(0, 0, 0, 0);
+    // 取出當地年月日
+    const dateLabel = localDate.toISOString().split("T")[0];
 
-    const end = new Date(date);
-    end.setHours(23, 59, 59, 999);
-
-    const dateLabel = start.toISOString().split("T")[0];
+    // 明確建構 UTC 時區的當天 00:00:00 ～ 23:59:59
+    const start = new Date(`${dateLabel}T00:00:00.000Z`);
+    const end = new Date(`${dateLabel}T23:59:59.999Z`);
 
     const [visitGroup, newUsers, uploads, likes, comments] = await Promise.all([
       VisitorLog.aggregate([
@@ -44,8 +43,8 @@ export async function GET(req) {
             _id: {
               $cond: [
                 { $ifNull: ["$visitId", false] },
-                "$visitId", // 有 visitId 就用它
-                "$ip",      // 沒有則 fallback 用 IP
+                "$visitId",
+                "$ip",
               ],
             },
             count: { $sum: 1 },
@@ -60,7 +59,7 @@ export async function GET(req) {
 
     summary.push({
       date: dateLabel,
-      uniqueIps: visitGroup.length, // 實際已是 uniqueVisitors，但可保留名稱
+      uniqueIps: visitGroup.length,
       totalVisits: visitGroup.reduce((sum, v) => sum + v.count, 0),
       newUsers,
       imagesUploaded: uploads,
