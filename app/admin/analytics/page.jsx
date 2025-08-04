@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import axios from "axios";
+import Link from "next/link";
 
 export default function AnalyticsPage() {
   const [logs, setLogs] = useState([]);
@@ -17,7 +18,15 @@ export default function AnalyticsPage() {
   }, []);
 
   return (
-    <div className="p-4">
+    <div className="relative min-h-screen bg-black text-white p-20">
+      {/* 左上角回首頁按鈕 */}
+      <Link
+        href="/"
+        className="absolute top-0 left-0 m-2 px-3 py-1 bg-white text-black rounded hover:bg-gray-100 font-semibold z-50"
+      >
+        ← 回首頁
+      </Link>
+
       <h1 className="text-xl font-bold mb-4">📊 後台總覽（最近 7 天）</h1>
       <table className="w-full mb-8 text-sm border border-zinc-700">
         <thead className="bg-zinc-800 text-white">

@@ -10,6 +10,7 @@ import UserHeader from "@/components/user/UserHeader";
 import UserImageGrid from "@/components/user/UserImageGrid";
 import UserModals from "@/components/user/UserModals";
 import UserEditModal from "@/components/user/UserEditModal";
+import FollowListButton from "@/components/user/FollowListButton";
 
 export default function UserProfilePage() {
   const { id } = useParams();
@@ -222,6 +223,7 @@ export default function UserProfilePage() {
           >
             ❤️ 收藏圖片
           </button>
+          <FollowListButton currentUser={currentUser} />
         </div>
 
         {filterMenuOpen && (

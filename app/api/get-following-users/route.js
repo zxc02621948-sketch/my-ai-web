@@ -15,7 +15,7 @@ export async function POST(req) {
       "_id username avatar"
     );
 
-    return Response.json(users);
+    return Response.json({ users });
   } catch (error) {
     console.error("取得追蹤清單失敗：", error);
     return new Response("伺服器錯誤", { status: 500 });

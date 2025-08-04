@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 const VisitorLogSchema = new mongoose.Schema({
   path: String,
   ip: String,
+  visitId: String, // ✅ 新增這行
   userAgent: String,
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now },

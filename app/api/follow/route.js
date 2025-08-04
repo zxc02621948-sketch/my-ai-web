@@ -17,7 +17,7 @@ export async function POST(req) {
       return new Response("無效的追蹤目標", { status: 400 });
     }
 
-    const user = await User.findById(currentUser._id);
+    const user = await User.findById(currentUser._id).populate("following");
     if (!user.following.includes(userIdToFollow)) {
       user.following.push(userIdToFollow);
       await user.save();
@@ -49,6 +49,23 @@ export async function DELETE(req) {
     return Response.json({ success: true, following: user.following });
   } catch (error) {
     console.error("取消追蹤失敗：", error);
+    return new Response("伺服器錯誤", { status: 500 });
+  }
+}
+
+export async function GET(req) {
+  await dbConnect();
+  const currentUser = await getCurrentUser(req);
+  if (!currentUser) {
+    return new Response("未授權", { status: 401 });
+  }
+
+  try {
+    const user = await User.findById(currentUser._id).populate("following", "username avatar image gender");
+
+    return Response.json({ following: user.following || [] });
+  } catch (error) {
+    console.error("讀取追蹤清單失敗：", error);
     return new Response("伺服器錯誤", { status: 500 });
   }
 }

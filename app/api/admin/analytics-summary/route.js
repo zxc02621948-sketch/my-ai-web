@@ -18,7 +18,6 @@ export async function GET(req) {
     return new Response("Forbidden", { status: 403 });
   }
 
-  // 🔁 過去七天，每天的資料
   const summary = [];
 
   for (let i = 0; i < 7; i++) {
@@ -33,15 +32,22 @@ export async function GET(req) {
 
     const dateLabel = start.toISOString().split("T")[0];
 
-    // 👉 每日統計
     const [visitGroup, newUsers, uploads, likes, comments] = await Promise.all([
       VisitorLog.aggregate([
         {
-          $match: { createdAt: { $gte: start, $lte: end } },
+          $match: {
+            createdAt: { $gte: start, $lte: end },
+          },
         },
         {
           $group: {
-            _id: "$ip",
+            _id: {
+              $cond: [
+                { $ifNull: ["$visitId", false] },
+                "$visitId", // 有 visitId 就用它
+                "$ip",      // 沒有則 fallback 用 IP
+              ],
+            },
             count: { $sum: 1 },
           },
         },
@@ -54,7 +60,7 @@ export async function GET(req) {
 
     summary.push({
       date: dateLabel,
-      uniqueIps: visitGroup.length,
+      uniqueIps: visitGroup.length, // 實際已是 uniqueVisitors，但可保留名稱
       totalVisits: visitGroup.reduce((sum, v) => sum + v.count, 0),
       newUsers,
       imagesUploaded: uploads,

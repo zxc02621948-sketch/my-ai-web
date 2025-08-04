@@ -1,7 +1,6 @@
-"use client";
 import { useRef, useState } from "react";
 import axios from "axios";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, Download } from "lucide-react";
 
 export default function ImageInfoBox({ image, currentUser, onClose }) {
   const positiveRef = useRef();
@@ -55,6 +54,8 @@ export default function ImageInfoBox({ image, currentUser, onClose }) {
     }
   };
 
+  const downloadUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public?download=true`;
+
   return (
     <div className="relative w-full overflow-x-hidden break-words space-y-4">
       {/* 🔥 標題與控制按鈕 */}
@@ -63,6 +64,18 @@ export default function ImageInfoBox({ image, currentUser, onClose }) {
           {image.title || "（無標題）"}
         </div>
         <div className="flex items-center gap-2">
+          {/* ⬇ 下載按鈕 */}
+          <a
+            href={downloadUrl}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded shadow transition"
+            title="下載原圖"
+          >
+            <Download size={16} />
+          </a>
+          {/* 刪除按鈕（擁有者或管理員） */}
           {currentUser &&
             (currentUser._id === image.user?._id || currentUser.isAdmin) && (
               <button
