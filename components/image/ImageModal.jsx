@@ -13,12 +13,12 @@ const defaultAvatarUrl =
   "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
 
 export default function ImageModal({
-  imageData,
+  imageData, // ✅ 改這個，不是 imageId
   onClose,
   currentUser,
   onLikeUpdate,
 }) {
-  const [image, setImage] = useState(imageData);
+  const [image, setImage] = useState(imageData); // ✅ 直接從 props 拿資料
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -32,28 +32,40 @@ export default function ImageModal({
     setIsFollowing(currentUser.following?.includes(userId));
   }, [currentUser, image]);
 
-  // ✅ 打開時重新抓最新圖片資料
-  useEffect(() => {
-    const fetchLatestImage = async () => {
-      try {
-        const res = await axios.get(`/api/image?id=${imageData._id}`);
-        if (res.status === 200 && res.data) {
-          setImage(res.data);
-        } else {
-          setImage(imageData); // fallback
-        }
-      } catch (err) {
-        console.error("❌ 取得圖片最新資料失敗", err);
-        setImage(imageData); // fallback
-      } finally {
-        setLoading(false);
+  const handleFollowToggle = async () => {
+    if (!image?.user) return;
+    const targetId = image.user._id || image.user;
+    try {
+      if (isFollowing) {
+        await axios.delete("/api/follow", {
+          data: { userIdToUnfollow: targetId },
+        });
+      } else {
+        await axios.post("/api/follow", { userIdToFollow: targetId });
       }
-    };
-
-    if (imageData?._id) {
-      fetchLatestImage();
+      setIsFollowing(!isFollowing);
+    } catch (error) {
+      console.error("❌ 追蹤切換失敗", error);
     }
+  };
+
+// ✅ 讓外部更新 likes 時，大圖能即時同步
+  useEffect(() => {
+    if (image?.likes && currentUser?._id) {
+      const liked = image.likes.includes(currentUser._id);
+      setImage((prev) => ({
+        ...prev,
+        _forceRenderToggle: liked, // 只是個假屬性，強制 re-render
+      }));
+    }
+  }, [image?.likes?.length]);
+
+  useEffect(() => {
+    setImage(imageData); // ✅ 第一次打開就吃外部傳來的資料
+    setLoading(false);   // ✅ 不用再顯示 loading
   }, [imageData]);
+
+  if (!imageData) return null;
 
   const handleScroll = () => {
     const top = scrollRef.current?.scrollTop || 0;
@@ -104,7 +116,10 @@ export default function ImageModal({
 
   return (
     <Dialog open={!!imageData} onClose={onClose} className="relative z-50">
+      {/* 遮罩背景 */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
+
+      {/* 點空白關閉容器 */}
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel
           onClick={(e) => e.stopPropagation()}
@@ -131,7 +146,7 @@ export default function ImageModal({
                       const hasLiked = image.likes.includes(currentUser._id);
                       const newLikeState = !hasLiked;
 
-                      // ✅ 樂觀更新
+                      // ✅ 樂觀更新畫面
                       const optimisticLikes = newLikeState
                         ? [...image.likes, currentUser._id]
                         : image.likes.filter((id) => id !== currentUser._id);
@@ -143,7 +158,7 @@ export default function ImageModal({
                       setImage(optimisticImage);
                       onLikeUpdate?.(optimisticImage);
 
-                      // 真實請求
+                      // ✅ 真實請求
                       const res = await axios.put(
                         `/api/like-image?id=${image._id}`,
                         { shouldLike: newLikeState },
@@ -155,6 +170,7 @@ export default function ImageModal({
                         }
                       );
 
+                      // ✅ 回寫伺服器的資料（避免同步問題）
                       if (res.status === 200 && res.data) {
                         const updated = {
                           ...image,
@@ -165,6 +181,8 @@ export default function ImageModal({
                       }
                     } catch (err) {
                       console.error("❌ 點讚失敗", err);
+
+                      // ⛔ 回滾錯誤的樂觀更新
                       const rolledBackLikes = image.likes.includes(currentUser._id)
                         ? image.likes.filter((id) => id !== currentUser._id)
                         : [...image.likes, currentUser._id];
@@ -187,7 +205,9 @@ export default function ImageModal({
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative">
               {image && (
                 <>
+                  {/* 頭像區塊 */}
                   <div className="absolute top-15 right-10 flex flex-col items-center z-50">
+                    {/* 頭像可點 */}
                     <div onClick={handleUserClick} className="cursor-pointer">
                       <img
                         src={
@@ -203,9 +223,13 @@ export default function ImageModal({
                         }}
                       />
                     </div>
+
+                    {/* 名字不點擊 */}
                     <span className="text-sm mt-2 text-center text-white select-none">
                       {image.user?.username || "未命名用戶"}
                     </span>
+
+                    {/* 追蹤按鈕 */}
                     {currentUser &&
                       image?.user &&
                       currentUser._id !== (image.user._id || image.user) && (
@@ -224,6 +248,7 @@ export default function ImageModal({
                         </button>
                       )}
                   </div>
+
                   <ImageInfoBox
                     image={{ ...image, user: image.user || image.userId }}
                     currentUser={currentUser}
