@@ -4,15 +4,16 @@ import { Heart, X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function ImageViewer({ image, currentUser, isLiked, onToggleLike }) {
+export default function ImageViewer({ image, currentUser, isLiked, onToggleLike, onLikeUpdate }) {
   const [clicked, setClicked] = useState(false);
+  const [buttonDisabled, setButtonDisabled] = useState(false);
   const [zoomState, setZoomState] = useState({
     zoomed: false,
     position: { x: 0, y: 0 },
   });
 
   const [isDragging, setIsDragging] = useState(false);
-  const [showHint, setShowHint] = useState(false); // ✅ 提示顯示狀態
+  const [showHint, setShowHint] = useState(false);
   const dragOrigin = useRef({ x: 0, y: 0 });
   const imageOrigin = useRef({ x: 0, y: 0 });
   const wasDragging = useRef(false);
@@ -49,17 +50,6 @@ export default function ImageViewer({ image, currentUser, isLiked, onToggleLike 
   }
 
   const imageUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`;
-
-  const handleLike = (e) => {
-    e.stopPropagation();
-    if (!onToggleLike) return;
-    onToggleLike(image._id);
-
-    if (!isLiked) {
-      setClicked(true);
-      setTimeout(() => setClicked(false), 400);
-    }
-  };
 
   const handleZoomOut = () => {
     setZoomState({ zoomed: false, position: { x: 0, y: 0 } });
@@ -134,10 +124,6 @@ export default function ImageViewer({ image, currentUser, isLiked, onToggleLike 
     });
   };
 
-  const combinedTransform = zoomState.zoomed
-    ? `translate(${zoomState.position.x}px, ${zoomState.position.y}px) scale(${ZOOM_SCALE})`
-    : `translate(0, 0) scale(1)`;
-
   return (
     <div
       ref={containerRef}
@@ -153,7 +139,9 @@ export default function ImageViewer({ image, currentUser, isLiked, onToggleLike 
       <div
         className={`relative ${zoomState.zoomed ? "z-20" : ""}`}
         style={{
-          transform: combinedTransform,
+          transform: zoomState.zoomed
+            ? `translate(${zoomState.position.x}px, ${zoomState.position.y}px) scale(${ZOOM_SCALE})`
+            : "translate(0, 0) scale(1)",
           transition: isDragging ? "none" : "transform 0.3s ease",
         }}
       >
@@ -167,12 +155,42 @@ export default function ImageViewer({ image, currentUser, isLiked, onToggleLike 
 
       {/* ❤️ 愛心區 */}
       <div className="absolute bottom-2 right-2 bg-black/60 text-white px-3 py-1 rounded-full flex items-center space-x-1 z-30">
-        <button onClick={handleLike} title="愛心" disabled={!currentUser}>
+        <button
+          onClick={async (e) => {
+            e.stopPropagation();
+            if (!onToggleLike || !currentUser || buttonDisabled) return;
+
+            const likedBefore = isLiked;
+            const likesBefore = image.likes || [];
+
+            const newLikeState = !likedBefore;
+            const updatedLikes = newLikeState
+              ? [...likesBefore, currentUser._id]
+              : likesBefore.filter((id) => id !== currentUser._id);
+
+            setClicked(true);
+            onLikeUpdate?.({ ...image, likes: updatedLikes });
+            setButtonDisabled(true);
+
+            try {
+              await onToggleLike(image._id);
+            } catch (err) {
+              console.error("❌ 點愛心失敗", err);
+              onLikeUpdate?.({ ...image, likes: likesBefore });
+              alert("愛心更新失敗");
+            } finally {
+              setTimeout(() => setClicked(false), 400);
+              setTimeout(() => setButtonDisabled(false), 1000);
+            }
+          }}
+          title="愛心"
+          disabled={!currentUser}
+        >
           <Heart
             fill={isLiked || clicked ? "#f472b6" : "transparent"}
             color={
               isLiked || clicked
-                ? "#f472b6" 
+                ? "#f472b6"
                 : image.likes?.length > 0
                 ? "#f472b6"
                 : "#ccc"
