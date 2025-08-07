@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
-import { flushSync } from "react-dom"; // 💡 新增：強制同步更新
+import { flushSync } from "react-dom";
 
 export default function ImageCard({
   img,
@@ -16,6 +16,7 @@ export default function ImageCard({
   const [likeCountLocal, setLikeCountLocal] = useState(img.likes?.length || 0);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // ✅ 保留 props 同步（縮圖 / 大圖同步顯示）
   useEffect(() => {
     setIsLikedLocal(isLiked);
     setLikeCountLocal(img.likes?.length || 0);
@@ -28,18 +29,19 @@ export default function ImageCard({
     const newLikeState = !isLikedLocal;
     setIsProcessing(true);
 
-    // ✅ 強制同步畫面更新（秒亮愛心）
+    // ✅ 真正樂觀更新：當下立即更新畫面
     flushSync(() => {
       setIsLikedLocal(newLikeState);
       setLikeCountLocal((prev) => prev + (newLikeState ? 1 : -1));
     });
 
     try {
-      await onToggleLike(img._id, newLikeState);
-      onLocalLikeChange?.(img._id, newLikeState); // ✅ 正確同步外部資料
+      await onToggleLike(img._id, newLikeState); // 呼叫父層處理 API 更新
+      onLocalLikeChange?.(img._id, newLikeState); // 通知父層可選擇更新 UI
     } catch (err) {
       console.error("❌ 愛心更新錯誤", err);
-      // 還原畫面
+
+      // ❗ rollback 回 UI
       flushSync(() => {
         setIsLikedLocal((prev) => !prev);
         setLikeCountLocal((prev) => prev + (newLikeState ? -1 : 1));
