@@ -14,6 +14,7 @@ export default function ImageCard({
   const [isLikedLocal, setIsLikedLocal] = useState(isLiked);
   const [likeCountLocal, setLikeCountLocal] = useState(img.likes?.length || 0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [renderKey, setRenderKey] = useState(0); // ✅ 新增：強制刷新用
 
   // ✅ 外部 props 更新時同步內部狀態
   useEffect(() => {
@@ -29,8 +30,9 @@ export default function ImageCard({
     setIsProcessing(true);
 
     try {
-      await onToggleLike(img._id, newLikeState); // 向後端提交
-      onLocalLikeChange?.(img._id, newLikeState); // 嘗試同步大圖（選擇性）
+      await onToggleLike(img._id, newLikeState); // ✅ 你原本的順序保留
+      onLocalLikeChange?.(img._id, newLikeState); // ✅ 成功後才同步
+      setRenderKey((prev) => prev + 1); // ✅ 加在這裡強制刷新
     } catch (err) {
       console.error("❌ 愛心點擊錯誤", err);
     } finally {
@@ -49,9 +51,9 @@ export default function ImageCard({
       className="mb-4 break-inside-avoid cursor-pointer group relative"
       onClick={onClick}
     >
-      {/* ❤️ 愛心區塊 */}
       <div className="absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1">
         <Heart
+          key={renderKey} // ✅ 新增
           onClick={handleLikeClick}
           fill={isLikedLocal ? "#f472b6" : "transparent"}
           color={isLikedLocal ? "#f472b6" : "#ccc"}
@@ -63,7 +65,6 @@ export default function ImageCard({
         <span className="text-white text-xs">{likeCountLocal}</span>
       </div>
 
-      {/* 圖片本體 */}
       <div className="overflow-hidden rounded-lg">
         <img
           src={imageUrl}
