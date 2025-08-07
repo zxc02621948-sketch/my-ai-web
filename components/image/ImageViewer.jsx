@@ -5,7 +5,6 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function ImageViewer({ image, currentUser, isLiked, onToggleLike, onLikeUpdate }) {
-  const [clicked, setClicked] = useState(false);
   const [buttonDisabled, setButtonDisabled] = useState(false);
   const [zoomState, setZoomState] = useState({
     zoomed: false,
@@ -22,16 +21,6 @@ export default function ImageViewer({ image, currentUser, isLiked, onToggleLike,
   const clickCount = useRef(0);
   const clickTimer = useRef(null);
   const ZOOM_SCALE = 1.5;
-
-  useEffect(() => {
-    if (isLiked) {
-      setClicked(true);
-      const timer = setTimeout(() => setClicked(false), 400);
-      return () => clearTimeout(timer);
-    } else {
-      setClicked(false);
-    }
-  }, [isLiked]);
 
   useEffect(() => {
     if (zoomState.zoomed) {
@@ -168,7 +157,6 @@ export default function ImageViewer({ image, currentUser, isLiked, onToggleLike,
               ? [...likesBefore, currentUser._id]
               : likesBefore.filter((id) => id !== currentUser._id);
 
-            setClicked(true);
             onLikeUpdate?.({ ...image, likes: updatedLikes });
             setButtonDisabled(true);
 
@@ -179,7 +167,6 @@ export default function ImageViewer({ image, currentUser, isLiked, onToggleLike,
               onLikeUpdate?.({ ...image, likes: likesBefore });
               alert("愛心更新失敗");
             } finally {
-              setTimeout(() => setClicked(false), 400);
               setTimeout(() => setButtonDisabled(false), 1000);
             }
           }}
@@ -187,16 +174,18 @@ export default function ImageViewer({ image, currentUser, isLiked, onToggleLike,
           disabled={!currentUser}
         >
           <Heart
-            fill={isLiked || clicked ? "#f472b6" : "transparent"}
+            fill={isLiked ? "#f472b6" : "transparent"}
             color={
-              isLiked || clicked
+              isLiked
                 ? "#f472b6"
                 : image.likes?.length > 0
                 ? "#f472b6"
                 : "#ccc"
             }
             strokeWidth={2.5}
-            className="w-6 h-6 hover:scale-110 transition duration-200"
+            className={`w-6 h-6 transition duration-200 ${
+              buttonDisabled ? "pointer-events-none" : "hover:scale-110 cursor-pointer"
+            }`}
           />
         </button>
         <span className="text-sm">{image.likes?.length || 0}</span>

@@ -9,6 +9,7 @@ export default function ImageCard({
   isLiked,
   onToggleLike,
   onLocalLikeChange,
+  onLikeUpdate, // ✅ 正確解構 props
 }) {
   const canLike = !!currentUser;
   const [isLikedLocal, setIsLikedLocal] = useState(isLiked);
@@ -29,17 +30,28 @@ export default function ImageCard({
     const prevCount = likeCountLocal;
     const newLiked = !prevLiked;
 
-    // 樂觀更新
+    // ✅ 樂觀更新
     setIsLikedLocal(newLiked);
     setLikeCountLocal((prev) => prev + (newLiked ? 1 : -1));
     setIsProcessing(true);
 
     try {
       await onToggleLike(img._id, newLiked);
+
+      // ✅ 縮圖同步邏輯（可選，通知外層）
       onLocalLikeChange?.(img._id, newLiked);
+
+      // ✅ 大圖同步 likes
+      const updatedImage = {
+        ...img,
+        likes: newLiked
+          ? [...img.likes, currentUser._id]
+          : img.likes.filter((id) => id !== currentUser._id),
+      };
+      onLikeUpdate?.(updatedImage);
+
       setRenderKey((prev) => prev + 1);
     } catch (err) {
-      // 失敗還原
       console.error("❌ 愛心點擊錯誤", err);
       setIsLikedLocal(prevLiked);
       setLikeCountLocal(prevCount);

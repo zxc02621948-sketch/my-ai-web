@@ -13,59 +13,28 @@ const defaultAvatarUrl =
   "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
 
 export default function ImageModal({
-  imageData, // ✅ 改這個，不是 imageId
+  imageData,
   onClose,
   currentUser,
   onLikeUpdate,
 }) {
-  const [image, setImage] = useState(imageData); // ✅ 直接從 props 拿資料
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [image, setImage] = useState(imageData);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const scrollRef = useRef(null);
   const router = useRouter();
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // ✅ 外部更新 likes 時同步
+  useEffect(() => {
+    setImage(imageData);
+  }, [imageData]);
 
   useEffect(() => {
     if (!currentUser || !image?.user) return;
     const userId = image.user._id || image.user;
     setIsFollowing(currentUser.following?.includes(userId));
   }, [currentUser, image]);
-
-  const handleFollowToggle = async () => {
-    if (!image?.user) return;
-    const targetId = image.user._id || image.user;
-    try {
-      if (isFollowing) {
-        await axios.delete("/api/follow", {
-          data: { userIdToUnfollow: targetId },
-        });
-      } else {
-        await axios.post("/api/follow", { userIdToFollow: targetId });
-      }
-      setIsFollowing(!isFollowing);
-    } catch (error) {
-      console.error("❌ 追蹤切換失敗", error);
-    }
-  };
-
-// ✅ 讓外部更新 likes 時，大圖能即時同步
-  useEffect(() => {
-    if (image?.likes && currentUser?._id) {
-      const liked = image.likes.includes(currentUser._id);
-      setImage((prev) => ({
-        ...prev,
-        _forceRenderToggle: liked, // 只是個假屬性，強制 re-render
-      }));
-    }
-  }, [image?.likes?.length]);
-
-  useEffect(() => {
-    setImage(imageData); // ✅ 第一次打開就吃外部傳來的資料
-    setLoading(false);   // ✅ 不用再顯示 loading
-  }, [imageData]);
-
-  if (!imageData) return null;
 
   const handleScroll = () => {
     const top = scrollRef.current?.scrollTop || 0;
@@ -116,10 +85,7 @@ export default function ImageModal({
 
   return (
     <Dialog open={!!imageData} onClose={onClose} className="relative z-50">
-      {/* 遮罩背景 */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
-
-      {/* 點空白關閉容器 */}
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel
           onClick={(e) => e.stopPropagation()}
@@ -128,75 +94,61 @@ export default function ImageModal({
           {/* 左側圖片區 */}
           <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
             <div style={{ zIndex: 10, position: "relative" }}>
-              {loading ? (
-                <div className="text-gray-400">載入中...</div>
-              ) : error ? (
-                <div className="text-red-500">{error}</div>
-              ) : (
-                <ImageViewer
-                  key={image._id + "_" + (image._forceSync || 0)}
-                  image={image}
-                  currentUser={currentUser}
-                  isLiked={image.likes.includes(currentUser?._id)}
-                  onToggleLike={async () => {
-                    try {
-                      const token = document.cookie.match(/token=([^;]+)/)?.[1];
-                      if (!token || !currentUser?._id) return;
+              <ImageViewer
+                key={image._id + "_" + image.likes.length}
+                image={image}
+                currentUser={currentUser}
+                isLiked={image.likes.includes(currentUser?._id)}
+                onToggleLike={async () => {
+                  if (isProcessing || !currentUser?._id) return;
+                  setIsProcessing(true);
 
-                      const hasLiked = image.likes.includes(currentUser._id);
-                      const newLikeState = !hasLiked;
+                  try {
+                    const token = document.cookie.match(/token=([^;]+)/)?.[1];
+                    if (!token || !currentUser?._id) return;
 
-                      // ✅ 樂觀更新畫面
-                      const optimisticLikes = newLikeState
-                        ? [...image.likes, currentUser._id]
-                        : image.likes.filter((id) => id !== currentUser._id);
+                    const hasLiked = image.likes.includes(currentUser._id);
+                    const newLikeState = !hasLiked;
 
-                      const optimisticImage = {
-                        ...image,
-                        likes: optimisticLikes,
-                      };
-                      setImage(optimisticImage);
-                      onLikeUpdate?.(optimisticImage);
+                    // ✅ 樂觀更新
+                    const optimisticLikes = newLikeState
+                      ? [...image.likes, currentUser._id]
+                      : image.likes.filter((id) => id !== currentUser._id);
 
-                      // ✅ 真實請求
-                      const res = await axios.put(
-                        `/api/like-image?id=${image._id}`,
-                        { shouldLike: newLikeState },
-                        {
-                          headers: {
-                            Authorization: `Bearer ${token}`,
-                            "Content-Type": "application/json",
-                          },
-                        }
-                      );
+                    const optimisticImage = {
+                      ...image,
+                      likes: optimisticLikes,
+                    };
+                    setImage(optimisticImage);
+                    onLikeUpdate?.(optimisticImage); // ✅ 外部也同步更新
 
-                      // ✅ 回寫伺服器的資料（避免同步問題）
-                      if (res.status === 200 && res.data) {
-                        const updated = {
-                          ...image,
-                          likes: res.data.likes,
-                        };
-                        setImage(updated);
-                        onLikeUpdate?.(updated);
+                    // 真實請求
+                    const res = await axios.put(
+                      `/api/like-image?id=${image._id}`,
+                      { shouldLike: newLikeState },
+                      {
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                          "Content-Type": "application/json",
+                        },
                       }
-                    } catch (err) {
-                      console.error("❌ 點讚失敗", err);
+                    );
 
-                      // ⛔ 回滾錯誤的樂觀更新
-                      const rolledBackLikes = image.likes.includes(currentUser._id)
-                        ? image.likes.filter((id) => id !== currentUser._id)
-                        : [...image.likes, currentUser._id];
-
-                      const rolledBackImage = {
+                    if (res.status === 200 && res.data) {
+                      const updated = {
                         ...image,
-                        likes: rolledBackLikes,
+                        likes: res.data.likes,
                       };
-                      setImage(rolledBackImage);
-                      onLikeUpdate?.(rolledBackImage);
+                      setImage(updated);
+                      onLikeUpdate?.(updated);
                     }
-                  }}
-                />
-              )}
+                  } catch (err) {
+                    console.error("❌ 點讚失敗", err);
+                  } finally {
+                    setTimeout(() => setIsProcessing(false), 1000); // ✅ 防連點冷卻
+                  }
+                }}
+              />
             </div>
           </div>
 
@@ -205,9 +157,7 @@ export default function ImageModal({
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative">
               {image && (
                 <>
-                  {/* 頭像區塊 */}
                   <div className="absolute top-15 right-10 flex flex-col items-center z-50">
-                    {/* 頭像可點 */}
                     <div onClick={handleUserClick} className="cursor-pointer">
                       <img
                         src={
@@ -223,19 +173,16 @@ export default function ImageModal({
                         }}
                       />
                     </div>
-
-                    {/* 名字不點擊 */}
                     <span className="text-sm mt-2 text-center text-white select-none">
                       {image.user?.username || "未命名用戶"}
                     </span>
-
-                    {/* 追蹤按鈕 */}
                     {currentUser &&
                       image?.user &&
                       currentUser._id !== (image.user._id || image.user) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            setIsFollowing((prev) => !prev);
                             handleFollowToggle();
                           }}
                           className={`mt-2 px-3 py-1 text-sm rounded ${
@@ -248,7 +195,6 @@ export default function ImageModal({
                         </button>
                       )}
                   </div>
-
                   <ImageInfoBox
                     image={{ ...image, user: image.user || image.userId }}
                     currentUser={currentUser}
