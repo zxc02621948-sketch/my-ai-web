@@ -98,14 +98,20 @@ export default function HomePage() {
     }
   };
 
-  const handleToggleLike = async (imageId) => {
+  const handleToggleLike = async (imageId, shouldLike) => {
     try {
       const token = getTokenFromCookie();
       const res = await axios.put(
         `/api/like-image?id=${imageId}`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        { shouldLike }, // ✅ 傳最後狀態
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
       );
+
       const updatedImage = res.data;
 
       setImages((prevImages) => {
@@ -287,14 +293,15 @@ export default function HomePage() {
 
       {selectedImage && currentUser !== undefined && (
         <ImageModal
-          key={selectedImage?._id}
-          imageId={selectedImage._id}
+          key={selectedImage?._id + "_" + selectedImage?._forceSync}
+          imageData={selectedImage} // ✅ 傳整個物件進去
           onClose={() => setSelectedImage(null)}
           currentUser={currentUser}
           onLikeUpdate={(updated) => {
             setImages((prev) =>
               prev.map((img) => (img._id === updated._id ? updated : img))
             );
+            setSelectedImage(updated); // ✅ 也更新 selectedImage 自身
             setLikeUpdateTrigger((n) => n + 1);
           }}
         />

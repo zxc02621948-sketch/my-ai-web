@@ -1,11 +1,43 @@
+import { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
 
-export default function ImageCard({ img, viewMode, onClick, currentUser, isLiked, onToggleLike }) {
+export default function ImageCard({
+  img,
+  viewMode,
+  onClick,
+  currentUser,
+  isLiked,
+  onToggleLike,
+  onLocalLikeChange,
+}) {
   const canLike = !!currentUser;
-  const likeCount = img.likes?.length || 0;
-  const hasLikes = likeCount > 0;
+  const [isLikedLocal, setIsLikedLocal] = useState(isLiked);
+  const [likeCountLocal, setLikeCountLocal] = useState(img.likes?.length || 0);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // ✅ 圖片 URL fallback 處理
+  // ✅ 外部 props 更新時同步內部狀態
+  useEffect(() => {
+    setIsLikedLocal(isLiked);
+    setLikeCountLocal(img.likes?.length || 0);
+  }, [isLiked, img.likes]);
+
+  const handleLikeClick = async (e) => {
+    e.stopPropagation();
+    if (!canLike || !onToggleLike) return;
+
+    const newLikeState = !isLikedLocal;
+    setIsProcessing(true);
+
+    try {
+      await onToggleLike(img._id, newLikeState); // 向後端提交
+      onLocalLikeChange?.(img._id, newLikeState); // 嘗試同步大圖（選擇性）
+    } catch (err) {
+      console.error("❌ 愛心點擊錯誤", err);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const imageUrl =
     img.imageUrl ||
     (img.imageId
@@ -17,28 +49,21 @@ export default function ImageCard({ img, viewMode, onClick, currentUser, isLiked
       className="mb-4 break-inside-avoid cursor-pointer group relative"
       onClick={onClick}
     >
-      {/* ❤️ 愛心數字與圖示區塊 */}
-      <div
-        className="absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1"
-        onClick={(e) => {
-          e.stopPropagation(); // ✅ 放正確位置
-          if (canLike && onToggleLike) {
-            onToggleLike(img._id);
-          }
-        }}
-      >
+      {/* ❤️ 愛心區塊 */}
+      <div className="absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1">
         <Heart
-          fill={isLiked ? "#f472b6" : "transparent"}
-          color={hasLikes ? "#f472b6" : "#ccc"}
+          onClick={handleLikeClick}
+          fill={isLikedLocal ? "#f472b6" : "transparent"}
+          color={isLikedLocal ? "#f472b6" : "#ccc"}
           strokeWidth={2.5}
-          className={`w-4 h-4 transition duration-300 ${
+          className={`w-4 h-4 transition duration-200 ${
             canLike ? "hover:scale-110 cursor-pointer" : "opacity-70"
           }`}
         />
-        <span className="text-white text-xs">{likeCount}</span>
+        <span className="text-white text-xs">{likeCountLocal}</span>
       </div>
 
-      {/* 圖片主體 */}
+      {/* 圖片本體 */}
       <div className="overflow-hidden rounded-lg">
         <img
           src={imageUrl}

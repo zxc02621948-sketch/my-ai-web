@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import Image from "@/models/Image";
 import jwt from "jsonwebtoken";
-import LikeLog from "@/models/LikeLog"; // ✅ 新增 LikeLog model
+import LikeLog from "@/models/LikeLog";
 
 export async function PUT(req) {
   await connectToDatabase();
@@ -22,6 +22,13 @@ export async function PUT(req) {
     return NextResponse.json({ message: "驗證失敗" }, { status: 401 });
   }
 
+  const body = await req.json().catch(() => null);
+  const shouldLike = body?.shouldLike;
+
+  if (typeof shouldLike !== "boolean") {
+    return NextResponse.json({ message: "缺少 shouldLike 參數" }, { status: 400 });
+  }
+
   try {
     const image = await Image.findById(imageId);
     if (!image) {
@@ -34,24 +41,17 @@ export async function PUT(req) {
     }
 
     image.likes = image.likes.filter((id) => !!id);
+    const alreadyLiked = image.likes.some((id) => id?.toString?.() === userIdStr);
 
-    const alreadyLiked = image.likes.some(
-      (id) => id?.toString?.() === userIdStr
-    );
-
-    if (alreadyLiked) {
-      image.likes = image.likes.filter(
-        (id) => id?.toString?.() !== userIdStr
-      );
-    } else {
+    if (shouldLike && !alreadyLiked) {
       image.likes.push(userIdStr);
-
-      // ✅ 記錄一筆 LikeLog
       await LikeLog.create({
         imageId,
         userId: userIdStr,
         createdAt: new Date(),
       });
+    } else if (!shouldLike && alreadyLiked) {
+      image.likes = image.likes.filter((id) => id?.toString?.() !== userIdStr);
     }
 
     await image.save();

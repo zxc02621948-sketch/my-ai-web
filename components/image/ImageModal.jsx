@@ -13,12 +13,12 @@ const defaultAvatarUrl =
   "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
 
 export default function ImageModal({
-  imageId,
+  imageData, // ✅ 改這個，不是 imageId
   onClose,
   currentUser,
   onLikeUpdate,
 }) {
-  const [image, setImage] = useState(null);
+  const [image, setImage] = useState(imageData); // ✅ 直接從 props 拿資料
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -49,24 +49,23 @@ export default function ImageModal({
     }
   };
 
+// ✅ 讓外部更新 likes 時，大圖能即時同步
   useEffect(() => {
-    const fetchImage = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/images/${imageId}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error("找不到該圖片，可能已被刪除");
-        setImage(data.image);
-      } catch (err) {
-        console.error("❌ 載入圖片失敗", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (image?.likes && currentUser?._id) {
+      const liked = image.likes.includes(currentUser._id);
+      setImage((prev) => ({
+        ...prev,
+        _forceRenderToggle: liked, // 只是個假屬性，強制 re-render
+      }));
+    }
+  }, [image?.likes?.length]);
 
-    if (imageId) fetchImage();
-  }, [imageId]);
+  useEffect(() => {
+    setImage(imageData); // ✅ 第一次打開就吃外部傳來的資料
+    setLoading(false);   // ✅ 不用再顯示 loading
+  }, [imageData]);
+
+  if (!imageData) return null;
 
   const handleScroll = () => {
     const top = scrollRef.current?.scrollTop || 0;
@@ -113,10 +112,10 @@ export default function ImageModal({
     }
   };
 
-  if (!imageId) return null;
+  if (!imageData) return null;
 
   return (
-    <Dialog open={!!imageId} onClose={onClose} className="relative z-50">
+    <Dialog open={!!imageData} onClose={onClose} className="relative z-50">
       {/* 遮罩背景 */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
 
@@ -135,7 +134,7 @@ export default function ImageModal({
                 <div className="text-red-500">{error}</div>
               ) : (
                 <ImageViewer
-                  key={image._id + (image.likes?.length || 0)}
+                  key={image._id + "_" + (image._forceSync || 0)}
                   image={image}
                   currentUser={currentUser}
                   isLiked={image.likes.includes(currentUser?._id)}
@@ -143,13 +142,20 @@ export default function ImageModal({
                     try {
                       const token = document.cookie.match(/token=([^;]+)/)?.[1];
                       if (!token || !currentUser?._id) return;
+
+                      const newLikeState = !image.likes.includes(currentUser._id);
+
                       const res = await axios.put(
                         `/api/like-image?id=${image._id}`,
-                        null,
+                        { shouldLike: newLikeState },
                         {
-                          headers: { Authorization: `Bearer ${token}` },
+                          headers: { 
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                          },
                         }
                       );
+
                       if (res.status === 200 && res.data) {
                         const updated = {
                           ...image,

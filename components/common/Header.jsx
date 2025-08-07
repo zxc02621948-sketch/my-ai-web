@@ -36,6 +36,7 @@ export default function Header({
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [panelPos, setPanelPos] = useState({ top: 0, left: 0 });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
 
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImageId, setSelectedImageId] = useState(null);
@@ -278,6 +279,8 @@ export default function Header({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={() => setIsComposing(false)}
                   placeholder="搜尋標題、作者、標籤…"
                   className="flex-1 pl-4 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none"
                 />
@@ -289,12 +292,19 @@ export default function Header({
                 </button>
               </form>
 
-              {showDropdown && (
+              {showDropdown && !isComposing && (
                 <ul className="absolute z-50 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded shadow-md text-sm text-white max-h-60 overflow-y-auto">
                   {filteredSuggestions.map((s, i) => (
                     <li
                       key={i}
-                      onClick={() => handleSuggestionClick(s)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();  
+                        inputRef.current?.blur();  
+                        setTimeout(() => {
+                          inputRef.current?.focus();  
+                        }, 0);
+                        handleSuggestionClick(s);
+                      }}
                       className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
                     >
                       {s}
