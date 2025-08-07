@@ -170,7 +170,13 @@ export default function ImageViewer({ image, currentUser, isLiked, onToggleLike 
         <button onClick={handleLike} title="愛心" disabled={!currentUser}>
           <Heart
             fill={isLiked || clicked ? "#f472b6" : "transparent"}
-            color={isLiked || clicked ? "#f472b6" : "#ccc"}
+            color={
+              isLiked || clicked
+                ? "#f472b6" 
+                : image.likes?.length > 0
+                ? "#f472b6"
+                : "#ccc"
+            }
             strokeWidth={2.5}
             className="w-6 h-6 hover:scale-110 transition duration-200"
           />

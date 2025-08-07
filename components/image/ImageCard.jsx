@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
-import { flushSync } from "react-dom";
 
 export default function ImageCard({
   img,
@@ -15,8 +14,8 @@ export default function ImageCard({
   const [isLikedLocal, setIsLikedLocal] = useState(isLiked);
   const [likeCountLocal, setLikeCountLocal] = useState(img.likes?.length || 0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [renderKey, setRenderKey] = useState(0);
 
-  // ✅ 保留 props 同步（縮圖 / 大圖同步顯示）
   useEffect(() => {
     setIsLikedLocal(isLiked);
     setLikeCountLocal(img.likes?.length || 0);
@@ -24,28 +23,17 @@ export default function ImageCard({
 
   const handleLikeClick = async (e) => {
     e.stopPropagation();
-    if (!canLike || !onToggleLike || isProcessing) return;
+    if (!canLike || !onToggleLike) return;
 
     const newLikeState = !isLikedLocal;
     setIsProcessing(true);
 
-    // ✅ 真正樂觀更新：當下立即更新畫面
-    flushSync(() => {
-      setIsLikedLocal(newLikeState);
-      setLikeCountLocal((prev) => prev + (newLikeState ? 1 : -1));
-    });
-
     try {
-      await onToggleLike(img._id, newLikeState); // 呼叫父層處理 API 更新
-      onLocalLikeChange?.(img._id, newLikeState); // 通知父層可選擇更新 UI
+      await onToggleLike(img._id, newLikeState);
+      onLocalLikeChange?.(img._id, newLikeState);
+      setRenderKey((prev) => prev + 1);
     } catch (err) {
-      console.error("❌ 愛心更新錯誤", err);
-
-      // ❗ rollback 回 UI
-      flushSync(() => {
-        setIsLikedLocal((prev) => !prev);
-        setLikeCountLocal((prev) => prev + (newLikeState ? -1 : 1));
-      });
+      console.error("❌ 愛心點擊錯誤", err);
     } finally {
       setIsProcessing(false);
     }
@@ -64,9 +52,16 @@ export default function ImageCard({
     >
       <div className="absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1">
         <Heart
+          key={renderKey}
           onClick={handleLikeClick}
           fill={isLikedLocal ? "#f472b6" : "transparent"}
-          color={isLikedLocal ? "#f472b6" : "#ccc"}
+          color={
+            isLikedLocal
+              ? "#f472b6"
+              : likeCountLocal > 0
+              ? "#f472b6"
+              : "#ccc"
+          }
           strokeWidth={2.5}
           className={`w-4 h-4 transition duration-200 ${
             canLike ? "hover:scale-110 cursor-pointer" : "opacity-70"
