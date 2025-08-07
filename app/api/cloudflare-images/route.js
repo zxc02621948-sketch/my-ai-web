@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import Image from "@/models/Image";
 import User from "@/models/User";
 import { Notification } from "@/models/Notification"; // ✅ 加入這行
+import mongoose from "mongoose";
+
 
 export async function GET(req) {
   try {
@@ -86,7 +88,10 @@ export async function POST(req) {
       tags,
       userId,
       modelName,   // ✅ 加入解構
-      loraName     // ✅ 加入解構
+      loraName,     // ✅ 加入解構
+      modelLink, 
+      loraLink,    
+      author 
     } = body;
 
     if (!imageId || !title) {
@@ -106,21 +111,24 @@ export async function POST(req) {
       category,
       description,
       tags,
+      author,  
       modelName,  // ✅ 寫入
       loraName,   // ✅ 寫入
+      modelLink,
+      loraLink,
       userId,
       user: userId,
     });
 
-// 改成（正確）：
-const followers = await User.find({ following: { $in: [userId] } });
-    const author = await User.findById(userId);
+  // 改成（正確）：
+  const followers = await User.find({ "following.userId": new mongoose.Types.ObjectId(userId) });
+    const uploader = await User.findById(userId);
 
     await Promise.all(
       followers.map((follower) =>
         Notification.create({
           userId: follower._id,
-          fromUserId: author._id,
+          fromUserId: uploader._id,
           type: "new_image",
           text: `${author.username} 發布了新圖片《${title}》`,
           imageId: newImage._id,

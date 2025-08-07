@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { jwtDecode } from "jwt-decode";
 
 export default function UploadStep2({
+  // 來自父層的狀態與 setter
   rating,
   setRating,
   setStep,
@@ -13,19 +14,36 @@ export default function UploadStep2({
   setPreview,
   useOriginal,
   setUseOriginal,
-  isUploading, 
+  compressionInfo,
+  setCompressionInfo,
+  title,
+  setTitle,
+  platform,
+  setPlatform,
+  description,
+  setDescription,
+  category,
+  setCategory,
+  tags,                // 父層存的「標籤字串」
+  setTags,             // 父層 setter
+  positivePrompt,
+  setPositivePrompt,
+  negativePrompt,
+  setNegativePrompt,
+  isUploading,
   setIsUploading,
   onUpload,
   onClose,
+  currentUser,
+
+  // ✅ 新增：父層控管的 civitai 連結
+  modelLink,
+  setModelLink,
+  loraLink,
+  setLoraLink,
 }) {
-  const [title, setTitle] = useState("");
+  // 本地端控管的欄位（父層沒有的）
   const [author, setAuthor] = useState("");
-  const [category, setCategory] = useState(""); // 🔧 改為無預設
-  const [platform, setPlatform] = useState("Stable Diffusion WebUI");
-  const [prompt, setPrompt] = useState("");
-  const [negativePrompt, setNegativePrompt] = useState("");
-  const [description, setDescription] = useState("");
-  const [tagsInput, setTagsInput] = useState("");
   const [modelName, setModelName] = useState("");
   const [loraName, setLoraName] = useState("");
   const [originalSize, setOriginalSize] = useState(0);
@@ -33,9 +51,11 @@ export default function UploadStep2({
 
   useEffect(() => {
     if (imageFile) {
-      setPreview(URL.createObjectURL(imageFile));
+      const url = URL.createObjectURL(imageFile);
+      setPreview(url);
       setOriginalSize(imageFile.size);
       compressImage(imageFile);
+      return () => URL.revokeObjectURL(url);
     }
   }, [imageFile]);
 
@@ -45,15 +65,16 @@ export default function UploadStep2({
     img.onload = async () => {
       const canvas = document.createElement("canvas");
       const MAX_WIDTH = 1280;
-      const scaleSize = MAX_WIDTH / img.width;
-      canvas.width = MAX_WIDTH;
-      canvas.height = img.height * scaleSize;
+      const scaleSize = Math.min(1, MAX_WIDTH / img.width);
+      canvas.width = Math.floor(img.width * scaleSize);
+      canvas.height = Math.floor(img.height * scaleSize);
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       canvas.toBlob(
         (blob) => {
           if (blob) {
-            setCompressedImage(new File([blob], originalFile.name, { type: "image/jpeg" }));
+            const f = new File([blob], originalFile.name, { type: "image/jpeg" });
+            setCompressedImage(f);
             setCompressedSize(blob.size);
           }
         },
@@ -72,9 +93,12 @@ export default function UploadStep2({
     }
   };
 
+  const civitaiRegex = /^https?:\/\/(www\.)?civitai\.com(\/|$)/i;
+
   const handleUpload = async () => {
     if (!imageFile) return;
-    if (!title.trim()) {
+
+    if (!title || !title.trim()) {
       alert("請輸入圖片標題！");
       return;
     }
@@ -83,16 +107,28 @@ export default function UploadStep2({
       return;
     }
 
+    // ✅ 僅允許 civitai.com 網址（可空白）
+    if (modelLink && !civitaiRegex.test(modelLink)) {
+      alert("模型連結僅允許填寫 civitai.com 網址。");
+      return;
+    }
+    if (loraLink && !civitaiRegex.test(loraLink)) {
+      alert("LoRA 連結僅允許填寫 civitai.com 網址。");
+      return;
+    }
+
     setIsUploading(true);
     let imageId = null;
 
     try {
+      // 1) 取得 Cloudflare 上傳 URL
       const urlRes = await fetch("/api/cloudflare-upload-url", { method: "POST" });
       if (!urlRes.ok) throw new Error("Cloudflare upload URL API 回應失敗");
 
       const urlData = await urlRes.json();
       if (!urlData.success || !urlData.uploadURL) throw new Error("無法取得上傳網址");
 
+      // 2) 上傳圖片（壓縮或原檔）
       const formData = new FormData();
       formData.append("file", useOriginal ? imageFile : compressedImage);
 
@@ -102,43 +138,55 @@ export default function UploadStep2({
       if (!imageId) throw new Error("Cloudflare 上傳失敗");
 
       const imageUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageId}/public`;
-      const tags = tagsInput.replace(/#/g, "").split(/[ ,，、]/).map(t => t.trim()).filter(t => t.length > 0);
+
+      // 3) 解析使用者資訊
       const token = document.cookie.match(/token=([^;]+)/)?.[1];
       const decoded = token ? jwtDecode(token) : null;
       const userId = decoded?._id || decoded?.id || null;
       const username = decoded?.username || decoded?.name || null;
 
+      // 4) tags（父層字串 → 陣列）
+      const tagsArray = (tags || "")
+        .replace(/#/g, "")
+        .split(/[ ,，、]/)
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+
+      // 5) 準備 metadata（✅ 帶上 modelLink / loraLink）
       const metadata = {
         imageId,
         imageUrl,
-        title,
-        author,
+        title: title?.trim(),
+        author: author?.trim() || "",
         category,
         rating,
-        platform,
-        modelName,
-        loraName,
-        positivePrompt: prompt,
+        platform: platform?.trim() || "Stable Diffusion WebUI",
+        modelName: modelName?.trim() || "",
+        loraName: loraName?.trim() || "",
+        modelLink: modelLink?.trim() || "",
+        loraLink: loraLink?.trim() || "",
+        positivePrompt,
         negativePrompt,
         description,
-        tags,
+        tags: tagsArray,
         fileName: imageFile.name,
         userId,
         username,
         likes: 0,
       };
 
+      // 6) 上傳 metadata
       const metaRes = await fetch("/api/cloudflare-images", {
         method: "POST",
         body: JSON.stringify(metadata),
         headers: { "Content-Type": "application/json" },
       });
-
       if (!metaRes.ok) throw new Error("Metadata 上傳失敗");
 
+      // 7) 完成後復位
       setStep(1);
-      onClose();
-      if (onUpload) onUpload(1);
+      onClose?.();
+      location.reload();
     } catch (err) {
       console.error("上傳失敗：", err);
       alert("上傳失敗，請稍後再試！");
@@ -149,12 +197,14 @@ export default function UploadStep2({
           console.error("❌ 刪除殘影圖片失敗：", delErr);
         }
       }
+    } finally {
+      setIsUploading(false);
     }
-    setIsUploading(false);
   };
 
   return (
     <div className="space-y-4">
+      {/* 分級選擇 */}
       <div className="flex items-center gap-4">
         <div className={`text-xl font-bold px-4 py-2 rounded text-white inline-block ${getRatingColor()}`}>
           目前選擇：{rating === "all" ? "一般 All" : rating === "15" ? "15+ 清涼" : "18+ 限制"}
@@ -170,22 +220,31 @@ export default function UploadStep2({
         </select>
       </div>
 
-      <input type="text" placeholder="標題" className="w-full p-2 rounded bg-zinc-700" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <input type="text" placeholder="作者（選填）" className="w-full p-2 rounded bg-zinc-700" value={author} onChange={(e) => setAuthor(e.target.value)} />
+      {/* 基本資訊 */}
+      <input
+        type="text"
+        placeholder="標題"
+        className="w-full p-2 rounded bg-zinc-700"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+      />
+      <input
+        type="text"
+        placeholder="來源作者（選填）"
+        className="w-full p-2 rounded bg-zinc-700"
+        value={author}
+        onChange={(e) => setAuthor(e.target.value)}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label
-            className={`text-sm font-semibold ${
-              category === "" ? "text-red-400" : "text-zinc-400"
-            }`}
+            className={`text-sm font-semibold ${category === "" ? "text-red-400" : "text-zinc-400"}`}
           >
             📁 圖片分類（必選）
           </label>
           <select
-            className={`p-2 rounded w-full bg-zinc-700 ${
-              category === "" ? "border border-red-500" : ""
-            }`}
+            className={`p-2 rounded w-full bg-zinc-700 ${category === "" ? "border border-red-500" : ""}`}
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           >
@@ -196,10 +255,15 @@ export default function UploadStep2({
             <option value="動漫">動漫</option>
             <option value="物品">物品</option>
           </select>
+
         </div>
         <div>
           <label className="text-sm text-zinc-400">🛠️ 使用平台</label>
-          <select className="p-2 rounded bg-zinc-700 w-full" value={platform} onChange={(e) => setPlatform(e.target.value)}>
+          <select
+            className="p-2 rounded bg-zinc-700 w-full"
+            value={platform}
+            onChange={(e) => setPlatform(e.target.value)}
+          >
             <option value="Stable Diffusion WebUI">Stable Diffusion WebUI</option>
             <option value="ComfyUI">ComfyUI</option>
             <option value="GPT 生圖">GPT 生圖</option>
@@ -208,41 +272,112 @@ export default function UploadStep2({
         </div>
       </div>
 
-      <textarea placeholder="正面提詞（Prompt）" className="w-full p-2 rounded bg-zinc-700 h-20" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
-      <textarea placeholder="負面提詞（Negative Prompt）" className="w-full p-2 rounded bg-zinc-700 h-20" value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} />
-      <input type="text" placeholder="模型名稱（選填）" className="w-full p-2 rounded bg-zinc-700" value={modelName} onChange={(e) => setModelName(e.target.value)} />
-      <input type="text" placeholder="LoRA 名稱（選填）" className="w-full p-2 rounded bg-zinc-700" value={loraName} onChange={(e) => setLoraName(e.target.value)} />
-      <textarea placeholder="內文說明（可選填）" className="w-full p-2 rounded bg-zinc-700 h-20" value={description} onChange={(e) => setDescription(e.target.value)} />
-      <input type="text" placeholder="標籤（空格 / # 分隔）" className="w-full p-2 rounded bg-zinc-700" value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} />
+      {/* 提詞 */}
+      <textarea
+        placeholder="正面提詞（Prompt）"
+        className="w-full p-2 rounded bg-zinc-700 h-20"
+        value={positivePrompt}
+        onChange={(e) => setPositivePrompt(e.target.value)}
+      />
+      <textarea
+        placeholder="負面提詞（Negative Prompt）"
+        className="w-full p-2 rounded bg-zinc-700 h-20"
+        value={negativePrompt}
+        onChange={(e) => setNegativePrompt(e.target.value)}
+      />
 
-      <input type="file" className="w-full" onChange={(e) => setImageFile(e.target.files[0])} />
+      {/* 模型 / LoRA 名稱 */}
+      <input
+        type="text"
+        placeholder="模型名稱（選填）"
+        className="w-full p-2 rounded bg-zinc-700"
+        value={modelName}
+        onChange={(e) => setModelName(e.target.value)}
+      />      
+      {/* ✅ civitai.com 連結（僅允許 civitai） */}
+      <input
+        type="text"
+        placeholder="模型 civitai 連結（可選）"
+        className="w-full p-2 rounded bg-zinc-700"
+        value={modelLink}
+        onChange={(e) => setModelLink(e.target.value)}
+      />
+      <input
+        type="text"
+        placeholder="LoRA 名稱（選填）"
+        className="w-full p-2 rounded bg-zinc-700"
+        value={loraName}
+        onChange={(e) => setLoraName(e.target.value)}
+      />
+      <input
+        type="text"
+        placeholder="LoRA civitai 連結（可選）"
+        className="w-full p-2 rounded bg-zinc-700"
+        value={loraLink}
+        onChange={(e) => setLoraLink(e.target.value)}
+      />
+      <p className="text-xs text-zinc-400">
+        只接受 <span className="underline">civitai.com</span> 的網址（可留白）。
+      </p>
 
+      {/* 標籤與描述 */}
+      <input
+        type="text"
+        placeholder="標籤（以空格或逗號分隔，例如：可愛 貓耳 女僕）"
+        className="w-full p-2 rounded bg-zinc-700"
+        value={tags}
+        onChange={(e) => setTags(e.target.value)}
+      />
+      <textarea
+        placeholder="描述（選填）"
+        className="w-full p-2 rounded bg-zinc-700 h-28"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
+
+      {/* 上傳圖片 */}
+      <input
+        type="file"
+        className="w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+        accept="image/*"
+        onChange={(e) => {
+          if (e.target.files[0]) {
+            setImageFile(e.target.files[0]);
+          }
+        }}
+      />
+
+      {/* 預覽與上傳 */}
       {preview && (
-        <div className="pt-2 space-y-2">
-          <img src={preview} alt="預覽" className="w-full max-h-60 object-contain rounded" />
-          <div className="text-sm text-zinc-400">
-            原圖大小：{(originalSize / 1024 / 1024).toFixed(2)} MB
-            <br />
-            壓縮後：{(compressedSize / 1024 / 1024).toFixed(2)} MB
-          </div>
-          <div className="flex gap-4 pt-1">
-            <label className="flex items-center gap-2">
-              <input type="radio" name="uploadMode" checked={!useOriginal} onChange={() => setUseOriginal(false)} />
-              使用壓縮圖（推薦）
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="radio" name="uploadMode" checked={useOriginal} onChange={() => setUseOriginal(true)} />
-              上傳原圖（需消耗積分）
-            </label>
-          </div>
+        <div className="rounded-lg overflow-hidden border border-white/10">
+          <img src={preview} alt="preview" className="w-full object-contain" />
         </div>
       )}
 
-      <div className="flex justify-between pt-2">
-        <button onClick={() => setStep(1)} className="px-4 py-2 rounded bg-gray-600 hover:bg-gray-700" disabled={isUploading}>返回</button>
-        <button onClick={handleUpload} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700" disabled={isUploading || !imageFile}>
-          {isUploading ? "上傳中..." : "上傳"}
-        </button>
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-zinc-400">
+          {useOriginal ? "使用原檔上傳" : "使用壓縮圖上傳"}
+          {originalSize ? `｜原檔 ${(originalSize / 1024 / 1024).toFixed(2)} MB` : ""}
+          {compressedSize ? `｜壓縮 ${(compressedSize / 1024 / 1024).toFixed(2)} MB` : ""}
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm">
+            <input
+              type="checkbox"
+              className="mr-1 align-middle"
+              checked={useOriginal}
+              onChange={(e) => setUseOriginal(e.target.checked)}
+            />
+            使用原檔
+          </label>
+          <button
+            disabled={isUploading}
+            onClick={handleUpload}
+            className={`px-4 py-2 rounded text-white ${isUploading ? "bg-zinc-600" : "bg-blue-600 hover:bg-blue-700"} transition`}
+          >
+            {isUploading ? "上傳中..." : "上傳"}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -25,8 +25,8 @@ const userSchema = new mongoose.Schema(
     // ✅ 加入追蹤欄位
     following: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        note: { type: String, default: "" }
       },
     ],
 

@@ -16,6 +16,16 @@ export default function ChangelogPage() {
       <div className="max-w-2xl mx-auto py-10 px-4">
         <h1 className="text-2xl font-bold mb-6">📝 更新日誌</h1>
 
+        {/* v0.7.5 - 新增 */}
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-2">v0.7.5（2025-08-07）</h2>
+          <ul className="list-disc list-inside space-y-1 text-gray-300">
+            <li>🐞 多項視覺錯誤與結構異常修正，提升穩定性</li>
+            <li>📝 可自訂已追蹤名單的備註說明</li>
+            <li>🏷️ 點擊大圖的標籤可自動索引並搜尋相關圖片</li>
+          </ul>
+        </div>
+
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-2">v0.7.4（2025-08-04）</h2>
           <ul className="list-disc list-inside space-y-1 text-gray-300">

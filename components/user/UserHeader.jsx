@@ -6,19 +6,32 @@ import AvatarCropModal from "./AvatarCropModal";
 import { uploadToCloudflare } from "@/lib/uploadToCloudflare";
 import { DEFAULT_AVATAR_IDS } from "@/lib/constants";
 import { Pencil } from "lucide-react";
+import FollowListButton from "./FollowListButton";
 
 const cloudflarePrefix = "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/";
 
 export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen }) {
-  const isOwnProfile = currentUser && currentUser._id === userData._id;
+  const isOwnProfile = Boolean(
+    currentUser &&
+    userData &&
+    String(currentUser._id) === String(userData._id)
+  );
 
   const [showCropModal, setShowCropModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
 
   useEffect(() => {
-    if (currentUser && userData) {
-      setIsFollowing(currentUser.following?.includes(userData._id));
+    if (!currentUser || !userData) return;
+
+    const isSelf = String(currentUser._id) === String(userData._id);
+    if (!isSelf) {
+      const following = currentUser.following ?? [];
+      const isFollowed = following.some(id => String(id) === String(userData._id));
+      setIsFollowing(isFollowed);
+    } else {
+      setIsFollowing(false); 
     }
   }, [currentUser, userData]);
 
@@ -45,6 +58,8 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
 
   const handleFollowToggle = async () => {
     try {
+      if (followLoading) return;
+      setFollowLoading(true);
       if (isFollowing) {
         await axios.delete("/api/follow", {
           data: { userIdToUnfollow: userData._id },
@@ -57,6 +72,8 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       setIsFollowing(!isFollowing);
     } catch (error) {
       console.error("❌ 切換追蹤失敗:", error);
+    } finally {
+      setFollowLoading(false);
     }
   };
 
@@ -120,20 +137,22 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
         </p>
 
         {isOwnProfile ? (
-          <button
-            onClick={() => onEditOpen?.()}
-            className="mt-2 px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-sm flex items-center gap-1"
-          >
-            <Pencil size={14} />
-            編輯資料
-          </button>
-        ) : (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => onEditOpen?.()}
+              className="h-9 px-3 bg-zinc-700 hover:bg-zinc-600 rounded text-sm flex items-center gap-1"
+            >
+              <Pencil size={14} />
+              編輯資料
+            </button>
+            {/* 只有自己頁面顯示「查看已追蹤」 */}
+            <FollowListButton currentUser={currentUser} userId={userData._id} />
+          </div>
+        ) : currentUser && userData && (
           <button
             onClick={handleFollowToggle}
             className={`mt-2 px-3 py-1 text-sm rounded ${
-              isFollowing
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-blue-600 hover:bg-blue-700"
+              isFollowing ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
             }`}
           >
             {isFollowing ? "取消追蹤" : "追蹤"}

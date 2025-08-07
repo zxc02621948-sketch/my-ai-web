@@ -43,6 +43,7 @@ export default function HomePage() {
     toggleCategoryFilter,
     viewMode,
     setViewMode,
+    resetFilters, // ✅ 加這一行
   } = useFilterContext();
 
   const fetchImages = async (pageToFetch = 1) => {
@@ -54,9 +55,13 @@ export default function HomePage() {
       if (res.ok && Array.isArray(data.images)) {
         const newImages = data.images;
         if (pageToFetch === 1) {
-          setImages([...data.images]);
+          setImages(newImages);
         } else {
-          setImages((prev) => [...prev, ...newImages]);
+          setImages((prev) => {
+            const existingIds = new Set(prev.map((img) => img._id));
+            const uniqueNewImages = newImages.filter((img) => !existingIds.has(img._id));
+            return [...prev, ...uniqueNewImages];
+          });
         }
         setHasMore(pageToFetch < data.totalPages);
         setPage(pageToFetch);
@@ -149,6 +154,7 @@ export default function HomePage() {
       fetchImages(1);
       setLikeUpdateTrigger((n) => n + 1);
       setSearchKeyReset((n) => n + 1);
+      resetFilters(); // ✅ 要加這一行才會清空篩選
     };
 
     window.addEventListener("reset-homepage", handleHomepageReset);
@@ -207,6 +213,9 @@ export default function HomePage() {
   };
 
   const filteredImages = useMemo(() => {
+    if (!Array.isArray(images)) return [];
+
+    const keyword = search.trim().toLowerCase();
     const selectedRatings = levelFilters.map((label) => labelToRating[label]);
 
     return images.filter((img) => {
@@ -219,12 +228,13 @@ export default function HomePage() {
       const matchCategory =
         categoryFilters.length === 0 || categoryFilters.includes(img.category);
 
-      const keyword = search.toLowerCase().trim();
       const matchSearch =
         keyword === "" ||
         (img.title?.toLowerCase() || "").includes(keyword) ||
         (img.user?.username?.toLowerCase() || "").includes(keyword) ||
-        (Array.isArray(img.tags) ? img.tags.some((tag) => tag.toLowerCase().includes(keyword)) : false);
+        (Array.isArray(img.tags) 
+          ? img.tags.some((tag) => tag.toLowerCase().includes(keyword)) 
+          : false);
 
       return matchLevel && matchCategory && matchSearch;
     });
@@ -235,12 +245,18 @@ export default function HomePage() {
       <Suspense fallback={null}>
         <SearchParamsProvider
           onSearchChange={(val) => {
-            setSearch(val);
-            if (val === "") {
-              router.push("/");
+            const keyword = val.trim();
+            setSearch(keyword);
+
+            const urlSearchParams = new URLSearchParams(window.location.search);
+            const hasSearchQuery = urlSearchParams.has("search");
+
+            if (keyword === "" && window.location.pathname === "/") {
+
               fetchImages(1);
               setLikeUpdateTrigger((n) => n + 1);
               setSearchKeyReset((n) => n + 1);
+              resetFilters(); // ✅ 重設篩選條件
             }
           }}
         />

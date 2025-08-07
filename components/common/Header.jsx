@@ -4,13 +4,14 @@ import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import FilterPanel from "@/components/common/FilterPanel";
 import axios from "axios";
 import NotificationBell from "@/components/common/NotificationBell";
 import { usePortalContainer } from "@/components/common/usePortal";
 import { createPortal } from "react-dom";
 import { useFilterContext } from "@/components/context/FilterContext";
+import toast from "react-hot-toast"; // 🔥 若尚未引入過記得加這行
 
 const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr: false });
 
@@ -27,6 +28,8 @@ export default function Header({
   isUserPage = false,
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState([]);
@@ -38,9 +41,11 @@ export default function Header({
   const [selectedImageId, setSelectedImageId] = useState(null);
 
   const filterButtonRef = useRef(null);
+  const inputRef = useRef(null);
   const filterPanelRef = useRef(null);
   const userMenuRef = useRef(null);
   const portalContainer = usePortalContainer();
+  const lastQRef = useRef("");
 
   const stableSuggestions = useMemo(() => suggestions, [suggestions]);
 
@@ -55,13 +60,28 @@ export default function Header({
 
   useEffect(() => {
     const trimmed = searchQuery.trim();
-    if (trimmed === "") {
+    // 這裡不再負責 dispatch；事件交給「URL 驅動」那個 effect
+    if (trimmed === "") setShowDropdown(false);
+  }, [searchQuery, pathname]); // ✅ 同時依賴 pathname
+
+  useEffect(() => {
+    const onHome = pathname === "/" || pathname?.startsWith("/user/");
+    if (!onHome) return;
+
+    const rawQ = searchParams.get("q");
+    const q = rawQ?.trim() || "";
+
+    if (q === lastQRef.current) return;
+    lastQRef.current = q;
+
+    if (pathname === "/" && !q) {
       window.dispatchEvent(new Event("reset-homepage"));
-      router.push("/");
-    } else {
-      window.dispatchEvent(new CustomEvent("global-search", { detail: { keyword: trimmed } }));
+    } else if (q) {
+      window.dispatchEvent(
+        new CustomEvent("global-search", { detail: { keyword: q } })
+      );
     }
-  }, [searchQuery]);
+  }, [searchParams, pathname]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -82,6 +102,22 @@ export default function Header({
   }, [filterMenuOpen]);
 
   useEffect(() => {
+    const qInUrl = searchParams.get("q") || "";
+    if (searchQuery === qInUrl) return;
+
+    const next = new URLSearchParams(searchParams);
+    if (searchQuery) {
+      next.set("q", searchQuery);
+    } else {
+      next.delete("q");
+    } 
+
+    const href = `${pathname}${next.toString() ? `?${next.toString()}` : ""}`;
+    router.replace(href);
+  }, [searchQuery, pathname, searchParams, router]);
+
+
+  useEffect(() => {
     if (filterMenuOpen && filterButtonRef.current) {
       const rect = filterButtonRef.current.getBoundingClientRect();
       setPanelPos({
@@ -90,6 +126,15 @@ export default function Header({
       });
     }
   }, [filterMenuOpen]);
+
+  useEffect(() => {
+   const q = searchParams.get("q")?.trim() || "";
+   const onHome = pathname === "/" || pathname?.startsWith("/user/");
+   if (onHome) {
+    
+     setSearchQuery(q);
+   }
+  }, [searchParams, pathname]);
 
   useEffect(() => {
     const delayDebounce = setTimeout(async () => {
@@ -136,40 +181,54 @@ export default function Header({
     if (!trimmed) return;
 
     await logSearch(trimmed);
-
+ 
+    // 維持焦點在輸入框，保持「即時輸入 → 即時搜尋」
+    inputRef.current?.focus();
+    
+    // 若你在非首頁希望導回首頁，可保留這段：
     const currentPath = window.location.pathname;
-    const encoded = encodeURIComponent(trimmed);
-
-    if (currentPath === "/" || currentPath.startsWith("/user/")) {
-      if (typeof onSearch === "function") onSearch(trimmed);
-    } else {
+    if (!(currentPath === "/" || currentPath.startsWith("/user/"))) {
+      const encoded = encodeURIComponent(trimmed);
       router.push(`/?q=${encoded}`);
+    } else {
     }
-
     setShowDropdown(false);
+    inputRef.current?.focus?.();
   };
 
   const clearSearch = () => {
     setSearchQuery("");
-    if (onSearch) onSearch("");
     setShowDropdown(false);
-    setTimeout(() => {
+    
+    const currentPath = window.location.pathname;
+    if (currentPath !== "/") {
+
+      router.push("/");
+      setTimeout(() => {
+        window.dispatchEvent(new Event("reset-homepage"));
+      }, 100);
+    } else {
       window.dispatchEvent(new Event("reset-homepage"));
-    }, 100);
+    }
   };
 
   const handleLogoClick = (e) => {
     e.preventDefault();
     clearSearch();
     window.scrollTo(0, 0);
-    router.push("/");
   };
 
   const handleSuggestionClick = async (s) => {
-    setSearchQuery(s);
-    if (onSearch) onSearch(s);
+    const currentPath = window.location.pathname;
+    if (!(currentPath === "/" || currentPath.startsWith("/user/"))) {
+      const encoded = encodeURIComponent(s);
+      router.push(`/?q=${encoded}`);
+    } else {
+      setSearchQuery(s); // 會觸發即時搜尋
+    }
     await logSearch(s);
     setShowDropdown(false);
+    inputRef.current?.focus();
   };
 
   useEffect(() => {
@@ -215,6 +274,7 @@ export default function Header({
                 className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
               >
                 <input
+                  ref={inputRef}
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -246,15 +306,11 @@ export default function Header({
           </div>
 
           {/* 篩選面板 */}
-          {filterMenuOpen && panelPos.top !== 0 && panelPos.left !== 0 &&
+          {filterMenuOpen &&
             createPortal(
               <div
                 ref={filterPanelRef}
-                className="fixed z-[99999]"
-                style={{
-                  top: `${panelPos.top}px`,
-                  left: `${panelPos.left}px`,
-                }}
+                className="fixed top-[72px] left-[calc(405px)] z-[99999]"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-4">
@@ -278,7 +334,22 @@ export default function Header({
 
         {/* 右側操作區 */}
         <div className="flex items-center gap-2">
-          <button onClick={onUploadClick} className="px-4 py-2 text-base rounded bg-green-600 text-white hover:bg-green-700 font-medium">上傳圖片</button>
+        <button
+          onClick={() => {
+            if (!currentUser) {
+              toast("請先登入才能上傳圖片", {
+                icon: "🔒",
+                id: "login-required",
+                duration: 1000, // 顯示時間 1 秒
+              });
+              return;
+            }
+              onUploadClick();
+          }}
+          className="px-4 py-2 text-base rounded bg-green-600 text-white hover:bg-green-700 font-medium"
+        >  
+          上傳圖片
+        </button>
           <Link href="/models">
             <button className="px-4 py-2 text-base rounded bg-sky-600 text-white hover:bg-sky-700 font-medium">獲取模型</button>
           </Link>
@@ -310,6 +381,12 @@ export default function Header({
                         </Link>
                         <button
                           onClick={async () => {
+                            localStorage.removeItem("ratingFilters");
+                            localStorage.removeItem("categoryFilters");
+                            localStorage.removeItem("viewMode");
+
+                            window.dispatchEvent(new Event("reset-homepage"));
+
                             await axios.post("/api/auth/logout", {}, { withCredentials: true });
                             location.reload();
                           }}

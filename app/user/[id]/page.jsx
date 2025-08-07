@@ -1,17 +1,35 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, Suspense } from "react";
 import axios from "axios";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { getTokenFromCookie } from "@/lib/cookie";
 import ImageModal from "@/components/image/ImageModal";
 import UserHeader from "@/components/user/UserHeader";
 import UserImageGrid from "@/components/user/UserImageGrid";
 import UserEditModal from "@/components/user/UserEditModal";
-import FollowListButton from "@/components/user/FollowListButton";
+import SearchParamsProvider from "@/components/homepage/SearchParamsProvider";
+import { useFilterContext } from "@/components/context/FilterContext";
+
+const labelToRating = {
+  "一般圖片": "all",
+  "15+ 圖片": "15",
+  "18+ 圖片": "18",
+};
 
 export default function UserProfilePage() {
   const { id } = useParams();
+  const searchParams = useSearchParams();
+  const {
+    levelFilters,
+    categoryFilters,
+    toggleLevelFilter,
+    toggleCategoryFilter,
+    viewMode,
+    setViewMode,
+    filterMenuOpen,
+    setFilterMenuOpen,
+  } = useFilterContext();
 
   const [currentUser, setCurrentUser] = useState(undefined);
   const [userData, setUserData] = useState(null);
@@ -19,37 +37,26 @@ export default function UserProfilePage() {
   const [likedImages, setLikedImages] = useState([]);
   const [activeTab, setActiveTab] = useState("uploads");
   const [selectedImage, setSelectedImage] = useState(null);
-  const [isUploadOpen, setUploadOpen] = useState(false);
-  const [isLoginOpen, setLoginOpen] = useState(false);
-  const [isRegisterOpen, setRegisterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [levelFilters, setLevelFilters] = useState([]);
-  const [categoryFilters, setCategoryFilters] = useState([]);
-  const [viewMode, setViewMode] = useState("default");
-  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
-  const [avatarPreview, setAvatarPreview] = useState(null);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [avatarFile, setAvatarFile] = useState(null);
-
-  const handleSearch = useCallback((q) => {
-    setSearchQuery(q);
-  }, []);
+  const [avatarPreview, setAvatarPreview] = useState(null);
 
   const isOwnProfile = currentUser && (currentUser._id === id || currentUser.id === id);
+
+  useEffect(() => {
+    const q = searchParams.get("q")?.trim() || "";
+    setSearchQuery(q);
+  }, [searchParams]);
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
         const res = await axios.get("/api/current-user");
         setCurrentUser(res.data);
-      } catch (err) {
-        if (err.response?.status === 401) {
-          setCurrentUser(null);
-        } else {
-          console.error("⚠️ 無法取得登入使用者", err);
-          setCurrentUser(null);
-        }
+      } catch {
+        setCurrentUser(null);
       }
     };
     fetchCurrentUser();
@@ -59,7 +66,7 @@ export default function UserProfilePage() {
     const handler = () => setFilterMenuOpen((prev) => !prev);
     document.addEventListener("toggle-filter-panel", handler);
     return () => document.removeEventListener("toggle-filter-panel", handler);
-  }, []);
+  }, [setFilterMenuOpen]);
 
   useEffect(() => {
     if (!id || id === "undefined") return;
@@ -83,23 +90,27 @@ export default function UserProfilePage() {
   }, [id]);
 
   const filteredImages = useMemo(() => {
+    const selectedRatings = levelFilters.map((label) => labelToRating[label]);
     const base = activeTab === "uploads" ? uploadedImages : likedImages;
+
     return base.filter((img) => {
-      const rating = typeof img.rating === "string" ? img.rating : "all";
+      const rating = img.rating || "all";
       const matchLevel =
-        (levelFilters.length === 0 && rating !== "18") ||
-        (levelFilters.includes("一般圖片") && rating === "all") ||
-        (levelFilters.includes("15+ 圖片") && rating === "15") ||
-        (levelFilters.includes("18+ 圖片") && rating === "18");
+        selectedRatings.length === 0
+          ? rating !== "18"
+          : selectedRatings.includes(rating);
 
-      const safeCategory = typeof img.category === "string" ? img.category : "";
-      const matchCategory = categoryFilters.length === 0 || categoryFilters.includes(safeCategory);
+      const matchCategory =
+        categoryFilters.length === 0 || categoryFilters.includes(img.category);
 
-      const safeTitle = typeof img.title === "string" ? img.title.toLowerCase() : "";
-      const safeAuthor = typeof img.user?.username === "string" ? img.user.username.toLowerCase() : "";
       const keyword = searchQuery.toLowerCase().trim();
       const matchSearch =
-        keyword === "" || safeTitle.includes(keyword) || safeAuthor.includes(keyword);
+        keyword === "" ||
+        (img.title?.toLowerCase() || "").includes(keyword) ||
+        (img.user?.username?.toLowerCase() || "").includes(keyword) ||
+        (Array.isArray(img.tags)
+          ? img.tags.some((tag) => tag.toLowerCase().includes(keyword))
+          : false);
 
       return matchLevel && matchCategory && matchSearch;
     });
@@ -115,7 +126,9 @@ export default function UserProfilePage() {
       );
       const updatedImage = res.data;
       const updateList = (list) =>
-        list.map((img) => (img._id === updatedImage._id ? { ...img, likes: updatedImage.likes } : img));
+        list.map((img) =>
+          img._id === updatedImage._id ? { ...img, likes: updatedImage.likes } : img
+        );
       setUploadedImages((prev) => updateList(prev));
       setLikedImages((prev) => updateList(prev));
       if (selectedImage?._id === updatedImage._id) {
@@ -127,6 +140,18 @@ export default function UserProfilePage() {
   };
 
   const isLikedByCurrentUser = (image) => image.likes?.includes(currentUser?._id);
+
+  const handleToggleLevelFilter = (label) => {
+    if (label === "18+ 圖片" && currentUser === null) {
+      alert("請先登入才能查看 18+ 圖片");
+      return;
+    }
+    toggleLevelFilter(label);
+  };
+
+  const handleToggleCategoryFilter = (label) => {
+    toggleCategoryFilter(label);
+  };
 
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
@@ -147,28 +172,20 @@ export default function UserProfilePage() {
     }
   };
 
-  const handleToggleLevelFilter = (label) => {
-    if (label === "18+ 圖片" && currentUser === null) {
-      alert("請先登入才能查看 18+ 圖片");
-      return;
-    }
-    setLevelFilters((prev) =>
-      prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]
-    );
-  };
-
-  const handleToggleCategoryFilter = (label) => {
-    setCategoryFilters((prev) =>
-      prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label]
-    );
-  };
-
   if (!userData) {
     return <div className="text-white p-4">載入中...</div>;
   }
 
   return (
     <>
+      <Suspense fallback={null}>
+        <SearchParamsProvider
+          onSearchChange={(val) => {
+            setSearchQuery(val);
+          }}
+        />
+      </Suspense>
+
       <main className="min-h-screen bg-zinc-950 text-white p-4 mt-[80px]">
         <UserHeader
           userData={userData}
@@ -186,18 +203,25 @@ export default function UserProfilePage() {
 
         <div className="flex gap-4 mb-6">
           <button
-            className={`px-4 py-2 rounded ${activeTab === "uploads" ? "bg-white text-black" : "bg-zinc-700 text-white"}`}
+            className={`px-4 py-2 rounded ${
+              activeTab === "uploads"
+                ? "bg-white text-black"
+                : "bg-zinc-700 text-white"
+            }`}
             onClick={() => setActiveTab("uploads")}
           >
             上傳作品
           </button>
           <button
-            className={`px-4 py-2 rounded ${activeTab === "likes" ? "bg-white text-black" : "bg-zinc-700 text-white"}`}
+            className={`px-4 py-2 rounded ${
+              activeTab === "likes"
+                ? "bg-white text-black"
+                : "bg-zinc-700 text-white"
+            }`}
             onClick={() => setActiveTab("likes")}
           >
             ❤️ 收藏圖片
           </button>
-          <FollowListButton currentUser={currentUser} />
         </div>
 
         {filterMenuOpen && (
@@ -224,8 +248,8 @@ export default function UserProfilePage() {
             onClose={() => setSelectedImage(null)}
           />
         )}
-
       </main>
+
       <UserEditModal
         isOpen={isEditModalOpen}
         onClose={() => setEditModalOpen(false)}

@@ -8,6 +8,7 @@ import UploadModal from "@/components/upload/UploadModal";
 import LoginModal from "@/components/auth/LoginModal";
 import RegisterModal from "@/components/auth/RegisterModal";
 import { FilterProvider } from "@/components/context/FilterContext"; // ✅ 新增這行
+import ClientToaster from "@/components/common/ClientToaster"; // ✅ 新增
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,7 +34,7 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="zh-TW">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-white`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-zinc-950 text-white`}
       >
         <CurrentUserProvider>
           <FilterProvider> {/* ✅ 把整體頁面包起來 */}
@@ -55,6 +56,8 @@ export default async function RootLayout({ children }) {
             </div>
 
             <FeedbackButton />
+
+            <ClientToaster /> {/* ✅ 放在這裡，全站 toast 生效 */}
 
             <div className="fixed bottom-0 left-0 w-full h-[90px] bg-zinc-900 text-white text-center border-t border-zinc-700 z-50 flex items-center justify-center text-sm">
               📢 廣告區｜這邊可以放 Google AdSense 或橫幅合作

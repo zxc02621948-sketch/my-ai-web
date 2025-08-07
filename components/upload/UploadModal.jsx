@@ -23,6 +23,8 @@ const UploadModal = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [modelLink, setModelLink] = useState("");
+  const [loraLink, setLoraLink] = useState("");
 
   // ✅ 用事件觸發開啟 modal
   useEffect(() => {
@@ -54,6 +56,8 @@ const UploadModal = () => {
       setIsUploading(false);
       setPreview(null);
       setCurrentUser(null);
+      setModelLink("");
+      setLoraLink("");
     }
   }, [isOpen]);
 
@@ -116,6 +120,10 @@ const UploadModal = () => {
               onUpload={handleUpload}
               onClose={onClose}
               currentUser={currentUser}
+              modelLink={modelLink}
+              setModelLink={setModelLink}
+              loraLink={loraLink}
+              setLoraLink={setLoraLink}
             />
           )}
         </div>

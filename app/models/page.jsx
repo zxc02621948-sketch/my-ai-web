@@ -1,13 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
-import Link from "next/link";
 import axios from "axios"; // ✅ 你有用 axios 卻沒 import
 
 export default function ModelInfoPage() {
-  const router = useRouter(); 
 
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
@@ -34,8 +31,8 @@ export default function ModelInfoPage() {
   }, []);
 
   return (
-    <>
-      <div className="max-w-4xl mx-auto px-4 py-8 text-white mt-24">
+    <main className="min-h-screen bg-zinc-950 text-white">
+      <div className="max-w-4xl mx-auto px-4 py-8 mt-24">
         <h1 className="text-3xl font-bold mb-6 text-center">模型介紹與獲取</h1>
 
         {/* civitai.com 按鈕 */}
@@ -160,6 +157,6 @@ export default function ModelInfoPage() {
           </ul>
         </section>
       </div>
-    </>
+    </main>
   );
 }

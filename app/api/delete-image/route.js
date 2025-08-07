@@ -3,10 +3,11 @@ import { connectToDatabase } from "@/lib/mongodb";
 import Image from "@/models/Image";
 import User from "@/models/User";
 import Comment from "@/models/Comment";
+import { Notification } from "@/models/Notification"; // ✅ 加上大括號
 import jwt from "jsonwebtoken";
 import axios from "axios";
 
-export async function DELETE(req) {
+export async function POST(req) {
   await connectToDatabase();
 
   try {
@@ -50,24 +51,34 @@ export async function DELETE(req) {
       }
     }
 
-    // ✅ 刪除 Cloudflare 圖片
-    try {
-      await axios.delete(
-        `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/images/v1/${image.imageId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.CLOUDFLARE_API_KEY}`,
-          },
+    // ✅ 刪除 Cloudflare 圖片（可略過錯誤）
+    if (image.imageId) {
+      try {
+        await axios.delete(
+          `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/images/v1/${image.imageId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.CLOUDFLARE_API_KEY}`,
+            },
+          }
+        );
+      } catch (error) {
+        const msg = error.response?.data?.errors?.[0]?.message || "";
+        console.error("❌ Cloudflare 刪除錯誤：", error.response?.data || error.message);
+
+        // 如果是圖片不存在，可略過
+        if (!msg.includes("not found")) {
+          return NextResponse.json(
+            { message: "Cloudflare 刪除失敗", detail: error.response?.data || error.message },
+            { status: 400 }
+          );
+        } else {
+          console.warn("⚠️ Cloudflare 圖片不存在，略過刪除");
         }
-      );
-    } catch (error) {
-      return NextResponse.json(
-        { message: "Cloudflare 刪除失敗", detail: error.response?.data },
-        { status: 400 }
-      );
+      }
     }
 
-    // ✅ 刪除所有該圖片留言，並記錄是誰刪的
+    // ✅ 清空留言
     await Comment.updateMany(
       { imageId },
       {
@@ -80,12 +91,15 @@ export async function DELETE(req) {
       }
     );
 
+    // ✅ 清除通知
+    await Notification.deleteMany({ imageId });
+
     // ✅ 刪除圖片記錄
     await Image.findByIdAndDelete(imageId);
 
     return NextResponse.json({ message: "圖片與留言刪除成功" });
   } catch (error) {
-    console.error("刪除圖片錯誤：", error);
+    console.error("伺服器錯誤：", error);
     return NextResponse.json({ message: "伺服器錯誤" }, { status: 500 });
   }
 }

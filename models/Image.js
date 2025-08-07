@@ -13,10 +13,13 @@ const ImageSchema = new mongoose.Schema(
     },
     category: String,
     description: String,
+    author: { type: String, default: "" }, // ✅ 新增這行
 
     // ✅ 新增欄位
     modelName: String,
     loraName: String,
+    modelLink: { type: String, default: "" },
+    loraLink: { type: String, default: "" },
 
     tags: [String],
     imageId: String,

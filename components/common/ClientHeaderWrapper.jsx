@@ -37,7 +37,6 @@ export default function ClientHeaderWrapper({ currentUser, setCurrentUser }) {
       currentUser={currentUser}
       setCurrentUser={setCurrentUser}
       suggestions={suggestions}
-      onSearch={handleSearch}
       onLogout={async () => {
         await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
         setCurrentUser(null);

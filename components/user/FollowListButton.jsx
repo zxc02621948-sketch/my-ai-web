@@ -5,21 +5,29 @@ import FollowListModal from "./FollowListModal";
 export default function FollowListButton({ currentUser, userId }) {
   const [isOpen, setIsOpen] = useState(false);
 
-  // ✅ 限制只有自己看自己頁面才會顯示按鈕
-  if (!currentUser || (currentUser._id !== userId && currentUser.id !== userId)) return null;
+  // 還在載入登入者資料：不渲染，避免閃爍
+  if (currentUser === undefined || userId === undefined || userId === null) return null;
+
+  const selfId = String(currentUser?._id ?? currentUser?.id ?? "");
+  const targetId = String(userId ?? "");
+
+  // 只有「自己看自己頁面」才顯示
+  const isOwnProfile = !!selfId && !!targetId && selfId === targetId;
+  if (!isOwnProfile) return null;
 
   return (
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+        className="h-9 px-3 rounded text-sm border border-blue-500 text-blue-400
+                   hover:bg-blue-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
       >
-        已追蹤
+        查看已追蹤
       </button>
       <FollowListModal
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
-        currentUser={currentUser} 
+        currentUser={currentUser}
       />
     </>
   );

@@ -26,12 +26,29 @@ export default function NotificationList({
     setUnread(updated.some((n) => !n.isRead));
   };
 
+  const handleDeleteRead = async () => {
+    if (!confirm("確定要刪除所有已讀通知嗎？")) return;
+    await axios.delete("/api/notifications/delete-read");
+    const updated = notifications.filter((n) => !n.isRead);
+    setNotifications(updated);
+    setUnread(updated.some((n) => !n.isRead));
+  };
+
   if (notifications.length === 0) {
     return <div className="text-sm text-center p-4 text-zinc-400">目前沒有通知</div>;
   }
 
   return (
     <div className="divide-y divide-zinc-700">
+      {/* ✅ 新增：一鍵刪除所有通知按鈕 */}
+      <div className="py-3 px-3 text-center">
+        <button
+          onClick={handleDeleteRead}
+          className="text-sm text-red-400 hover:underline"
+        >
+          🧹 刪除所有通知
+        </button>
+      </div>
       {notifications.map((n) => (
         <div
           key={n._id}

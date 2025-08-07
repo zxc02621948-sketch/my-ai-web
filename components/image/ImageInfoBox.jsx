@@ -1,24 +1,36 @@
 import { useRef, useState } from "react";
 import axios from "axios";
 import { X, Trash2, Download } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function ImageInfoBox({ image, currentUser, onClose }) {
   const positiveRef = useRef();
   const negativeRef = useRef();
   const [copiedField, setCopiedField] = useState(null);
+  const router = useRouter();
 
   const handleDelete = async () => {
     const confirmed = window.confirm("你確定要刪除這張圖片嗎？");
     if (!confirmed) return;
 
+    if (!image || !image._id) {
+      alert("找不到圖片資訊，無法刪除！");
+      return; 
+    }
+
     const token = document.cookie.match(/token=([^;]+)/)?.[1];
     if (!token) return;
 
     try {
-      const res = await axios.delete("/api/delete-image", {
-        data: { imageId: image._id },
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await axios.post(
+        "/api/delete-image",     
+        { imageId: image._id },
+        {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      } 
+    );
       if (res.status === 200) {
         alert("圖片刪除成功！");
         onClose?.();
@@ -99,25 +111,61 @@ export default function ImageInfoBox({ image, currentUser, onClose }) {
       {/* 📌 分級標籤 */}
       <div className="mb-3">{getRatingLabel(image.rating)}</div>
 
+      {image.author && (
+       <div className="text-sm text-zinc-300 mb-3">
+          來源作者：<span className="text-white">{image.author}</span>
+        </div>
+      )}
+
       {/* 📌 平台資訊 */}
       <div className="text-sm text-gray-300 mb-3">
-        平台：{image.platform || "未指定"}
+        平台：{image.platform?.trim() ? image.platform : "未指定"}
       </div>
 
       {/* ✅ 模型與 LORA 名稱 */}
-      <div className="text-sm text-gray-300 mb-3">
-        模型名稱：
-        <span className="text-white ml-1 break-words inline-block max-w-[150px] align-top">
-          {image.modelName || "（無）"}
-        </span>
-      </div>
+        <div className="text-sm text-gray-300 mb-3">
+          模型名稱：<br />
+          {image.modelName?.trim() ? (
+            image.modelLink && image.modelLink.includes("civitai.com") ? (
+              <a
+                href={image.modelLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 underline break-words inline-block max-w-[220px]"
+              >
+                {image.modelName}
+              </a>
+            ) : (
+              <span className="text-white break-words inline-block max-w-[220px]">
+                {image.modelName}
+              </span>
+            )
+          ) : (
+            <span className="text-white">(未提供)</span>
+          )}
+        </div>
 
-      <div className="text-sm text-gray-300 mb-3">
-        LoRA 名稱：
-        <span className="text-white ml-1 break-words inline-block max-w-[220px] align-top">
-          {image.loraName || "（無）"}
-        </span>
-      </div>
+        <div className="text-sm text-gray-300 mb-3">
+          LoRA 名稱：<br />
+          {image.modelName?.trim() ? (
+            image.loraLink && image.loraLink.includes("civitai.com") ? (
+              <a
+                href={image.loraLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 underline break-words inline-block max-w-[220px]"
+              >
+                {image.loraName}
+              </a>
+            ) : (
+              <span className="text-white break-words inline-block max-w-[220px]">
+                {image.loraName}
+              </span>
+            )
+          ) : (
+            <span className="text-white">(未提供)</span>
+          )}
+        </div>
 
       {/* 📌 分類 */}
       <div className="text-sm text-gray-300 mb-3">
@@ -129,12 +177,17 @@ export default function ImageInfoBox({ image, currentUser, onClose }) {
         標籤：
         {Array.isArray(image.tags) && image.tags.length > 0
           ? image.tags.map((tag, index) => (
-              <span
+              <button
                 key={index}
-                className="inline-block bg-gray-700 text-white text-xs px-2 py-1 rounded mr-1 mb-1"
+                onClick={() => {
+                  const keyword = tag;
+                  window.dispatchEvent(new CustomEvent("global-search", { detail: { keyword } }));
+                  onClose?.();   
+                }}
+                className="inline-block bg-blue-700 hover:bg-blue-800 text-white text-xs px-2 py-1 rounded mr-1 mb-1 transition"
               >
-                {tag}
-              </span>
+                #{tag}
+              </button>
             ))
           : "（無標籤）"}
       </div>
