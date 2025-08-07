@@ -143,19 +143,34 @@ export default function ImageModal({
                       const token = document.cookie.match(/token=([^;]+)/)?.[1];
                       if (!token || !currentUser?._id) return;
 
-                      const newLikeState = !image.likes.includes(currentUser._id);
+                      const hasLiked = image.likes.includes(currentUser._id);
+                      const newLikeState = !hasLiked;
 
+                      // ✅ 樂觀更新畫面
+                      const optimisticLikes = newLikeState
+                        ? [...image.likes, currentUser._id]
+                        : image.likes.filter((id) => id !== currentUser._id);
+
+                      const optimisticImage = {
+                        ...image,
+                        likes: optimisticLikes,
+                      };
+                      setImage(optimisticImage);
+                      onLikeUpdate?.(optimisticImage);
+
+                      // ✅ 真實請求
                       const res = await axios.put(
                         `/api/like-image?id=${image._id}`,
                         { shouldLike: newLikeState },
                         {
-                          headers: { 
+                          headers: {
                             Authorization: `Bearer ${token}`,
                             "Content-Type": "application/json",
                           },
                         }
                       );
 
+                      // ✅ 回寫伺服器的資料（避免同步問題）
                       if (res.status === 200 && res.data) {
                         const updated = {
                           ...image,
@@ -166,6 +181,18 @@ export default function ImageModal({
                       }
                     } catch (err) {
                       console.error("❌ 點讚失敗", err);
+
+                      // ⛔ 回滾錯誤的樂觀更新
+                      const rolledBackLikes = image.likes.includes(currentUser._id)
+                        ? image.likes.filter((id) => id !== currentUser._id)
+                        : [...image.likes, currentUser._id];
+
+                      const rolledBackImage = {
+                        ...image,
+                        likes: rolledBackLikes,
+                      };
+                      setImage(rolledBackImage);
+                      onLikeUpdate?.(rolledBackImage);
                     }
                   }}
                 />
