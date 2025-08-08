@@ -49,7 +49,7 @@ export default function FilterPanel({
 
       <div className="font-bold text-sm text-gray-300 pt-2">分類</div>
       <div className="flex gap-2 flex-wrap">
-        {["風景", "食物", "人物", "動漫", "物品", "其他"].map((cat) => (
+        {["風景", "食物", "人物", "動漫", "物品", "藝術", "其他"].map((cat) => (
           <button
             key={cat}
             onClick={() => toggleCategoryFilter(cat)}

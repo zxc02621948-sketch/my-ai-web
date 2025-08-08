@@ -44,7 +44,9 @@ export async function GET(req) {
         description: img.description,
         tags: img.tags,
         modelName: img.modelName || null,   // ✅ 加入欄位
+        modelLink: img.modelLink || null,
         loraName: img.loraName || null,     // ✅ 加入欄位
+        loraLink: img.loraLink || null, 
         user: populatedUser
           ? {
               _id: populatedUser._id?.toString(),

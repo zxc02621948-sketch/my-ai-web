@@ -254,6 +254,8 @@ export default function UploadStep2({
             <option value="食物">食物</option>
             <option value="動漫">動漫</option>
             <option value="物品">物品</option>
+            <option value="藝術">藝術</option>
+            <option value="其他">其他</option>
           </select>
 
         </div>

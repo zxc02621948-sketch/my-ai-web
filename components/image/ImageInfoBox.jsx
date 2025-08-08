@@ -125,46 +125,48 @@ export default function ImageInfoBox({ image, currentUser, onClose }) {
       {/* ✅ 模型與 LORA 名稱 */}
         <div className="text-sm text-gray-300 mb-3">
           模型名稱：<br />
-          {image.modelName?.trim() ? (
-            image.modelLink && image.modelLink.includes("civitai.com") ? (
-              <a
-                href={image.modelLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 underline break-words inline-block max-w-[220px]"
-              >
-                {image.modelName}
-              </a>
-            ) : (
-              <span className="text-white break-words inline-block max-w-[220px]">
-                {image.modelName}
-              </span>
-            )
-          ) : (
-            <span className="text-white">(未提供)</span>
-          )}
+          {(() => {
+            const name = (image.modelName || "").trim();
+            const link = (image.modelLink || "").trim();
+            const url = link || name; 
+            const looksUrl = /^https?:\/\//i.test(url);
+
+            if (!name && !looksUrl) return <span className="text-white">(未提供)</span>;
+
+            if (looksUrl) {
+              return (
+                <a href={url} target="_blank" rel="noopener noreferrer"
+                   className="text-blue-400 underline break-words inline-block max-w-[260px]">
+                  {name || url}
+                </a>
+              );
+            }
+
+            return <span className="text-white break-words inline-block max-w-[260px]">{name}</span>;
+          })()}
         </div>
 
         <div className="text-sm text-gray-300 mb-3">
           LoRA 名稱：<br />
-          {image.modelName?.trim() ? (
-            image.loraLink && image.loraLink.includes("civitai.com") ? (
-              <a
-                href={image.loraLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 underline break-words inline-block max-w-[220px]"
-              >
-                {image.loraName}
-              </a>
-            ) : (
-              <span className="text-white break-words inline-block max-w-[220px]">
-                {image.loraName}
-              </span>
-            )
-          ) : (
-            <span className="text-white">(未提供)</span>
-          )}
+          {(() => {
+            const name = (image.loraName || "").trim();
+            const link = (image.loraLink || "").trim();
+            const url = link || name;
+            const looksUrl = /^https?:\/\//i.test(url);
+
+            if (!name && !looksUrl) return <span className="text-white">(未提供)</span>;
+ 
+            if (looksUrl) {
+              return (
+                <a href={url} target="_blank" rel="noopener noreferrer"
+                   className="text-blue-400 underline break-words inline-block max-w-[260px]">
+                  {name || url}
+                </a>
+              );
+            }
+
+            return <span className="text-white break-words inline-block max-w-[260px]">{name}</span>;
+          })()}
         </div>
 
       {/* 📌 分類 */}
