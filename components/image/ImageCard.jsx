@@ -30,25 +30,33 @@ export default function ImageCard({
     const prevCount = likeCountLocal;
     const newLiked = !prevLiked;
 
-    // ✅ 樂觀更新
+    // ✅ 樂觀更新（本地立即變）
     setIsLikedLocal(newLiked);
     setLikeCountLocal((prev) => prev + (newLiked ? 1 : -1));
     setIsProcessing(true);
 
+    // ✅ 準備外層需要的 updatedImage（先在前端組 likes）
+    const updatedImage = {
+      ...img,
+      likes: newLiked
+        ? [...(img.likes || []), currentUser._id]
+        : (img.likes || []).filter((id) => id !== currentUser._id),
+    };
+
     try {
-      await onToggleLike(img._id, newLiked);
-
-      // ✅ 縮圖同步邏輯（可選，通知外層）
+      // ✅ 通知外層（如有透傳）
       onLocalLikeChange?.(img._id, newLiked);
-
-      // ✅ 大圖同步 likes
-      const updatedImage = {
-        ...img,
-        likes: newLiked
-          ? [...img.likes, currentUser._id]
-          : img.likes.filter((id) => id !== currentUser._id),
-      };
       onLikeUpdate?.(updatedImage);
+
+      // ✅ 廣播全域事件，page.js 先同步 images / selectedImage
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("image-liked", { detail: { ...updatedImage } })
+        );
+      }
+
+      // ✅ 打 API，送最後狀態
+      await onToggleLike(img._id, newLiked);
 
       setRenderKey((prev) => prev + 1);
     } catch (err) {

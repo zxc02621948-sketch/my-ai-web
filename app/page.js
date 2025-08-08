@@ -169,6 +169,7 @@ export default function HomePage() {
     };
   }, []);
 
+  // ✅ 收到「樂觀更新」事件就先同步到 images / selectedImage
   useEffect(() => {
     const handleImageLiked = (event) => {
       const updatedImage = event.detail;
@@ -177,13 +178,16 @@ export default function HomePage() {
           img._id === updatedImage._id ? { ...img, likes: updatedImage.likes } : img
         )
       );
+      if (selectedImage?._id === updatedImage._id) {
+        setSelectedImage((prev) => ({ ...prev, likes: updatedImage.likes }));
+      }
     };
 
     window.addEventListener("image-liked", handleImageLiked);
     return () => {
       window.removeEventListener("image-liked", handleImageLiked);
     };
-  }, []);
+  }, [selectedImage]);
 
   useEffect(() => {
     fetch("/api/track-visit", {
@@ -285,6 +289,16 @@ export default function HomePage() {
         currentUser={currentUser}
         isLikedByCurrentUser={isLikedByCurrentUser}
         onToggleLike={handleToggleLike}
+        // ✅ 整條打通給縮圖用（如果 ImageGrid 透傳，就能第一時間外層也同步）
+        onLikeUpdate={(updated) => {
+          setImages((prev) =>
+            prev.map((img) => (img._id === updated._id ? updated : img))
+          );
+          if (selectedImage?._id === updated._id) {
+            setSelectedImage(updated);
+          }
+          setLikeUpdateTrigger((n) => n + 1);
+        }}
       />
 
       <div ref={loadMoreRef} className="py-6 text-center text-zinc-400 text-sm">

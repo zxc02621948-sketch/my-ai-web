@@ -122,6 +122,15 @@ export default function ImageModal({
                     setImage(optimisticImage);
                     onLikeUpdate?.(optimisticImage); // ✅ 外部也同步更新
 
+                    // ✅ 廣播全域事件，縮圖立刻同步
+                    if (typeof window !== "undefined") {
+                      window.dispatchEvent(
+                        new CustomEvent("image-liked", {
+                          detail: { ...optimisticImage },
+                        })
+                      );
+                    }
+
                     // 真實請求
                     const res = await axios.put(
                       `/api/like-image?id=${image._id}`,
@@ -141,6 +150,15 @@ export default function ImageModal({
                       };
                       setImage(updated);
                       onLikeUpdate?.(updated);
+
+                      // ✅ 再次廣播，確保最終狀態一致
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(
+                          new CustomEvent("image-liked", {
+                            detail: { ...updated },
+                          })
+                        );
+                      }
                     }
                   } catch (err) {
                     console.error("❌ 點讚失敗", err);

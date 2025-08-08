@@ -11,6 +11,8 @@ const ImageGrid = ({
   isLikedByCurrentUser,
   currentUser,
   viewMode,
+  onLikeUpdate,       // ✅ 新增
+  onLocalLikeChange,  // ✅ 新增（可選，用於縮圖內部即時同步）
 }) => {
   const finalImages = images.length > 0 ? images : filteredImages || [];
   const columnCount = 5;
@@ -35,6 +37,8 @@ const ImageGrid = ({
               isLiked={isLikedByCurrentUser?.(img)}
               onClick={() => onSelectImage(img)}
               onToggleLike={onToggleLike}
+              onLikeUpdate={onLikeUpdate}           // ✅ 往下傳
+              onLocalLikeChange={onLocalLikeChange} // ✅ 往下傳
             />
           ))}
         </div>
