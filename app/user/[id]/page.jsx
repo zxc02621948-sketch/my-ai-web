@@ -1,15 +1,14 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, Suspense } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import axios from "axios";
-import { useParams, useSearchParams } from "next/navigation";
-import { getTokenFromCookie } from "@/lib/cookie";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import ImageModal from "@/components/image/ImageModal";
 import UserHeader from "@/components/user/UserHeader";
 import UserImageGrid from "@/components/user/UserImageGrid";
 import UserEditModal from "@/components/user/UserEditModal";
-import SearchParamsProvider from "@/components/homepage/SearchParamsProvider";
 import { useFilterContext } from "@/components/context/FilterContext";
+import useLikeHandler from "@/hooks/useLikeHandler";
 
 const labelToRating = {
   "一般圖片": "all",
@@ -19,14 +18,13 @@ const labelToRating = {
 
 export default function UserProfilePage() {
   const { id } = useParams();
-  const searchParams = useSearchParams();
+  const params = useSearchParams();
+  const router = useRouter();
+
   const {
     levelFilters,
     categoryFilters,
-    toggleLevelFilter,
-    toggleCategoryFilter,
     viewMode,
-    setViewMode,
     filterMenuOpen,
     setFilterMenuOpen,
   } = useFilterContext();
@@ -35,53 +33,63 @@ export default function UserProfilePage() {
   const [userData, setUserData] = useState(null);
   const [uploadedImages, setUploadedImages] = useState([]);
   const [likedImages, setLikedImages] = useState([]);
-  const [activeTab, setActiveTab] = useState("uploads");
+
+  // ✅ 從 URL 讀取目前分頁（預設 uploads）
+  const [activeTab, setActiveTab] = useState(
+    params.get("tab") === "likes" ? "likes" : "uploads"
+  );
+
   const [selectedImage, setSelectedImage] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
-  const [avatarFile, setAvatarFile] = useState(null);
-  const [avatarPreview, setAvatarPreview] = useState(null);
 
-  const isOwnProfile = currentUser && (currentUser._id === id || currentUser.id === id);
-
+  // ✅ 讀 URL 的 search 當唯一資料源（就地搜尋）
+  const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
-    const q = searchParams.get("q")?.trim() || "";
-    setSearchQuery(q);
-  }, [searchParams]);
+    setSearchQuery((params.get("search") || "").trim());
+  }, [params]);
 
+  // 分頁切換時把 tab 寫回 URL（保留既有的 search 等參數）
   useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const res = await axios.get("/api/current-user");
-        setCurrentUser(res.data);
-      } catch {
-        setCurrentUser(null);
-      }
-    };
-    fetchCurrentUser();
+    const sp = new URLSearchParams(params.toString());
+    if (activeTab === "likes") sp.set("tab", "likes");
+    else sp.delete("tab");
+    const href = `${window.location.pathname}${sp.toString() ? `?${sp.toString()}` : ""}`;
+    router.replace(href);
+    // 故意不把 params 放依賴，避免反覆觸發
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const isOwnProfile =
+    currentUser && (currentUser._id === id || currentUser.id === id);
+
+  // 目前登入者
+  useEffect(() => {
+    axios
+      .get("/api/current-user")
+      .then((res) => setCurrentUser(res.data))
+      .catch(() => setCurrentUser(null));
   }, []);
 
+  // 篩選面板快捷事件（保留）
   useEffect(() => {
     const handler = () => setFilterMenuOpen((prev) => !prev);
     document.addEventListener("toggle-filter-panel", handler);
     return () => document.removeEventListener("toggle-filter-panel", handler);
   }, [setFilterMenuOpen]);
 
+  // 讀取個人頁資料
   useEffect(() => {
     if (!id || id === "undefined") return;
     const fetchData = async () => {
       try {
-        const token = getTokenFromCookie();
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const [userRes, uploadsRes, likesRes] = await Promise.all([
-          axios.get(`/api/user-info?id=${id}`, { headers }),
-          axios.get(`/api/user-images?id=${id}`, { headers }),
-          axios.get(`/api/user-liked-images?id=${id}`, { headers }),
+          axios.get(`/api/user-info?id=${id}`),
+          axios.get(`/api/user-images?id=${id}`),
+          axios.get(`/api/user-liked-images?id=${id}`),
         ]);
         setUserData(userRes.data);
-        setUploadedImages(uploadsRes.data);
-        setLikedImages(likesRes.data);
+        setUploadedImages(uploadsRes.data || []);
+        setLikedImages(likesRes.data || []);
       } catch (err) {
         console.error("❌ 讀取用戶資料失敗", err);
       }
@@ -89,21 +97,68 @@ export default function UserProfilePage() {
     fetchData();
   }, [id]);
 
+  // 🔔 接收全域的「樂觀更新」事件：同步兩個清單 & modal
+  useEffect(() => {
+    const handleImageLiked = (e) => {
+      const updated = e.detail;
+      const me = currentUser?._id || currentUser?.id;
+
+      // 上傳清單：只同步 likes
+      setUploadedImages((prev) =>
+        prev.map((img) => (img._id === updated._id ? { ...img, likes: updated.likes } : img))
+      );
+
+      // 收藏清單：若已不再喜歡，移除；否則同步 likes
+      setLikedImages((prev) => {
+        const stillLiked = Array.isArray(updated.likes) && updated.likes.includes(me);
+        return stillLiked
+          ? prev.map((img) => (img._id === updated._id ? { ...img, likes: updated.likes } : img))
+          : prev.filter((img) => img._id !== updated._id);
+      });
+
+      // modal 畫面一起同步
+      setSelectedImage((prev) =>
+        prev?._id === updated._id ? { ...prev, likes: updated.likes } : prev
+      );
+    };
+
+    window.addEventListener("image-liked", handleImageLiked);
+    return () => window.removeEventListener("image-liked", handleImageLiked);
+  }, [currentUser]);
+
+  // 點縮圖時，若 user 欄位不完整，補抓作者資訊再開圖
+  const handleSelectImage = async (img) => {
+    let enriched = img;
+    try {
+      const authorId =
+        typeof img.user === "string" ? img.user : img.user?._id || img.user?.id;
+
+      if (authorId && (!img.user || !img.user.username)) {
+        const res = await axios.get(`/api/user-info?id=${authorId}`);
+        if (res?.data) {
+          enriched = { ...img, user: res.data };
+        }
+      }
+    } catch {
+      // 靜默失敗：維持原資料
+    }
+    setSelectedImage(enriched);
+  };
+
+  // 畫面用的過濾清單
   const filteredImages = useMemo(() => {
-    const selectedRatings = levelFilters.map((label) => labelToRating[label]);
     const base = activeTab === "uploads" ? uploadedImages : likedImages;
+    const keyword = searchQuery.toLowerCase();
+    const selectedRatings = levelFilters.map((label) => labelToRating[label]);
 
     return base.filter((img) => {
       const rating = img.rating || "all";
       const matchLevel =
-        selectedRatings.length === 0
-          ? rating !== "18"
-          : selectedRatings.includes(rating);
+        selectedRatings.length === 0 ? rating !== "18" : selectedRatings.includes(rating);
 
       const matchCategory =
         categoryFilters.length === 0 || categoryFilters.includes(img.category);
 
-      const keyword = searchQuery.toLowerCase().trim();
       const matchSearch =
         keyword === "" ||
         (img.title?.toLowerCase() || "").includes(keyword) ||
@@ -116,60 +171,19 @@ export default function UserProfilePage() {
     });
   }, [activeTab, uploadedImages, likedImages, levelFilters, categoryFilters, searchQuery]);
 
-  const handleToggleLike = async (imageId) => {
-    try {
-      const token = getTokenFromCookie();
-      const res = await axios.put(
-        `/api/like-image?id=${imageId}`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const updatedImage = res.data;
-      const updateList = (list) =>
-        list.map((img) =>
-          img._id === updatedImage._id ? { ...img, likes: updatedImage.likes } : img
-        );
-      setUploadedImages((prev) => updateList(prev));
-      setLikedImages((prev) => updateList(prev));
-      if (selectedImage?._id === updatedImage._id) {
-        setSelectedImage({ ...selectedImage, likes: [...updatedImage.likes] });
-      }
-    } catch (err) {
-      console.error("點愛心失敗", err);
-    }
-  };
+  // Like hook（共用）
+  const { handleToggleLike, onLikeUpdate } = useLikeHandler({
+    setUploadedImages,
+    setLikedImages,
+    selectedImage,
+    setSelectedImage,
+    currentUser,
+  });
 
-  const isLikedByCurrentUser = (image) => image.likes?.includes(currentUser?._id);
-
-  const handleToggleLevelFilter = (label) => {
-    if (label === "18+ 圖片" && currentUser === null) {
-      alert("請先登入才能查看 18+ 圖片");
-      return;
-    }
-    toggleLevelFilter(label);
-  };
-
-  const handleToggleCategoryFilter = (label) => {
-    toggleCategoryFilter(label);
-  };
-
-  const handleAvatarChange = (e) => {
-    const file = e.target.files[0];
-    setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
-  };
-
-  const handleUploadAvatar = async () => {
-    if (!avatarFile) return;
-    try {
-      const formData = new FormData();
-      formData.append("file", avatarFile);
-      const res = await axios.post(`/api/upload-avatar?id=${id}`, formData);
-      setUserData((prev) => ({ ...prev, image: res.data.image }));
-      setIsAvatarModalOpen(false);
-    } catch (err) {
-      console.error("上傳頭貼失敗", err);
-    }
+  // 判斷是否被我按讚（防呆）
+  const isLikedByCurrentUser = (image) => {
+    const me = currentUser?._id || currentUser?.id;
+    return !!(me && Array.isArray(image.likes) && image.likes.includes(me));
   };
 
   if (!userData) {
@@ -178,45 +192,34 @@ export default function UserProfilePage() {
 
   return (
     <>
-      <Suspense fallback={null}>
-        <SearchParamsProvider
-          onSearchChange={(val) => {
-            setSearchQuery(val);
-          }}
-        />
-      </Suspense>
-
       <main className="min-h-screen bg-zinc-950 text-white p-4 mt-[80px]">
         <UserHeader
           userData={userData}
           currentUser={currentUser}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          onAvatarClick={() => setIsAvatarModalOpen(true)}
           onUpdate={() => {
-            axios.get(`/api/user-info?id=${id}`).then((res) => {
-              setUserData(res.data);
-            });
+            axios.get(`/api/user-info?id=${id}`).then((res) => setUserData(res.data));
           }}
           onEditOpen={() => setEditModalOpen(true)}
         />
 
         <div className="flex gap-4 mb-6">
           <button
-            className={`px-4 py-2 rounded ${
+            className={`px-4 py-2 rounded font-medium transition ${
               activeTab === "uploads"
-                ? "bg-white text-black"
-                : "bg-zinc-700 text-white"
+                ? "bg-white text-black shadow"
+                : "bg-zinc-700 text-white hover:bg-zinc-600"
             }`}
             onClick={() => setActiveTab("uploads")}
           >
             上傳作品
           </button>
           <button
-            className={`px-4 py-2 rounded ${
+            className={`px-4 py-2 rounded font-medium transition ${
               activeTab === "likes"
-                ? "bg-white text-black"
-                : "bg-zinc-700 text-white"
+                ? "bg-white text-black shadow"
+                : "bg-zinc-700 text-white hover:bg-zinc-600"
             }`}
             onClick={() => setActiveTab("likes")}
           >
@@ -234,17 +237,50 @@ export default function UserProfilePage() {
           images={filteredImages}
           currentUser={currentUser}
           onToggleLike={handleToggleLike}
-          onSelectImage={setSelectedImage}
+          onSelectImage={handleSelectImage}   // ✅ 改用補抓作者的版本
           isLikedByCurrentUser={isLikedByCurrentUser}
           viewMode={viewMode}
+          setUploadedImages={setUploadedImages}
+          setLikedImages={setLikedImages}
+          selectedImage={selectedImage}
+          setSelectedImage={setSelectedImage}
+          onLikeUpdate={onLikeUpdate}
         />
 
+        {/* 用 imageData（已補抓作者）開圖 */}
         {selectedImage && (
           <ImageModal
-            imageId={selectedImage._id}
+            imageData={selectedImage}
             currentUser={currentUser}
-            isLikedByCurrentUser={isLikedByCurrentUser}
-            onToggleLike={handleToggleLike}
+            onLikeUpdate={(updated) => {
+              // 共用 hook 先同步 likes
+              onLikeUpdate(updated);
+
+              const me = currentUser?._id || currentUser?.id;
+              const stillLiked = Array.isArray(updated.likes) && updated.likes.includes(me);
+
+              if (activeTab === "likes") {
+                // 取消喜歡 → 立即從收藏列表移除
+                if (!stillLiked) {
+                  setLikedImages((prev) => prev.filter((img) => img._id !== updated._id));
+                  setSelectedImage((prev) => (prev?._id === updated._id ? null : prev));
+                } else {
+                  // 仍是喜歡 → 同步 likes
+                  setLikedImages((prev) =>
+                    prev.map((img) =>
+                      img._id === updated._id ? { ...img, likes: updated.likes } : img
+                    )
+                  );
+                }
+              } else {
+                // 上傳分頁 → 同步 likes
+                setUploadedImages((prev) =>
+                  prev.map((img) =>
+                    img._id === updated._id ? { ...img, likes: updated.likes } : img
+                  )
+                );
+              }
+            }}
             onClose={() => setSelectedImage(null)}
           />
         )}

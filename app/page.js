@@ -1,49 +1,40 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef, Suspense } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import ImageModal from "@/components/image/ImageModal";
-import { useRouter } from "next/navigation";
-import { jwtDecode } from "jwt-decode";
-import FilterPanel from "@/components/common/FilterPanel";
+import { useRouter, useSearchParams } from "next/navigation";
 import ImageGrid from "@/components/image/ImageGrid";
 import AdminPanel from "@/components/homepage/AdminPanel";
 import BackToTopButton from "@/components/common/BackToTopButton";
-import axios from "axios";
-import SearchParamsProvider from "@/components/homepage/SearchParamsProvider";
-import NotificationBell from "@/components/common/NotificationBell";
 import { useFilterContext, labelToRating } from "@/components/context/FilterContext";
-
-function getTokenFromCookie() {
-  const match = document.cookie.match(/token=([^;]+)/);
-  return match ? match[1] : "";
-}
+import useLikeHandler from "@/hooks/useLikeHandler";
 
 export default function HomePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [likeUpdateTrigger, setLikeUpdateTrigger] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+
+  // ✅ 搜尋字由 URL 主導（唯一資料源）
   const [search, setSearch] = useState("");
+  const lastUrlSearchRef = useRef(null);
+  const fetchedOnceRef = useRef(false); // ✅ 首次載入已抓
+
   const [images, setImages] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [showProcessingCard, setShowProcessingCard] = useState(false);
   const [currentUser, setCurrentUser] = useState(undefined);
-  const [suggestions, setSuggestions] = useState([]);
   const [searchKeyReset, setSearchKeyReset] = useState(0);
   const loadMoreRef = useRef(null);
 
   const {
     levelFilters,
-    toggleLevelFilter,
     categoryFilters,
-    toggleCategoryFilter,
     viewMode,
     setViewMode,
-    resetFilters, // ✅ 加這一行
+    resetFilters,
   } = useFilterContext();
 
   const fetchImages = async (pageToFetch = 1) => {
@@ -65,15 +56,6 @@ export default function HomePage() {
         }
         setHasMore(pageToFetch < data.totalPages);
         setPage(pageToFetch);
-        const allStrings = newImages.flatMap((img) => [
-          img.title ?? "",
-          img.author ?? "",
-          ...(Array.isArray(img.tags) ? img.tags : []),
-        ]);
-        setSuggestions((prev) => {
-          const set = new Set([...prev, ...allStrings.map((s) => s.trim()).filter(Boolean)]);
-          return Array.from(set);
-        });
       } else {
         console.warn("資料格式錯誤", data);
         setHasMore(false);
@@ -92,45 +74,19 @@ export default function HomePage() {
       if (!res.ok) throw new Error("未登入");
       const user = await res.json();
       setCurrentUser(user);
-    } catch (err) {
-      console.warn("⚠️ 無法取得使用者資訊", err);
+    } catch {
       setCurrentUser(null);
     }
   };
 
-  const handleToggleLike = async (imageId, shouldLike) => {
-    try {
-      const token = getTokenFromCookie();
-      const res = await axios.put(
-        `/api/like-image?id=${imageId}`,
-        { shouldLike }, // ✅ 傳最後狀態
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const updatedImage = res.data;
-
-      setImages((prevImages) => {
-        const newImages = prevImages.map((img) =>
-          img._id === updatedImage._id
-            ? { ...img, likes: updatedImage.likes }
-            : img
-        );
-        return [...newImages];
-      });
-
-      if (selectedImage?._id === updatedImage._id) {
-        setSelectedImage((prev) => ({ ...prev, likes: updatedImage.likes }));
-      }
-    } catch (error) {
-      console.error("❌ 更新愛心失敗", error.response?.data || error.message);
-      alert("更新愛心失敗：" + (error.response?.data?.message || "未知錯誤"));
-    }
-  };
+  // 共用愛心 hook
+  const { handleToggleLike, onLikeUpdate: onLikeUpdateHook } = useLikeHandler({
+    setUploadedImages: setImages,
+    setLikedImages: null,
+    selectedImage,
+    setSelectedImage,
+    currentUser,
+  });
 
   const isLikedByCurrentUser = (img) => {
     if (!currentUser || !img.likes) return false;
@@ -138,74 +94,77 @@ export default function HomePage() {
     return img.likes.includes(userId);
   };
 
+  // ✅ URL -> search（唯一資料源）
+  // 規則：
+  // 1) 首次進來：抓一次列表，但「不重置篩選」（刷新也要保留）
+  // 2) search 清空：重抓首頁列表；只有當 sessionStorage.homepageReset === "1" 才 resetFilters（點 Logo）
+  // 3) 有關鍵字：不重抓，用前端過濾
   useEffect(() => {
-    const handleGlobalSearch = (e) => {
-      const keyword = e.detail?.keyword ?? "";
-      setSearch(keyword);
-      setSearchKeyReset((n) => n + 1);
-    };
+    const val = (searchParams.get("search") || "").trim();
+    const byLogo = sessionStorage.getItem("homepageReset") === "1";
 
-    window.addEventListener("global-search", handleGlobalSearch);
-    return () => window.removeEventListener("global-search", handleGlobalSearch);
-  }, []);
+    console.log("[HOME] effect hit:", { val, last: lastUrlSearchRef.current, fetchedOnce: fetchedOnceRef.current, byLogo });
 
+    // 若 search 值沒變，但這次是點 Logo（有旗標），仍要執行清篩選
+    if (val === lastUrlSearchRef.current && fetchedOnceRef.current) {
+      if (byLogo && val === "") {
+        console.log("[HOME] reset by logo (early-return branch)");
+        fetchImages(1);
+        resetFilters();
+        sessionStorage.removeItem("homepageReset");
+        setLikeUpdateTrigger((n) => n + 1);
+        setSearchKeyReset((n) => n + 1);
+      }
+      return;
+    }
+
+    lastUrlSearchRef.current = val;
+    setSearch(val);
+
+    if (!fetchedOnceRef.current) {
+      fetchedOnceRef.current = true;
+      fetchImages(1);      // 首次必抓一次列表
+      setPage(1);
+      return;              // 🔸 不在首次做 resetFilters —— 刷新需保留篩選
+    }
+
+    if (val === "") {
+      // 清空搜尋：回首頁列表
+      fetchImages(1);
+
+      // 只有按 Logo（Header 會寫入這個旗標）才清篩選
+      if (byLogo) {
+        resetFilters();
+        sessionStorage.removeItem("homepageReset");
+        setLikeUpdateTrigger((n) => n + 1);
+        setSearchKeyReset((n) => n + 1);
+      }
+    } else {
+      // 有關鍵字：使用前端 filter，不重抓
+      setPage(1);
+    }
+  }, [searchParams, resetFilters]);
+
+  // ✅ 只抓使用者（避免與上面 effect 同時抓圖）
   useEffect(() => {
-    fetchImages();
     fetchCurrentUser();
   }, []);
 
-  useEffect(() => {
-    const handleHomepageReset = () => {
-      setSearch("");
-      fetchImages(1);
-      setLikeUpdateTrigger((n) => n + 1);
-      setSearchKeyReset((n) => n + 1);
-      resetFilters(); // ✅ 要加這一行才會清空篩選
-    };
-
-    window.addEventListener("reset-homepage", handleHomepageReset);
-    return () => {
-      window.removeEventListener("reset-homepage", handleHomepageReset);
-    };
-  }, []);
-
-  // ✅ 收到「樂觀更新」事件就先同步到 images / selectedImage
-  useEffect(() => {
-    const handleImageLiked = (event) => {
-      const updatedImage = event.detail;
-      setImages((prevImages) =>
-        prevImages.map((img) =>
-          img._id === updatedImage._id ? { ...img, likes: updatedImage.likes } : img
-        )
-      );
-      if (selectedImage?._id === updatedImage._id) {
-        setSelectedImage((prev) => ({ ...prev, likes: updatedImage.likes }));
-      }
-    };
-
-    window.addEventListener("image-liked", handleImageLiked);
-    return () => {
-      window.removeEventListener("image-liked", handleImageLiked);
-    };
-  }, [selectedImage]);
-
+  // 訪問紀錄（非關鍵）
   useEffect(() => {
     fetch("/api/track-visit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pathname: window.location.pathname }),
-    }).catch((err) => {
-      console.warn("⚠️ 訪問紀錄上傳失敗", err);
-    });
+    }).catch(() => {});
   }, []);
 
+  // 無限滾動
   useEffect(() => {
     if (!hasMore || isLoading) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          fetchImages(page + 1);
-        }
+        if (entries[0].isIntersecting) fetchImages(page + 1);
       },
       { root: null, rootMargin: "0px", threshold: 1.0 }
     );
@@ -215,25 +174,15 @@ export default function HomePage() {
     };
   }, [hasMore, isLoading, page]);
 
-  const handleLogout = () => {
-    document.cookie = "token=; path=/; max-age=0";
-    setCurrentUser(null);
-    alert("您已登出");
-    location.reload();
-  };
-
   const filteredImages = useMemo(() => {
     if (!Array.isArray(images)) return [];
-
     const keyword = search.trim().toLowerCase();
     const selectedRatings = levelFilters.map((label) => labelToRating[label]);
 
     return images.filter((img) => {
       const rating = img.rating || "all";
       const matchLevel =
-        selectedRatings.length === 0
-          ? rating !== "18" // 預設不顯示 18+
-          : selectedRatings.includes(rating);
+        selectedRatings.length === 0 ? rating !== "18" : selectedRatings.includes(rating);
 
       const matchCategory =
         categoryFilters.length === 0 || categoryFilters.includes(img.category);
@@ -242,8 +191,8 @@ export default function HomePage() {
         keyword === "" ||
         (img.title?.toLowerCase() || "").includes(keyword) ||
         (img.user?.username?.toLowerCase() || "").includes(keyword) ||
-        (Array.isArray(img.tags) 
-          ? img.tags.some((tag) => tag.toLowerCase().includes(keyword)) 
+        (Array.isArray(img.tags)
+          ? img.tags.some((tag) => tag.toLowerCase().includes(keyword))
           : false);
 
       return matchLevel && matchCategory && matchSearch;
@@ -252,26 +201,6 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-4">
-      <Suspense fallback={null}>
-        <SearchParamsProvider
-          onSearchChange={(val) => {
-            const keyword = val.trim();
-            setSearch(keyword);
-
-            const urlSearchParams = new URLSearchParams(window.location.search);
-            const hasSearchQuery = urlSearchParams.has("search");
-
-            if (keyword === "" && window.location.pathname === "/") {
-
-              fetchImages(1);
-              setLikeUpdateTrigger((n) => n + 1);
-              setSearchKeyReset((n) => n + 1);
-              resetFilters(); // ✅ 重設篩選條件
-            }
-          }}
-        />
-      </Suspense>
-
       {currentUser?.isAdmin && (
         <div className="mb-4">
           <AdminPanel />
@@ -281,7 +210,6 @@ export default function HomePage() {
       <ImageGrid
         images={filteredImages}
         viewMode={viewMode}
-        showProcessingCard={showProcessingCard}
         isLoading={isLoading}
         hasMore={hasMore}
         onSelectImage={setSelectedImage}
@@ -289,14 +217,8 @@ export default function HomePage() {
         currentUser={currentUser}
         isLikedByCurrentUser={isLikedByCurrentUser}
         onToggleLike={handleToggleLike}
-        // ✅ 整條打通給縮圖用（如果 ImageGrid 透傳，就能第一時間外層也同步）
         onLikeUpdate={(updated) => {
-          setImages((prev) =>
-            prev.map((img) => (img._id === updated._id ? updated : img))
-          );
-          if (selectedImage?._id === updated._id) {
-            setSelectedImage(updated);
-          }
+          onLikeUpdateHook(updated);
           setLikeUpdateTrigger((n) => n + 1);
         }}
       />
@@ -308,14 +230,11 @@ export default function HomePage() {
       {selectedImage && currentUser !== undefined && (
         <ImageModal
           key={selectedImage?._id + "_" + selectedImage?._forceSync}
-          imageData={selectedImage} // ✅ 傳整個物件進去
+          imageData={selectedImage}
           onClose={() => setSelectedImage(null)}
           currentUser={currentUser}
           onLikeUpdate={(updated) => {
-            setImages((prev) =>
-              prev.map((img) => (img._id === updated._id ? updated : img))
-            );
-            setSelectedImage(updated); // ✅ 也更新 selectedImage 自身
+            onLikeUpdateHook(updated);
             setLikeUpdateTrigger((n) => n + 1);
           }}
         />

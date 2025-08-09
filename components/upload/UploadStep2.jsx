@@ -215,7 +215,7 @@ export default function UploadStep2({
           onChange={(e) => setRating(e.target.value)}
         >
           <option value="all">一般（All）</option>
-          <option value="15">15+（清涼）</option>
+          <option value="15">15+（輕限）</option>
           <option value="18">18+（限制）</option>
         </select>
       </div>
@@ -256,6 +256,7 @@ export default function UploadStep2({
             <option value="物品">物品</option>
             <option value="藝術">藝術</option>
             <option value="其他">其他</option>
+            <option value="動物">動物</option>
           </select>
 
         </div>

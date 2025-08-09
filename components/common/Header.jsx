@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import FilterPanel from "@/components/common/FilterPanel";
 import axios from "axios";
@@ -11,30 +11,27 @@ import NotificationBell from "@/components/common/NotificationBell";
 import { usePortalContainer } from "@/components/common/usePortal";
 import { createPortal } from "react-dom";
 import { useFilterContext } from "@/components/context/FilterContext";
-import toast from "react-hot-toast"; // 🔥 若尚未引入過記得加這行
+import toast from "react-hot-toast";
 
 const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr: false });
 
 export default function Header({
   currentUser,
   setCurrentUser,
-  onSearch,
-  onLogout,
   onLoginOpen,
   onRegisterOpen,
   suggestions = [],
   onUploadClick,
   onGuideClick,
-  isUserPage = false,
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState([]);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
-  const [panelPos, setPanelPos] = useState({ top: 0, left: 0 });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
 
@@ -46,9 +43,9 @@ export default function Header({
   const filterPanelRef = useRef(null);
   const userMenuRef = useRef(null);
   const portalContainer = usePortalContainer();
-  const lastQRef = useRef("");
 
-  const stableSuggestions = useMemo(() => suggestions, [suggestions]);
+  // ✅ 搜尋下拉用的容器，用來偵測點外關閉
+  const searchBoxRef = useRef(null);
 
   const {
     levelFilters,
@@ -57,88 +54,87 @@ export default function Header({
     toggleCategoryFilter,
     viewMode,
     setViewMode,
+    resetFilters,
   } = useFilterContext();
 
+  // ✅ 標記是「使用者打字」而非 URL 回寫，避免雙向同步回圈
+  const isUserTypingRef = useRef(false);
+  const debounceTimerRef = useRef(null);
+
+  // ✅ 就地搜尋／清空：一律以目前頁面 pathname 作為基底
+  const buildHref = (term) => {
+    const q = (term || "").trim();
+    return q ? `${pathname}?search=${encodeURIComponent(q)}` : pathname;
+  };
+
+  // URL → 輸入框（只讀 search；這是「外部同步」，要清掉使用者輸入旗標）
   useEffect(() => {
-    const trimmed = searchQuery.trim();
-    // 這裡不再負責 dispatch；事件交給「URL 驅動」那個 effect
-    if (trimmed === "") setShowDropdown(false);
-  }, [searchQuery, pathname]); // ✅ 同時依賴 pathname
+    const q = searchParams.get("search")?.trim() || "";
+    setSearchQuery(q);
+    isUserTypingRef.current = false; // 外部同步，不觸發輸入路徑
+  }, [searchParams]);
 
+  // 🟢 即時搜尋：輸入框 → URL（僅在「使用者正在輸入」且非組字中時執行）
   useEffect(() => {
-    const onHome = pathname === "/" || pathname?.startsWith("/user/");
-    if (!onHome) return;
+    if (!isUserTypingRef.current) return;
+    if (isComposing) return;
 
-    const rawQ = searchParams.get("q");
-    const q = rawQ?.trim() || "";
+    clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      const target = buildHref(searchQuery);
+      const currentQuery = searchParams.toString();
+      const currentHref = `${pathname}${currentQuery ? `?${currentQuery}` : ""}`;
+      if (currentHref === target) return;
+      router.replace(target);
+    }, 200);
 
-    if (q === lastQRef.current) return;
-    lastQRef.current = q;
+    return () => clearTimeout(debounceTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, isComposing, pathname, searchParams]);
 
-    if (pathname === "/" && !q) {
-      window.dispatchEvent(new Event("reset-homepage"));
-    } else if (q) {
-      window.dispatchEvent(
-        new CustomEvent("global-search", { detail: { keyword: q } })
-      );
-    }
-  }, [searchParams, pathname]);
-
+  // 🔒 點空白處關閉「篩選面板」
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
-        setUserMenuOpen(false);
-      }
-      if (
-        filterMenuOpen &&
-        filterPanelRef.current &&
-        !filterPanelRef.current.contains(e.target) &&
-        !filterButtonRef.current.contains(e.target)
-      ) {
+    const onDocMouseDown = (e) => {
+      if (!filterMenuOpen) return;
+      const panel = filterPanelRef.current;
+      const btn = filterButtonRef.current;
+      if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
         setFilterMenuOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, [filterMenuOpen]);
 
+  // 🔒 點空白 / Esc / 捲動 → 關閉「搜尋建議下拉」
   useEffect(() => {
-    const qInUrl = searchParams.get("q") || "";
-    if (searchQuery === qInUrl) return;
+    const onDocMouseDown = (e) => {
+      if (!showDropdown) return;
+      const box = searchBoxRef.current;
+      if (box && !box.contains(e.target)) setShowDropdown(false);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") setShowDropdown(false);
+    };
+    const onAnyScroll = () => {
+      if (showDropdown) setShowDropdown(false);
+    };
 
-    const next = new URLSearchParams(searchParams);
-    if (searchQuery) {
-      next.set("q", searchQuery);
-    } else {
-      next.delete("q");
-    } 
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onKey);
+    // 第三個參數 true：在捕獲階段也接收（包含可滾容器）
+    window.addEventListener("scroll", onAnyScroll, true);
 
-    const href = `${pathname}${next.toString() ? `?${next.toString()}` : ""}`;
-    router.replace(href);
-  }, [searchQuery, pathname, searchParams, router]);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onAnyScroll, true);
+    };
+  }, [showDropdown]);
 
-
+  // 下拉建議（純顯示，不動 URL）
   useEffect(() => {
-    if (filterMenuOpen && filterButtonRef.current) {
-      const rect = filterButtonRef.current.getBoundingClientRect();
-      setPanelPos({
-        top: rect.bottom + window.scrollY + 8,
-        left: rect.left + window.scrollX,
-      });
-    }
-  }, [filterMenuOpen]);
-
-  useEffect(() => {
-   const q = searchParams.get("q")?.trim() || "";
-   const onHome = pathname === "/" || pathname?.startsWith("/user/");
-   if (onHome) {
-    
-     setSearchQuery(q);
-   }
-  }, [searchParams, pathname]);
-
-  useEffect(() => {
-    const delayDebounce = setTimeout(async () => {
+    const delay = setTimeout(async () => {
       const input = searchQuery.toLowerCase().trim();
       if (!input) {
         setFilteredSuggestions([]);
@@ -151,11 +147,11 @@ export default function Header({
         const data = await res.json();
         setFilteredSuggestions(data.slice(0, 6));
         setShowDropdown(data.length > 0);
-      } catch (err) {
+      } catch {
         setShowDropdown(false);
       }
     }, 200);
-    return () => clearTimeout(delayDebounce);
+    return () => clearTimeout(delay);
   }, [searchQuery]);
 
   const logSearch = async (keyword) => {
@@ -171,67 +167,63 @@ export default function Header({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ keyword, level }),
       });
-    } catch (err) {
-      console.warn("搜尋紀錄送出失敗", err);
-    }
+    } catch {}
+  };
+
+  const handleInputChange = (e) => {
+    isUserTypingRef.current = true; // 標記這是「使用者輸入」路徑
+    setSearchQuery(e.target.value);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const trimmed = searchQuery.trim();
     if (!trimmed) return;
-
     await logSearch(trimmed);
- 
-    // 維持焦點在輸入框，保持「即時輸入 → 即時搜尋」
-    inputRef.current?.focus();
-    
-    // 若你在非首頁希望導回首頁，可保留這段：
-    const currentPath = window.location.pathname;
-    if (!(currentPath === "/" || currentPath.startsWith("/user/"))) {
-      const encoded = encodeURIComponent(trimmed);
-      router.push(`/?q=${encoded}`);
-    } else {
-    }
+    isUserTypingRef.current = false; // 接下來交給 URL → state
+    router.push(buildHref(trimmed));
     setShowDropdown(false);
-    inputRef.current?.focus?.();
+    inputRef.current?.focus();
   };
 
   const clearSearch = () => {
-    setSearchQuery("");
     setShowDropdown(false);
-    
-    const currentPath = window.location.pathname;
-    if (currentPath !== "/") {
-
-      router.push("/");
-      setTimeout(() => {
-        window.dispatchEvent(new Event("reset-homepage"));
-      }, 100);
-    } else {
-      window.dispatchEvent(new Event("reset-homepage"));
-    }
+    setSearchQuery("");              // 先清 UI
+    isUserTypingRef.current = false; // 避免立刻又進入輸入路徑
+    router.push(buildHref(""));      // 就地清空：變成當前 pathname
   };
 
   const handleLogoClick = (e) => {
     e.preventDefault();
-    clearSearch();
+
+    setShowDropdown(false);
+    setFilterMenuOpen(false);
+    setSearchQuery("");
+    isUserTypingRef.current = false;
+
+    // ✅ 直接清篩選
+    resetFilters();
+
+    if (pathname !== "/") {
+      router.push("/");
+    } else {
+      const hasSearch = !!(searchParams.get("search") || "");
+      if (hasSearch) router.replace("/");
+      // 否則已經是乾淨首頁了，不需要再動
+    }
+
     window.scrollTo(0, 0);
   };
 
   const handleSuggestionClick = async (s) => {
-    const currentPath = window.location.pathname;
-    if (!(currentPath === "/" || currentPath.startsWith("/user/"))) {
-      const encoded = encodeURIComponent(s);
-      router.push(`/?q=${encoded}`);
-    } else {
-      setSearchQuery(s); // 會觸發即時搜尋
-    }
     await logSearch(s);
+    isUserTypingRef.current = false; // 這是選擇建議，不是輸入中
+    router.push(buildHref(s));       // 就地帶入搜尋
     setShowDropdown(false);
     inputRef.current?.focus();
   };
 
+  // 其他與搜尋無關：開圖 modal 事件
   useEffect(() => {
     const handleOpenImage = (e) => {
       const { imageId } = e.detail;
@@ -241,7 +233,7 @@ export default function Header({
     };
     window.addEventListener("openImageModal", handleOpenImage);
     return () => window.removeEventListener("openImageModal", handleOpenImage);
-  }, []);
+  }, [selectedImageId, showImageModal]);
 
   return (
     <>
@@ -269,7 +261,7 @@ export default function Header({
             </div>
 
             {/* 搜尋列 */}
-            <div className="relative w-full">
+            <div className="relative w-full" ref={searchBoxRef}>
               <form
                 onSubmit={handleSubmit}
                 className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
@@ -278,7 +270,7 @@ export default function Header({
                   ref={inputRef}
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={handleInputChange}
                   onCompositionStart={() => setIsComposing(true)}
                   onCompositionEnd={() => setIsComposing(false)}
                   placeholder="搜尋標題、作者、標籤…"
@@ -298,11 +290,7 @@ export default function Header({
                     <li
                       key={i}
                       onMouseDown={(e) => {
-                        e.preventDefault();  
-                        inputRef.current?.blur();  
-                        setTimeout(() => {
-                          inputRef.current?.focus();  
-                        }, 0);
+                        e.preventDefault();
                         handleSuggestionClick(s);
                       }}
                       className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
@@ -338,36 +326,38 @@ export default function Header({
                 </div>
               </div>,
               portalContainer || document.body
-            )
-          }
+            )}
         </div>
 
         {/* 右側操作區 */}
         <div className="flex items-center gap-2">
-        <button
-          onClick={() => {
-            if (!currentUser) {
-              toast("請先登入才能上傳圖片", {
-                icon: "🔒",
-                id: "login-required",
-                duration: 1000, // 顯示時間 1 秒
-              });
-              return;
-            }
+          <button
+            onClick={() => {
+              if (!currentUser) {
+                toast("請先登入才能上傳圖片", { icon: "🔒", id: "login-required", duration: 1000 });
+                return;
+              }
               onUploadClick();
-          }}
-          className="px-4 py-2 text-base rounded bg-green-600 text-white hover:bg-green-700 font-medium"
-        >  
-          上傳圖片
-        </button>
+            }}
+            className="px-4 py-2 text-base rounded bg-green-600 text-white hover:bg-green-700 font-medium"
+          >
+            上傳圖片
+          </button>
           <Link href="/models">
-            <button className="px-4 py-2 text-base rounded bg-sky-600 text-white hover:bg-sky-700 font-medium">獲取模型</button>
+            <button className="px-4 py-2 text-base rounded bg-sky-600 text-white hover:bg-sky-700 font-medium">
+              獲取模型
+            </button>
           </Link>
-          <button onClick={onGuideClick} className="px-4 py-2 text-base rounded bg-purple-600 text-white hover:bg-purple-700 font-medium">安裝教學</button>
+          <button
+            onClick={onGuideClick}
+            className="px-4 py-2 text-base rounded bg-purple-600 text-white hover:bg-purple-700 font-medium"
+          >
+            安裝教學
+          </button>
 
           {currentUser && <NotificationBell currentUser={currentUser} />}
 
-          {/* ✅ 補上登入 / 註冊按鈕 */}
+          {/* 使用者選單 */}
           <div className="relative" ref={userMenuRef}>
             {currentUser === undefined ? (
               <div className="px-4 py-2 bg-zinc-800 text-gray-400 rounded text-sm">🔄 載入中...</div>
@@ -377,9 +367,7 @@ export default function Header({
                   onClick={() => setUserMenuOpen((prev) => !prev)}
                   className="px-4 py-2 bg-zinc-800 text-white rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[140px] text-left"
                 >
-                  {currentUser?.username
-          ? `👤 ${currentUser.username} ▼`
-          : "🔑 登入 / 註冊 ▼"}
+                  {currentUser?.username ? `👤 ${currentUser.username} ▼` : "🔑 登入 / 註冊 ▼"}
                 </button>
 
                 {userMenuOpen && (
@@ -391,12 +379,7 @@ export default function Header({
                         </Link>
                         <button
                           onClick={async () => {
-                            localStorage.removeItem("ratingFilters");
-                            localStorage.removeItem("categoryFilters");
-                            localStorage.removeItem("viewMode");
-
-                            window.dispatchEvent(new Event("reset-homepage"));
-
+                            localStorage.clear();
                             await axios.post("/api/auth/logout", {}, { withCredentials: true });
                             location.reload();
                           }}
@@ -433,4 +416,3 @@ export default function Header({
     </>
   );
 }
-

@@ -183,7 +183,7 @@ export default function ImageInfoBox({ image, currentUser, onClose }) {
                 key={index}
                 onClick={() => {
                   const keyword = tag;
-                  window.dispatchEvent(new CustomEvent("global-search", { detail: { keyword } }));
+                  router.push(`/?search=${encodeURIComponent(keyword)}`);
                   onClose?.();   
                 }}
                 className="inline-block bg-blue-700 hover:bg-blue-800 text-white text-xs px-2 py-1 rounded mr-1 mb-1 transition"

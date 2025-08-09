@@ -20,7 +20,7 @@ export default function UploadStep1({ rating, setRating, onNext }) {
           }}
           className="p-4 rounded text-white bg-yellow-500 hover:bg-yellow-600"
         >
-          15+（清涼）
+          15+（輕限）
         </button>
         <button
           onClick={() => {

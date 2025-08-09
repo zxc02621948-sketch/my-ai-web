@@ -1,8 +1,7 @@
-// ImageModal.jsx
 "use client";
 
 import { Dialog } from "@headlessui/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import ImageViewer from "./ImageViewer";
 import CommentBox from "./CommentBox";
@@ -11,6 +10,11 @@ import axios from "axios";
 
 const defaultAvatarUrl =
   "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
+
+function getTokenFromCookie() {
+  const match = typeof document !== "undefined" && document.cookie.match(/token=([^;]+)/);
+  return match ? match[1] : "";
+}
 
 export default function ImageModal({
   imageData,
@@ -22,19 +26,35 @@ export default function ImageModal({
   const [showScrollTop, setShowScrollTop] = useState(false);
   const scrollRef = useRef(null);
   const router = useRouter();
-  const [isFollowing, setIsFollowing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
 
-  // ✅ 外部更新 likes 時同步
+  // 外部更新 likes 時同步
   useEffect(() => {
     setImage(imageData);
   }, [imageData]);
 
+  // 被追蹤者 ID（從 imageData 推導）
+  const targetUserId = useMemo(() => {
+    const u = imageData?.user || imageData?.author || {};
+    return u?._id || imageData?.userId || u?.id || null;
+  }, [imageData]);
+
+  // 目前登入者的 following -> 標準化成 id 陣列（相容字串/物件）
+  const followingIds = useMemo(() => {
+    if (!currentUser?.following) return [];
+    return currentUser.following
+      .map((f) => (typeof f === "string" ? f : (f?.userId?._id || f?.userId || f?._id)))
+      .filter(Boolean)
+      .map(String);
+  }, [currentUser]);
+
+  // 初始化 isFollowing
   useEffect(() => {
-    if (!currentUser || !image?.user) return;
-    const userId = image.user._id || image.user;
-    setIsFollowing(currentUser.following?.includes(userId));
-  }, [currentUser, image]);
+    if (!targetUserId) return setIsFollowing(false);
+    setIsFollowing(followingIds.includes(String(targetUserId)));
+  }, [targetUserId, followingIds]);
 
   const handleScroll = () => {
     const top = scrollRef.current?.scrollTop || 0;
@@ -63,9 +83,7 @@ export default function ImageModal({
     const confirmed = window.confirm("你確定要刪除這張圖片嗎？");
     if (!confirmed) return;
 
-    const match = document.cookie.match(/token=([^;]+)/);
-    const token = match ? match[1] : null;
-
+    const token = getTokenFromCookie();
     try {
       const res = await axios.delete("/api/delete-image", {
         data: { imageId },
@@ -78,6 +96,56 @@ export default function ImageModal({
     } catch (err) {
       console.error("刪除圖片錯誤：", err);
       alert("刪除失敗，請稍後再試。");
+    }
+  };
+
+  // 切換追蹤
+  const handleFollowToggle = async () => {
+    if (!currentUser) return alert("請先登入");
+    if (!targetUserId || followLoading) return;
+
+    setFollowLoading(true);
+    setIsFollowing((prev) => !prev); // 樂觀更新
+
+    try {
+      const token = getTokenFromCookie();
+      if (isFollowing) {
+        // 取消追蹤
+        await axios.delete("/api/follow", {
+          data: { userIdToUnfollow: targetUserId },
+          headers: {
+            Authorization: token ? `Bearer ${token}` : undefined,
+            "Content-Type": "application/json",
+          },
+        });
+      } else {
+        // 追蹤
+        await axios.post(
+          "/api/follow",
+          { userIdToFollow: targetUserId },
+          {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      }
+
+      // 廣播事件讓其他頁同步（可選）
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("follow-changed", {
+            detail: { targetUserId, isFollowing: !isFollowing },
+          })
+        );
+      }
+    } catch (err) {
+      console.error("❌ 追蹤切換失敗：", err);
+      setIsFollowing((prev) => !prev); // 回滾
+      alert("追蹤更新失敗");
+    } finally {
+      setFollowLoading(false);
     }
   };
 
@@ -102,32 +170,25 @@ export default function ImageModal({
                 onToggleLike={async () => {
                   if (isProcessing || !currentUser?._id) return;
                   setIsProcessing(true);
-
                   try {
-                    const token = document.cookie.match(/token=([^;]+)/)?.[1];
+                    const token = getTokenFromCookie();
                     if (!token || !currentUser?._id) return;
 
                     const hasLiked = image.likes.includes(currentUser._id);
                     const newLikeState = !hasLiked;
 
-                    // ✅ 樂觀更新
+                    // 樂觀更新
                     const optimisticLikes = newLikeState
                       ? [...image.likes, currentUser._id]
                       : image.likes.filter((id) => id !== currentUser._id);
 
-                    const optimisticImage = {
-                      ...image,
-                      likes: optimisticLikes,
-                    };
+                    const optimisticImage = { ...image, likes: optimisticLikes };
                     setImage(optimisticImage);
-                    onLikeUpdate?.(optimisticImage); // ✅ 外部也同步更新
+                    onLikeUpdate?.(optimisticImage);
 
-                    // ✅ 廣播全域事件，縮圖立刻同步
                     if (typeof window !== "undefined") {
                       window.dispatchEvent(
-                        new CustomEvent("image-liked", {
-                          detail: { ...optimisticImage },
-                        })
+                        new CustomEvent("image-liked", { detail: { ...optimisticImage } })
                       );
                     }
 
@@ -144,26 +205,19 @@ export default function ImageModal({
                     );
 
                     if (res.status === 200 && res.data) {
-                      const updated = {
-                        ...image,
-                        likes: res.data.likes,
-                      };
+                      const updated = { ...image, likes: res.data.likes };
                       setImage(updated);
                       onLikeUpdate?.(updated);
-
-                      // ✅ 再次廣播，確保最終狀態一致
                       if (typeof window !== "undefined") {
                         window.dispatchEvent(
-                          new CustomEvent("image-liked", {
-                            detail: { ...updated },
-                          })
+                          new CustomEvent("image-liked", { detail: { ...updated } })
                         );
                       }
                     }
                   } catch (err) {
                     console.error("❌ 點讚失敗", err);
                   } finally {
-                    setTimeout(() => setIsProcessing(false), 1000); // ✅ 防連點冷卻
+                    setTimeout(() => setIsProcessing(false), 1000);
                   }
                 }}
               />
@@ -200,14 +254,14 @@ export default function ImageModal({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setIsFollowing((prev) => !prev);
                             handleFollowToggle();
                           }}
+                          disabled={followLoading}
                           className={`mt-2 px-3 py-1 text-sm rounded ${
                             isFollowing
                               ? "bg-red-600 hover:bg-red-700"
                               : "bg-blue-600 hover:bg-blue-700"
-                          }`}
+                          } ${followLoading ? "opacity-60 cursor-not-allowed" : ""}`}
                         >
                           {isFollowing ? "取消追蹤" : "追蹤作者"}
                         </button>
