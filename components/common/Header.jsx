@@ -132,6 +132,30 @@ export default function Header({
     };
   }, [showDropdown]);
 
+  // ✅ 使用者選單：點外面 + Esc 關閉
+  useEffect(() => {
+    const handleOutside = (e) => {
+      if (!userMenuOpen) return;
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const handleEsc = (e) => {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handleOutside, true);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutside, true);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [userMenuOpen]);
+
+  // ✅ 路由切換自動關閉使用者選單（點「我的頁面」導頁時）
+  useEffect(() => {
+    setUserMenuOpen(false);
+  }, [pathname]);
+
   // 下拉建議（純顯示，不動 URL）
   useEffect(() => {
     const delay = setTimeout(async () => {
@@ -366,34 +390,60 @@ export default function Header({
                 <button
                   onClick={() => setUserMenuOpen((prev) => !prev)}
                   className="px-4 py-2 bg-zinc-800 text-white rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[140px] text-left"
+                  aria-haspopup="menu"
+                  aria-expanded={userMenuOpen}
                 >
                   {currentUser?.username ? `👤 ${currentUser.username} ▼` : "🔑 登入 / 註冊 ▼"}
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-40 bg-zinc-800 text-white rounded shadow-md py-1 z-50">
+                  <div
+                    className="absolute right-0 mt-2 w-40 bg-zinc-800 text-white rounded shadow-md py-1 z-50"
+                    role="menu"
+                  >
                     {currentUser?.username ? (
                       <>
-                        <Link href={`/user/${currentUser._id}`} className="block px-4 py-2 hover:bg-zinc-700 text-sm">
+                        <Link
+                          href={`/user/${currentUser._id}`}
+                          className="block px-4 py-2 hover:bg-zinc-700 text-sm"
+                          onClick={() => setUserMenuOpen(false)} // ← 點連結就關
+                          role="menuitem"
+                        >
                           我的頁面
                         </Link>
                         <button
                           onClick={async () => {
+                            setUserMenuOpen(false); // ← 先關菜單
                             localStorage.clear();
                             await axios.post("/api/auth/logout", {}, { withCredentials: true });
                             location.reload();
                           }}
                           className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-red-400"
+                          role="menuitem"
                         >
                           登出
                         </button>
                       </>
                     ) : (
                       <>
-                        <button onClick={onLoginOpen} className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm">
+                        <button
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            onLoginOpen();
+                          }}
+                          className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
+                          role="menuitem"
+                        >
                           登入
                         </button>
-                        <button onClick={onRegisterOpen} className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm">
+                        <button
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            onRegisterOpen();
+                          }}
+                          className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
+                          role="menuitem"
+                        >
                           註冊
                         </button>
                       </>
