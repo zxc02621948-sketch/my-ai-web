@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { jwtDecode } from "jwt-decode";
+import CATEGORIES from "@/constants/categories";
 
 export default function UploadStep2({
   // 來自父層的狀態與 setter
@@ -249,14 +250,9 @@ export default function UploadStep2({
             onChange={(e) => setCategory(e.target.value)}
           >
             <option value="" disabled hidden>請選擇分類</option>
-            <option value="人物">人物</option>
-            <option value="風景">風景</option>
-            <option value="食物">食物</option>
-            <option value="動漫">動漫</option>
-            <option value="物品">物品</option>
-            <option value="藝術">藝術</option>
-            <option value="其他">其他</option>
-            <option value="動物">動物</option>
+            {CATEGORIES.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
           </select>
 
         </div>

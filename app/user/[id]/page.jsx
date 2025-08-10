@@ -59,6 +59,35 @@ export default function UserProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  // 🔔 編輯後就地同步個人頁（上傳/收藏清單 + 已開啟的大圖）
+  useEffect(() => {
+    const onImageUpdated = (e) => {
+      const updated = e.detail?.image;
+      if (!updated?._id) return;
+
+      setUploadedImages((prev) =>
+        prev.map((img) =>
+          String(img._id) === String(updated._id) ? { ...img, ...updated } : img
+        )
+      );
+
+      setLikedImages((prev) =>
+        prev.map((img) =>
+          String(img._id) === String(updated._id) ? { ...img, ...updated } : img
+        )
+      );
+
+      setSelectedImage((prev) =>
+        prev?._id && String(prev._id) === String(updated._id)
+          ? { ...prev, ...updated }
+          : prev
+      );
+    };
+
+    window.addEventListener("image-updated", onImageUpdated);
+    return () => window.removeEventListener("image-updated", onImageUpdated);
+  }, []);
+
   const isOwnProfile =
     currentUser && (currentUser._id === id || currentUser.id === id);
 

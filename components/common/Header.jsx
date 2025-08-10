@@ -36,7 +36,7 @@ export default function Header({
   const [isComposing, setIsComposing] = useState(false);
 
   const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedImageId, setSelectedImageId] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null); // 以完整物件為主
 
   const filterButtonRef = useRef(null);
   const inputRef = useRef(null);
@@ -64,14 +64,15 @@ export default function Header({
   // ✅ 就地搜尋／清空：一律以目前頁面 pathname 作為基底
   const buildHref = (term) => {
     const q = (term || "").trim();
-    return q ? `${pathname}?search=${encodeURIComponent(q)}` : pathname;
+    return q ? `${pathname}?search=${encodeURIComponent(q)}`
+             : pathname;
   };
 
-  // URL → 輸入框（只讀 search；這是「外部同步」，要清掉使用者輸入旗標）
+  // URL → 輸入框
   useEffect(() => {
     const q = searchParams.get("search")?.trim() || "";
     setSearchQuery(q);
-    isUserTypingRef.current = false; // 外部同步，不觸發輸入路徑
+    isUserTypingRef.current = false;
   }, [searchParams]);
 
   // 🟢 即時搜尋：輸入框 → URL（僅在「使用者正在輸入」且非組字中時執行）
@@ -116,13 +117,10 @@ export default function Header({
     const onKey = (e) => {
       if (e.key === "Escape") setShowDropdown(false);
     };
-    const onAnyScroll = () => {
-      if (showDropdown) setShowDropdown(false);
-    };
+    const onAnyScroll = () => { if (showDropdown) setShowDropdown(false); };
 
     document.addEventListener("mousedown", onDocMouseDown);
     document.addEventListener("keydown", onKey);
-    // 第三個參數 true：在捕獲階段也接收（包含可滾容器）
     window.addEventListener("scroll", onAnyScroll, true);
 
     return () => {
@@ -151,10 +149,8 @@ export default function Header({
     };
   }, [userMenuOpen]);
 
-  // ✅ 路由切換自動關閉使用者選單（點「我的頁面」導頁時）
-  useEffect(() => {
-    setUserMenuOpen(false);
-  }, [pathname]);
+  // ✅ 路由切換自動關閉使用者選單
+  useEffect(() => { setUserMenuOpen(false); }, [pathname]);
 
   // 下拉建議（純顯示，不動 URL）
   useEffect(() => {
@@ -195,7 +191,7 @@ export default function Header({
   };
 
   const handleInputChange = (e) => {
-    isUserTypingRef.current = true; // 標記這是「使用者輸入」路徑
+    isUserTypingRef.current = true;
     setSearchQuery(e.target.value);
   };
 
@@ -204,7 +200,7 @@ export default function Header({
     const trimmed = searchQuery.trim();
     if (!trimmed) return;
     await logSearch(trimmed);
-    isUserTypingRef.current = false; // 接下來交給 URL → state
+    isUserTypingRef.current = false;
     router.push(buildHref(trimmed));
     setShowDropdown(false);
     inputRef.current?.focus();
@@ -212,20 +208,17 @@ export default function Header({
 
   const clearSearch = () => {
     setShowDropdown(false);
-    setSearchQuery("");              // 先清 UI
-    isUserTypingRef.current = false; // 避免立刻又進入輸入路徑
-    router.push(buildHref(""));      // 就地清空：變成當前 pathname
+    setSearchQuery("");
+    isUserTypingRef.current = false;
+    router.push(buildHref(""));
   };
 
   const handleLogoClick = (e) => {
     e.preventDefault();
-
     setShowDropdown(false);
     setFilterMenuOpen(false);
     setSearchQuery("");
     isUserTypingRef.current = false;
-
-    // ✅ 直接清篩選
     resetFilters();
 
     if (pathname !== "/") {
@@ -233,31 +226,45 @@ export default function Header({
     } else {
       const hasSearch = !!(searchParams.get("search") || "");
       if (hasSearch) router.replace("/");
-      // 否則已經是乾淨首頁了，不需要再動
     }
-
     window.scrollTo(0, 0);
   };
 
   const handleSuggestionClick = async (s) => {
     await logSearch(s);
-    isUserTypingRef.current = false; // 這是選擇建議，不是輸入中
-    router.push(buildHref(s));       // 就地帶入搜尋
+    isUserTypingRef.current = false;
+    router.push(buildHref(s));
     setShowDropdown(false);
     inputRef.current?.focus();
   };
 
-  // 其他與搜尋無關：開圖 modal 事件
+  // 其他與搜尋無關：開圖 modal 事件（先「預抓完整資料」→ 再開）
   useEffect(() => {
-    const handleOpenImage = (e) => {
-      const { imageId } = e.detail;
-      if (imageId === selectedImageId && showImageModal) return;
-      setSelectedImageId(imageId);
+    const handleOpenImage = async (e) => {
+      const { imageId, image: shallow } = e.detail || {};
+      const id = imageId || shallow?._id;
+      if (!id) return;
+
+      const base = shallow || { _id: id };
+
+      let full = null;
+      try {
+        const res = await fetch(`/api/images/${id}`, { credentials: "include" });
+        const payload = await res.json().catch(() => ({}));
+        if (res.ok && payload?.image) full = payload.image;
+      } catch (err) {
+        console.warn("預抓圖片失敗：", err);
+      }
+
+      // ✅ 只有在「已拿到完整資料」或「抓不到就退回卡片資料」時才開啟
+      const ready = full ? { ...base, ...full, _prefetched: true } : { ...base, _prefetched: false };
+      setSelectedImage(ready);
       setShowImageModal(true);
     };
+
     window.addEventListener("openImageModal", handleOpenImage);
     return () => window.removeEventListener("openImageModal", handleOpenImage);
-  }, [selectedImageId, showImageModal]);
+  }, []);
 
   return (
     <>
@@ -406,14 +413,14 @@ export default function Header({
                         <Link
                           href={`/user/${currentUser._id}`}
                           className="block px-4 py-2 hover:bg-zinc-700 text-sm"
-                          onClick={() => setUserMenuOpen(false)} // ← 點連結就關
+                          onClick={() => setUserMenuOpen(false)}
                           role="menuitem"
                         >
                           我的頁面
                         </Link>
                         <button
                           onClick={async () => {
-                            setUserMenuOpen(false); // ← 先關菜單
+                            setUserMenuOpen(false);
                             localStorage.clear();
                             await axios.post("/api/auth/logout", {}, { withCredentials: true });
                             location.reload();
@@ -456,10 +463,13 @@ export default function Header({
         </div>
       </header>
 
-      {showImageModal && selectedImageId && (
+      {showImageModal && selectedImage && (
         <ImageModal
-          imageId={selectedImageId}
-          onClose={() => setShowImageModal(false)}
+          imageData={selectedImage}
+          onClose={() => {
+            setShowImageModal(false);
+            setSelectedImage(null);
+          }}
           currentUser={currentUser}
         />
       )}

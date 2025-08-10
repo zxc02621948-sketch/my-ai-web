@@ -9,7 +9,7 @@ export default function ImageCard({
   isLiked,
   onToggleLike,
   onLocalLikeChange,
-  onLikeUpdate, // ✅ 正確解構 props
+  onLikeUpdate,
 }) {
   const canLike = !!currentUser;
   const [isLikedLocal, setIsLikedLocal] = useState(isLiked);
@@ -30,12 +30,11 @@ export default function ImageCard({
     const prevCount = likeCountLocal;
     const newLiked = !prevLiked;
 
-    // ✅ 樂觀更新（本地立即變）
+    // 樂觀更新
     setIsLikedLocal(newLiked);
     setLikeCountLocal((prev) => prev + (newLiked ? 1 : -1));
     setIsProcessing(true);
 
-    // ✅ 準備外層需要的 updatedImage（先在前端組 likes）
     const updatedImage = {
       ...img,
       likes: newLiked
@@ -44,18 +43,15 @@ export default function ImageCard({
     };
 
     try {
-      // ✅ 通知外層（如有透傳）
       onLocalLikeChange?.(img._id, newLiked);
       onLikeUpdate?.(updatedImage);
 
-      // ✅ 廣播全域事件，page.js 先同步 images / selectedImage
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("image-liked", { detail: { ...updatedImage } })
         );
       }
 
-      // ✅ 打 API，送最後狀態
       await onToggleLike(img._id, newLiked);
 
       setRenderKey((prev) => prev + 1);
@@ -65,7 +61,21 @@ export default function ImageCard({
       setLikeCountLocal(prevCount);
       alert("愛心更新失敗");
     } finally {
-      setTimeout(() => setIsProcessing(false), 1000); // 冷卻 1 秒
+      setTimeout(() => setIsProcessing(false), 1000);
+    }
+  };
+
+  const handleCardClick = () => {
+    if (onClick) {
+      // 父層自己處理開圖；把完整物件傳上去
+      onClick(img);
+    } else {
+      // 沒有父層 onClick 時，卡片自己廣播事件
+      window.dispatchEvent(
+        new CustomEvent("openImageModal", {
+          detail: { imageId: img._id, image: img },
+        })
+      );
     }
   };
 
@@ -78,8 +88,9 @@ export default function ImageCard({
   return (
     <div
       className="mb-4 break-inside-avoid cursor-pointer group relative"
-      onClick={onClick}
+      onClick={handleCardClick}
     >
+      {/* 愛心與數量 */}
       <div className="absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1">
         <Heart
           key={renderKey}
@@ -100,6 +111,7 @@ export default function ImageCard({
         <span className="text-white text-xs">{likeCountLocal}</span>
       </div>
 
+      {/* 圖片與標題 */}
       <div className="overflow-hidden rounded-lg">
         <img
           src={imageUrl}

@@ -7,6 +7,7 @@ import ImageViewer from "./ImageViewer";
 import CommentBox from "./CommentBox";
 import ImageInfoBox from "./ImageInfoBox";
 import axios from "axios";
+import EditImageModal from "@/components/image/EditImageModal";
 
 const defaultAvatarUrl =
   "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
@@ -23,23 +24,72 @@ export default function ImageModal({
   onLikeUpdate,
 }) {
   const [image, setImage] = useState(imageData);
+
+  // 顯示用作者：完全原樣採用 author（包含「自己」）
+  const [displayAuthor, setDisplayAuthor] = useState(() =>
+    typeof imageData?.author === "string" ? imageData.author.trim() : ""
+  );
+
   const [showScrollTop, setShowScrollTop] = useState(false);
   const scrollRef = useRef(null);
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
-  // 外部更新 likes 時同步
+  // 外部更新同步（含 likes / author）
   useEffect(() => {
     setImage(imageData);
-  }, [imageData]);
+    if (typeof imageData?.author === "string") {
+      const next = imageData.author.trim();
+      if (next !== displayAuthor) setDisplayAuthor(next);
+    }
+  }, [imageData]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 被追蹤者 ID（從 imageData 推導）
+  // 開啟後補抓完整資料（modelUrl / loraUrl / 正規化欄位等）
+  // 只在拿到 author（字串）且與目前不同時才更新顯示，避免不必要跳動
+  useEffect(() => {
+    const id = imageData?._id;
+    if (!id) return;
+
+    let aborted = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/images/${id}`, { credentials: "include" });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || !payload?.image || aborted) return;
+
+        const full = payload.image;
+        setImage((prev) => ({ ...prev, ...full }));
+
+        if (typeof full?.author === "string") {
+          const next = full.author.trim();
+          if (next !== displayAuthor) setDisplayAuthor(next);
+        }
+      } catch (e) {
+        console.warn("補抓圖片詳細資料失敗：", e);
+      }
+    })();
+
+    return () => { aborted = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageData?._id]);
+
+  // 是否可編輯（本人或管理員）→ 只看 user
+  const canEdit = useMemo(() => {
+    if (!currentUser || !image) return false;
+    const ownerId =
+      typeof image.user === "string" ? image.user :
+      image.user?._id || image.user?.id || null;
+    return currentUser.isAdmin || (ownerId && String(ownerId) === String(currentUser._id));
+  }, [currentUser, image]);
+
+  // 被追蹤者 ID（只看 user，不讀 author）
   const targetUserId = useMemo(() => {
-    const u = imageData?.user || imageData?.author || {};
-    return u?._id || imageData?.userId || u?.id || null;
-  }, [imageData]);
+    const u = image?.user || {};
+    return (typeof u === "string" ? u : (u?._id || u?.id)) || image?.userId || null;
+  }, [image]);
 
   // 目前登入者的 following -> 標準化成 id 陣列（相容字串/物件）
   const followingIds = useMemo(() => {
@@ -73,8 +123,13 @@ export default function ImageModal({
   }, []);
 
   const handleUserClick = () => {
-    if (image?.user?._id) {
-      router.push(`/user/${image.user._id}`);
+    const uid =
+      typeof image?.user === "string"
+        ? image.user
+        : image?.user?._id || image?.user?.id || null;
+
+    if (uid) {
+      router.push(`/user/${uid}`);
       onClose();
     }
   };
@@ -110,7 +165,6 @@ export default function ImageModal({
     try {
       const token = getTokenFromCookie();
       if (isFollowing) {
-        // 取消追蹤
         await axios.delete("/api/follow", {
           data: { userIdToUnfollow: targetUserId },
           headers: {
@@ -119,7 +173,6 @@ export default function ImageModal({
           },
         });
       } else {
-        // 追蹤
         await axios.post(
           "/api/follow",
           { userIdToFollow: targetUserId },
@@ -132,7 +185,6 @@ export default function ImageModal({
         );
       }
 
-      // 廣播事件讓其他頁同步（可選）
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("follow-changed", {
@@ -149,24 +201,59 @@ export default function ImageModal({
     }
   };
 
+  // 編輯成功 → 樂觀更新 + 廣播；若帶入 author 字串則一併更新顯示（包含「自己」）
+  const handleImageUpdated = (updated) => {
+    if (!updated) return;
+    setImage((prev) => ({ ...prev, ...updated }));
+
+    if (typeof updated?.author === "string") {
+      const next = updated.author.trim();
+      if (next !== displayAuthor) setDisplayAuthor(next);
+    }
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("image-updated", { detail: { image: updated } }));
+    }
+  };
+
   if (!imageData) return null;
 
+  const likesArr = Array.isArray(image?.likes) ? image.likes : [];
+
   return (
-    <Dialog open={!!imageData} onClose={onClose} className="relative z-50">
+    <Dialog
+      open={!!imageData}
+      onClose={() => {
+        if (editOpen) return; // 編輯彈窗開著就不要關外層
+        onClose();
+      }}
+      className="relative z-50"
+    >
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel
           onClick={(e) => e.stopPropagation()}
           className="relative w-full max-w-6xl bg-[#1a1a1a] text-white rounded-xl shadow-lg flex flex-col lg:flex-row overflow-hidden"
         >
+          {/* 右上角編輯按鈕（僅本人/管理員可見） */}
+          {canEdit && (
+            <button
+              onClick={() => setEditOpen(true)}
+              className="absolute top-3.5 right-35 z-50 px-2 py-1 rounded bg-green-500 hover:bg-green-600 text-sm font-medium"
+              title="編輯圖片資料"
+            >
+              編輯
+            </button>
+          )}
+
           {/* 左側圖片區 */}
           <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
             <div style={{ zIndex: 10, position: "relative" }}>
               <ImageViewer
-                key={image._id + "_" + image.likes.length}
+                key={image._id + "_" + likesArr.length}
                 image={image}
                 currentUser={currentUser}
-                isLiked={image.likes.includes(currentUser?._id)}
+                isLiked={likesArr.includes(currentUser?._id)}
                 onToggleLike={async () => {
                   if (isProcessing || !currentUser?._id) return;
                   setIsProcessing(true);
@@ -174,13 +261,13 @@ export default function ImageModal({
                     const token = getTokenFromCookie();
                     if (!token || !currentUser?._id) return;
 
-                    const hasLiked = image.likes.includes(currentUser._id);
+                    const hasLiked = likesArr.includes(currentUser._id);
                     const newLikeState = !hasLiked;
 
                     // 樂觀更新
                     const optimisticLikes = newLikeState
-                      ? [...image.likes, currentUser._id]
-                      : image.likes.filter((id) => id !== currentUser._id);
+                      ? [...likesArr, currentUser._id]
+                      : likesArr.filter((id) => id !== currentUser._id);
 
                     const optimisticImage = { ...image, likes: optimisticLikes };
                     setImage(optimisticImage);
@@ -205,7 +292,7 @@ export default function ImageModal({
                     );
 
                     if (res.status === 200 && res.data) {
-                      const updated = { ...image, likes: res.data.likes };
+                      const updated = { ...image, likes: res.data.likes || [] };
                       setImage(updated);
                       onLikeUpdate?.(updated);
                       if (typeof window !== "undefined") {
@@ -233,7 +320,7 @@ export default function ImageModal({
                     <div onClick={handleUserClick} className="cursor-pointer">
                       <img
                         src={
-                          image.user?.image
+                          (typeof image.user !== "string" && image.user?.image)
                             ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
                             : defaultAvatarUrl
                         }
@@ -246,11 +333,13 @@ export default function ImageModal({
                       />
                     </div>
                     <span className="text-sm mt-2 text-center text-white select-none">
-                      {image.user?.username || "未命名用戶"}
+                      {(typeof image.user !== "string" && image.user?.username) || "未命名用戶"}
                     </span>
                     {currentUser &&
                       image?.user &&
-                      currentUser._id !== (image.user._id || image.user) && (
+                      (String(currentUser._id) !== String(
+                        typeof image.user === "string" ? image.user : (image.user._id || image.user.id)
+                      )) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -267,8 +356,14 @@ export default function ImageModal({
                         </button>
                       )}
                   </div>
+
+                  {/* 傳入顯示用作者（若為空，InfoBox 會顯示 "—"） */}
                   <ImageInfoBox
-                    image={{ ...image, user: image.user || image.userId }}
+                    image={{
+                      ...image,
+                      user: image.user || image.userId,
+                      author: displayAuthor,
+                    }}
                     currentUser={currentUser}
                     onClose={onClose}
                   />
@@ -289,6 +384,16 @@ export default function ImageModal({
           </div>
         </Dialog.Panel>
       </div>
+
+      {/* 編輯彈窗 */}
+      {canEdit && (
+        <EditImageModal
+          imageId={image?._id}
+          isOpen={editOpen}
+          onClose={() => setEditOpen(false)}
+          onImageUpdated={handleImageUpdated}
+        />
+      )}
     </Dialog>
   );
 }

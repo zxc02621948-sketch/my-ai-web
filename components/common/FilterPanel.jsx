@@ -1,4 +1,6 @@
-// FilterPanel.jsx
+// components/common/FilterPanel.jsx
+import CATEGORIES from "@/constants/categories";
+
 export default function FilterPanel({
   levelFilters,
   categoryFilters,
@@ -49,7 +51,7 @@ export default function FilterPanel({
 
       <div className="font-bold text-sm text-gray-300 pt-2">分類</div>
       <div className="flex gap-2 flex-wrap">
-        {["風景", "食物", "人物", "動漫", "物品", "藝術", "動物", "其他"].map((cat) => (
+        {CATEGORIES.map((cat) => (
           <button
             key={cat}
             onClick={() => toggleCategoryFilter(cat)}

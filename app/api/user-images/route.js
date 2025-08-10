@@ -15,13 +15,15 @@ export async function GET(req) {
 
     const rawImages = await Image.find({ userId: id })
       .sort({ createdAt: -1 })
-      .populate("user", "username image"); // ✅ 補這行！
+      .populate("user", "username image"); // 取上傳者基本資訊
 
     const images = rawImages.map((img) => ({
       _id: img._id.toString(),
       title: img.title,
       imageId: img.imageId,
-      imageUrl: img.imageUrl || `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/public`,
+      imageUrl:
+        img.imageUrl ||
+        `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/public`,
       platform: img.platform,
       positivePrompt: img.positivePrompt,
       negativePrompt: img.negativePrompt,
@@ -29,12 +31,13 @@ export async function GET(req) {
       category: img.category,
       description: img.description,
       tags: img.tags,
+      author: img.author || "",              // 👈 加上作者
       createdAt: img.createdAt,
       user: img.user
         ? {
             _id: img.user._id?.toString(),
             username: img.user.username || "未命名用戶",
-            image: img.user.image || "", // ✅ 頭像路徑
+            image: img.user.image || "",
           }
         : null,
       likes: Array.isArray(img.likes)

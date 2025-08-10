@@ -111,11 +111,12 @@ export default function ImageInfoBox({ image, currentUser, onClose }) {
       {/* 📌 分級標籤 */}
       <div className="mb-3">{getRatingLabel(image.rating)}</div>
 
-      {image.author && (
-       <div className="text-sm text-zinc-300 mb-3">
-          來源作者：<span className="text-white">{image.author}</span>
-        </div>
-      )}
+      <div className="text-sm text-zinc-300 mb-3">
+        來源作者：
+        <span className="text-white">
+          {image?.author?.trim() || "—"}
+        </span>
+      </div>
 
       {/* 📌 平台資訊 */}
       <div className="text-sm text-gray-300 mb-3">

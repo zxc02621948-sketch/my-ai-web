@@ -159,6 +159,29 @@ export default function HomePage() {
     }).catch(() => {});
   }, []);
 
+  // 🔔 編輯後就地同步首頁清單 & 已開啟的大圖
+  useEffect(() => {
+    const onImageUpdated = (e) => {
+      const updated = e.detail?.image;
+      if (!updated?._id) return;
+
+      // 替換列表同 ID 的圖片資料
+      setImages((prev) => prev.map((it) =>
+        String(it._id) === String(updated._id) ? { ...it, ...updated } : it
+      ));
+
+      // 若大圖正打開同一張，也一併同步
+      setSelectedImage((prev) =>
+        prev?._id && String(prev._id) === String(updated._id)
+          ? { ...prev, ...updated }
+          : prev
+      );
+    };
+
+    window.addEventListener("image-updated", onImageUpdated);
+    return () => window.removeEventListener("image-updated", onImageUpdated);
+  }, []);
+
   // 無限滾動
   useEffect(() => {
     if (!hasMore || isLoading) return;
