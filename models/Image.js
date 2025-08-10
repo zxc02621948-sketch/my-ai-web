@@ -13,9 +13,9 @@ const ImageSchema = new mongoose.Schema(
     },
     category: String,
     description: String,
-    author: { type: String, default: "" }, // ✅ 新增這行
+    author: { type: String, default: "" },
 
-    // ✅ 新增欄位
+    // 模型相關
     modelName: String,
     loraName: String,
     modelLink: { type: String, default: "" },
@@ -26,28 +26,25 @@ const ImageSchema = new mongoose.Schema(
     imageUrl: String,
     variant: String,
 
-    // ✅ 關聯 user
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-
-    // ✅ 保留 userId 用於刪除等功能
-    userId: {
-      type: String,
-      required: true,
-    },
+    // 使用者關聯
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    userId: { type: String, required: true },
 
     likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    createdAt: { type: Date, default: Date.now },
 
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
+    // 🔽 新增生成參數欄位
+    steps: { type: Number, default: null },
+    sampler: { type: String, default: "" },
+    cfgScale: { type: Number, default: null },
+    seed: { type: String, default: "" },   // 用字串避免大數字精度問題
+    clipSkip: { type: Number, default: null },
+    width: { type: Number, default: null },
+    height: { type: Number, default: null },
+    modelHash: { type: String, default: "" },
   },
-  {
-    collection: "images",
-  }
+  { collection: "images" }
 );
+
 
 export default mongoose.models.Image || mongoose.model("Image", ImageSchema);

@@ -17,19 +17,11 @@ function getTokenFromCookie() {
   return match ? match[1] : "";
 }
 
-export default function ImageModal({
-  imageData,
-  onClose,
-  currentUser,
-  onLikeUpdate,
-}) {
+export default function ImageModal({ imageData, onClose, currentUser, onLikeUpdate }) {
   const [image, setImage] = useState(imageData);
-
-  // 顯示用作者：完全原樣採用 author（包含「自己」）
   const [displayAuthor, setDisplayAuthor] = useState(() =>
     typeof imageData?.author === "string" ? imageData.author.trim() : ""
   );
-
   const [showScrollTop, setShowScrollTop] = useState(false);
   const scrollRef = useRef(null);
   const router = useRouter();
@@ -38,31 +30,25 @@ export default function ImageModal({
   const [followLoading, setFollowLoading] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
-  // 外部更新同步（含 likes / author）
   useEffect(() => {
     setImage(imageData);
     if (typeof imageData?.author === "string") {
       const next = imageData.author.trim();
       if (next !== displayAuthor) setDisplayAuthor(next);
     }
-  }, [imageData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [imageData]);
 
-  // 開啟後補抓完整資料（modelUrl / loraUrl / 正規化欄位等）
-  // 只在拿到 author（字串）且與目前不同時才更新顯示，避免不必要跳動
   useEffect(() => {
     const id = imageData?._id;
     if (!id) return;
-
     let aborted = false;
     (async () => {
       try {
         const res = await fetch(`/api/images/${id}`, { credentials: "include" });
         const payload = await res.json().catch(() => ({}));
         if (!res.ok || !payload?.image || aborted) return;
-
         const full = payload.image;
         setImage((prev) => ({ ...prev, ...full }));
-
         if (typeof full?.author === "string") {
           const next = full.author.trim();
           if (next !== displayAuthor) setDisplayAuthor(next);
@@ -71,36 +57,31 @@ export default function ImageModal({
         console.warn("補抓圖片詳細資料失敗：", e);
       }
     })();
-
-    return () => { aborted = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      aborted = true;
+    };
   }, [imageData?._id]);
 
-  // 是否可編輯（本人或管理員）→ 只看 user
   const canEdit = useMemo(() => {
     if (!currentUser || !image) return false;
     const ownerId =
-      typeof image.user === "string" ? image.user :
-      image.user?._id || image.user?.id || null;
+      typeof image.user === "string" ? image.user : image.user?._id || image.user?.id || null;
     return currentUser.isAdmin || (ownerId && String(ownerId) === String(currentUser._id));
   }, [currentUser, image]);
 
-  // 被追蹤者 ID（只看 user，不讀 author）
   const targetUserId = useMemo(() => {
     const u = image?.user || {};
-    return (typeof u === "string" ? u : (u?._id || u?.id)) || image?.userId || null;
+    return (typeof u === "string" ? u : u?._id || u?.id) || image?.userId || null;
   }, [image]);
 
-  // 目前登入者的 following -> 標準化成 id 陣列（相容字串/物件）
   const followingIds = useMemo(() => {
     if (!currentUser?.following) return [];
     return currentUser.following
-      .map((f) => (typeof f === "string" ? f : (f?.userId?._id || f?.userId || f?._id)))
+      .map((f) => (typeof f === "string" ? f : f?.userId?._id || f?.userId || f?._id))
       .filter(Boolean)
       .map(String);
   }, [currentUser]);
 
-  // 初始化 isFollowing
   useEffect(() => {
     if (!targetUserId) return setIsFollowing(false);
     setIsFollowing(followingIds.includes(String(targetUserId)));
@@ -127,7 +108,6 @@ export default function ImageModal({
       typeof image?.user === "string"
         ? image.user
         : image?.user?._id || image?.user?.id || null;
-
     if (uid) {
       router.push(`/user/${uid}`);
       onClose();
@@ -137,7 +117,6 @@ export default function ImageModal({
   const handleDelete = async (imageId) => {
     const confirmed = window.confirm("你確定要刪除這張圖片嗎？");
     if (!confirmed) return;
-
     const token = getTokenFromCookie();
     try {
       const res = await axios.delete("/api/delete-image", {
@@ -154,14 +133,11 @@ export default function ImageModal({
     }
   };
 
-  // 切換追蹤
   const handleFollowToggle = async () => {
     if (!currentUser) return alert("請先登入");
     if (!targetUserId || followLoading) return;
-
     setFollowLoading(true);
-    setIsFollowing((prev) => !prev); // 樂觀更新
-
+    setIsFollowing((prev) => !prev);
     try {
       const token = getTokenFromCookie();
       if (isFollowing) {
@@ -184,7 +160,6 @@ export default function ImageModal({
           }
         );
       }
-
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("follow-changed", {
@@ -194,37 +169,33 @@ export default function ImageModal({
       }
     } catch (err) {
       console.error("❌ 追蹤切換失敗：", err);
-      setIsFollowing((prev) => !prev); // 回滾
+      setIsFollowing((prev) => !prev);
       alert("追蹤更新失敗");
     } finally {
       setFollowLoading(false);
     }
   };
 
-  // 編輯成功 → 樂觀更新 + 廣播；若帶入 author 字串則一併更新顯示（包含「自己」）
   const handleImageUpdated = (updated) => {
     if (!updated) return;
     setImage((prev) => ({ ...prev, ...updated }));
-
     if (typeof updated?.author === "string") {
       const next = updated.author.trim();
       if (next !== displayAuthor) setDisplayAuthor(next);
     }
-
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("image-updated", { detail: { image: updated } }));
     }
   };
 
   if (!imageData) return null;
-
   const likesArr = Array.isArray(image?.likes) ? image.likes : [];
 
   return (
     <Dialog
       open={!!imageData}
       onClose={() => {
-        if (editOpen) return; // 編輯彈窗開著就不要關外層
+        if (editOpen) return;
         onClose();
       }}
       className="relative z-50"
@@ -235,18 +206,6 @@ export default function ImageModal({
           onClick={(e) => e.stopPropagation()}
           className="relative w-full max-w-6xl bg-[#1a1a1a] text-white rounded-xl shadow-lg flex flex-col lg:flex-row overflow-hidden"
         >
-          {/* 右上角編輯按鈕（僅本人/管理員可見） */}
-          {canEdit && (
-            <button
-              onClick={() => setEditOpen(true)}
-              className="absolute top-3.5 right-35 z-50 px-2 py-1 rounded bg-green-500 hover:bg-green-600 text-sm font-medium"
-              title="編輯圖片資料"
-            >
-              編輯
-            </button>
-          )}
-
-          {/* 左側圖片區 */}
           <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
             <div style={{ zIndex: 10, position: "relative" }}>
               <ImageViewer
@@ -260,26 +219,19 @@ export default function ImageModal({
                   try {
                     const token = getTokenFromCookie();
                     if (!token || !currentUser?._id) return;
-
                     const hasLiked = likesArr.includes(currentUser._id);
                     const newLikeState = !hasLiked;
-
-                    // 樂觀更新
                     const optimisticLikes = newLikeState
                       ? [...likesArr, currentUser._id]
                       : likesArr.filter((id) => id !== currentUser._id);
-
                     const optimisticImage = { ...image, likes: optimisticLikes };
                     setImage(optimisticImage);
                     onLikeUpdate?.(optimisticImage);
-
                     if (typeof window !== "undefined") {
                       window.dispatchEvent(
                         new CustomEvent("image-liked", { detail: { ...optimisticImage } })
                       );
                     }
-
-                    // 真實請求
                     const res = await axios.put(
                       `/api/like-image?id=${image._id}`,
                       { shouldLike: newLikeState },
@@ -290,7 +242,6 @@ export default function ImageModal({
                         },
                       }
                     );
-
                     if (res.status === 200 && res.data) {
                       const updated = { ...image, likes: res.data.likes || [] };
                       setImage(updated);
@@ -310,13 +261,12 @@ export default function ImageModal({
               />
             </div>
           </div>
-
-          {/* 右側資訊與留言區 */}
           <div className="w-full lg:w-[400px] max-h-[90vh] border-l border-white/10 flex flex-col relative">
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative">
               {image && (
                 <>
-                  <div className="absolute top-15 right-10 flex flex-col items-center z-50">
+                  <div className="absolute top-15 right-10 flex flex-col items-center z-10">
+                    
                     <div onClick={handleUserClick} className="cursor-pointer">
                       <img
                         src={
@@ -338,7 +288,7 @@ export default function ImageModal({
                     {currentUser &&
                       image?.user &&
                       (String(currentUser._id) !== String(
-                        typeof image.user === "string" ? image.user : (image.user._id || image.user.id)
+                        typeof image.user === "string" ? image.user : image.user._id || image.user.id
                       )) && (
                         <button
                           onClick={(e) => {
@@ -356,22 +306,16 @@ export default function ImageModal({
                         </button>
                       )}
                   </div>
-
-                  {/* 傳入顯示用作者（若為空，InfoBox 會顯示 "—"） */}
                   <ImageInfoBox
-                    image={{
-                      ...image,
-                      user: image.user || image.userId,
-                      author: displayAuthor,
-                    }}
+                    image={{ ...image, user: image.user || image.userId, author: displayAuthor }}
                     currentUser={currentUser}
                     onClose={onClose}
+                    onEdit={() => setEditOpen(true)}
                   />
                   <CommentBox currentUser={currentUser} imageId={image._id} />
                 </>
               )}
             </div>
-
             {showScrollTop && (
               <button
                 onClick={handleScrollToTop}
@@ -384,8 +328,6 @@ export default function ImageModal({
           </div>
         </Dialog.Panel>
       </div>
-
-      {/* 編輯彈窗 */}
       {canEdit && (
         <EditImageModal
           imageId={image?._id}

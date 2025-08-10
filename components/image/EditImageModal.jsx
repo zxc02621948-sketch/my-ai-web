@@ -21,6 +21,15 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
     loraName: "",
     loraUrl: "",
     tags: "",
+    // ▼ 進階參數
+    steps: "",
+    sampler: "",
+    cfgScale: "",
+    seed: "",
+    clipSkip: "",
+    width: "",
+    height: "",
+    modelHash: "",
   });
 
   useEffect(() => {
@@ -44,10 +53,19 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
           category: img.category || "",
           rating: img.rating || "all",
           modelName: img.modelName || "",
-          modelUrl: img.modelUrl || "",
+          modelUrl: img.modelUrl || img.modelLink || "",
           loraName: img.loraName || "",
-          loraUrl: img.loraUrl || "",
+          loraUrl: img.loraUrl || img.loraLink || "",
           tags: Array.isArray(img.tags) ? img.tags.join(" ") : (img.tags || ""),
+          // 進階
+          steps: img.steps ?? "",
+          sampler: img.sampler || "",
+          cfgScale: img.cfgScale ?? "",
+          seed: img.seed || "",
+          clipSkip: img.clipSkip ?? "",
+          width: img.width ?? "",
+          height: img.height ?? "",
+          modelHash: img.modelHash || "",
         });
       } catch (err) {
         console.error(err);
@@ -74,15 +92,36 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
       setSaving(true);
 
       const normalizedTags = String(form.tags || "")
-        .split(/[,\s]+/g)
+        .split(/[\s,，、]+/g)
         .map((t) => t.trim())
         .filter(Boolean);
+
+      const body = {
+        title: form.title.trim(),
+        description: form.description,
+        category: form.category,
+        rating: form.rating,
+        modelName: form.modelName,
+        modelUrl: form.modelUrl, // 若後端用 modelLink 會在 API 端對應
+        loraName: form.loraName,
+        loraUrl: form.loraUrl,   // 同上
+        tags: normalizedTags,
+        // 進階（型別轉換）
+        steps: form.steps === "" ? null : Number(form.steps),
+        sampler: form.sampler,
+        cfgScale: form.cfgScale === "" ? null : Number(form.cfgScale),
+        seed: String(form.seed || ""),
+        clipSkip: form.clipSkip === "" ? null : Number(form.clipSkip),
+        width: form.width === "" ? null : Number(form.width),
+        height: form.height === "" ? null : Number(form.height),
+        modelHash: form.modelHash,
+      };
 
       const res = await fetch(`/api/images/${imageId}/edit`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, tags: normalizedTags }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || `更新失敗（${res.status}）`);
@@ -214,6 +253,18 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
             disabled={loading || saving}
           />
         </label>
+
+        {/* 進階參數 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <input className="mt-1 w-full p-2 rounded bg-zinc-800 text-white" placeholder="Steps" value={form.steps} onChange={(e) => handleChange("steps", e.target.value)} disabled={loading || saving} />
+          <input className="mt-1 w-full p-2 rounded bg-zinc-800 text-white" placeholder="Sampler" value={form.sampler} onChange={(e) => handleChange("sampler", e.target.value)} disabled={loading || saving} />
+          <input className="mt-1 w-full p-2 rounded bg-zinc-800 text-white" placeholder="CFG scale" value={form.cfgScale} onChange={(e) => handleChange("cfgScale", e.target.value)} disabled={loading || saving} />
+          <input className="mt-1 w-full p-2 rounded bg-zinc-800 text-white" placeholder="Seed" value={form.seed} onChange={(e) => handleChange("seed", e.target.value)} disabled={loading || saving} />
+          <input className="mt-1 w-full p-2 rounded bg-zinc-800 text-white" placeholder="Clip skip" value={form.clipSkip} onChange={(e) => handleChange("clipSkip", e.target.value)} disabled={loading || saving} />
+          <input className="mt-1 w-full p-2 rounded bg-zinc-800 text-white" placeholder="寬度" value={form.width} onChange={(e) => handleChange("width", e.target.value)} disabled={loading || saving} />
+          <input className="mt-1 w-full p-2 rounded bg-zinc-800 text-white" placeholder="高度" value={form.height} onChange={(e) => handleChange("height", e.target.value)} disabled={loading || saving} />
+          <input className="mt-1 w-full p-2 rounded bg-zinc-800 text-white" placeholder="Model hash" value={form.modelHash} onChange={(e) => handleChange("modelHash", e.target.value)} disabled={loading || saving} />
+        </div>
 
         <div className="mt-2 flex items-center justify-end gap-2">
           <button

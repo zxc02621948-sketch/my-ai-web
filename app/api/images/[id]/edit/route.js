@@ -1,4 +1,3 @@
-// /app/api/images/[id]/edit/route.js
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
@@ -43,6 +42,15 @@ export async function PATCH(req, { params }) {
       "loraName",
       "loraUrl",
       "tags",
+      // ▼ 新增進階欄位
+      "steps",
+      "sampler",
+      "cfgScale",
+      "seed",
+      "clipSkip",
+      "width",
+      "height",
+      "modelHash",
     ];
 
     const updates = {};
@@ -57,9 +65,7 @@ export async function PATCH(req, { params }) {
 
     // civitai 網址檢查：非空才檢查；空字串代表清除
     const isInvalidCivitai = (url) =>
-      typeof url === "string" &&
-      url.trim() !== "" &&
-      !/^https?:\/\/(www\.)?civitai\.com\//i.test(url.trim());
+      typeof url === "string" && url.trim() !== "" && !/^https?:\/\/(www\.)?civitai\.com\//i.test(url.trim());
 
     if (isInvalidCivitai(updates.modelUrl) || isInvalidCivitai(updates.loraUrl)) {
       return NextResponse.json(
@@ -74,7 +80,7 @@ export async function PATCH(req, { params }) {
         updates.tags = updates.tags.map((t) => String(t).trim()).filter(Boolean);
       } else if (typeof updates.tags === "string") {
         updates.tags = updates.tags
-          .split(/[,\s]+/g)   // ← 這裡改成同時支援空白與逗號
+          .split(/[\s,，、]+/g)
           .map((t) => t.trim())
           .filter(Boolean);
       } else if (updates.tags == null) {
@@ -87,54 +93,38 @@ export async function PATCH(req, { params }) {
     // —— 舊欄位同步策略（含清空；不動 imageUrl）——
     if ("modelUrl" in updates) {
       const v = (updates.modelUrl || "").trim();
-      image.modelUrl = v;
+      image.modelUrl = v; // 你的 schema 若無此欄位可刪掉
       image.modelLink = v;
       image.modelCivitaiUrl = v;
       delete updates.modelUrl;
     }
     if ("loraUrl" in updates) {
       const v = (updates.loraUrl || "").trim();
-      image.loraUrl = v;
+      image.loraUrl = v; // 你的 schema 若無此欄位可刪掉
       image.loraLink = v;
       image.loraCivitaiUrl = v;
       delete updates.loraUrl;
     }
+
+    // —— 進階欄位型別處理 ——
+    if ("steps" in updates) updates.steps = updates.steps === "" ? null : Number(updates.steps);
+    if ("cfgScale" in updates) updates.cfgScale = updates.cfgScale === "" ? null : Number(updates.cfgScale);
+    if ("seed" in updates) updates.seed = String(updates.seed || "");
+    if ("clipSkip" in updates) updates.clipSkip = updates.clipSkip === "" ? null : Number(updates.clipSkip);
+    if ("width" in updates) updates.width = updates.width === "" ? null : Number(updates.width);
+    if ("height" in updates) updates.height = updates.height === "" ? null : Number(updates.height);
 
     // 套用其餘更新
     Object.assign(image, updates);
 
     await image.save();
 
-    // —— 回傳最新資料（用與 GET 相同的正規化規則）——
+    // —— 回傳最新資料（簡化版，維持你原有 GET 正規化策略即可）——
     const doc = await Image.findById(id)
       .populate({ path: "user", select: "_id username image isAdmin level" })
       .lean();
 
-    const isCivitai = (v) =>
-      typeof v === "string" && /https?:\/\/(www\.)?civitai\.com\//i.test(v);
-    const hasLoraHint = (k, v) => /lora/i.test(String(k) + " " + String(v));
-
-    let modelUrl = doc.modelUrl || doc.modelLink || doc.modelCivitaiUrl || "";
-    let loraUrl  = doc.loraUrl  || doc.loraLink  || doc.loraCivitaiUrl  || "";
-
-    if (!modelUrl || !isCivitai(modelUrl)) {
-      for (const [k, v] of Object.entries(doc)) {
-        if (isCivitai(v) && !hasLoraHint(k, v)) { modelUrl = v; break; }
-      }
-    }
-    if (!loraUrl || !isCivitai(loraUrl)) {
-      for (const [k, v] of Object.entries(doc)) {
-        if (isCivitai(v) && hasLoraHint(k, v)) { loraUrl = v; break; }
-      }
-    }
-
-    const normalized = {
-      ...doc,
-      modelUrl: modelUrl && isCivitai(modelUrl) ? modelUrl : "",
-      loraUrl:  loraUrl  && isCivitai(loraUrl)  ? loraUrl  : "",
-    };
-
-    return NextResponse.json({ message: "圖片資料已更新", image: normalized });
+    return NextResponse.json({ message: "圖片資料已更新", image: doc });
   } catch (error) {
     console.error("❌ 更新圖片資料錯誤：", error);
     return NextResponse.json({ message: "伺服器錯誤" }, { status: 500 });

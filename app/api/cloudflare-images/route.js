@@ -2,9 +2,14 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { NextResponse } from "next/server";
 import Image from "@/models/Image";
 import User from "@/models/User";
-import { Notification } from "@/models/Notification"; // ✅ 加入這行
+import { Notification } from "@/models/Notification";
 import mongoose from "mongoose";
 
+/**
+ * 注意：請確認 models/Image.js 已包含以下欄位：
+ * steps(Number), sampler(String), cfgScale(Number), seed(String),
+ * clipSkip(Number), width(Number), height(Number), modelHash(String)
+ */
 
 export async function GET(req) {
   try {
@@ -43,10 +48,19 @@ export async function GET(req) {
         category: img.category,
         description: img.description,
         tags: img.tags,
-        modelName: img.modelName || null,   // ✅ 加入欄位
+        modelName: img.modelName || null,
         modelLink: img.modelLink || null,
-        loraName: img.loraName || null,     // ✅ 加入欄位
-        loraLink: img.loraLink || null, 
+        loraName: img.loraName || null,
+        loraLink: img.loraLink || null,
+        // ▼ 新增：生成參數回傳
+        steps: img.steps ?? null,
+        sampler: img.sampler || null,
+        cfgScale: img.cfgScale ?? null,
+        seed: img.seed || null,
+        clipSkip: img.clipSkip ?? null,
+        width: img.width ?? null,
+        height: img.height ?? null,
+        modelHash: img.modelHash || null,
         user: populatedUser
           ? {
               _id: populatedUser._id?.toString(),
@@ -78,6 +92,7 @@ export async function POST(req) {
   try {
     await connectToDatabase();
     const body = await req.json();
+
     const {
       title,
       imageId,
@@ -89,11 +104,20 @@ export async function POST(req) {
       description,
       tags,
       userId,
-      modelName,   // ✅ 加入解構
-      loraName,     // ✅ 加入解構
-      modelLink, 
-      loraLink,    
-      author 
+      modelName,
+      loraName,
+      modelLink,
+      loraLink,
+      author,
+      // ▼ 新增：進階欄位
+      steps,
+      sampler,
+      cfgScale,
+      seed,
+      clipSkip,
+      width,
+      height,
+      modelHash,
     } = body;
 
     if (!imageId || !title) {
@@ -113,26 +137,35 @@ export async function POST(req) {
       category,
       description,
       tags,
-      author,  
-      modelName,  // ✅ 寫入
-      loraName,   // ✅ 寫入
+      author,
+      modelName,
+      loraName,
       modelLink,
       loraLink,
+      // ▼ 寫入進階欄位
+      steps: steps ?? null,
+      sampler: sampler || "",
+      cfgScale: cfgScale ?? null,
+      seed: seed ? String(seed) : "",
+      clipSkip: clipSkip ?? null,
+      width: width ?? null,
+      height: height ?? null,
+      modelHash: modelHash || "",
       userId,
       user: userId,
     });
 
-  // 改成（正確）：
-  const followers = await User.find({ "following.userId": new mongoose.Types.ObjectId(userId) });
+    // 通知追蹤者
+    const followers = await User.find({ "following.userId": new mongoose.Types.ObjectId(userId) });
     const uploader = await User.findById(userId);
 
     await Promise.all(
       followers.map((follower) =>
         Notification.create({
           userId: follower._id,
-          fromUserId: uploader._id,
+          fromUserId: uploader?._id,
           type: "new_image",
-          text: `${author.username} 發布了新圖片《${title}》`,
+          text: `${uploader?.username || "用戶"} 發布了新圖片《${title}》`,
           imageId: newImage._id,
           isRead: false,
         })
