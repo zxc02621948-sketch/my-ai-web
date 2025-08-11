@@ -1,341 +1,355 @@
 "use client";
 
 import { Dialog } from "@headlessui/react";
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ImageViewer from "./ImageViewer";
 import CommentBox from "./CommentBox";
 import ImageInfoBox from "./ImageInfoBox";
 import axios from "axios";
-import EditImageModal from "@/components/image/EditImageModal";
+
+/**
+ * 行動版：
+ * - Dialog.Panel 自己是「唯一滾動容器」：height = 100 * --app-vh
+ * - snap 兩段：①滿版圖片（ImageViewer），②資訊/留言
+ * 桌機：維持左圖右資訊既有功能（追蹤、刪除、留言…）
+ * 傳參：
+ * - 支援 imageData（整包資料）或 imageId（由這裡 fetch）
+ */
 
 const defaultAvatarUrl =
   "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
 
-function getTokenFromCookie() {
-  const match = typeof document !== "undefined" && document.cookie.match(/token=([^;]+)/);
-  return match ? match[1] : "";
-}
+export default function ImageModal({
+  imageId,
+  imageData,          // ← 新增：可直接帶整包圖片資料進來
+  onClose,
+  currentUser,
+  onLikeUpdate,
+}) {
+  const [image, setImage] = useState(imageData || null);
+  const [loading, setLoading] = useState(!imageData);
+  const [error, setError] = useState(null);
 
-export default function ImageModal({ imageData, onClose, currentUser, onLikeUpdate }) {
-  const [image, setImage] = useState(imageData);
-  const [displayAuthor, setDisplayAuthor] = useState(() =>
-    typeof imageData?.author === "string" ? imageData.author.trim() : ""
-  );
-  const [showScrollTop, setShowScrollTop] = useState(false);
-  const scrollRef = useRef(null);
-  const router = useRouter();
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
-  const [followLoading, setFollowLoading] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const rightScrollRef = useRef(null);
+  const router = useRouter();
 
+  // 鎖住 body 捲動，避免與 Panel 雙重捲動
   useEffect(() => {
-    setImage(imageData);
-    if (typeof imageData?.author === "string") {
-      const next = imageData.author.trim();
-      if (next !== displayAuthor) setDisplayAuthor(next);
-    }
-  }, [imageData]);
-
-  useEffect(() => {
-    const id = imageData?._id;
-    if (!id) return;
-    let aborted = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/images/${id}`, { credentials: "include" });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok || !payload?.image || aborted) return;
-        const full = payload.image;
-        setImage((prev) => ({ ...prev, ...full }));
-        if (typeof full?.author === "string") {
-          const next = full.author.trim();
-          if (next !== displayAuthor) setDisplayAuthor(next);
-        }
-      } catch (e) {
-        console.warn("補抓圖片詳細資料失敗：", e);
-      }
-    })();
-    return () => {
-      aborted = true;
-    };
-  }, [imageData?._id]);
-
-  const canEdit = useMemo(() => {
-    if (!currentUser || !image) return false;
-    const ownerId =
-      typeof image.user === "string" ? image.user : image.user?._id || image.user?.id || null;
-    return currentUser.isAdmin || (ownerId && String(ownerId) === String(currentUser._id));
-  }, [currentUser, image]);
-
-  const targetUserId = useMemo(() => {
-    const u = image?.user || {};
-    return (typeof u === "string" ? u : u?._id || u?.id) || image?.userId || null;
-  }, [image]);
-
-  const followingIds = useMemo(() => {
-    if (!currentUser?.following) return [];
-    return currentUser.following
-      .map((f) => (typeof f === "string" ? f : f?.userId?._id || f?.userId || f?._id))
-      .filter(Boolean)
-      .map(String);
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!targetUserId) return setIsFollowing(false);
-    setIsFollowing(followingIds.includes(String(targetUserId)));
-  }, [targetUserId, followingIds]);
-
-  const handleScroll = () => {
-    const top = scrollRef.current?.scrollTop || 0;
-    setShowScrollTop(top > 200);
-  };
-
-  const handleScrollToTop = () => {
-    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.addEventListener("scroll", handleScroll);
-    return () => el.removeEventListener("scroll", handleScroll);
+    const orig = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = orig; };
   }, []);
 
-  const handleUserClick = () => {
-    const uid =
-      typeof image?.user === "string"
-        ? image.user
-        : image?.user?._id || image?.user?.id || null;
-    if (uid) {
-      router.push(`/user/${uid}`);
-      onClose();
+  // --app-vh（以視窗實高為準，避免行動瀏覽器工具列誤差）
+  useEffect(() => {
+    const setVH = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty("--app-vh", `${vh}px`);
+    };
+    setVH();
+    window.addEventListener("resize", setVH);
+    window.addEventListener("orientationchange", setVH);
+    return () => {
+      window.removeEventListener("resize", setVH);
+      window.removeEventListener("orientationchange", setVH);
+    };
+  }, []);
+
+  // 載入圖片：優先用 imageData；否則用 imageId fetch
+  useEffect(() => {
+    if (imageData?._id) {
+      setImage(imageData);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    if (!imageId) return; // 沒有任何資訊就不啟動請求
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/images/${imageId}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error("找不到該圖片，可能已被刪除");
+        setImage(data.image);
+        setError(null);
+      } catch (err) {
+        console.error("❌ 載入圖片失敗", err);
+        setError(err.message || "載入失敗");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [imageId, imageData]);
+
+  // 追蹤狀態
+  useEffect(() => {
+    if (!currentUser || !image?.user) return;
+    const targetId = image.user._id || image.user;
+    setIsFollowing(!!currentUser.following?.includes(targetId));
+  }, [currentUser, image]);
+
+  const handleFollowToggle = async () => {
+    if (!image?.user) return;
+    const targetId = image.user._id || image.user;
+    try {
+      if (isFollowing) {
+        await axios.delete("/api/follow", { data: { userIdToUnfollow: targetId } });
+      } else {
+        await axios.post("/api/follow", { userIdToFollow: targetId });
+      }
+      setIsFollowing((v) => !v);
+    } catch (err) {
+      console.error("❌ 追蹤切換失敗", err);
     }
   };
 
-  const handleDelete = async (imageId) => {
-    const confirmed = window.confirm("你確定要刪除這張圖片嗎？");
-    if (!confirmed) return;
-    const token = getTokenFromCookie();
+  const handleUserClick = () => {
+    if (image?.user?._id) {
+      router.push(`/user/${image.user._id}`);
+      onClose?.();
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("你確定要刪除這張圖片嗎？")) return;
+    const token = document.cookie.match(/token=([^;]+)/)?.[1];
     try {
       const res = await axios.delete("/api/delete-image", {
-        data: { imageId },
+        data: { imageId: id },
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status < 200 || res.status >= 300) throw new Error("刪除失敗");
       alert("圖片刪除成功！");
       window.location.reload();
-      onClose();
+      onClose?.();
     } catch (err) {
       console.error("刪除圖片錯誤：", err);
       alert("刪除失敗，請稍後再試。");
     }
   };
 
-  const handleFollowToggle = async () => {
-    if (!currentUser) return alert("請先登入");
-    if (!targetUserId || followLoading) return;
-    setFollowLoading(true);
-    setIsFollowing((prev) => !prev);
+  const isLikedByCurrent =
+    Array.isArray(image?.likes) && currentUser?._id
+      ? image.likes.includes(currentUser._id)
+      : false;
+
+  const toggleLikeOnServer = async () => {
     try {
-      const token = getTokenFromCookie();
-      if (isFollowing) {
-        await axios.delete("/api/follow", {
-          data: { userIdToUnfollow: targetUserId },
-          headers: {
-            Authorization: token ? `Bearer ${token}` : undefined,
-            "Content-Type": "application/json",
-          },
-        });
-      } else {
-        await axios.post(
-          "/api/follow",
-          { userIdToFollow: targetUserId },
-          {
-            headers: {
-              Authorization: token ? `Bearer ${token}` : undefined,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-      }
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent("follow-changed", {
-            detail: { targetUserId, isFollowing: !isFollowing },
-          })
-        );
+      const token = document.cookie.match(/token=([^;]+)/)?.[1];
+      if (!token || !currentUser?._id || !image?._id) return;
+      const res = await axios.put(`/api/like-image?id=${image._id}`, null, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 200 && res.data) {
+        const updated = { ...image, likes: res.data.likes };
+        setImage(updated);
+        onLikeUpdate?.(updated);
       }
     } catch (err) {
-      console.error("❌ 追蹤切換失敗：", err);
-      setIsFollowing((prev) => !prev);
-      alert("追蹤更新失敗");
-    } finally {
-      setFollowLoading(false);
+      console.error("❌ 點讚失敗", err);
     }
   };
 
-  const handleImageUpdated = (updated) => {
-    if (!updated) return;
-    setImage((prev) => ({ ...prev, ...updated }));
-    if (typeof updated?.author === "string") {
-      const next = updated.author.trim();
-      if (next !== displayAuthor) setDisplayAuthor(next);
-    }
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("image-updated", { detail: { image: updated } }));
-    }
-  };
+  // 桌機右側面板滾動監聽（保留原功能）
+  useEffect(() => {
+    const el = rightScrollRef.current;
+    if (!el) return;
+    const onScroll = () => setShowScrollTop(el.scrollTop > 200);
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
-  if (!imageData) return null;
-  const likesArr = Array.isArray(image?.likes) ? image.likes : [];
+  // fileUrl 供下載等用
+  const fileUrl = image?.imageId
+    ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`
+    : image?.imageUrl || "";
 
   return (
-    <Dialog
-      open={!!imageData}
-      onClose={() => {
-        if (editOpen) return;
-        onClose();
-      }}
-      className="relative z-50"
-    >
+    <Dialog open={!!(imageId || imageData)} onClose={onClose} className="relative z-[99999]">
+      {/* Overlay */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
+
+      {/* Wrapper（點外面關閉） */}
+      <div className="fixed inset-0 flex items-center justify-center p-0 md:p-4" onClick={onClose}>
+        {/* Panel = 手機唯一滾動容器 + snap 兩段；桌機維持左右版 */}
         <Dialog.Panel
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-6xl bg-[#1a1a1a] text-white rounded-xl shadow-lg flex flex-col lg:flex-row overflow-hidden"
+          className="
+            relative w-full md:max-w-6xl
+            bg-[#1a1a1a] text-white
+            rounded-none md:rounded-xl shadow-lg
+            overflow-y-auto md:overflow-hidden
+            snap-y snap-mandatory md:snap-none
+            flex flex-col md:flex-row
+          "
+          style={{
+            height: "calc(var(--app-vh, 1vh) * 100)",
+            maxHeight: "calc(var(--app-vh, 1vh) * 100)",
+            WebkitOverflowScrolling: "touch",
+            paddingTop: "max(env(safe-area-inset-top), 0px)",
+            paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
+          }}
         >
-          <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
-            <div style={{ zIndex: 10, position: "relative" }}>
+          {/* ===== Mobile：Section 1 — 滿版圖片 ===== */}
+          <section
+            className="md:hidden snap-start relative"
+            style={{ minHeight: "calc(var(--app-vh, 1vh) * 100)" }}
+          >
+            {loading ? (
+              <div className="w-full h-full flex items-center justify-center text-gray-400">載入中...</div>
+            ) : error ? (
+              <div className="w-full h-full flex items-center justify-center text-red-500">{error}</div>
+            ) : image ? (
               <ImageViewer
-                key={image._id + "_" + likesArr.length}
                 image={image}
                 currentUser={currentUser}
-                isLiked={likesArr.includes(currentUser?._id)}
-                onToggleLike={async () => {
-                  if (isProcessing || !currentUser?._id) return;
-                  setIsProcessing(true);
-                  try {
-                    const token = getTokenFromCookie();
-                    if (!token || !currentUser?._id) return;
-                    const hasLiked = likesArr.includes(currentUser._id);
-                    const newLikeState = !hasLiked;
-                    const optimisticLikes = newLikeState
-                      ? [...likesArr, currentUser._id]
-                      : likesArr.filter((id) => id !== currentUser._id);
-                    const optimisticImage = { ...image, likes: optimisticLikes };
-                    setImage(optimisticImage);
-                    onLikeUpdate?.(optimisticImage);
-                    if (typeof window !== "undefined") {
-                      window.dispatchEvent(
-                        new CustomEvent("image-liked", { detail: { ...optimisticImage } })
-                      );
-                    }
-                    const res = await axios.put(
-                      `/api/like-image?id=${image._id}`,
-                      { shouldLike: newLikeState },
-                      {
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                          "Content-Type": "application/json",
-                        },
-                      }
-                    );
-                    if (res.status === 200 && res.data) {
-                      const updated = { ...image, likes: res.data.likes || [] };
-                      setImage(updated);
-                      onLikeUpdate?.(updated);
-                      if (typeof window !== "undefined") {
-                        window.dispatchEvent(
-                          new CustomEvent("image-liked", { detail: { ...updated } })
-                        );
-                      }
-                    }
-                  } catch (err) {
-                    console.error("❌ 點讚失敗", err);
-                  } finally {
-                    setTimeout(() => setIsProcessing(false), 1000);
-                  }
-                }}
+                isLiked={isLikedByCurrent}
+                onToggleLike={toggleLikeOnServer}
+                showClose
+                onClose={onClose}
               />
+            ) : null}
+
+            {/* 上滑提示 */}
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80">
+              ↑ 上滑查看資訊
             </div>
-          </div>
-          <div className="w-full lg:w-[400px] max-h-[90vh] border-l border-white/10 flex flex-col relative">
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 relative">
-              {image && (
-                <>
-                  <div className="absolute top-15 right-10 flex flex-col items-center z-10">
-                    
-                    <div onClick={handleUserClick} className="cursor-pointer">
-                      <img
-                        src={
-                          (typeof image.user !== "string" && image.user?.image)
-                            ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
-                            : defaultAvatarUrl
-                        }
-                        alt="User Avatar"
-                        className="w-20 h-20 rounded-full object-cover border border-white shadow"
-                        onError={(e) => {
-                          e.target.onerror = null;
-                          e.target.src = defaultAvatarUrl;
-                        }}
-                      />
-                    </div>
-                    <span className="text-sm mt-2 text-center text-white select-none">
-                      {(typeof image.user !== "string" && image.user?.username) || "未命名用戶"}
-                    </span>
-                    {currentUser &&
-                      image?.user &&
-                      (String(currentUser._id) !== String(
-                        typeof image.user === "string" ? image.user : image.user._id || image.user.id
-                      )) && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleFollowToggle();
+          </section>
+
+          {/* ===== Mobile：Section 2 — 資訊 & 留言 ===== */}
+          <section className="md:hidden snap-start bg-zinc-950 text-zinc-100 border-t border-white/10">
+            <div className="flex justify-center pt-3">
+              <div className="h-1.5 w-12 rounded-full bg-white/20" />
+            </div>
+            {image && (
+              <div className="p-4 space-y-4">
+                {/* 作者＆追蹤 */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={
+                        image.user?.image
+                          ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
+                          : defaultAvatarUrl
+                      }
+                      alt="User Avatar"
+                      className="w-12 h-12 rounded-full object-cover border border-white/20 shadow"
+                      onClick={handleUserClick}
+                    />
+                    <span className="text-sm">{image.user?.username || "未命名用戶"}</span>
+                  </div>
+                  {currentUser && image?.user && currentUser._id !== (image.user._id || image.user) && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleFollowToggle(); }}
+                      className={`px-3 py-1 text-sm rounded ${
+                        isFollowing ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+                      }`}
+                    >
+                      {isFollowing ? "取消追蹤" : "追蹤作者"}
+                    </button>
+                  )}
+                </div>
+
+                {/* 詳細資訊（保留全部功能） */}
+                <ImageInfoBox
+                  image={{ ...image, user: image.user || image.userId }}
+                  currentUser={currentUser}
+                  onClose={onClose}
+                  onDelete={handleDelete}
+                  fileUrl={fileUrl}
+                />
+
+                {/* 留言 */}
+                <CommentBox currentUser={currentUser} imageId={image._id} />
+              </div>
+            )}
+          </section>
+
+          {/* ===== Desktop：維持原左右版 ===== */}
+          <div className="hidden md:flex md:flex-row w-full">
+            {/* 左：圖片區 */}
+            <div className="flex-1 bg-black relative p-4 flex items-center justify-center">
+              {loading ? (
+                <div className="text-gray-400">載入中...</div>
+              ) : error ? (
+                <div className="text-red-500">{error}</div>
+              ) : image ? (
+                <ImageViewer
+                  key={image._id + (Array.isArray(image.likes) ? image.likes.length : 0)}
+                  image={image}
+                  currentUser={currentUser}
+                  isLiked={isLikedByCurrent}
+                  onToggleLike={toggleLikeOnServer}
+                />
+              ) : null}
+            </div>
+
+            {/* 右：資訊區 */}
+            <div className="w-full md:w-[400px] max-h-[90vh] border-l border-white/10 flex flex-col relative">
+              <div ref={rightScrollRef} className="flex-1 overflow-y-auto p-4 relative">
+                {image && (
+                  <>
+                    <div className="absolute top-15 right-10 flex flex-col items-center z-50">
+                      <div onClick={handleUserClick} className="cursor-pointer">
+                        <img
+                          src={
+                            image.user?.image
+                              ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
+                              : defaultAvatarUrl
+                          }
+                          alt="User Avatar"
+                          className="w-20 h-20 rounded-full object-cover border border-white shadow"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = defaultAvatarUrl;
                           }}
-                          disabled={followLoading}
+                        />
+                      </div>
+                      <span className="text-sm mt-2 text-center select-none">
+                        {image.user?.username || "未命名用戶"}
+                      </span>
+
+                      {currentUser && image?.user && currentUser._id !== (image.user._id || image.user) && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleFollowToggle(); }}
                           className={`mt-2 px-3 py-1 text-sm rounded ${
-                            isFollowing
-                              ? "bg-red-600 hover:bg-red-700"
-                              : "bg-blue-600 hover:bg-blue-700"
-                          } ${followLoading ? "opacity-60 cursor-not-allowed" : ""}`}
+                            isFollowing ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+                          }`}
                         >
                           {isFollowing ? "取消追蹤" : "追蹤作者"}
                         </button>
                       )}
-                  </div>
-                  <ImageInfoBox
-                    image={{ ...image, user: image.user || image.userId, author: displayAuthor }}
-                    currentUser={currentUser}
-                    onClose={onClose}
-                    onEdit={() => setEditOpen(true)}
-                  />
-                  <CommentBox currentUser={currentUser} imageId={image._id} />
-                </>
+                    </div>
+
+                    <ImageInfoBox
+                      image={{ ...image, user: image.user || image.userId }}
+                      currentUser={currentUser}
+                      onClose={onClose}
+                      onDelete={handleDelete}
+                      fileUrl={fileUrl}
+                    />
+
+                    <CommentBox currentUser={currentUser} imageId={image._id} />
+                  </>
+                )}
+              </div>
+
+              {showScrollTop && (
+                <button
+                  onClick={() => rightScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+                  className="absolute bottom-16 right-4 z-20 text-white bg-sky-400 hover:bg-gray-600 rounded-full w-10 h-10 text-xl flex items-center justify-center shadow"
+                  title="回到頂部"
+                >
+                  ↑
+                </button>
               )}
             </div>
-            {showScrollTop && (
-              <button
-                onClick={handleScrollToTop}
-                className="absolute bottom-16 right-4 z-20 text-white bg-sky-400 hover:bg-gray-600 rounded-full w-10 h-10 text-xl flex items-center justify-center shadow"
-                title="回到頂部"
-              >
-                ↑
-              </button>
-            )}
           </div>
         </Dialog.Panel>
       </div>
-      {canEdit && (
-        <EditImageModal
-          imageId={image?._id}
-          isOpen={editOpen}
-          onClose={() => setEditOpen(false)}
-          onImageUpdated={handleImageUpdated}
-        />
-      )}
     </Dialog>
   );
 }
