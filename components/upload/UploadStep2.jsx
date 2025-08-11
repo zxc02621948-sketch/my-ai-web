@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import pako from "pako";
 import { jwtDecode } from "jwt-decode";
 import CATEGORIES from "@/constants/categories";
 
@@ -110,12 +111,26 @@ export default function UploadStep2({
         };
         const key = readToNull();
         const compressionFlag = raw[p++];
-        p++; // compressionMethod
+        const compressionMethod = raw[p++]; // 0=zlib
         readToNull(); // languageTag
         readToNull(); // translatedKeyword
         let text = "";
-        if (compressionFlag === 0) text = textDecoder.decode(raw.slice(p));
+        if (compressionFlag === 1 && compressionMethod === 0) {
+          try { text = textDecoder.decode(pako.inflate(raw.slice(p))); } catch {}
+        } else {
+          text = textDecoder.decode(raw.slice(p));
+        }
         if (key) out[key] = text;
+      } else if (type === "zTXt") {
+        const raw = new Uint8Array(ab, dataStart, length);
+        const idx = raw.indexOf(0);
+        const key = textDecoder.decode(raw.slice(0, Math.max(0, idx)));
+        const method = raw[idx + 1]; // 0=zlib
+        let text = "";
+        try {
+          if (method === 0) text = textDecoder.decode(pako.inflate(raw.slice(idx + 2)));
+        } catch {}
+        if (key && text) out[key] = text;
       }
       pos = dataEnd + 4; // skip CRC
       if (type === "IEND") break;
@@ -257,6 +272,25 @@ export default function UploadStep2({
           const chunks = await extractPngTextChunks(imageFile);
           if (chunks.parameters) {
             parsed = parseA1111Parameters(chunks.parameters);
+          } else if (chunks["sd-metadata"] || chunks["sd_metadata"] || chunks["SD:metadata"]) {
+            try {
+              const json = chunks["sd-metadata"] || chunks["sd_metadata"] || chunks["SD:metadata"];
+              const meta = JSON.parse(json);
+              // 轉成你的欄位
+              parsed = {
+                prompt: meta.prompt || meta.Prompt || "",
+                negative: meta.negative_prompt || meta.NegativePrompt || "",
+                steps: meta.steps,
+                sampler: meta.sampler,
+                cfgScale: meta.cfg_scale ?? meta.cfg,
+                seed: meta.seed,
+                width: meta.width,
+                height: meta.height,
+                model: meta.model || meta.Model,
+                modelHash: meta.model_hash || meta.ModelHash,
+                clipSkip: meta.clip_skip ?? meta.clipSkip,
+              };
+            } catch {}
           } else if (chunks.prompt) {
             const comfy = tryParseComfy(chunks.prompt);
             if (comfy) parsed = comfy;

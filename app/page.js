@@ -8,15 +8,21 @@ import AdminPanel from "@/components/homepage/AdminPanel";
 import BackToTopButton from "@/components/common/BackToTopButton";
 import { useFilterContext, labelToRating } from "@/components/context/FilterContext";
 import useLikeHandler from "@/hooks/useLikeHandler";
+import SortSelect from "@/components/common/SortSelect";
 
 export default function HomePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const PAGE_SIZE = 20; // 與 API 的 limit 對齊
+
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [likeUpdateTrigger, setLikeUpdateTrigger] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+
+  // ✅ 排序（預設：popular 加權分數）
+  const [sort, setSort] = useState("popular");
 
   // ✅ 搜尋字由 URL 主導（唯一資料源）
   const [search, setSearch] = useState("");
@@ -37,10 +43,26 @@ export default function HomePage() {
     resetFilters,
   } = useFilterContext();
 
+  // --- 點擊回報（打開大圖就 +1），含 30 秒本地節流，避免灌水 ---
+  const reportClick = (id) => {
+    if (!id) return;
+    const key = `click:${id}`;
+    const now = Date.now();
+    const last = Number(localStorage.getItem(key) || 0);
+    if (now - last < 30 * 1000) return; // 30 秒內同一張不重複回報
+    localStorage.setItem(key, String(now));
+    fetch(`/api/images/${id}/click`, { method: "POST" }).catch(() => {});
+  };
+
   const fetchImages = async (pageToFetch = 1) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/cloudflare-images?page=${pageToFetch}&limit=20`);
+      const params = new URLSearchParams({
+        page: String(pageToFetch),
+        limit: String(PAGE_SIZE),
+        sort, // 🔹 帶入排序
+      });
+      const res = await fetch(`/api/images?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
 
       if (res.ok && Array.isArray(data.images)) {
@@ -49,12 +71,13 @@ export default function HomePage() {
           setImages(newImages);
         } else {
           setImages((prev) => {
-            const existingIds = new Set(prev.map((img) => img._id));
-            const uniqueNewImages = newImages.filter((img) => !existingIds.has(img._id));
+            const existingIds = new Set(prev.map((img) => String(img._id)));
+            const uniqueNewImages = newImages.filter((img) => !existingIds.has(String(img._id)));
             return [...prev, ...uniqueNewImages];
           });
         }
-        setHasMore(pageToFetch < data.totalPages);
+        // 沒有 totalPages 時，用回傳數量判定是否還有下一頁
+        setHasMore(newImages.length >= PAGE_SIZE);
         setPage(pageToFetch);
       } else {
         console.warn("資料格式錯誤", data);
@@ -95,20 +118,13 @@ export default function HomePage() {
   };
 
   // ✅ URL -> search（唯一資料源）
-  // 規則：
-  // 1) 首次進來：抓一次列表，但「不重置篩選」（刷新也要保留）
-  // 2) search 清空：重抓首頁列表；只有當 sessionStorage.homepageReset === "1" 才 resetFilters（點 Logo）
-  // 3) 有關鍵字：不重抓，用前端過濾
+  // 首次載入抓一次列表；清空搜尋回首頁；有關鍵字時用前端 filter。
   useEffect(() => {
     const val = (searchParams.get("search") || "").trim();
     const byLogo = sessionStorage.getItem("homepageReset") === "1";
 
-    console.log("[HOME] effect hit:", { val, last: lastUrlSearchRef.current, fetchedOnce: fetchedOnceRef.current, byLogo });
-
-    // 若 search 值沒變，但這次是點 Logo（有旗標），仍要執行清篩選
     if (val === lastUrlSearchRef.current && fetchedOnceRef.current) {
       if (byLogo && val === "") {
-        console.log("[HOME] reset by logo (early-return branch)");
         fetchImages(1);
         resetFilters();
         sessionStorage.removeItem("homepageReset");
@@ -123,16 +139,13 @@ export default function HomePage() {
 
     if (!fetchedOnceRef.current) {
       fetchedOnceRef.current = true;
-      fetchImages(1);      // 首次必抓一次列表
+      fetchImages(1); // 首次必抓一次列表
       setPage(1);
-      return;              // 🔸 不在首次做 resetFilters —— 刷新需保留篩選
+      return; // 🔸 不在首次做 resetFilters —— 刷新需保留篩選
     }
 
     if (val === "") {
-      // 清空搜尋：回首頁列表
       fetchImages(1);
-
-      // 只有按 Logo（Header 會寫入這個旗標）才清篩選
       if (byLogo) {
         resetFilters();
         sessionStorage.removeItem("homepageReset");
@@ -140,10 +153,16 @@ export default function HomePage() {
         setSearchKeyReset((n) => n + 1);
       }
     } else {
-      // 有關鍵字：使用前端 filter，不重抓
-      setPage(1);
+      setPage(1); // 有關鍵字：使用前端 filter，不重抓
     }
   }, [searchParams, resetFilters]);
+
+  // ✅ 切換排序時：重抓第一頁
+  useEffect(() => {
+    if (!fetchedOnceRef.current) return;
+    fetchImages(1);
+    setPage(1);
+  }, [sort]);
 
   // ✅ 只抓使用者（避免與上面 effect 同時抓圖）
   useEffect(() => {
@@ -159,22 +178,20 @@ export default function HomePage() {
     }).catch(() => {});
   }, []);
 
-  // 🔔 編輯後就地同步首頁清單 & 已開啟的大圖
+  // 🔔 後台編輯後就地同步首頁清單 & 已開啟的大圖
   useEffect(() => {
     const onImageUpdated = (e) => {
       const updated = e.detail?.image;
       if (!updated?._id) return;
 
       // 替換列表同 ID 的圖片資料
-      setImages((prev) => prev.map((it) =>
-        String(it._id) === String(updated._id) ? { ...it, ...updated } : it
-      ));
+      setImages((prev) =>
+        prev.map((it) => (String(it._id) === String(updated._id) ? { ...it, ...updated } : it))
+      );
 
       // 若大圖正打開同一張，也一併同步
       setSelectedImage((prev) =>
-        prev?._id && String(prev._id) === String(updated._id)
-          ? { ...prev, ...updated }
-          : prev
+        prev?._id && String(prev._id) === String(updated._id) ? { ...prev, ...updated } : prev
       );
     };
 
@@ -182,7 +199,7 @@ export default function HomePage() {
     return () => window.removeEventListener("image-updated", onImageUpdated);
   }, []);
 
-  // 無限滾動
+  // 無限滾動：保持同一排序下的續頁
   useEffect(() => {
     if (!hasMore || isLoading) return;
     const observer = new IntersectionObserver(
@@ -195,7 +212,8 @@ export default function HomePage() {
     return () => {
       if (loadMoreRef.current) observer.unobserve(loadMoreRef.current);
     };
-  }, [hasMore, isLoading, page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, isLoading, page, sort]);
 
   const filteredImages = useMemo(() => {
     if (!Array.isArray(images)) return [];
@@ -230,12 +248,20 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* 排序選單 */}
+      <div className="max-w-6xl mx-auto mb-3 flex items-center justify-end">
+        <SortSelect value={sort} onChange={setSort} />
+      </div>
+
       <ImageGrid
         images={filteredImages}
         viewMode={viewMode}
         isLoading={isLoading}
         hasMore={hasMore}
-        onSelectImage={setSelectedImage}
+        onSelectImage={(img) => {
+          setSelectedImage(img);
+          if (img?._id) reportClick(img._id); // 👈 打開大圖就回報點擊
+        }}
         loadMoreRef={loadMoreRef}
         currentUser={currentUser}
         isLikedByCurrentUser={isLikedByCurrentUser}
@@ -254,7 +280,12 @@ export default function HomePage() {
         <ImageModal
           key={selectedImage?._id + "_" + selectedImage?._forceSync}
           imageData={selectedImage}
-          onClose={() => setSelectedImage(null)}
+          onClose={() => {
+            setSelectedImage(null);
+            // 為了測試「熱門」排序的即時感受：關閉大圖時重抓首頁
+            fetchImages(1);
+            setPage(1);
+          }}
           currentUser={currentUser}
           onLikeUpdate={(updated) => {
             onLikeUpdateHook(updated);

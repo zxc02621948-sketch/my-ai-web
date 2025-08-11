@@ -1,15 +1,11 @@
+// app/api/cloudflare-images/route.js
 import { connectToDatabase } from "@/lib/mongodb";
 import { NextResponse } from "next/server";
 import Image from "@/models/Image";
 import User from "@/models/User";
 import { Notification } from "@/models/Notification";
 import mongoose from "mongoose";
-
-/**
- * 注意：請確認 models/Image.js 已包含以下欄位：
- * steps(Number), sampler(String), cfgScale(Number), seed(String),
- * clipSkip(Number), width(Number), height(Number), modelHash(String)
- */
+import { computeCompleteness } from "@/utils/score"; // 👈 新增
 
 export async function GET(req) {
   try {
@@ -29,7 +25,6 @@ export async function GET(req) {
 
     const images = rawImages.map((img) => {
       const populatedUser = img.user && typeof img.user === "object" ? img.user : null;
-
       const fallbackImageId = "a607f9aa-b1e5-484c-bee3-02191abee13e";
       const userImage =
         populatedUser?.image && populatedUser.image.trim() !== ""
@@ -52,7 +47,6 @@ export async function GET(req) {
         modelLink: img.modelLink || null,
         loraName: img.loraName || null,
         loraLink: img.loraLink || null,
-        // ▼ 新增：生成參數回傳
         steps: img.steps ?? null,
         sampler: img.sampler || null,
         cfgScale: img.cfgScale ?? null,
@@ -61,6 +55,7 @@ export async function GET(req) {
         width: img.width ?? null,
         height: img.height ?? null,
         modelHash: img.modelHash || null,
+        completenessScore: img.completenessScore ?? null, // 👈 顯示用
         user: populatedUser
           ? {
               _id: populatedUser._id?.toString(),
@@ -108,8 +103,6 @@ export async function POST(req) {
       loraName,
       modelLink,
       loraLink,
-      author,
-      // ▼ 新增：進階欄位
       steps,
       sampler,
       cfgScale,
@@ -118,6 +111,7 @@ export async function POST(req) {
       width,
       height,
       modelHash,
+      author,
     } = body;
 
     if (!imageId || !title) {
@@ -126,23 +120,23 @@ export async function POST(req) {
 
     const imageUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageId}/public`;
 
-    const newImage = await Image.create({
+    // 先組資料（空值不塞）
+    const doc = {
       title,
       imageId,
       imageUrl,
-      platform,
-      positivePrompt,
-      negativePrompt,
+      platform: platform || "",
+      positivePrompt: positivePrompt || "",
+      negativePrompt: negativePrompt || "",
       rating,
       category,
-      description,
-      tags,
-      author,
-      modelName,
-      loraName,
-      modelLink,
-      loraLink,
-      // ▼ 寫入進階欄位
+      description: description || "",
+      tags: Array.isArray(tags) ? tags : [],
+      author: author || "",
+      modelName: modelName || "",
+      loraName: loraName || "",
+      modelLink: modelLink || "",
+      loraLink: loraLink || "",
       steps: steps ?? null,
       sampler: sampler || "",
       cfgScale: cfgScale ?? null,
@@ -153,9 +147,14 @@ export async function POST(req) {
       modelHash: modelHash || "",
       userId,
       user: userId,
-    });
+    };
 
-    // 通知追蹤者
+    // 👇 即時計算完整度，讓熱門度立即生效
+    doc.completenessScore = computeCompleteness(doc);
+
+    const newImage = await Image.create(doc);
+
+    // 通知追蹤者（維持原有行為）
     const followers = await User.find({ "following.userId": new mongoose.Types.ObjectId(userId) });
     const uploader = await User.findById(userId);
 

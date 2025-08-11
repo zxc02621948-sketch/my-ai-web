@@ -12,6 +12,8 @@ import { usePortalContainer } from "@/components/common/usePortal";
 import { createPortal } from "react-dom";
 import { useFilterContext } from "@/components/context/FilterContext";
 import toast from "react-hot-toast";
+import { Package2, Wrench, CircleHelp } from "lucide-react";
+
 
 const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr: false });
 
@@ -22,7 +24,6 @@ export default function Header({
   onRegisterOpen,
   suggestions = [],
   onUploadClick,
-  onGuideClick,
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -36,15 +37,13 @@ export default function Header({
   const [isComposing, setIsComposing] = useState(false);
 
   const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null); // 以完整物件為主
+  const [selectedImage, setSelectedImage] = useState(null);
 
   const filterButtonRef = useRef(null);
   const inputRef = useRef(null);
   const filterPanelRef = useRef(null);
   const userMenuRef = useRef(null);
   const portalContainer = usePortalContainer();
-
-  // ✅ 搜尋下拉用的容器，用來偵測點外關閉
   const searchBoxRef = useRef(null);
 
   const {
@@ -57,15 +56,12 @@ export default function Header({
     resetFilters,
   } = useFilterContext();
 
-  // ✅ 標記是「使用者打字」而非 URL 回寫，避免雙向同步回圈
   const isUserTypingRef = useRef(false);
   const debounceTimerRef = useRef(null);
 
-  // ✅ 就地搜尋／清空：一律以目前頁面 pathname 作為基底
   const buildHref = (term) => {
     const q = (term || "").trim();
-    return q ? `${pathname}?search=${encodeURIComponent(q)}`
-             : pathname;
+    return q ? `${pathname}?search=${encodeURIComponent(q)}` : pathname;
   };
 
   // URL → 輸入框
@@ -75,11 +71,10 @@ export default function Header({
     isUserTypingRef.current = false;
   }, [searchParams]);
 
-  // 🟢 即時搜尋：輸入框 → URL（僅在「使用者正在輸入」且非組字中時執行）
+  // 輸入框 → URL（debounce）
   useEffect(() => {
     if (!isUserTypingRef.current) return;
     if (isComposing) return;
-
     clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
       const target = buildHref(searchQuery);
@@ -88,377 +83,342 @@ export default function Header({
       if (currentHref === target) return;
       router.replace(target);
     }, 200);
-
     return () => clearTimeout(debounceTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, isComposing, pathname, searchParams]);
 
-  // 🔒 點空白處關閉「篩選面板」
+  // 點外關閉：篩選面板 + 使用者選單 + 搜尋下拉
   useEffect(() => {
     const onDocMouseDown = (e) => {
-      if (!filterMenuOpen) return;
-      const panel = filterPanelRef.current;
-      const btn = filterButtonRef.current;
-      if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
-        setFilterMenuOpen(false);
+      if (filterMenuOpen) {
+        const panel = filterPanelRef.current;
+        const btn = filterButtonRef.current;
+        if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
+          setFilterMenuOpen(false);
+        }
+      }
+      if (userMenuOpen) {
+        const menu = userMenuRef.current;
+        if (menu && !menu.contains(e.target)) setUserMenuOpen(false);
+      }
+      if (showDropdown) {
+        const box = searchBoxRef.current;
+        if (box && !box.contains(e.target)) setShowDropdown(false);
       }
     };
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, [filterMenuOpen]);
+  }, [filterMenuOpen, userMenuOpen, showDropdown]);
 
-  // 🔒 點空白 / Esc / 捲動 → 關閉「搜尋建議下拉」
+  // 搜尋建議
   useEffect(() => {
-    const onDocMouseDown = (e) => {
-      if (!showDropdown) return;
-      const box = searchBoxRef.current;
-      if (box && !box.contains(e.target)) setShowDropdown(false);
-    };
-    const onKey = (e) => {
-      if (e.key === "Escape") setShowDropdown(false);
-    };
-    const onAnyScroll = () => { if (showDropdown) setShowDropdown(false); };
-
-    document.addEventListener("mousedown", onDocMouseDown);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onAnyScroll, true);
-
-    return () => {
-      document.removeEventListener("mousedown", onDocMouseDown);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onAnyScroll, true);
-    };
-  }, [showDropdown]);
-
-  // ✅ 使用者選單：點外面 + Esc 關閉
-  useEffect(() => {
-    const handleOutside = (e) => {
-      if (!userMenuOpen) return;
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
-        setUserMenuOpen(false);
-      }
-    };
-    const handleEsc = (e) => {
-      if (e.key === "Escape") setUserMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", handleOutside, true);
-    document.addEventListener("keydown", handleEsc);
-    return () => {
-      document.removeEventListener("pointerdown", handleOutside, true);
-      document.removeEventListener("keydown", handleEsc);
-    };
-  }, [userMenuOpen]);
-
-  // ✅ 路由切換自動關閉使用者選單
-  useEffect(() => { setUserMenuOpen(false); }, [pathname]);
-
-  // 下拉建議（純顯示，不動 URL）
-  useEffect(() => {
-    const delay = setTimeout(async () => {
-      const input = searchQuery.toLowerCase().trim();
-      if (!input) {
-        setFilteredSuggestions([]);
-        setShowDropdown(false);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(input)}`);
-        if (!res.ok) throw new Error("API 錯誤");
-        const data = await res.json();
-        setFilteredSuggestions(data.slice(0, 6));
-        setShowDropdown(data.length > 0);
-      } catch {
-        setShowDropdown(false);
-      }
-    }, 200);
-    return () => clearTimeout(delay);
-  }, [searchQuery]);
-
-  const logSearch = async (keyword) => {
-    const level =
-      currentUser?.isAdmin || currentUser?.level === "18"
-        ? "18"
-        : currentUser?.level === "15"
-        ? "15"
-        : "all";
-    try {
-      await fetch("/api/log-search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword, level }),
-      });
-    } catch {}
-  };
+    const q = searchQuery.trim();
+    if (!q) {
+      setShowDropdown(false);
+      setFilteredSuggestions([]);
+      return;
+    }
+    const list = suggestions
+      .filter((s) => typeof s === "string" && s.toLowerCase().includes(q.toLowerCase()))
+      .slice(0, 8);
+    setFilteredSuggestions(list);
+    setShowDropdown(list.length > 0);
+  }, [searchQuery, suggestions]);
 
   const handleInputChange = (e) => {
     isUserTypingRef.current = true;
     setSearchQuery(e.target.value);
   };
-
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    const trimmed = searchQuery.trim();
-    if (!trimmed) return;
-    await logSearch(trimmed);
     isUserTypingRef.current = false;
-    router.push(buildHref(trimmed));
     setShowDropdown(false);
-    inputRef.current?.focus();
+    router.push(buildHref(searchQuery));
   };
-
-  const clearSearch = () => {
-    setShowDropdown(false);
-    setSearchQuery("");
+  const handleSuggestionClick = (text) => {
     isUserTypingRef.current = false;
-    router.push(buildHref(""));
-  };
-
-  const handleLogoClick = (e) => {
-    e.preventDefault();
+    setSearchQuery(text);
     setShowDropdown(false);
-    setFilterMenuOpen(false);
-    setSearchQuery("");
-    isUserTypingRef.current = false;
-    resetFilters();
-
-    if (pathname !== "/") {
-      router.push("/");
-    } else {
-      const hasSearch = !!(searchParams.get("search") || "");
-      if (hasSearch) router.replace("/");
-    }
-    window.scrollTo(0, 0);
+    router.push(buildHref(text));
   };
-
-  const handleSuggestionClick = async (s) => {
-    await logSearch(s);
-    isUserTypingRef.current = false;
-    router.push(buildHref(s));
-    setShowDropdown(false);
-    inputRef.current?.focus();
-  };
-
-  // 其他與搜尋無關：開圖 modal 事件（先「預抓完整資料」→ 再開）
-  useEffect(() => {
-    const handleOpenImage = async (e) => {
-      const { imageId, image: shallow } = e.detail || {};
-      const id = imageId || shallow?._id;
-      if (!id) return;
-
-      const base = shallow || { _id: id };
-
-      let full = null;
-      try {
-        const res = await fetch(`/api/images/${id}`, { credentials: "include" });
-        const payload = await res.json().catch(() => ({}));
-        if (res.ok && payload?.image) full = payload.image;
-      } catch (err) {
-        console.warn("預抓圖片失敗：", err);
-      }
-
-      // ✅ 只有在「已拿到完整資料」或「抓不到就退回卡片資料」時才開啟
-      const ready = full ? { ...base, ...full, _prefetched: true } : { ...base, _prefetched: false };
-      setSelectedImage(ready);
-      setShowImageModal(true);
-    };
-
-    window.addEventListener("openImageModal", handleOpenImage);
-    return () => window.removeEventListener("openImageModal", handleOpenImage);
-  }, []);
 
   return (
     <>
-      <header className="fixed top-0 left-0 w-full z-50 px-6 py-3 bg-zinc-900 border-b border-zinc-700 flex flex-wrap items-center justify-between gap-3 shadow-md">
-        {/* Logo */}
-        <div className="flex items-center gap-4 ml-8">
-          <Link href="/" onClick={handleLogoClick} className="flex items-center space-x-3">
-            <Image src="/ai_logo_icon.png" alt="AI 創界 Logo" width={64} height={64} className="rounded-lg" priority />
-            <span className="text-white text-4xl font-extrabold tracking-wide">AI 創界</span>
+      <header className="fixed top-0 left-0 right-0 z-50 bg-zinc-900 border-b border-zinc-700">
+        {/* 左右貼齊，移除 max-w 容器，Logo 靠左 */}
+        <div className="px-3 md:px-4 py-2 md:py-3 flex items-center justify-between gap-3">
+          {/* 左：Logo */}
+          <Link
+            href="/"
+            className="flex items-center gap-2 md:gap-3 shrink-0"
+            onClick={() => {
+              sessionStorage.setItem("homepageReset", "1");
+              router.push("/");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            aria-label="回首頁"
+          >
+            <Image
+              src="/ai_logo_icon.png"
+              alt="AI 創界 Logo"
+              width={40}
+              height={40}
+              className="rounded-lg md:w-[56px] md:h-[56px]"
+              priority
+            />
+            <span className="text-white text-xl md:text-3xl font-extrabold tracking-wide">
+              AI 創界
+            </span>
           </Link>
-        </div>
 
-        {/* 篩選＋搜尋 */}
-        <div className="flex-1 flex items-center justify-center max-w-6xl w-full min-w-[600px]">
-          <div className="flex items-center gap-2 w-full max-w-md">
-            {/* 篩選按鈕 */}
-            <div className="w-[80px] shrink-0">
-              <button
-                ref={filterButtonRef}
-                onClick={() => setFilterMenuOpen((prev) => !prev)}
-                className="w-full px-4 py-2 rounded text-white text-base font-medium transition duration-200 bg-blue-600 hover:bg-blue-700"
-              >
-                篩選
-              </button>
-            </div>
-
-            {/* 搜尋列 */}
-            <div className="relative w-full" ref={searchBoxRef}>
-              <form
-                onSubmit={handleSubmit}
-                className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
-              >
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={searchQuery}
-                  onChange={handleInputChange}
-                  onCompositionStart={() => setIsComposing(true)}
-                  onCompositionEnd={() => setIsComposing(false)}
-                  placeholder="搜尋標題、作者、標籤…"
-                  className="flex-1 pl-4 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none"
-                />
+          {/* 中：篩選 + 搜尋（靠左、吃滿剩餘寬度） */}
+          <div className="flex-1 min-w-0 flex items-center justify-start w-full">
+            <div className="flex items-center gap-2 w-full">
+              {/* 篩選 */}
+              <div className="w-10 md:w-[80px] shrink-0">
                 <button
-                  type="submit"
-                  className="px-4 py-2 rounded-r bg-zinc-700 text-white hover:bg-zinc-600 text-sm font-medium"
+                  ref={filterButtonRef}
+                  onClick={() => setFilterMenuOpen((prev) => !prev)}
+                  className="w-full px-2 py-2 md:px-4 rounded text-white text-base font-medium transition duration-200 bg-blue-600 hover:bg-blue-700"
+                  title="篩選"
                 >
-                  搜尋
+                  <span className="md:hidden" aria-hidden>⚙︎</span>
+                  <span className="hidden md:inline">篩選</span>
                 </button>
-              </form>
+              </div>
 
-              {showDropdown && !isComposing && (
-                <ul className="absolute z-50 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded shadow-md text-sm text-white max-h-60 overflow-y-auto">
-                  {filteredSuggestions.map((s, i) => (
-                    <li
-                      key={i}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleSuggestionClick(s);
-                      }}
-                      className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
-                    >
-                      {s}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {/* 搜尋列 */}
+              <div className="relative w-full min-w-0" ref={searchBoxRef}>
+                <form
+                  onSubmit={handleSubmit}
+                  className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
+                >
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={handleInputChange}
+                    onCompositionStart={() => setIsComposing(true)}
+                    onCompositionEnd={() => setIsComposing(false)}
+                    placeholder="搜尋標題、作者、標籤…"
+                    className="flex-1 min-w-0 pl-3 md:pl-4 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none text-sm md:text-base"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 md:px-4 py-2 rounded-r bg-zinc-700 text-white hover:bg-zinc-600 text-sm font-medium"
+                  >
+                    搜尋
+                  </button>
+                </form>
+
+                {showDropdown && !isComposing && (
+                  <ul className="absolute z-50 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded shadow-md text-sm text-white max-h-60 overflow-y-auto">
+                    {filteredSuggestions.map((s, i) => (
+                      <li
+                        key={i}
+                        onMouseDown={(e) => { e.preventDefault(); handleSuggestionClick(s); }}
+                        className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
+                      >
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
+
+            {/* 篩選面板（Portal） */}
+            {filterMenuOpen &&
+              createPortal(
+                <div
+                  ref={filterPanelRef}
+                  className="fixed top-[64px] md:top:[72px] left-[calc(120px)] md:left-[calc(405px)] z-[99999]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-3 md:p-4">
+                    <FilterPanel
+                      currentUser={currentUser}
+                      filterMenuOpen={filterMenuOpen}
+                      setFilterMenuOpen={setFilterMenuOpen}
+                      levelFilters={levelFilters}
+                      categoryFilters={categoryFilters}
+                      viewMode={viewMode}
+                      toggleLevelFilter={toggleLevelFilter}
+                      toggleCategoryFilter={toggleCategoryFilter}
+                      setViewMode={setViewMode}
+                    />
+                  </div>
+                </div>,
+                portalContainer || document.body
+              )}
           </div>
 
-          {/* 篩選面板 */}
-          {filterMenuOpen &&
-            createPortal(
-              <div
-                ref={filterPanelRef}
-                className="fixed top-[72px] left-[calc(405px)] z-[99999]"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-4">
-                  <FilterPanel
-                    currentUser={currentUser}
-                    filterMenuOpen={filterMenuOpen}
-                    setFilterMenuOpen={setFilterMenuOpen}
-                    levelFilters={levelFilters}
-                    categoryFilters={categoryFilters}
-                    viewMode={viewMode}
-                    toggleLevelFilter={toggleLevelFilter}
-                    toggleCategoryFilter={toggleCategoryFilter}
-                    setViewMode={setViewMode}
-                  />
-                </div>
-              </div>,
-              portalContainer || document.body
-            )}
-        </div>
-
-        {/* 右側操作區 */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              if (!currentUser) {
-                toast("請先登入才能上傳圖片", { icon: "🔒", id: "login-required", duration: 1000 });
-                return;
-              }
-              onUploadClick();
-            }}
-            className="px-4 py-2 text-base rounded bg-green-600 text-white hover:bg-green-700 font-medium"
-          >
-            上傳圖片
-          </button>
-          <Link href="/models">
-            <button className="px-4 py-2 text-base rounded bg-sky-600 text-white hover:bg-sky-700 font-medium">
-              獲取模型
+          {/* 右：操作區（緊湊排版） */}
+          <div className="flex items-center gap-2 md:gap-2 lg:gap-3 shrink-0">
+            {/* 上傳（桌機顯示） */}
+            <button
+              onClick={() => {
+                if (!currentUser) {
+                  toast("請先登入才能上傳圖片", { icon: "🔒", id: "login-required", duration: 1000 });
+                  return;
+                }
+                onUploadClick();
+              }}
+              className="hidden md:inline-flex items-center gap-2 px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 font-medium"
+              title="上傳圖片"
+            >
+              <span aria-hidden>⬆️</span>
+              <span>上傳圖片</span>
             </button>
-          </Link>
-          <button
-            onClick={onGuideClick}
-            className="px-4 py-2 text-base rounded bg-purple-600 text-white hover:bg-purple-700 font-medium"
-          >
-            安裝教學
-          </button>
 
-          {currentUser && <NotificationBell currentUser={currentUser} />}
+            {/* 獲取模型（外露） */}
+            <Link
+              href="/models"  // 若你的實際路徑不同再改
+              className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
+                         bg-gradient-to-r from-emerald-400 to-cyan-500 text-white font-semibold
+                         shadow-[0_6px_20px_-6px_rgba(16,185,129,0.55)]
+                         hover:shadow-[0_8px_28px_-6px_rgba(6,182,212,0.7)]
+                         transition-all active:translate-y-[1px] focus-visible:outline-none
+                         focus-visible:ring-2 focus-visible:ring-emerald-300/70"
+              title="獲取模型"
+            >
+              <Package2 className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
+              <span className="hidden xl:inline">獲取模型</span>
+            </Link>
 
-          {/* 使用者選單 */}
-          <div className="relative" ref={userMenuRef}>
-            {currentUser === undefined ? (
-              <div className="px-4 py-2 bg-zinc-800 text-gray-400 rounded text-sm">🔄 載入中...</div>
-            ) : (
-              <>
-                <button
-                  onClick={() => setUserMenuOpen((prev) => !prev)}
-                  className="px-4 py-2 bg-zinc-800 text-white rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[140px] text-left"
-                  aria-haspopup="menu"
-                  aria-expanded={userMenuOpen}
-                >
-                  {currentUser?.username ? `👤 ${currentUser.username} ▼` : "🔑 登入 / 註冊 ▼"}
-                </button>
+            {/* 安裝教學（外露） */}
+            <Link
+              href="/tutorial/install"  // 若你的實際路徑不同再改
+              className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
+                         bg-gradient-to-r from-amber-400 to-orange-500 text-white font-semibold
+                         shadow-[0_6px_20px_-6px_rgba(245,158,11,0.55)]
+                         hover:shadow-[0_8px_28px_-6px_rgba(249,115,22,0.7)]
+                         transition-all active:translate-y-[1px] focus-visible:outline-none
+                         focus-visible:ring-2 focus-visible:ring-amber-300/70"
+              title="安裝教學"
+            >
+              <Wrench className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
+              <span className="hidden xl:inline">安裝教學</span>
+            </Link>
 
-                {userMenuOpen && (
-                  <div
-                    className="absolute right-0 mt-2 w-40 bg-zinc-800 text-white rounded shadow-md py-1 z-50"
-                    role="menu"
+            {/* 新手生成 Q&A（外露） */}
+            <Link
+              href="/qa"
+              className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
+                         bg-gradient-to-r from-indigo-400 to-fuchsia-500 text-white font-semibold
+                         shadow-[0_6px_20px_-6px_rgba(99,102,241,0.55)]
+                         hover:shadow-[0_8px_28px_-6px_rgba(217,70,239,0.7)]
+                         transition-all active:translate-y-[1px] focus-visible:outline-none
+                         focus-visible:ring-2 focus-visible:ring-indigo-300/70"
+              title="新手生成 Q&A"
+            >
+              <CircleHelp className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
+              <span className="hidden xl:inline">新手生成 Q&A</span>
+            </Link>
+
+            {currentUser && <NotificationBell currentUser={currentUser} />}
+
+            {/* 使用者選單 */}
+            <div className="relative" ref={userMenuRef}>
+              {currentUser === undefined ? (
+                <div className="px-3 md:px-4 py-2 bg-zinc-800 text-gray-400 rounded text-sm">🔄</div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setUserMenuOpen((prev) => !prev)}
+                    className="px-3 md:px-4 py-2 bg-zinc-800 text-white rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[40px] md:min-w-[140px] max-w-[160px] truncate text-left"
+                    aria-haspopup="menu"
+                    aria-expanded={userMenuOpen}
+                    title={currentUser?.username || "登入 / 註冊"}
                   >
-                    {currentUser?.username ? (
-                      <>
-                        <Link
-                          href={`/user/${currentUser._id}`}
-                          className="block px-4 py-2 hover:bg-zinc-700 text-sm"
-                          onClick={() => setUserMenuOpen(false)}
-                          role="menuitem"
-                        >
-                          我的頁面
-                        </Link>
-                        <button
-                          onClick={async () => {
-                            setUserMenuOpen(false);
-                            localStorage.clear();
-                            await axios.post("/api/auth/logout", {}, { withCredentials: true });
-                            location.reload();
-                          }}
-                          className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-red-400"
-                          role="menuitem"
-                        >
-                          登出
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => {
-                            setUserMenuOpen(false);
-                            onLoginOpen();
-                          }}
-                          className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
-                          role="menuitem"
-                        >
-                          登入
-                        </button>
-                        <button
-                          onClick={() => {
-                            setUserMenuOpen(false);
-                            onRegisterOpen();
-                          }}
-                          className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
-                          role="menuitem"
-                        >
-                          註冊
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
+                    <span className="md:hidden" aria-hidden>👤</span>
+                    <span className="hidden md:inline">
+                      {currentUser?.username ? `👤 ${currentUser.username} ▼` : "🔑 登入 / 註冊 ▼"}
+                    </span>
+                  </button>
+
+                  {userMenuOpen && (
+                    <div
+                      className="absolute right-0 mt-2 w-48 bg-zinc-800 text-white rounded shadow-md py-1 z-50"
+                      role="menu"
+                    >
+                      {currentUser?.username ? (
+                        <>
+                          <Link
+                            href={`/user/${currentUser._id}`}
+                            className="block px-4 py-2 hover:bg-zinc-700 text-sm"
+                            onClick={() => setUserMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            我的頁面
+                          </Link>
+
+                          {/* 📱 手機：上傳入口（登入狀態） */}
+                          <button
+                            role="menuitem"
+                            className="md:hidden block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
+                            onClick={() => {
+                              setUserMenuOpen(false);
+                              onUploadClick();
+                            }}
+                          >
+                            📤 上傳（Beta）
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              setUserMenuOpen(false);
+                              localStorage.clear();
+                              await axios.post("/api/auth/logout", {}, { withCredentials: true });
+                              location.reload();
+                            }}
+                            className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-red-400"
+                            role="menuitem"
+                          >
+                            登出
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {/* 📱 手機：上傳入口（未登入 → 先開登入） */}
+                          <button
+                            role="menuitem"
+                            className="md:hidden block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
+                            onClick={() => {
+                              setUserMenuOpen(false);
+                              onLoginOpen?.();
+                            }}
+                          >
+                            📤 上傳（需登入）
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setUserMenuOpen(false);
+                              onLoginOpen();
+                            }}
+                            className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
+                            role="menuitem"
+                          >
+                            登入
+                          </button>
+                          <button
+                            onClick={() => {
+                              setUserMenuOpen(false);
+                              onRegisterOpen();
+                            }}
+                            className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
+                            role="menuitem"
+                          >
+                            註冊
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>

@@ -1,3 +1,4 @@
+// models/Image.js
 import mongoose from "mongoose";
 
 const ImageSchema = new mongoose.Schema(
@@ -30,21 +31,28 @@ const ImageSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     userId: { type: String, required: true },
 
+    // 互動
     likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    createdAt: { type: Date, default: Date.now },
+    clicks: { type: Number, default: 0 },               // 👈 熱門度需要
+    completenessScore: { type: Number, default: 0 },    // 👈 熱門度需要
 
-    // 🔽 新增生成參數欄位
+    // 生成參數
     steps: { type: Number, default: null },
     sampler: { type: String, default: "" },
     cfgScale: { type: Number, default: null },
-    seed: { type: String, default: "" },   // 用字串避免大數字精度問題
+    seed: { type: String, default: "" }, // 用字串避免大數字精度問題
     clipSkip: { type: Number, default: null },
     width: { type: Number, default: null },
     height: { type: Number, default: null },
     modelHash: { type: String, default: "" },
+
+    // 時間
+    createdAt: { type: Date, default: Date.now },
   },
   { collection: "images" }
 );
 
+// 可選：幫常用排序加索引（加快 newest/oldest）
+ImageSchema.index({ createdAt: -1 });
 
 export default mongoose.models.Image || mongoose.model("Image", ImageSchema);

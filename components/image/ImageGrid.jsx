@@ -1,9 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import ImageCard from "./ImageCard";
 
-const ImageGrid = ({
+export default function ImageGrid({
   images = [],
   filteredImages,
   onSelectImage,
@@ -11,15 +11,32 @@ const ImageGrid = ({
   isLikedByCurrentUser,
   currentUser,
   viewMode,
-  onLikeUpdate,       // ✅ 新增
-  onLocalLikeChange,  // ✅ 新增（可選，用於縮圖內部即時同步）
-}) => {
+  onLocalLikeChange,
+}) {
   const finalImages = images.length > 0 ? images : filteredImages || [];
-  const columnCount = 5;
+  const [columnCount, setColumnCount] = useState(2);
+
+  useEffect(() => {
+    const computeCols = () => {
+      const w = window.innerWidth;
+      if (w < 640) return 2; // mobile
+      if (w < 768) return 2; // sm
+      if (w < 1024) return 3; // md
+      if (w < 1280) return 4; // lg
+      return 5; // xl+
+    };
+    const apply = () => setColumnCount(computeCols());
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, []);
+
+  if (!Array.isArray(finalImages) || finalImages.length === 0) {
+    return null;
+  }
+
+  // Split into N columns (keeps your existing CSS hooks)
   const columns = Array.from({ length: columnCount }, () => []);
-
-  if (!Array.isArray(finalImages)) return null;
-
   finalImages.forEach((img, idx) => {
     columns[idx % columnCount].push(img);
   });
@@ -30,21 +47,18 @@ const ImageGrid = ({
         <div key={colIdx} className="my-masonry-grid_column">
           {column.map((img, idx) => (
             <ImageCard
-              key={idx}
+              key={`${img._id || idx}-${colIdx}`}
               img={img}
               viewMode={viewMode}
               currentUser={currentUser}
               isLiked={isLikedByCurrentUser?.(img)}
-              onClick={() => onSelectImage(img)}
-              onToggleLike={onToggleLike}
-              onLikeUpdate={onLikeUpdate}           // ✅ 往下傳
-              onLocalLikeChange={onLocalLikeChange} // ✅ 往下傳
+              onClick={() => onSelectImage?.(img)}
+              onToggleLike={() => onToggleLike?.(img._id)}
+              onLocalLikeChange={onLocalLikeChange}
             />
           ))}
         </div>
       ))}
     </div>
   );
-};
-
-export default ImageGrid;
+}

@@ -2,12 +2,16 @@
 
 import { Dialog } from "@headlessui/react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import UploadStep1 from "./UploadStep1";
 import UploadStep2 from "./UploadStep2";
 
-const UploadModal = () => {
+export default function UploadModal() {
+  const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState(1);
+
+  // 表單欄位
   const [rating, setRating] = useState("");
   const [platform, setPlatform] = useState("");
   const [title, setTitle] = useState("");
@@ -26,10 +30,13 @@ const UploadModal = () => {
   const [modelLink, setModelLink] = useState("");
   const [loraLink, setLoraLink] = useState("");
 
-  // ✅ 用事件觸發開啟 modal
+  useEffect(() => setMounted(true), []);
+
+  // 事件開啟（Header 按鈕請 dispatch 這個事件）
   useEffect(() => {
     const open = (e) => {
-      if (e.detail?.user) setCurrentUser(e.detail.user); // 可以額外傳使用者進來
+      // console.log("[openUploadModal] fired", e?.detail);
+      if (e?.detail?.user) setCurrentUser(e.detail.user);
       setIsOpen(true);
     };
     window.addEventListener("openUploadModal", open);
@@ -38,6 +45,7 @@ const UploadModal = () => {
 
   const onClose = () => setIsOpen(false);
 
+  // 關閉時重置表單
   useEffect(() => {
     if (!isOpen) {
       setStep(1);
@@ -61,29 +69,18 @@ const UploadModal = () => {
     }
   }, [isOpen]);
 
-  const handleNextStep = () => {
-    setStep(2);
-  };
+  // ✅ 核心：沒開就完全不渲染 + 僅在前端掛載後才渲染
+  if (!mounted || !isOpen) return null;
 
-  const handleUpload = () => {
-    // TODO: 可加入 upload API 呼叫
-    console.log("執行上傳邏輯...");
-  };
-
-  return (
-    <Dialog open={isOpen} onClose={onClose} className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4">
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-        <div className="relative z-50 w-full max-w-3xl mx-auto bg-neutral-900 text-white rounded-xl p-6 shadow-lg">
+  const panel = (
+    <Dialog open={isOpen} onClose={onClose} className="relative z-[9999]">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
+      <div className="fixed inset-0 flex items-center justify-center p-4">
+        <Dialog.Panel className="w-full max-w-3xl mx-auto bg-neutral-900 text-white rounded-xl p-6 shadow-lg">
           <Dialog.Title className="text-xl font-bold mb-4">圖片上傳</Dialog.Title>
 
           {step === 1 && (
-            <UploadStep1
-              rating={rating}
-              setRating={setRating}
-              onNext={handleNextStep}
-            />
+            <UploadStep1 rating={rating} setRating={setRating} onNext={() => setStep(2)} />
           )}
 
           {step === 2 && (
@@ -117,7 +114,6 @@ const UploadModal = () => {
               setNegativePrompt={setNegativePrompt}
               isUploading={isUploading}
               setIsUploading={setIsUploading}
-              onUpload={handleUpload}
               onClose={onClose}
               currentUser={currentUser}
               modelLink={modelLink}
@@ -126,10 +122,11 @@ const UploadModal = () => {
               setLoraLink={setLoraLink}
             />
           )}
-        </div>
+        </Dialog.Panel>
       </div>
     </Dialog>
   );
-};
 
-export default UploadModal;
+  // 用 Portal 掛到 <body>，與 Header/頁面流完全脫鉤
+  return createPortal(panel, document.body);
+}
