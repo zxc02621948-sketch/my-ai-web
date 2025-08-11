@@ -22,7 +22,7 @@ export default function MobileImageSheet({
   onFollowToggle,
   onUserClick,
   onToggleLike,
-  onLikeUpdate, // for ImageInfoBox/CommentBox
+  onLikeUpdate,
   onClose,
   onNavigate, // "prev" | "next"
 }) {
@@ -36,8 +36,9 @@ export default function MobileImageSheet({
   const animatingRef = useRef(false);
 
   // 縮放/多指偵測
-  const pinchingRef = useRef(false); // 當前手勢曾經多指
-  const zoomedRef = useRef(false);   // 由 ImageViewer 回報當前縮放倍率 > 1
+  const pinchingRef = useRef(false); // 此次手勢是否有多指
+  const zoomedRef = useRef(false);   // 由 ImageViewer 通知是否 scale>1
+  const bypassSwipeRef = useRef(false); // 當前手勢整段都不處理滑頁
 
   // 門檻
   const H_RATIO_X = 0.22;
@@ -51,7 +52,7 @@ export default function MobileImageSheet({
   // 輕點判定 & 排除區
   const TAP_DIST_MAX = 10;      // 輕點最大位移（px）
   const TAP_TIME_MAX = 250;     // 輕點最大時間（ms）
-  const EXCLUDE_CLOSE_PX = 56;  // 右上角「X」排除方塊大小
+  const EXCLUDE_CLOSE_PX = 56;  // 右上角「X」排除方塊
 
   const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
   function animateTo({ targetX = dragX, targetY = dragY, duration = 240, onDone }) {
@@ -83,8 +84,15 @@ export default function MobileImageSheet({
   function onTouchStart(e) {
     if (animatingRef.current) return;
 
-    // 多指 → 當作縮放操作，這次手勢期間不要切頁
+    // 只要「此時已放大」或「一開始就是多指」，整段手勢交給 ImageViewer，不做滑頁
     pinchingRef.current = e.touches.length > 1;
+    bypassSwipeRef.current = pinchingRef.current || zoomedRef.current;
+    if (bypassSwipeRef.current) {
+      // 仍需標記 dragging，讓 overlay 還原一致；但不鎖方向、不改變 dragX/Y
+      setIsDragging(true);
+      startRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: performance.now(), locked: "img" };
+      return;
+    }
 
     const t = e.touches[0];
     startRef.current = { x: t.clientX, y: t.clientY, t: performance.now(), locked: null };
@@ -95,8 +103,8 @@ export default function MobileImageSheet({
   function onTouchMove(e) {
     if (!isDragging || animatingRef.current) return;
 
-    // 縮放/多指時，不接管左右滑，交給 ImageViewer 處理平移/縮放
-    if (pinchingRef.current || zoomedRef.current) return;
+    // 縮放或被標記為 bypass → 不處理滑頁
+    if (bypassSwipeRef.current) return;
 
     const width = panelRef.current?.clientWidth || window.innerWidth;
 
@@ -136,8 +144,9 @@ export default function MobileImageSheet({
     const width = panelRef.current?.clientWidth || window.innerWidth;
     const height = panelRef.current?.clientHeight || window.innerHeight;
 
-    // 若曾多指，當作縮放操作：不切頁，重置即可
-    if (pinchingRef.current) {
+    // 若此手勢被標記為 bypass（縮放/多指/已放大），直接重置，不做任何切頁
+    if (bypassSwipeRef.current) {
+      bypassSwipeRef.current = false;
       pinchingRef.current = false;
       setIsDragging(false);
       setDragX(0); setDragY(0); setOverlayDim(0.6);
@@ -168,7 +177,7 @@ export default function MobileImageSheet({
     const localY = panelRect ? startY - panelRect.top : startY;
     const inCloseRect = (localX >= width - EXCLUDE_CLOSE_PX) && (localY <= EXCLUDE_CLOSE_PX);
 
-    // ✅ 輕點：距離小、時間短 → 左/右 1/3 翻頁（排除 X 區 & 非縮放）
+    // ✅ 輕點：距離小、時間短 → 左/右 1/3 翻頁（排除 X 區；且必須未放大）
     if (
       !zoomedRef.current &&
       !inCloseRect &&
@@ -191,12 +200,12 @@ export default function MobileImageSheet({
         startRef.current.locked = null; setOverlayDim(0.6);
         return;
       }
-      // 中間 1/3：不動作，繼續原本回彈/其他邏輯
+      // 中間 1/3：不動作
     }
 
     if (locked === "x") {
-      // 已縮放時禁用左右切換，直接回彈
       if (zoomedRef.current) {
+        // 已放大 → 禁止左右切換，直接回彈
         animateTo({
           targetX: 0, targetY: 0, duration: 160,
           onDone: () => { setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null; }
@@ -277,6 +286,7 @@ export default function MobileImageSheet({
 
   const prevUrl = useMemo(() => fileUrlOf(prevImage), [prevImage]);
   const nextUrl = useMemo(() => fileUrlOf(nextImage), [nextImage]);
+
   const avatarUrl = image?.user?.image
     ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
     : "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
@@ -348,6 +358,8 @@ export default function MobileImageSheet({
                 onToggleLike={onToggleLike}
                 showClose
                 onClose={onClose}
+                // 關閉單指/雙擊放大，只允許雙指捏合
+                disableTapZoom
                 // 由 ImageViewer 回報縮放倍率
                 onZoomChange={(scale) => { zoomedRef.current = (scale || 1) > 1.001; }}
               />
@@ -387,8 +399,8 @@ export default function MobileImageSheet({
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <AvatarFrame src={image?.user?.image ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public` : "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public"} size={48} onClick={onUserClick} />
-                <span className="text-sm">{image?.user?.username || "未命名用戶"}</span>
+                <AvatarFrame src={avatarUrl(image)} size={48} onClick={onUserClick} />
+                <span className="text-sm">{displayName(image)}</span>
               </div>
               {currentUser && image?.user && currentUser._id !== (image.user._id || image.user) && (
                 <button
@@ -416,4 +428,11 @@ export default function MobileImageSheet({
       </section>
     </>
   );
+
+  function avatarUrl(img) {
+    return img?.user?.image
+      ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.user.image}/public`
+      : "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
+  }
+  function displayName(img) { return img?.user?.username || "未命名用戶"; }
 }
