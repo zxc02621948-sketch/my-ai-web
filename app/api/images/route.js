@@ -211,7 +211,7 @@ export async function GET(req) {
     // ===== popular（✅ 用預算分 popScore）=====
     if (!qRegex) {
       const docs = await Image.find(match)
-        .sort({ popScore: -1, createdAt: -1 })
+        .sort({ popScore: -1, createdAt: -1, _id: -1 })
         .skip(skip).limit(limit)
         .populate("user", "username image").lean();
       return NextResponse.json({ images: decorate(docs), debug: !!debug });
@@ -221,7 +221,7 @@ export async function GET(req) {
       { $project: projectBase },
       ...lookupUser,
       { $match: searchMatch },
-      { $sort: { popScore: -1, createdAt: -1 } },
+      { $sort: { popScore: -1, createdAt: -1, _id: -1 } },
       { $skip: skip }, { $limit: limit },
     ]);
     return NextResponse.json({ images: decorate(docs), debug: !!debug });

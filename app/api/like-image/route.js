@@ -3,26 +3,9 @@ import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
 import jwt from "jsonwebtoken";
+import { computePopScore, ensureLikesCount } from "@/utils/score";
 
 export const dynamic = "force-dynamic";
-
-function computePopScore(img) {
-  const W_CLICK = 1.0;
-  const W_LIKE = 2.0;
-  const W_COMPLETE = 0.05;
-  const TIMEBOOST_MAX = 10;
-
-  const now = Date.now();
-  const created = new Date(img.createdAt || now).getTime();
-  const hoursSince = Math.max(0, (now - created) / 36e5);
-  const timeBoost = Math.max(0, TIMEBOOST_MAX - hoursSince);
-
-  const clicks = Number(img.clicks || 0);
-  const likesCount = Number(img.likesCount ?? (Array.isArray(img.likes) ? img.likes.length : 0));
-  const comp = Number(img.completenessScore || 0);
-
-  return clicks * W_CLICK + likesCount * W_LIKE + comp * W_COMPLETE + timeBoost;
-}
 
 function getUserIdFromAuth(req) {
   const auth = req.headers.get("authorization") || "";
@@ -58,7 +41,7 @@ export async function PUT(req) {
       img.likes = [...(img.likes || []), userId];
     }
 
-    img.likesCount = Array.isArray(img.likes) ? img.likes.length : 0;
+    img.likesCount = ensureLikesCount(img);
     img.popScore = computePopScore(img);
     await img.save();
 

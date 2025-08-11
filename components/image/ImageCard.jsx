@@ -1,6 +1,15 @@
 import { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
 
+// ⬇️ 新增：從 ObjectId 推回建立時間（備援）
+function getCreatedMsFromObjectId(id) {
+  if (typeof id === "string" && id.length === 24) {
+    const sec = parseInt(id.slice(0, 8), 16);
+    if (!Number.isNaN(sec)) return sec * 1000;
+  }
+  return Date.now();
+}
+
 export default function ImageCard({
   img,
   viewMode,            // "default" = 常駐標題；"compact" = hover 顯示
@@ -82,6 +91,10 @@ export default function ImageCard({
       ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/${img.variant || "public"}`
       : "/default-image.png");
 
+  // ⬇️ NEW 判斷（< 10 小時）
+  const createdMs = img?.createdAt ? new Date(img.createdAt).getTime() : getCreatedMsFromObjectId(img?._id);
+  const isNew = (Date.now() - createdMs) / 36e5 < 10;
+
   return (
     <div
       className="mb-4 break-inside-avoid cursor-pointer group relative"
@@ -90,6 +103,16 @@ export default function ImageCard({
       title={img.title || "圖片"}
       aria-label={img.title || "圖片"}
     >
+      {/* ⬇️ NEW 徽章（左上角） */}
+      {isNew && (
+        <div className="absolute left-2 top-2 z-20 pointer-events-none">
+          <span className="px-2 py-1 text-[10px] font-bold rounded-md bg-emerald-500/90 text-white shadow">
+            NEW
+          </span>
+        </div>
+      )}
+
+
       {/* 愛心與數量（固定在卡片右上角） */}
       <div className="absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1">
         <Heart

@@ -12,6 +12,9 @@ import axios from "axios";
  * 行動版：
  * - Dialog.Panel 自己是「唯一滾動容器」：height = 100 * --app-vh
  * - snap 兩段：①滿版圖片（ImageViewer），②資訊/留言
+ * 手勢：
+ * - 左/右 快速滑動：關閉
+ * - 上 快速滑動：捲到下一段（顯示資訊），不關閉
  * 桌機：維持左圖右資訊既有功能（追蹤、刪除、留言…）
  * 傳參：
  * - 支援 imageData（整包資料）或 imageId（由這裡 fetch）
@@ -43,20 +46,23 @@ export default function ImageModal({
   const rightScrollRef = useRef(null);
   const router = useRouter();
 
-  // === 手機滑動關閉（僅作用於「滿版圖片」區塊） ===
+  // === Panel 參考（用於程式化捲動到資訊段） ===
+  const panelRef = useRef(null);
+
+  // === 手機滑動關閉/顯示資訊（僅作用於「滿版圖片」區塊） ===
   const [dragX, setDragX] = useState(0);
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const startRef = useRef({ x: 0, y: 0, t: 0, locked: null });
-  const [overlayDim, setOverlayDim] = useState(0.6); // 背景暗度（拖曳時變淡）
-  const THRESHOLD = 80; // 超過此距離（或足夠速度）即關閉
+  const [overlayDim, setOverlayDim] = useState(0.6); // 背景暗度（水平拖曳時變淡）
+  const THRESHOLD = 80; // 距離門檻
   const VELOCITY = 900; // px/s 速度門檻
 
   function onTouchStart(e) {
     const t = e.touches[0];
     startRef.current = { x: t.clientX, y: t.clientY, t: performance.now(), locked: null };
     setIsDragging(true);
-    // 開始拖曳時先略淡一點
+    // 開始拖曳時先略淡一點（只作為初始過渡）
     setOverlayDim(0.55);
   }
 
@@ -71,37 +77,57 @@ export default function ImageModal({
       if (Math.abs(dx) > Math.abs(dy) + 8) startRef.current.locked = "x";
       else if (Math.abs(dy) > Math.abs(dx) + 8) startRef.current.locked = "y";
     }
-    // 若水平或上滑關閉邏輯啟動，阻止預設捲動
-    if (startRef.current.locked === "x" || dy < -8) {
+
+    // 若判定為「水平手勢」，阻止預設捲動，維持卡片跟手移動
+    if (startRef.current.locked === "x") {
       e.preventDefault();
     }
 
     setDragX(dx);
     setDragY(dy);
 
-    // 拖越多 → 背景越淡（保留下限避免全透明）
-    const dist = Math.min(Math.abs(dx) + Math.abs(dy), 160);
-    const alpha = 0.6 - dist / 800; // 0.6 → ~0.4
-    setOverlayDim(Math.max(0.35, alpha));
+    // 只有「水平拖曳」時才讓背景變淡；垂直拖曳保持穩定視覺
+    if (startRef.current.locked === "x") {
+      const dist = Math.min(Math.abs(dx), 160);
+      const alpha = 0.6 - dist / 800; // 0.6 → ~0.4
+      setOverlayDim(Math.max(0.35, alpha));
+    } else {
+      setOverlayDim(0.6);
+    }
   }
 
   function onTouchEnd() {
     if (!isDragging) return;
+
     const dt = (performance.now() - startRef.current.t) / 1000;
     const vx = Math.abs(dragX) / Math.max(dt, 0.001);
     const vy = Math.abs(dragY) / Math.max(dt, 0.001);
 
-    const swipeLeft = dragX < -THRESHOLD || (dragX < -20 && vx > VELOCITY);
-    const swipeUp = dragY < -THRESHOLD || (dragY < -20 && vy > VELOCITY);
+    const swipeHorizontal =
+      Math.abs(dragX) > THRESHOLD || (Math.abs(dragX) > 20 && vx > VELOCITY);
+    const swipeUpFast = dragY < -THRESHOLD || (dragY < -20 && vy > VELOCITY);
 
-    if (swipeLeft || swipeUp) {
+    if (swipeHorizontal) {
+      // 左右滑：關閉
       onClose?.();
+    } else if (swipeUpFast) {
+      // 上滑：顯示資訊（捲到下一個 snap 區段）
+      const panel = panelRef.current;
+      if (panel) {
+        const h = panel.clientHeight || window.innerHeight;
+        panel.scrollTo({ top: h, behavior: "smooth" });
+      }
+      // 回彈狀態重設
+      setDragX(0);
+      setDragY(0);
+      setOverlayDim(0.6);
     } else {
       // 回彈
       setDragX(0);
       setDragY(0);
       setOverlayDim(0.6);
     }
+
     setIsDragging(false);
     startRef.current.locked = null;
   }
@@ -284,7 +310,7 @@ export default function ImageModal({
 
   return (
     <Dialog open={!!(imageId || imageData)} onClose={onClose} className="relative z-[99999]">
-      {/* Overlay（拖曳時會變淡） */}
+      {/* Overlay（拖曳時會變淡；垂直拖曳不變） */}
       <div
         className="fixed inset-0 backdrop-blur-sm"
         aria-hidden="true"
@@ -295,6 +321,7 @@ export default function ImageModal({
       <div className="fixed inset-0 flex items-center justify-center p-0 md:p-4" onClick={onClose}>
         {/* Panel = 手機唯一滾動容器 + snap 兩段；桌機維持左右版 */}
         <Dialog.Panel
+          ref={panelRef}
           onClick={(e) => e.stopPropagation()}
           className="
             relative w-full md:max-w-6xl
@@ -312,12 +339,12 @@ export default function ImageModal({
             paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
           }}
         >
-          {/* ===== Mobile：Section 1 — 滿版圖片（可滑動關閉） ===== */}
+          {/* ===== Mobile：Section 1 — 滿版圖片（水平滑動關閉；上滑顯示資訊） ===== */}
           <section
-            className="md:hidden snap-start relative touch-none"
+            className="md:hidden snap-start relative touch-pan-y"
             style={{
               minHeight: "calc(var(--app-vh, 1vh) * 100)",
-              transform: `translate(${dragX}px, ${dragY}px) scale(${isDragging ? 0.985 : 1})`,
+              transform: `translate(${dragX}px, ${dragY}px) scale(${isDragging && startRef.current.locked === "x" ? 0.985 : 1})`,
               transition: isDragging ? "none" : "transform 180ms ease",
             }}
             onTouchStart={onTouchStart}
@@ -339,9 +366,9 @@ export default function ImageModal({
               />
             ) : null}
 
-            {/* 上滑提示 */}
+            {/* 手勢提示 */}
             <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80">
-              ← 左滑 / ↑ 上滑可關閉
+              ← / → 左右滑可關閉　·　↑ 上滑看資訊
             </div>
           </section>
 
