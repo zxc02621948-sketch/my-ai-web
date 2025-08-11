@@ -55,7 +55,6 @@ export default function UserProfilePage() {
     else sp.delete("tab");
     const href = `${window.location.pathname}${sp.toString() ? `?${sp.toString()}` : ""}`;
     router.replace(href);
-    // 故意不把 params 放依賴，避免反覆觸發
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -174,7 +173,7 @@ export default function UserProfilePage() {
     setSelectedImage(enriched);
   };
 
-  // 畫面用的過濾清單
+  // 畫面用的過濾清單（左右滑手勢以這份陣列為準 → 與畫面一致）
   const filteredImages = useMemo(() => {
     const base = activeTab === "uploads" ? uploadedImages : likedImages;
     const keyword = searchQuery.toLowerCase();
@@ -213,6 +212,22 @@ export default function UserProfilePage() {
   const isLikedByCurrentUser = (image) => {
     const me = currentUser?._id || currentUser?.id;
     return !!(me && Array.isArray(image.likes) && image.likes.includes(me));
+  };
+
+  // 在 filteredImages 阵列中左右移動
+  const navigateFromSelected = (dir) => {
+    if (!selectedImage) return;
+    const list = filteredImages;
+    const idx = list.findIndex((img) => String(img._id) === String(selectedImage._id));
+    if (idx < 0) return;
+
+    const nextIdx = dir === "next" ? idx + 1 : idx - 1;
+    if (nextIdx < 0 || nextIdx >= list.length) {
+      // 邊界回彈：不動（避免誤跳分頁）
+      return;
+    }
+    const target = list[nextIdx];
+    setSelectedImage(target);
   };
 
   if (!userData) {
@@ -266,7 +281,7 @@ export default function UserProfilePage() {
           images={filteredImages}
           currentUser={currentUser}
           onToggleLike={handleToggleLike}
-          onSelectImage={handleSelectImage}   // ✅ 改用補抓作者的版本
+          onSelectImage={handleSelectImage}   // ✅ 補抓作者後再開圖
           isLikedByCurrentUser={isLikedByCurrentUser}
           viewMode={viewMode}
           setUploadedImages={setUploadedImages}
@@ -276,7 +291,7 @@ export default function UserProfilePage() {
           onLikeUpdate={onLikeUpdate}
         />
 
-        {/* 用 imageData（已補抓作者）開圖 */}
+        {/* 用 imageData（已補抓作者或清單內）開圖 */}
         {selectedImage && (
           <ImageModal
             imageData={selectedImage}
@@ -311,6 +326,7 @@ export default function UserProfilePage() {
               }
             }}
             onClose={() => setSelectedImage(null)}
+            onNavigate={(dir) => navigateFromSelected(dir)}  // ⬅️ 接上左右滑手勢
           />
         )}
       </main>

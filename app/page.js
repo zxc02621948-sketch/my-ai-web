@@ -248,6 +248,29 @@ export default function HomePage() {
     }).catch(() => {});
   }, []);
 
+  // ← / → 手勢對應：在目前 images 陣列內移動（不循環；到邊界回彈不動）
+  const navigateFromSelected = async (dir) => {
+    if (!selectedImage) return;
+    const idx = images.findIndex((img) => String(img._id) === String(selectedImage._id));
+    if (idx < 0) return;
+
+    const nextIdx = dir === "next" ? idx + 1 : idx - 1;
+    if (nextIdx < 0 || nextIdx >= images.length) {
+      // 邊界：不動（Modal 內會回彈），也可視情況預取下一頁
+      return;
+    }
+    const target = images[nextIdx];
+    const enriched = await ensureUserOnImage(target);
+    setSelectedImage(enriched);
+    if (enriched?._id) reportClick(enriched._id);
+
+    // 若靠近末尾且還有更多，提前拉下一頁，避免滑到最後一張卡住
+    if (dir === "next" && nextIdx >= images.length - 2 && hasMore && !isLoading) {
+      const q = (searchParams.get("search") || "").trim();
+      fetchImages(page + 1, q, selectedCategories, selectedRatings);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-4">
       {currentUser?.isAdmin && (
@@ -298,6 +321,7 @@ export default function HomePage() {
           onLikeUpdate={(updated) => {
             onLikeUpdateHook(updated);
           }}
+          onNavigate={(dir) => navigateFromSelected(dir)}  // ⬅️ 接上左右滑手勢
         />
       )}
 

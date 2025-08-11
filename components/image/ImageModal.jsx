@@ -9,21 +9,21 @@ import ImageInfoBox from "./ImageInfoBox";
 import axios from "axios";
 
 /**
- * 行動版：
- * - Dialog.Panel 自己是「唯一滾動容器」：height = 100 * --app-vh
- * - snap 兩段：①滿版圖片（ImageViewer），②資訊/留言
- * 手勢：
- * - 左/右 快速滑動：關閉
- * - 上 快速滑動：捲到下一段（顯示資訊），不關閉
- * 桌機：維持左圖右資訊既有功能（追蹤、刪除、留言…）
- * 傳參：
- * - 支援 imageData（整包資料）或 imageId（由這裡 fetch）
+ * 手機手勢（新版）：
+ * - 左/右 快速滑動：上一張 / 下一張（透過 onNavigate 回呼）
+ * - 下 快速滑動：關閉
+ * - 上 快速滑動：捲到資訊段（不關閉）
+ * - 輕微拖曳：回彈（避免過敏感）
+ *
+ * 桌機維持左圖右資訊。
+ *
+ * 新增 prop：
+ * - onNavigate?: (dir: "prev" | "next") => void
  */
 
 const defaultAvatarUrl =
   "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
 
-// 取得擁有者 ID（不論 user 是物件或字串）
 const getOwnerId = (img) => {
   if (!img) return null;
   const u = img.user ?? img.userId;
@@ -32,10 +32,11 @@ const getOwnerId = (img) => {
 
 export default function ImageModal({
   imageId,
-  imageData, // 可直接帶整包圖片資料進來
+  imageData,
   onClose,
   currentUser,
   onLikeUpdate,
+  onNavigate, // ← 新增：上一/下一張
 }) {
   const [image, setImage] = useState(imageData || null);
   const [loading, setLoading] = useState(!imageData);
@@ -46,23 +47,25 @@ export default function ImageModal({
   const rightScrollRef = useRef(null);
   const router = useRouter();
 
-  // === Panel 參考（用於程式化捲動到資訊段） ===
+  // Panel：手機唯一滾動容器（兩段 snap）
   const panelRef = useRef(null);
 
-  // === 手機滑動關閉/顯示資訊（僅作用於「滿版圖片」區塊） ===
+  // === 手勢狀態（只作用於「滿版圖片」段） ===
   const [dragX, setDragX] = useState(0);
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const startRef = useRef({ x: 0, y: 0, t: 0, locked: null });
-  const [overlayDim, setOverlayDim] = useState(0.6); // 背景暗度（水平拖曳時變淡）
-  const THRESHOLD = 80; // 距離門檻
-  const VELOCITY = 900; // px/s 速度門檻
+  const [overlayDim, setOverlayDim] = useState(0.6);
+
+  // 門檻：降低誤觸、提升穩定性
+  const DIST_THRESH = 100;   // 距離門檻（px）
+  const VEL_THRESH = 1200;   // 速度門檻（px/s）
+  const LOCK_DIFF = 10;      // 方向鎖差值
 
   function onTouchStart(e) {
     const t = e.touches[0];
     startRef.current = { x: t.clientX, y: t.clientY, t: performance.now(), locked: null };
     setIsDragging(true);
-    // 開始拖曳時先略淡一點（只作為初始過渡）
     setOverlayDim(0.55);
   }
 
@@ -72,13 +75,13 @@ export default function ImageModal({
     const dx = t.clientX - startRef.current.x;
     const dy = t.clientY - startRef.current.y;
 
-    // 方向鎖：避免和垂直捲動衝突
+    // 方向鎖：只要明顯偏某軸才鎖定，避免誤判
     if (startRef.current.locked === null) {
-      if (Math.abs(dx) > Math.abs(dy) + 8) startRef.current.locked = "x";
-      else if (Math.abs(dy) > Math.abs(dx) + 8) startRef.current.locked = "y";
+      if (Math.abs(dx) > Math.abs(dy) + LOCK_DIFF) startRef.current.locked = "x";
+      else if (Math.abs(dy) > Math.abs(dx) + LOCK_DIFF) startRef.current.locked = "y";
     }
 
-    // 若判定為「水平手勢」，阻止預設捲動，維持卡片跟手移動
+    // 水平手勢時，避免整頁垂直捲動干擾
     if (startRef.current.locked === "x") {
       e.preventDefault();
     }
@@ -86,12 +89,15 @@ export default function ImageModal({
     setDragX(dx);
     setDragY(dy);
 
-    // 只有「水平拖曳」時才讓背景變淡；垂直拖曳保持穩定視覺
+    // 視覺回饋：
+    // - 水平拖曳：背景微變淡
+    // - 垂直向下：圖片輕微縮小（在樣式中以 scale 呈現）
     if (startRef.current.locked === "x") {
-      const dist = Math.min(Math.abs(dx), 160);
-      const alpha = 0.6 - dist / 800; // 0.6 → ~0.4
-      setOverlayDim(Math.max(0.35, alpha));
-    } else {
+      const dist = Math.min(Math.abs(dx), 200);
+      const alpha = 0.6 - dist / 1000; // 0.6 → ~0.4
+      setOverlayDim(Math.max(0.4, alpha));
+    } else if (startRef.current.locked === "y") {
+      // 垂直時不改動 overlay（保持 0.6），視覺重點放在圖的 scale
       setOverlayDim(0.6);
     }
   }
@@ -100,29 +106,52 @@ export default function ImageModal({
     if (!isDragging) return;
 
     const dt = (performance.now() - startRef.current.t) / 1000;
-    const vx = Math.abs(dragX) / Math.max(dt, 0.001);
-    const vy = Math.abs(dragY) / Math.max(dt, 0.001);
+    const vx = dragX / Math.max(dt, 0.001);
+    const vy = dragY / Math.max(dt, 0.001);
 
-    const swipeHorizontal =
-      Math.abs(dragX) > THRESHOLD || (Math.abs(dragX) > 20 && vx > VELOCITY);
-    const swipeUpFast = dragY < -THRESHOLD || (dragY < -20 && vy > VELOCITY);
+    const absDx = Math.abs(dragX);
+    const absDy = Math.abs(dragY);
 
-    if (swipeHorizontal) {
-      // 左右滑：關閉
-      onClose?.();
-    } else if (swipeUpFast) {
-      // 上滑：顯示資訊（捲到下一個 snap 區段）
-      const panel = panelRef.current;
-      if (panel) {
-        const h = panel.clientHeight || window.innerHeight;
-        panel.scrollTo({ top: h, behavior: "smooth" });
+    const swipeLeft  = (dragX < -DIST_THRESH) || (dragX < -20 && -vx > VEL_THRESH);
+    const swipeRight = (dragX >  DIST_THRESH) || (dragX >  20 &&  vx > VEL_THRESH);
+    const swipeUp    = (dragY < -DIST_THRESH) || (dragY < -20 && -vy > VEL_THRESH);
+    const swipeDown  = (dragY >  DIST_THRESH) || (dragY >  20 &&  vy > VEL_THRESH);
+
+    const locked = startRef.current.locked;
+
+    // 優先遵守鎖定方向，避免斜角誤觸
+    if (locked === "x") {
+      if (swipeLeft) {
+        onNavigate ? onNavigate("next") : onClose?.();
+      } else if (swipeRight) {
+        onNavigate ? onNavigate("prev") : onClose?.();
+      } else {
+        // 回彈
+        setDragX(0);
+        setDragY(0);
+        setOverlayDim(0.6);
       }
-      // 回彈狀態重設
-      setDragX(0);
-      setDragY(0);
-      setOverlayDim(0.6);
+    } else if (locked === "y") {
+      if (swipeDown) {
+        onClose?.(); // 向下關閉
+      } else if (swipeUp) {
+        // 向上：捲到資訊段
+        const panel = panelRef.current;
+        if (panel) {
+          const h = panel.clientHeight || window.innerHeight;
+          panel.scrollTo({ top: h, behavior: "smooth" });
+        }
+        setDragX(0);
+        setDragY(0);
+        setOverlayDim(0.6);
+      } else {
+        // 回彈
+        setDragX(0);
+        setDragY(0);
+        setOverlayDim(0.6);
+      }
     } else {
-      // 回彈
+      // 未鎖成功（拖太短）：一律回彈
       setDragX(0);
       setDragY(0);
       setOverlayDim(0.6);
@@ -132,16 +161,14 @@ export default function ImageModal({
     startRef.current.locked = null;
   }
 
-  // 鎖住 body 捲動，避免與 Panel 雙重捲動
+  // 鎖 body 捲動（面板自身可捲）
   useEffect(() => {
     const orig = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = orig;
-    };
+    return () => { document.body.style.overflow = orig; };
   }, []);
 
-  // --app-vh（以視窗實高為準，避免行動瀏覽器工具列誤差）
+  // --app-vh 修正（行動瀏覽器工具列）
   useEffect(() => {
     const setVH = () => {
       const vh = window.innerHeight * 0.01;
@@ -156,7 +183,7 @@ export default function ImageModal({
     };
   }, []);
 
-  // 載入圖片：優先用 imageData；否則用 imageId fetch
+  // 載入圖片
   useEffect(() => {
     if (imageData?._id) {
       setImage(imageData);
@@ -164,7 +191,7 @@ export default function ImageModal({
       setError(null);
       return;
     }
-    if (!imageId) return; // 沒有任何資訊就不啟動請求
+    if (!imageId) return;
     (async () => {
       setLoading(true);
       try {
@@ -182,14 +209,13 @@ export default function ImageModal({
     })();
   }, [imageId, imageData]);
 
-  // 如果 image.user 只有字串 ID，補抓作者資料
+  // 若 user 為字串，補抓資料
   useEffect(() => {
     if (!image) return;
     const u = image.user ?? image.userId;
-    if (!u || typeof u !== "string") return; // 已是物件就不抓
+    if (!u || typeof u !== "string") return;
     (async () => {
       try {
-        // 優先嘗試抓使用者
         let userObj = null;
         try {
           const r = await fetch(`/api/user/${u}`);
@@ -198,7 +224,6 @@ export default function ImageModal({
             userObj = data?.user || data?.data || null;
           }
         } catch {}
-        // 退而求其次：再打一次 images API（有的會 populate）
         if (!userObj && image?._id) {
           try {
             const r2 = await fetch(`/api/images/${image._id}`);
@@ -215,7 +240,6 @@ export default function ImageModal({
     })();
   }, [image]);
 
-  // 追蹤狀態
   const ownerId = getOwnerId(image);
   useEffect(() => {
     if (!currentUser || !ownerId) return;
@@ -283,7 +307,7 @@ export default function ImageModal({
     }
   };
 
-  // 桌機右側面板滾動監聽（保留原功能）
+  // 桌機右側面板滾動監聽
   useEffect(() => {
     const el = rightScrollRef.current;
     if (!el) return;
@@ -292,25 +316,21 @@ export default function ImageModal({
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  // fileUrl 供下載等用
   const fileUrl = image?.imageId
     ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`
     : image?.imageUrl || "";
 
-  // 供顯示的作者資訊（可能還在補抓中）
   const userObj = typeof image?.user === "object" ? image.user : null;
   const avatarUrl = userObj?.image
     ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${userObj.image}/public`
     : defaultAvatarUrl;
   const displayName = userObj?.username || "未命名用戶";
   const canEdit = !!currentUser?._id && !!ownerId && currentUser._id === ownerId;
-
-  // 傳給子層使用的 user（確保有 _id）
   const userForChild = userObj || (ownerId ? { _id: ownerId } : undefined);
 
   return (
     <Dialog open={!!(imageId || imageData)} onClose={onClose} className="relative z-[99999]">
-      {/* Overlay（拖曳時會變淡；垂直拖曳不變） */}
+      {/* Overlay */}
       <div
         className="fixed inset-0 backdrop-blur-sm"
         aria-hidden="true"
@@ -319,13 +339,12 @@ export default function ImageModal({
 
       {/* Wrapper（點外面關閉） */}
       <div className="fixed inset-0 flex items-center justify-center p-0 md:p-4" onClick={onClose}>
-        {/* Panel = 手機唯一滾動容器 + snap 兩段；桌機維持左右版 */}
         <Dialog.Panel
           ref={panelRef}
           onClick={(e) => e.stopPropagation()}
           className="
             relative w-full md:max-w-6xl
-            bg-[#1a1a1a] text白
+            bg-[#1a1a1a] text-white
             rounded-none md:rounded-xl shadow-lg
             overflow-y-auto md:overflow-hidden
             snap-y snap-mandatory md:snap-none
@@ -339,12 +358,15 @@ export default function ImageModal({
             paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
           }}
         >
-          {/* ===== Mobile：Section 1 — 滿版圖片（水平滑動關閉；上滑顯示資訊） ===== */}
+          {/* ===== Mobile：Section 1 — 滿版圖片（左右切圖、下關閉、上看資訊） ===== */}
           <section
             className="md:hidden snap-start relative touch-pan-y"
             style={{
               minHeight: "calc(var(--app-vh, 1vh) * 100)",
-              transform: `translate(${dragX}px, ${dragY}px) scale(${isDragging && startRef.current.locked === "x" ? 0.985 : 1})`,
+              transform: `
+                translate(${dragX}px, ${dragY > 0 ? dragY : 0}px)
+                scale(${isDragging && startRef.current.locked === "y" && dragY > 0 ? 1 - Math.min(dragY, 120) / 3000 : 1})
+              `,
               transition: isDragging ? "none" : "transform 180ms ease",
             }}
             onTouchStart={onTouchStart}
@@ -367,15 +389,15 @@ export default function ImageModal({
             ) : null}
 
             {/* 手勢提示 */}
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80">
-              ← / → 左右滑可關閉　·　↑ 上滑看資訊
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80 text-center px-3 py-1 rounded-full bg-black/30">
+              ← 上一張　·　→ 下一張　·　↓ 關閉　·　↑ 看資訊
             </div>
           </section>
 
           {/* ===== Mobile：Section 2 — 資訊 & 留言 ===== */}
           <section className="md:hidden snap-start bg-zinc-950 text-zinc-100 border-t border-white/10">
             <div className="flex justify-center pt-3">
-              <div className="h-1.5 w-12 rounded-full bg白/20" />
+              <div className="h-1.5 w-12 rounded-full bg-white/20" />
             </div>
             {image && (
               <div className="p-4 space-y-4">
@@ -493,7 +515,7 @@ export default function ImageModal({
               {showScrollTop && (
                 <button
                   onClick={() => rightScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-                  className="absolute bottom-16 right-4 z-20 text-white bg-sky-400 hover:bg-gray-600 rounded-full w-10 h-10 text-xl flex items中心 justify中心 shadow"
+                  className="absolute bottom-16 right-4 z-20 text-white bg-sky-400 hover:bg-gray-600 rounded-full w-10 h-10 text-xl flex items-center justify-center shadow"
                   title="回到頂部"
                 >
                   ↑
