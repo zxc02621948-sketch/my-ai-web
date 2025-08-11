@@ -22,7 +22,7 @@ export default function MobileImageSheet({
   onFollowToggle,
   onUserClick,
   onToggleLike,
-  onLikeUpdate, // 保留給子元件內部使用（ImageInfoBox/CommentBox）
+  onLikeUpdate, // for ImageInfoBox/CommentBox
   onClose,
   onNavigate, // "prev" | "next"
 }) {
@@ -35,7 +35,11 @@ export default function MobileImageSheet({
   const panelRef = useRef(null);
   const animatingRef = useRef(false);
 
-  // 門檻（與你現有值一致，避免敏感）
+  // 縮放/多指偵測
+  const pinchingRef = useRef(false); // 當前手勢曾經多指
+  const zoomedRef = useRef(false);   // 由 ImageViewer 回報當前縮放倍率 > 1
+
+  // 門檻
   const H_RATIO_X = 0.22;
   const V_RATIO_UP = 0.17;
   const DIST_X_MIN = 90;
@@ -44,9 +48,10 @@ export default function MobileImageSheet({
   const VEL_Y_UP = 1500;
   const LOCK_DIFF = 14;
 
-  // 輕點判定
-  const TAP_DIST_MAX = 10;   // 輕點最大位移（px）
-  const TAP_TIME_MAX = 250;  // 輕點最大時間（ms）
+  // 輕點判定 & 排除區
+  const TAP_DIST_MAX = 10;      // 輕點最大位移（px）
+  const TAP_TIME_MAX = 250;     // 輕點最大時間（ms）
+  const EXCLUDE_CLOSE_PX = 56;  // 右上角「X」排除方塊大小
 
   const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
   function animateTo({ targetX = dragX, targetY = dragY, duration = 240, onDone }) {
@@ -77,6 +82,10 @@ export default function MobileImageSheet({
 
   function onTouchStart(e) {
     if (animatingRef.current) return;
+
+    // 多指 → 當作縮放操作，這次手勢期間不要切頁
+    pinchingRef.current = e.touches.length > 1;
+
     const t = e.touches[0];
     startRef.current = { x: t.clientX, y: t.clientY, t: performance.now(), locked: null };
     setIsDragging(true);
@@ -85,12 +94,17 @@ export default function MobileImageSheet({
 
   function onTouchMove(e) {
     if (!isDragging || animatingRef.current) return;
+
+    // 縮放/多指時，不接管左右滑，交給 ImageViewer 處理平移/縮放
+    if (pinchingRef.current || zoomedRef.current) return;
+
     const width = panelRef.current?.clientWidth || window.innerWidth;
 
     const t = e.touches[0];
     let dx = t.clientX - startRef.current.x;
     const dy = t.clientY - startRef.current.y;
 
+    // 方向鎖
     if (startRef.current.locked === null) {
       if (Math.abs(dx) > Math.abs(dy) + LOCK_DIFF) startRef.current.locked = "x";
       else if (Math.abs(dy) > Math.abs(dx) + LOCK_DIFF) startRef.current.locked = "y";
@@ -118,8 +132,18 @@ export default function MobileImageSheet({
 
   function onTouchEnd() {
     if (!isDragging || animatingRef.current) return;
+
     const width = panelRef.current?.clientWidth || window.innerWidth;
     const height = panelRef.current?.clientHeight || window.innerHeight;
+
+    // 若曾多指，當作縮放操作：不切頁，重置即可
+    if (pinchingRef.current) {
+      pinchingRef.current = false;
+      setIsDragging(false);
+      setDragX(0); setDragY(0); setOverlayDim(0.6);
+      startRef.current.locked = null;
+      return;
+    }
 
     const elapsedMs = performance.now() - startRef.current.t;
     const absDx = Math.abs(dragX);
@@ -136,32 +160,50 @@ export default function MobileImageSheet({
 
     const locked = startRef.current.locked;
 
-    // ✅ 輕點：距離很小、時間很短 → 依起點在左右 1/3 觸發翻頁
-    if (absDx <= TAP_DIST_MAX && absDy <= TAP_DIST_MAX && elapsedMs <= TAP_TIME_MAX) {
-      const startX = startRef.current.x;
-      const panelRect = panelRef.current?.getBoundingClientRect();
-      const localX = panelRect ? startX - panelRect.left : startX;
+    // 右上角 X 排除：若起點在右上角 EXCLUDE_CLOSE_PX 內，完全不觸發翻頁
+    const panelRect = panelRef.current?.getBoundingClientRect();
+    const startX = startRef.current.x;
+    const startY = startRef.current.y;
+    const localX = panelRect ? startX - panelRect.left : startX;
+    const localY = panelRect ? startY - panelRect.top : startY;
+    const inCloseRect = (localX >= width - EXCLUDE_CLOSE_PX) && (localY <= EXCLUDE_CLOSE_PX);
+
+    // ✅ 輕點：距離小、時間短 → 左/右 1/3 翻頁（排除 X 區 & 非縮放）
+    if (
+      !zoomedRef.current &&
+      !inCloseRect &&
+      absDx <= TAP_DIST_MAX &&
+      absDy <= TAP_DIST_MAX &&
+      elapsedMs <= TAP_TIME_MAX
+    ) {
       const leftZone = width / 3;
       const rightZone = (2 * width) / 3;
 
       if (localX <= leftZone && prevImage) {
         onNavigate?.("prev");
         setDragX(0); setDragY(0); setIsDragging(false);
-        startRef.current.locked = null;
-        setOverlayDim(0.6);
+        startRef.current.locked = null; setOverlayDim(0.6);
         return;
       }
       if (localX >= rightZone && nextImage) {
         onNavigate?.("next");
         setDragX(0); setDragY(0); setIsDragging(false);
-        startRef.current.locked = null;
-        setOverlayDim(0.6);
+        startRef.current.locked = null; setOverlayDim(0.6);
         return;
       }
-      // 中間 1/3：不動作，繼續走下面原本的回彈/其他邏輯
+      // 中間 1/3：不動作，繼續原本回彈/其他邏輯
     }
 
     if (locked === "x") {
+      // 已縮放時禁用左右切換，直接回彈
+      if (zoomedRef.current) {
+        animateTo({
+          targetX: 0, targetY: 0, duration: 160,
+          onDone: () => { setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null; }
+        });
+        return;
+      }
+
       if (needSwitchX && dragX < 0 && nextImage) {
         animateTo({
           targetX: -width, targetY: 0, duration: 260,
@@ -212,6 +254,7 @@ export default function MobileImageSheet({
       return;
     }
 
+    // 沒鎖成功：回彈
     animateTo({ targetX: 0, targetY: 0, duration: 160, onDone: () => {
       setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
     }});
@@ -248,7 +291,6 @@ export default function MobileImageSheet({
 
   return (
     <>
-      {/* Overlay 在父層 */}
       {/* ===== Mobile：Section 1 — 三層滑動 ===== */}
       <section
         className="md:hidden snap-start relative touch-pan-y"
@@ -258,6 +300,12 @@ export default function MobileImageSheet({
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
+        {/* Overlay（明暗在這個元件內控制，父層固定 0.6） */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ backgroundColor: `rgba(0,0,0,${overlayDim})` }}
+        />
+
         <div className="absolute inset-0 overflow-hidden">
           {/* prev */}
           {prevUrl && (
@@ -300,6 +348,8 @@ export default function MobileImageSheet({
                 onToggleLike={onToggleLike}
                 showClose
                 onClose={onClose}
+                // 由 ImageViewer 回報縮放倍率
+                onZoomChange={(scale) => { zoomedRef.current = (scale || 1) > 1.001; }}
               />
             ) : null}
           </div>
@@ -324,7 +374,7 @@ export default function MobileImageSheet({
 
         {/* 手勢提示 */}
         <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80 text-center px-3 py-1 rounded-full bg-black/30 md:hidden">
-          ← 上一張　·　→ 下一張　·　↓ 關閉　·　↑ 看資訊
+          ← 上一張　·　→ 下一張　·　↓ 關閉　·　↑ 看資訊　·　點左右可翻頁
         </div>
       </section>
 
@@ -337,8 +387,8 @@ export default function MobileImageSheet({
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <AvatarFrame src={avatarUrl} size={48} onClick={onUserClick} />
-                <span className="text-sm">{displayName}</span>
+                <AvatarFrame src={image?.user?.image ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public` : "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public"} size={48} onClick={onUserClick} />
+                <span className="text-sm">{image?.user?.username || "未命名用戶"}</span>
               </div>
               {currentUser && image?.user && currentUser._id !== (image.user._id || image.user) && (
                 <button
@@ -354,7 +404,7 @@ export default function MobileImageSheet({
               image={image}
               currentUser={currentUser}
               onClose={onClose}
-              onDelete={/* 父層處理 */ undefined}
+              onDelete={/* handled in parent */ undefined}
               fileUrl={fileUrlOf(image)}
               canEdit={currentUser?._id && image?.user && (currentUser._id === (image.user._id || image.user))}
               onLikeUpdate={onLikeUpdate}

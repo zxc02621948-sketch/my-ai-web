@@ -43,7 +43,8 @@ export default function Header({
   const filterPanelRef = useRef(null);
   const userMenuRef = useRef(null);
   const portalContainer = usePortalContainer();
-  const searchBoxRef = useRef(null);
+  const searchBoxRefDesktop = useRef(null);
+  const searchBoxRefMobile = useRef(null);
 
   // 篩選面板動態位置 + 是否定位完成（避免左上角閃一下）
   const [panelStyle, setPanelStyle] = useState({ top: 0, left: 0, width: 320 });
@@ -105,8 +106,11 @@ export default function Header({
         if (menu && !menu.contains(e.target)) setUserMenuOpen(false);
       }
       if (showDropdown) {
-        const box = searchBoxRef.current;
-        if (box && !box.contains(e.target)) setShowDropdown(false);
+        const box1 = searchBoxRefDesktop.current;
+        const box2 = searchBoxRefMobile.current;
+        const inDesktop = box1 && box1.contains(e.target);
+        const inMobile = box2 && box2.contains(e.target);
+        if (!inDesktop && !inMobile) setShowDropdown(false);
       }
     };
     document.addEventListener("mousedown", onDocMouseDown);
@@ -133,21 +137,20 @@ export default function Header({
     setShowDropdown(list.length > 0);
   }, [searchQuery, suggestions]);
 
-  // 面板動態定位（繪製前先算好）：開啟/視窗大小重算（不再綁 scroll）
+  // 面板動態定位（繪製前先算好）：開啟/視窗大小重算
   useLayoutEffect(() => {
     if (!filterMenuOpen) return;
 
-    setPanelReady(false); // 開啟時先隱藏，定位後再顯示
-
+    setPanelReady(false);
     const positionPanel = () => {
       const btn = filterButtonRef.current;
       if (!btn) return;
       const rect = btn.getBoundingClientRect();
       const gap = 8;
-      const panelWidth = 320;    // 面板寬
-      const padding = 12;        // 與左右邊界保留
+      const panelWidth = 320;
+      const padding = 12;
 
-      // ❗ position: fixed 使用「視窗座標」，不需要加 scrollX/scrollY
+      // position: fixed → 用視窗座標
       const top = rect.bottom + gap;
       const desiredLeft = rect.left;
       const maxLeft = window.innerWidth - panelWidth - padding;
@@ -163,7 +166,6 @@ export default function Header({
       window.removeEventListener("resize", positionPanel);
     };
   }, [filterMenuOpen]);
-
 
   const handleInputChange = (e) => {
     isUserTypingRef.current = true;
@@ -185,7 +187,7 @@ export default function Header({
   return (
     <>
       <header className="fixed top-0 left-0 right-0 z-50 bg-zinc-900 border-b border-zinc-700">
-        {/* 左右貼齊，移除 max-w 容器，Logo 靠左 */}
+        {/* 第一列：Logo / 篩選 / 桌機搜尋 / 右側功能 */}
         <div className="px-3 md:px-4 py-2 md:py-3 flex items-center justify-between gap-3">
           {/* 左：Logo */}
           <Link
@@ -211,7 +213,7 @@ export default function Header({
             </span>
           </Link>
 
-          {/* 中：篩選 + 搜尋（靠左、吃滿剩餘寬度） */}
+          {/* 中：篩選 + 桌機搜尋（手機隱藏） */}
           <div className="flex-1 min-w-0 flex items-center justify-start w-full">
             <div className="flex items-center gap-2 w-full">
               {/* 篩選 */}
@@ -227,8 +229,8 @@ export default function Header({
                 </button>
               </div>
 
-              {/* 搜尋列 */}
-              <div className="relative w-full min-w-0" ref={searchBoxRef}>
+              {/* 桌機搜尋列（手機隱藏，避免擠爆） */}
+              <div className="relative w-full min-w-0 hidden md:block" ref={searchBoxRefDesktop}>
                 <form
                   onSubmit={handleSubmit}
                   className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
@@ -241,11 +243,11 @@ export default function Header({
                     onCompositionStart={() => setIsComposing(true)}
                     onCompositionEnd={() => setIsComposing(false)}
                     placeholder="搜尋標題、作者、標籤…"
-                    className="flex-1 min-w-0 pl-3 md:pl-4 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none text-sm md:text-base"
+                    className="flex-1 min-w-0 pl-4 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none text-base"
                   />
                   <button
                     type="submit"
-                    className="px-3 md:px-4 py-2 rounded-r bg-zinc-700 text-white hover:bg-zinc-600 text-sm font-medium"
+                    className="px-4 py-2 rounded-r bg-zinc-700 text-white hover:bg-zinc-600 text-sm font-medium"
                   >
                     搜尋
                   </button>
@@ -321,7 +323,7 @@ export default function Header({
               <span>上傳圖片</span>
             </button>
 
-            {/* 獲取模型 */}
+            {/* 其他連結（桌機顯示） */}
             <Link
               href="/models"
               className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
@@ -335,7 +337,6 @@ export default function Header({
               <span className="hidden xl:inline">獲取模型</span>
             </Link>
 
-            {/* 安裝教學（正確路徑） */}
             <Link
               href="/install-guide"
               className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
@@ -349,7 +350,6 @@ export default function Header({
               <span className="hidden xl:inline">安裝教學</span>
             </Link>
 
-            {/* 新手生成 Q&A */}
             <Link
               href="/qa"
               className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
@@ -467,6 +467,44 @@ export default function Header({
               )}
             </div>
           </div>
+        </div>
+
+        {/* 第二列：📱 手機搜尋專用（佔滿一欄） */}
+        <div className="md:hidden px-3 pb-3 pt-2 border-t border-zinc-700" ref={searchBoxRefMobile}>
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }}
+            className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
+          >
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={handleInputChange}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
+              placeholder="搜尋標題、作者、標籤…"
+              className="flex-1 min-w-0 pl-3 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none text-sm"
+            />
+            <button
+              type="submit"
+              className="px-3 py-2 rounded-r bg-zinc-700 text-white hover:bg-zinc-600 text-sm font-medium"
+            >
+              搜尋
+            </button>
+          </form>
+
+          {showDropdown && !isComposing && (
+            <ul className="mt-1 w-full bg-zinc-800 border border-zinc-700 rounded shadow-md text-sm text-white max-h-60 overflow-y-auto">
+              {filteredSuggestions.map((s, i) => (
+                <li
+                  key={i}
+                  onMouseDown={(e) => { e.preventDefault(); handleSuggestionClick(s); }}
+                  className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
+                >
+                  {s}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </header>
 
