@@ -1,64 +1,60 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import ImageCard from "./ImageCard";
 
+/**
+ * 手機：等寬 2 欄 Grid（不會出現一窄一寬）
+ * md+：columns 瀑布流（維持你想要的自然高度）
+ */
 export default function ImageGrid({
   images = [],
   filteredImages,
+  currentUser,
+  isLikedByCurrentUser,
   onSelectImage,
   onToggleLike,
-  isLikedByCurrentUser,
-  currentUser,
-  viewMode,
   onLocalLikeChange,
 }) {
-  const finalImages = images.length > 0 ? images : filteredImages || [];
-  const [columnCount, setColumnCount] = useState(2);
+  const finalImages = images.length ? images : (filteredImages || []);
 
-  useEffect(() => {
-    const computeCols = () => {
-      const w = window.innerWidth;
-      if (w < 640) return 2; // mobile
-      if (w < 768) return 2; // sm
-      if (w < 1024) return 3; // md
-      if (w < 1280) return 4; // lg
-      return 5; // xl+
-    };
-    const apply = () => setColumnCount(computeCols());
-    apply();
-    window.addEventListener("resize", apply);
-    return () => window.removeEventListener("resize", apply);
-  }, []);
-
-  if (!Array.isArray(finalImages) || finalImages.length === 0) {
-    return null;
-  }
-
-  // Split into N columns (keeps your existing CSS hooks)
-  const columns = Array.from({ length: columnCount }, () => []);
-  finalImages.forEach((img, idx) => {
-    columns[idx % columnCount].push(img);
-  });
+  if (!finalImages?.length) return null;
 
   return (
-    <div className="my-masonry-grid">
-      {columns.map((column, colIdx) => (
-        <div key={colIdx} className="my-masonry-grid_column">
-          {column.map((img, idx) => (
+    <>
+      {/* Mobile: uniform grid */}
+      <div className="md:hidden grid grid-cols-2 gap-3">
+        {finalImages.map((img) => (
+          <div key={img._id} className="break-inside-avoid">
             <ImageCard
-              key={`${img._id || idx}-${colIdx}`}
               img={img}
-              viewMode={viewMode}
               currentUser={currentUser}
               isLiked={isLikedByCurrentUser?.(img)}
               onClick={() => onSelectImage?.(img)}
               onToggleLike={() => onToggleLike?.(img._id)}
               onLocalLikeChange={onLocalLikeChange}
             />
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop+: masonry via CSS columns */}
+      <div className="hidden md:block">
+        <div className="columns-3 lg:columns-4 xl:columns-5 gap-4 [column-fill:_balance]">
+          {finalImages.map((img) => (
+            <div key={img._id} className="mb-4 break-inside-avoid">
+              <ImageCard
+                img={img}
+                currentUser={currentUser}
+                isLiked={isLikedByCurrentUser?.(img)}
+                onClick={() => onSelectImage?.(img)}
+                onToggleLike={() => onToggleLike?.(img._id)}
+                onLocalLikeChange={onLocalLikeChange}
+              />
+            </div>
           ))}
         </div>
-      ))}
-    </div>
+      </div>
+    </>
   );
 }
