@@ -46,7 +46,7 @@ const toNum = (v, d) => {
 
 // 互動權重（可用環境變數覆寫）
 export const POP_W_CLICK = toNum(process.env.POP_W_CLICK, 1.0);
-export const POP_W_LIKE = toNum(process.env.POP_W_LIKE, 2.0);
+export const POP_W_LIKE = toNum(process.env.POP_W_LIKE, 8.0);
 export const POP_W_COMPLETE = toNum(process.env.POP_W_COMPLETE, 0.05);
 
 // 時間加成：基礎加成 * (衰減率^小時)

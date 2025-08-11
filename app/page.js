@@ -327,10 +327,8 @@ export default function HomePage() {
           prevImage={prevImage}   // ⬅️ 新增
           nextImage={nextImage}   // ⬅️ 新增
           onClose={() => {
+            // 僅關閉，不重抓列表、不重設分頁，避免版面重排導致跳頂
             setSelectedImage(null);
-            const q = (searchParams.get("search") || "").trim();
-            fetchImages(1, q, selectedCategories, selectedRatings);
-            setPage(1);
           }}
           currentUser={currentUser}
           onLikeUpdate={(updated) => {
