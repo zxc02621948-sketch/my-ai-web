@@ -36,9 +36,9 @@ export default function MobileImageSheet({
   const animatingRef = useRef(false);
 
   // 縮放/多指偵測
-  const pinchingRef = useRef(false); // 此次手勢是否有多指
-  const zoomedRef = useRef(false);   // 由 ImageViewer 通知是否 scale>1
-  const bypassSwipeRef = useRef(false); // 當前手勢整段都不處理滑頁
+  const pinchingRef = useRef(false);     // 此次手勢是否有多指
+  const zoomedRef = useRef(false);       // 由 ImageViewer 通知是否 scale>1
+  const bypassSwipeRef = useRef(false);  // 此次手勢是否整段不處理滑頁
 
   // 門檻
   const H_RATIO_X = 0.22;
@@ -87,24 +87,28 @@ export default function MobileImageSheet({
     // 只要「此時已放大」或「一開始就是多指」，整段手勢交給 ImageViewer，不做滑頁
     pinchingRef.current = e.touches.length > 1;
     bypassSwipeRef.current = pinchingRef.current || zoomedRef.current;
-    if (bypassSwipeRef.current) {
-      // 仍需標記 dragging，讓 overlay 還原一致；但不鎖方向、不改變 dragX/Y
-      setIsDragging(true);
-      startRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: performance.now(), locked: "img" };
-      return;
-    }
 
     const t = e.touches[0];
-    startRef.current = { x: t.clientX, y: t.clientY, t: performance.now(), locked: null };
+    startRef.current = { x: t.clientX, y: t.clientY, t: performance.now(), locked: bypassSwipeRef.current ? "img" : null };
     setIsDragging(true);
-    setOverlayDim(0.55);
+    if (!bypassSwipeRef.current) setOverlayDim(0.55);
   }
 
   function onTouchMove(e) {
     if (!isDragging || animatingRef.current) return;
 
-    // 縮放或被標記為 bypass → 不處理滑頁
-    if (bypassSwipeRef.current) return;
+    // ✅ 進行中從單指變雙指：立即切換為 bypass，清除位移
+    if (e.touches && e.touches.length > 1) {
+      pinchingRef.current = true;
+      bypassSwipeRef.current = true;
+      setIsDragging(false);
+      setDragX(0); setDragY(0); setOverlayDim(0.6);
+      startRef.current.locked = "img";
+      return;
+    }
+
+    // 縮放/多指時，不接管左右滑，交給 ImageViewer 處理
+    if (bypassSwipeRef.current || pinchingRef.current || zoomedRef.current) return;
 
     const width = panelRef.current?.clientWidth || window.innerWidth;
 
@@ -178,13 +182,7 @@ export default function MobileImageSheet({
     const inCloseRect = (localX >= width - EXCLUDE_CLOSE_PX) && (localY <= EXCLUDE_CLOSE_PX);
 
     // ✅ 輕點：距離小、時間短 → 左/右 1/3 翻頁（排除 X 區；且必須未放大）
-    if (
-      !zoomedRef.current &&
-      !inCloseRect &&
-      absDx <= TAP_DIST_MAX &&
-      absDy <= TAP_DIST_MAX &&
-      elapsedMs <= TAP_TIME_MAX
-    ) {
+    if (!zoomedRef.current && !inCloseRect && absDx <= TAP_DIST_MAX && absDy <= TAP_DIST_MAX && elapsedMs <= TAP_TIME_MAX) {
       const leftZone = width / 3;
       const rightZone = (2 * width) / 3;
 
@@ -349,7 +347,7 @@ export default function MobileImageSheet({
             {loading ? (
               <div className="w-full h-full flex items-center justify-center text-gray-400">載入中...</div>
             ) : error ? (
-              <div className="w-full h-full flex items-center justify-center text-red-500">{error}</div>
+              <div className="w-full h-full flex items-center justify中心 text-red-500">{error}</div>
             ) : image ? (
               <ImageViewer
                 image={image}
@@ -358,7 +356,7 @@ export default function MobileImageSheet({
                 onToggleLike={onToggleLike}
                 showClose
                 onClose={onClose}
-                // 關閉單指/雙擊放大，只允許雙指捏合
+                // 手機只允許雙指捏合放大
                 disableTapZoom
                 // 由 ImageViewer 回報縮放倍率
                 onZoomChange={(scale) => { zoomedRef.current = (scale || 1) > 1.001; }}
@@ -393,14 +391,14 @@ export default function MobileImageSheet({
       {/* ===== Mobile：Section 2 — 資訊 & 留言 ===== */}
       <section className="md:hidden snap-start bg-zinc-950 text-zinc-100 border-t border-white/10">
         <div className="flex justify-center pt-3">
-          <div className="h-1.5 w-12 rounded-full bg-white/20" />
+          <div className="h-1.5 w-12 rounded-full bg白/20" />
         </div>
         {image && (
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <AvatarFrame src={avatarUrl(image)} size={48} onClick={onUserClick} />
-                <span className="text-sm">{displayName(image)}</span>
+                <AvatarFrame src={avatarUrl} size={48} onClick={onUserClick} />
+                <span className="text-sm">{displayName}</span>
               </div>
               {currentUser && image?.user && currentUser._id !== (image.user._id || image.user) && (
                 <button
@@ -428,11 +426,4 @@ export default function MobileImageSheet({
       </section>
     </>
   );
-
-  function avatarUrl(img) {
-    return img?.user?.image
-      ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.user.image}/public`
-      : "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
-  }
-  function displayName(img) { return img?.user?.username || "未命名用戶"; }
 }
