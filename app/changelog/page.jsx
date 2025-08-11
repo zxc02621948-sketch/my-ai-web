@@ -16,6 +16,36 @@ export default function ChangelogPage() {
       <div className="max-w-2xl mx-auto py-10 px-4">
         <h1 className="text-2xl font-bold mb-6">📝 更新日誌</h1>
 
+      {/* v0.7.6 - 新增 */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-2">v0.7.6（2025-08-11）</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-300">
+          <li>✏️ 可編輯已上傳內容</li>
+          <li>🎨 UI 按鈕優化</li>
+          <li>❓ 新增新手生成 Q&amp;A</li>
+          <li>📱 手機版本上線</li>
+          <li>🖼️ 上傳圖片自動抓取提詞</li>
+          <li>⚙️ 圖片新增生成參數</li>
+        </ul>
+      </div>
+
+      {/* 下面是舊版本的更新日誌，保留不動 */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-2">v0.7.51（2025-08-01）</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-300">
+          <li>🐛 修復部分圖片無法正常顯示的問題</li>
+          <li>⚡ 提升頁面載入速度</li>
+        </ul>
+      </div>
+
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-2">v0.7.41（2025-07-20）</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-300">
+          <li>🆕 新增標籤篩選功能</li>
+          <li>🎯 優化搜尋結果排序</li>
+        </ul>
+      </div>
+
         {/* v0.7.5 - 新增 */}
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-2">v0.7.5（2025-08-07）</h2>
