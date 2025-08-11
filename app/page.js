@@ -196,7 +196,7 @@ export default function HomePage() {
     const k = keyOf(q, sort, selectedCategories, selectedRatings);
     const cached = page1CacheRef.current.get(k);
 
-    // ⭐ 先用快取（如果有）立即顯示，避免「取消篩選」時空窗
+    // ⭐ 先用快取（如果有）立即顯示
     if (cached) {
       setImages(cached);
       setPage(1);
@@ -248,28 +248,45 @@ export default function HomePage() {
     }).catch(() => {});
   }, []);
 
-  // ← / → 手勢對應：在目前 images 陣列內移動（不循環；到邊界回彈不動）
+  // 開圖：補齊作者資訊
+  const openImage = async (img) => {
+    const enriched = await ensureUserOnImage(img);
+    setSelectedImage(enriched);
+    if (enriched?._id) reportClick(enriched._id);
+  };
+
+  // ← / → 導航：在目前 images 陣列內移動（不循環）
   const navigateFromSelected = async (dir) => {
     if (!selectedImage) return;
     const idx = images.findIndex((img) => String(img._id) === String(selectedImage._id));
     if (idx < 0) return;
 
     const nextIdx = dir === "next" ? idx + 1 : idx - 1;
-    if (nextIdx < 0 || nextIdx >= images.length) {
-      // 邊界：不動（Modal 內會回彈），也可視情況預取下一頁
-      return;
-    }
+    if (nextIdx < 0 || nextIdx >= images.length) return;
+
     const target = images[nextIdx];
     const enriched = await ensureUserOnImage(target);
     setSelectedImage(enriched);
     if (enriched?._id) reportClick(enriched._id);
 
-    // 若靠近末尾且還有更多，提前拉下一頁，避免滑到最後一張卡住
+    // 靠近尾端提前拉下一頁
     if (dir === "next" && nextIdx >= images.length - 2 && hasMore && !isLoading) {
       const q = (searchParams.get("search") || "").trim();
       fetchImages(page + 1, q, selectedCategories, selectedRatings);
     }
   };
+
+  // ✅ 計算前/後一張（給手機拖曳預覽）
+  const selectedIndex = selectedImage
+    ? images.findIndex((img) => String(img._id) === String(selectedImage._id))
+    : -1;
+
+  const prevImage =
+    selectedIndex > 0 ? images[selectedIndex - 1] : undefined;
+  const nextImage =
+    selectedIndex >= 0 && selectedIndex < images.length - 1
+      ? images[selectedIndex + 1]
+      : undefined;
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-4">
@@ -289,17 +306,13 @@ export default function HomePage() {
         viewMode={viewMode} // "default" = 常駐標題；"compact" = hover 顯示
         isLoading={isLoading}
         hasMore={hasMore}
-        onSelectImage={async (img) => {
-          const enriched = await ensureUserOnImage(img);
-          setSelectedImage(enriched);
-          if (enriched?._id) reportClick(enriched._id);
-        }}
+        onSelectImage={openImage}
         loadMoreRef={loadMoreRef}
         currentUser={currentUser}
         isLikedByCurrentUser={isLikedByCurrentUser}
         onToggleLike={handleToggleLike}
         onLikeUpdate={(updated) => {
-          onLikeUpdateHook(updated);
+            onLikeUpdateHook(updated);
         }}
       />
 
@@ -311,6 +324,8 @@ export default function HomePage() {
         <ImageModal
           key={selectedImage?._id + "_" + selectedImage?._forceSync}
           imageData={selectedImage}
+          prevImage={prevImage}   // ⬅️ 新增
+          nextImage={nextImage}   // ⬅️ 新增
           onClose={() => {
             setSelectedImage(null);
             const q = (searchParams.get("search") || "").trim();
@@ -321,7 +336,7 @@ export default function HomePage() {
           onLikeUpdate={(updated) => {
             onLikeUpdateHook(updated);
           }}
-          onNavigate={(dir) => navigateFromSelected(dir)}  // ⬅️ 接上左右滑手勢
+          onNavigate={(dir) => navigateFromSelected(dir)}  // ⬅️ 既有：左右切換
         />
       )}
 

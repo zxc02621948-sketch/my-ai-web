@@ -1,7 +1,7 @@
 "use client";
 
 import { Dialog } from "@headlessui/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import ImageViewer from "./ImageViewer";
 import CommentBox from "./CommentBox";
@@ -9,16 +9,16 @@ import ImageInfoBox from "./ImageInfoBox";
 import axios from "axios";
 
 /**
- * 手機手勢（新版）：
- * - 左/右 快速滑動：上一張 / 下一張（透過 onNavigate 回呼）
- * - 下 快速滑動：關閉
- * - 上 快速滑動：捲到資訊段（不關閉）
- * - 輕微拖曳：回彈（避免過敏感）
+ * 手機：
+ * - 三層滑動：prev / current / next 跟著 dragX 位移，形成翻頁預覽
+ * - 左/右 快速滑：上一/下一（onNavigate）
+ * - 下 快速滑：關閉
+ * - 上 快速滑：捲到資訊
+ * - 輕微拖曳：回彈
  *
- * 桌機維持左圖右資訊。
- *
- * 新增 prop：
- * - onNavigate?: (dir: "prev" | "next") => void
+ * 桌機：
+ * - ←/→ 鍵、左右按鈕：上一/下一（onNavigate）
+ * - Esc 或 右上角 X：關閉
  */
 
 const defaultAvatarUrl =
@@ -30,13 +30,20 @@ const getOwnerId = (img) => {
   return typeof u === "string" ? u : u?._id ?? null;
 };
 
+const fileUrlOf = (image) =>
+  image?.imageId
+    ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`
+    : image?.imageUrl || "";
+
 export default function ImageModal({
   imageId,
   imageData,
+  prevImage,         // ← 新增：上一張（可為 undefined）
+  nextImage,         // ← 新增：下一張（可為 undefined）
   onClose,
   currentUser,
   onLikeUpdate,
-  onNavigate, // ← 新增：上一/下一張
+  onNavigate,        // "prev" | "next"
 }) {
   const [image, setImage] = useState(imageData || null);
   const [loading, setLoading] = useState(!imageData);
@@ -47,20 +54,19 @@ export default function ImageModal({
   const rightScrollRef = useRef(null);
   const router = useRouter();
 
-  // Panel：手機唯一滾動容器（兩段 snap）
   const panelRef = useRef(null);
 
-  // === 手勢狀態（只作用於「滿版圖片」段） ===
+  // === 手機手勢 ===
   const [dragX, setDragX] = useState(0);
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const startRef = useRef({ x: 0, y: 0, t: 0, locked: null });
   const [overlayDim, setOverlayDim] = useState(0.6);
 
-  // 門檻：降低誤觸、提升穩定性
-  const DIST_THRESH = 100;   // 距離門檻（px）
-  const VEL_THRESH = 1200;   // 速度門檻（px/s）
-  const LOCK_DIFF = 10;      // 方向鎖差值
+  // threshold
+  const DIST_THRESH = 100;
+  const VEL_THRESH = 1200;
+  const LOCK_DIFF = 10;
 
   function onTouchStart(e) {
     const t = e.touches[0];
@@ -75,31 +81,31 @@ export default function ImageModal({
     const dx = t.clientX - startRef.current.x;
     const dy = t.clientY - startRef.current.y;
 
-    // 方向鎖：只要明顯偏某軸才鎖定，避免誤判
     if (startRef.current.locked === null) {
       if (Math.abs(dx) > Math.abs(dy) + LOCK_DIFF) startRef.current.locked = "x";
       else if (Math.abs(dy) > Math.abs(dx) + LOCK_DIFF) startRef.current.locked = "y";
     }
 
-    // 水平手勢時，避免整頁垂直捲動干擾
-    if (startRef.current.locked === "x") {
-      e.preventDefault();
-    }
+    if (startRef.current.locked === "x") e.preventDefault();
 
     setDragX(dx);
     setDragY(dy);
 
-    // 視覺回饋：
-    // - 水平拖曳：背景微變淡
-    // - 垂直向下：圖片輕微縮小（在樣式中以 scale 呈現）
     if (startRef.current.locked === "x") {
       const dist = Math.min(Math.abs(dx), 200);
-      const alpha = 0.6 - dist / 1000; // 0.6 → ~0.4
+      const alpha = 0.6 - dist / 1000;
       setOverlayDim(Math.max(0.4, alpha));
-    } else if (startRef.current.locked === "y") {
-      // 垂直時不改動 overlay（保持 0.6），視覺重點放在圖的 scale
+    } else {
       setOverlayDim(0.6);
     }
+  }
+
+  function resetDrag() {
+    setDragX(0);
+    setDragY(0);
+    setOverlayDim(0.6);
+    setIsDragging(false);
+    startRef.current.locked = null;
   }
 
   function onTouchEnd() {
@@ -109,9 +115,6 @@ export default function ImageModal({
     const vx = dragX / Math.max(dt, 0.001);
     const vy = dragY / Math.max(dt, 0.001);
 
-    const absDx = Math.abs(dragX);
-    const absDy = Math.abs(dragY);
-
     const swipeLeft  = (dragX < -DIST_THRESH) || (dragX < -20 && -vx > VEL_THRESH);
     const swipeRight = (dragX >  DIST_THRESH) || (dragX >  20 &&  vx > VEL_THRESH);
     const swipeUp    = (dragY < -DIST_THRESH) || (dragY < -20 && -vy > VEL_THRESH);
@@ -119,56 +122,44 @@ export default function ImageModal({
 
     const locked = startRef.current.locked;
 
-    // 優先遵守鎖定方向，避免斜角誤觸
     if (locked === "x") {
-      if (swipeLeft) {
+      if (swipeLeft && nextImage) {
         onNavigate ? onNavigate("next") : onClose?.();
-      } else if (swipeRight) {
+      } else if (swipeRight && prevImage) {
         onNavigate ? onNavigate("prev") : onClose?.();
       } else {
-        // 回彈
-        setDragX(0);
-        setDragY(0);
-        setOverlayDim(0.6);
+        // 邊界或不達門檻：回彈
       }
-    } else if (locked === "y") {
+      resetDrag();
+      return;
+    }
+
+    if (locked === "y") {
       if (swipeDown) {
-        onClose?.(); // 向下關閉
+        onClose?.();
       } else if (swipeUp) {
-        // 向上：捲到資訊段
         const panel = panelRef.current;
         if (panel) {
           const h = panel.clientHeight || window.innerHeight;
           panel.scrollTo({ top: h, behavior: "smooth" });
         }
-        setDragX(0);
-        setDragY(0);
-        setOverlayDim(0.6);
-      } else {
-        // 回彈
-        setDragX(0);
-        setDragY(0);
-        setOverlayDim(0.6);
       }
-    } else {
-      // 未鎖成功（拖太短）：一律回彈
-      setDragX(0);
-      setDragY(0);
-      setOverlayDim(0.6);
+      resetDrag();
+      return;
     }
 
-    setIsDragging(false);
-    startRef.current.locked = null;
+    // 未鎖成功 → 一律回彈
+    resetDrag();
   }
 
-  // 鎖 body 捲動（面板自身可捲）
+  // 鎖 body 捲動
   useEffect(() => {
     const orig = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = orig; };
   }, []);
 
-  // --app-vh 修正（行動瀏覽器工具列）
+  // --app-vh 修正
   useEffect(() => {
     const setVH = () => {
       const vh = window.innerHeight * 0.01;
@@ -293,7 +284,7 @@ export default function ImageModal({
   const toggleLikeOnServer = async () => {
     try {
       const token = document.cookie.match(/token=([^;]+)/)?.[1];
-      if (!token || !currentUser?._id || !image?._id) return;
+    if (!token || !currentUser?._id || !image?._id) return;
       const res = await axios.put(`/api/like-image?id=${image._id}`, null, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -316,10 +307,22 @@ export default function ImageModal({
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  const fileUrl = image?.imageId
-    ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`
-    : image?.imageUrl || "";
+  // 桌機鍵盤 ←/→/Esc
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault(); onClose?.();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault(); onNavigate ? onNavigate("prev") : onClose?.();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault(); onNavigate ? onNavigate("next") : onClose?.();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, onNavigate]);
 
+  // 使用者頭像顯示
   const userObj = typeof image?.user === "object" ? image.user : null;
   const avatarUrl = userObj?.image
     ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${userObj.image}/public`
@@ -327,6 +330,11 @@ export default function ImageModal({
   const displayName = userObj?.username || "未命名用戶";
   const canEdit = !!currentUser?._id && !!ownerId && currentUser._id === ownerId;
   const userForChild = userObj || (ownerId ? { _id: ownerId } : undefined);
+
+  // 供手機預覽的前/後一張圖片 URL
+  const prevUrl = useMemo(() => fileUrlOf(prevImage), [prevImage]);
+  const nextUrl = useMemo(() => fileUrlOf(nextImage), [nextImage]);
+  const curUrl  = useMemo(() => fileUrlOf(image), [image]);
 
   return (
     <Dialog open={!!(imageId || imageData)} onClose={onClose} className="relative z-[99999]">
@@ -358,38 +366,85 @@ export default function ImageModal({
             paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
           }}
         >
-          {/* ===== Mobile：Section 1 — 滿版圖片（左右切圖、下關閉、上看資訊） ===== */}
+          {/* ===== Mobile：Section 1 — 三層滑動（prev/current/next） ===== */}
           <section
             className="md:hidden snap-start relative touch-pan-y"
             style={{
               minHeight: "calc(var(--app-vh, 1vh) * 100)",
-              transform: `
-                translate(${dragX}px, ${dragY > 0 ? dragY : 0}px)
-                scale(${isDragging && startRef.current.locked === "y" && dragY > 0 ? 1 - Math.min(dragY, 120) / 3000 : 1})
-              `,
-              transition: isDragging ? "none" : "transform 180ms ease",
             }}
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
           >
-            {loading ? (
-              <div className="w-full h-full flex items-center justify-center text-gray-400">載入中...</div>
-            ) : error ? (
-              <div className="w-full h-full flex items-center justify-center text-red-500">{error}</div>
-            ) : image ? (
-              <ImageViewer
-                image={image}
-                currentUser={currentUser}
-                isLiked={isLikedByCurrent}
-                onToggleLike={toggleLikeOnServer}
-                showClose
-                onClose={onClose}
-              />
-            ) : null}
+            {/* 三層容器：用 translateX 實現翻頁預覽 */}
+            <div className="absolute inset-0 overflow-hidden">
+              {/* prev slide */}
+              {prevUrl && (
+                <div
+                  className="absolute inset-y-0 w-full flex items-center justify-center"
+                  style={{
+                    transform: `translateX(calc(-100% + ${dragX}px))`,
+                    transition: isDragging ? "none" : "transform 180ms ease",
+                  }}
+                >
+                  <img
+                    src={prevUrl}
+                    alt="Prev"
+                    className="max-h-full max-w-full object-contain"
+                    draggable={false}
+                  />
+                </div>
+              )}
 
-            {/* 手勢提示 */}
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80 text-center px-3 py-1 rounded-full bg-black/30">
+              {/* current slide（可以上下拖曳縮放一點點，強調下滑關閉） */}
+              <div
+                className="absolute inset-y-0 w-full flex items-center justify-center"
+                style={{
+                  transform: `
+                    translateX(${dragX}px)
+                    translateY(${dragY > 0 ? dragY : 0}px)
+                    scale(${isDragging && startRef.current.locked === "y" && dragY > 0 ? 1 - Math.min(dragY, 120) / 3000 : 1})
+                  `,
+                  transition: isDragging ? "none" : "transform 180ms ease",
+                }}
+              >
+                {loading ? (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">載入中...</div>
+                ) : error ? (
+                  <div className="w-full h-full flex items-center justify-center text-red-500">{error}</div>
+                ) : image ? (
+                  <ImageViewer
+                    image={image}
+                    currentUser={currentUser}
+                    isLiked={isLikedByCurrent}
+                    onToggleLike={toggleLikeOnServer}
+                    showClose
+                    onClose={onClose}
+                  />
+                ) : null}
+              </div>
+
+              {/* next slide */}
+              {nextUrl && (
+                <div
+                  className="absolute inset-y-0 w-full flex items-center justify-center"
+                  style={{
+                    transform: `translateX(calc(100% + ${dragX}px))`,
+                    transition: isDragging ? "none" : "transform 180ms ease",
+                  }}
+                >
+                  <img
+                    src={nextUrl}
+                    alt="Next"
+                    className="max-h-full max-w-full object-contain"
+                    draggable={false}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* 手勢提示（僅手機） */}
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80 text-center px-3 py-1 rounded-full bg-black/30 md:hidden">
               ← 上一張　·　→ 下一張　·　↓ 關閉　·　↑ 看資訊
             </div>
           </section>
@@ -412,7 +467,7 @@ export default function ImageModal({
                     />
                     <span className="text-sm">{displayName}</span>
                   </div>
-                  {currentUser && ownerId && currentUser._id !== ownerId && (
+                  {currentUser && getOwnerId(image) && currentUser._id !== getOwnerId(image) && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -427,23 +482,21 @@ export default function ImageModal({
                   )}
                 </div>
 
-                {/* 詳細資訊 */}
                 <ImageInfoBox
                   image={{ ...image, user: userForChild }}
                   currentUser={currentUser}
                   onClose={onClose}
                   onDelete={handleDelete}
-                  fileUrl={fileUrl}
+                  fileUrl={fileUrlOf(image)}
                   canEdit={canEdit}
                 />
 
-                {/* 留言 */}
                 <CommentBox currentUser={currentUser} imageId={image._id} />
               </div>
             )}
           </section>
 
-          {/* ===== Desktop：維持原左右版 ===== */}
+          {/* ===== Desktop：左右版 + 鍵盤/按鈕 ===== */}
           <div className="hidden md:flex md:flex-row w-full">
             {/* 左：圖片區 */}
             <div className="flex-1 bg-black relative p-4 flex items-center justify-center">
@@ -460,6 +513,37 @@ export default function ImageModal({
                   onToggleLike={toggleLikeOnServer}
                 />
               ) : null}
+
+              {/* ← 左一張（桌機） */}
+              <button
+                type="button"
+                aria-label="上一張"
+                onClick={(e) => { e.stopPropagation(); onNavigate ? onNavigate("prev") : onClose?.(); }}
+                className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur text-white text-2xl"
+              >
+                ←
+              </button>
+
+              {/* → 右一張（桌機） */}
+              <button
+                type="button"
+                aria-label="下一張"
+                onClick={(e) => { e.stopPropagation(); onNavigate ? onNavigate("next") : onClose?.(); }}
+                className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur text-white text-2xl"
+              >
+                →
+              </button>
+
+              {/* Esc（桌機） */}
+              <button
+                type="button"
+                aria-label="關閉"
+                title="Esc 關閉"
+                onClick={(e) => { e.stopPropagation(); onClose?.(); }}
+                className="hidden md:flex absolute top-3 right-3 items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur text-white text-xl"
+              >
+                ✕
+              </button>
             </div>
 
             {/* 右：資訊區 */}
@@ -467,46 +551,14 @@ export default function ImageModal({
               <div ref={rightScrollRef} className="flex-1 overflow-y-auto p-4 relative">
                 {image && (
                   <>
-                    <div className="absolute top-15 right-10 flex flex-col items-center z-50">
-                      <div onClick={handleUserClick} className="cursor-pointer">
-                        <img
-                          src={avatarUrl}
-                          alt="User Avatar"
-                          className="w-20 h-20 rounded-full object-cover border border-white shadow"
-                          onError={(e) => {
-                            e.currentTarget.onerror = null;
-                            e.currentTarget.src = defaultAvatarUrl;
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm mt-2 text-center select-none">
-                        {displayName}
-                      </span>
-
-                      {currentUser && ownerId && currentUser._id !== ownerId && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleFollowToggle();
-                          }}
-                          className={`mt-2 px-3 py-1 text-sm rounded ${
-                            isFollowing ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
-                          }`}
-                        >
-                          {isFollowing ? "取消追蹤" : "追蹤作者"}
-                        </button>
-                      )}
-                    </div>
-
                     <ImageInfoBox
                       image={{ ...image, user: userForChild }}
                       currentUser={currentUser}
                       onClose={onClose}
                       onDelete={handleDelete}
-                      fileUrl={fileUrl}
+                      fileUrl={fileUrlOf(image)}
                       canEdit={canEdit}
                     />
-
                     <CommentBox currentUser={currentUser} imageId={image._id} />
                   </>
                 )}

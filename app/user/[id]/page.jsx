@@ -154,7 +154,7 @@ export default function UserProfilePage() {
     return () => window.removeEventListener("image-liked", handleImageLiked);
   }, [currentUser]);
 
-  // 點縮圖時，若 user 欄位不完整，補抓作者資訊再開圖
+  // 點縮圖時，若 user 欄位不完整，補抓作者資料再開圖
   const handleSelectImage = async (img) => {
     let enriched = img;
     try {
@@ -222,13 +222,23 @@ export default function UserProfilePage() {
     if (idx < 0) return;
 
     const nextIdx = dir === "next" ? idx + 1 : idx - 1;
-    if (nextIdx < 0 || nextIdx >= list.length) {
-      // 邊界回彈：不動（避免誤跳分頁）
-      return;
-    }
+    if (nextIdx < 0 || nextIdx >= list.length) return; // 邊界
+
     const target = list[nextIdx];
     setSelectedImage(target);
   };
+
+  // ✅ 計算前/後一張（給手機拖曳預覽）
+  const selectedIndex = selectedImage
+    ? filteredImages.findIndex((img) => String(img._id) === String(selectedImage._id))
+    : -1;
+
+  const prevImage =
+    selectedIndex > 0 ? filteredImages[selectedIndex - 1] : undefined;
+  const nextImage =
+    selectedIndex >= 0 && selectedIndex < filteredImages.length - 1
+      ? filteredImages[selectedIndex + 1]
+      : undefined;
 
   if (!userData) {
     return <div className="text-white p-4">載入中...</div>;
@@ -236,7 +246,7 @@ export default function UserProfilePage() {
 
   return (
     <>
-      <main className="min-h-screen bg-zinc-950 text-white p-4 mt-[80px]">
+      <main className="min-h-screen bg-zinc-950 text-white p-4 mt![80px]">
         <UserHeader
           userData={userData}
           currentUser={currentUser}
@@ -281,7 +291,7 @@ export default function UserProfilePage() {
           images={filteredImages}
           currentUser={currentUser}
           onToggleLike={handleToggleLike}
-          onSelectImage={handleSelectImage}   // ✅ 補抓作者後再開圖
+          onSelectImage={handleSelectImage}   // 補抓作者後再開圖
           isLikedByCurrentUser={isLikedByCurrentUser}
           viewMode={viewMode}
           setUploadedImages={setUploadedImages}
@@ -291,10 +301,11 @@ export default function UserProfilePage() {
           onLikeUpdate={onLikeUpdate}
         />
 
-        {/* 用 imageData（已補抓作者或清單內）開圖 */}
         {selectedImage && (
           <ImageModal
             imageData={selectedImage}
+            prevImage={prevImage}   // ⬅️ 新增
+            nextImage={nextImage}   // ⬅️ 新增
             currentUser={currentUser}
             onLikeUpdate={(updated) => {
               // 共用 hook 先同步 likes
@@ -326,7 +337,7 @@ export default function UserProfilePage() {
               }
             }}
             onClose={() => setSelectedImage(null)}
-            onNavigate={(dir) => navigateFromSelected(dir)}  // ⬅️ 接上左右滑手勢
+            onNavigate={(dir) => navigateFromSelected(dir)}  // 左右切換
           />
         )}
       </main>
