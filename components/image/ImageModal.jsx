@@ -15,6 +15,7 @@ import axios from "axios";
  * - 下 快速滑：關閉（補完動畫）
  * - 上 快速滑：捲到資訊
  * - 輕微拖曳：回彈（補完動畫）
+ * - 邊界橡皮筋：往沒有鄰居的方向時 dx * 0.35
  *
  * 桌機：
  * - ←/→ 鍵、左右按鈕：上一/下一（onNavigate）
@@ -122,7 +123,7 @@ export default function ImageModal({
   function onTouchMove(e) {
     if (!isDragging || animatingRef.current) return;
     const t = e.touches[0];
-    const dx = t.clientX - startRef.current.x;
+    let dx = t.clientX - startRef.current.x;
     const dy = t.clientY - startRef.current.y;
 
     if (startRef.current.locked === null) {
@@ -130,7 +131,15 @@ export default function ImageModal({
       else if (Math.abs(dy) > Math.abs(dx) + LOCK_DIFF) startRef.current.locked = "y";
     }
 
-    if (startRef.current.locked === "x") e.preventDefault();
+    if (startRef.current.locked === "x") {
+      e.preventDefault();
+
+      // ⭐ 橡皮筋阻尼：往沒有鄰居的方向時，降低位移量
+      const hasPrev = !!prevImage;
+      const hasNext = !!nextImage;
+      if (dx > 0 && !hasPrev) dx *= 0.35;
+      if (dx < 0 && !hasNext) dx *= 0.35;
+    }
 
     setDragX(dx);
     setDragY(dy);
@@ -159,19 +168,18 @@ export default function ImageModal({
     const locked = startRef.current.locked;
     const width = panelRef.current?.clientWidth || window.innerWidth;
 
-    // 讓速度影響「補推距離」，更順手
-    const throwDistX = Math.min(120, Math.abs(vx) / 4);
-    const throwDistY = Math.min(120, Math.abs(vy) / 6);
+    // 讓速度影響「補推距離」，更順手（保留少量 throw）
+    const throwDistX = Math.min(80, Math.abs(vx) / 6);
+    const throwDistY = Math.min(100, Math.abs(vy) / 8);
 
     if (locked === "x") {
       if (swipeLeft && nextImage) {
-        // 往左：推到 -width，再切換到下一張
+        // 往左：推到 -width（+一點 throw），再切換到下一張
         animateTo({
-          targetX: -width - throwDistX,
+          targetX: -(width + throwDistX),
           targetY: 0,
-          duration: 260,
+          duration: 240,
           onDone: () => {
-            // 重置拖曳狀態，觸發切換
             setDragX(0); setDragY(0); setOverlayDim(0.6);
             setIsDragging(false);
             startRef.current.locked = null;
@@ -181,11 +189,11 @@ export default function ImageModal({
         return;
       }
       if (swipeRight && prevImage) {
-        // 往右：推到 +width，再切換到上一張
+        // 往右：推到 +width（+一點 throw），再切換到上一張
         animateTo({
           targetX: width + throwDistX,
           targetY: 0,
-          duration: 260,
+          duration: 240,
           onDone: () => {
             setDragX(0); setDragY(0); setOverlayDim(0.6);
             setIsDragging(false);
@@ -452,10 +460,14 @@ export default function ImageModal({
   const canEdit = !!currentUser?._id && !!ownerId && currentUser._id === ownerId;
   const userForChild = userObj || (ownerId ? { _id: ownerId } : undefined);
 
-  // 供手機預覽的前/後一張圖片 URL
+  // 供手機預覽的前/後一張圖片 URL + peek 進度（陰影用）
   const prevUrl = useMemo(() => fileUrlOf(prevImage), [prevImage]);
   const nextUrl = useMemo(() => fileUrlOf(nextImage), [nextImage]);
-  const curUrl  = useMemo(() => fileUrlOf(image), [image]); // 目前沒用到，但留著以後加特效可用
+  const width = panelRef.current?.clientWidth || (typeof window !== "undefined" ? window.innerWidth : 375);
+  const prevPeek = Math.max(0, Math.min(1, dragX > 0 ? dragX / width : 0));   // 0~1
+  const nextPeek = Math.max(0, Math.min(1, dragX < 0 ? -dragX / width : 0));  // 0~1
+  const prevShade = 0.12 + prevPeek * 0.18;  // 0.12 ~ 0.30
+  const nextShade = 0.12 + nextPeek * 0.18;  // 0.12 ~ 0.30
 
   return (
     <Dialog open={!!(imageId || imageData)} onClose={onClose} className="relative z-[99999]">
@@ -514,6 +526,13 @@ export default function ImageModal({
                     className="max-h-full max-w-full object-contain"
                     draggable={false}
                   />
+                  {/* ⭐ 邊緣陰影（右側向左漸層） */}
+                  <div
+                    className="pointer-events-none absolute top-0 right-0 h-full w-16"
+                    style={{
+                      background: `linear-gradient(to left, rgba(0,0,0,${prevShade}), rgba(0,0,0,0))`,
+                    }}
+                  />
                 </div>
               )}
 
@@ -559,6 +578,13 @@ export default function ImageModal({
                     alt="Next"
                     className="max-h-full max-w-full object-contain"
                     draggable={false}
+                  />
+                  {/* ⭐ 邊緣陰影（左側向右漸層） */}
+                  <div
+                    className="pointer-events-none absolute top-0 left-0 h-full w-16"
+                    style={{
+                      background: `linear-gradient(to right, rgba(0,0,0,${nextShade}), rgba(0,0,0,0))`,
+                    }}
                   />
                 </div>
               )}
