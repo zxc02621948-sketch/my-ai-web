@@ -43,6 +43,69 @@ export default function ImageModal({
   const rightScrollRef = useRef(null);
   const router = useRouter();
 
+  // === 手機滑動關閉（僅作用於「滿版圖片」區塊） ===
+  const [dragX, setDragX] = useState(0);
+  const [dragY, setDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const startRef = useRef({ x: 0, y: 0, t: 0, locked: null });
+  const [overlayDim, setOverlayDim] = useState(0.6); // 背景暗度（拖曳時變淡）
+  const THRESHOLD = 80; // 超過此距離（或足夠速度）即關閉
+  const VELOCITY = 900; // px/s 速度門檻
+
+  function onTouchStart(e) {
+    const t = e.touches[0];
+    startRef.current = { x: t.clientX, y: t.clientY, t: performance.now(), locked: null };
+    setIsDragging(true);
+    // 開始拖曳時先略淡一點
+    setOverlayDim(0.55);
+  }
+
+  function onTouchMove(e) {
+    if (!isDragging) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startRef.current.x;
+    const dy = t.clientY - startRef.current.y;
+
+    // 方向鎖：避免和垂直捲動衝突
+    if (startRef.current.locked === null) {
+      if (Math.abs(dx) > Math.abs(dy) + 8) startRef.current.locked = "x";
+      else if (Math.abs(dy) > Math.abs(dx) + 8) startRef.current.locked = "y";
+    }
+    // 若水平或上滑關閉邏輯啟動，阻止預設捲動
+    if (startRef.current.locked === "x" || dy < -8) {
+      e.preventDefault();
+    }
+
+    setDragX(dx);
+    setDragY(dy);
+
+    // 拖越多 → 背景越淡（保留下限避免全透明）
+    const dist = Math.min(Math.abs(dx) + Math.abs(dy), 160);
+    const alpha = 0.6 - dist / 800; // 0.6 → ~0.4
+    setOverlayDim(Math.max(0.35, alpha));
+  }
+
+  function onTouchEnd() {
+    if (!isDragging) return;
+    const dt = (performance.now() - startRef.current.t) / 1000;
+    const vx = Math.abs(dragX) / Math.max(dt, 0.001);
+    const vy = Math.abs(dragY) / Math.max(dt, 0.001);
+
+    const swipeLeft = dragX < -THRESHOLD || (dragX < -20 && vx > VELOCITY);
+    const swipeUp = dragY < -THRESHOLD || (dragY < -20 && vy > VELOCITY);
+
+    if (swipeLeft || swipeUp) {
+      onClose?.();
+    } else {
+      // 回彈
+      setDragX(0);
+      setDragY(0);
+      setOverlayDim(0.6);
+    }
+    setIsDragging(false);
+    startRef.current.locked = null;
+  }
+
   // 鎖住 body 捲動，避免與 Panel 雙重捲動
   useEffect(() => {
     const orig = document.body.style.overflow;
@@ -93,7 +156,7 @@ export default function ImageModal({
     })();
   }, [imageId, imageData]);
 
-  // 如果 image.user 只有字串 ID，補抓作者資料（避免顯示未命名用戶／權限判斷失敗）
+  // 如果 image.user 只有字串 ID，補抓作者資料
   useEffect(() => {
     if (!image) return;
     const u = image.user ?? image.userId;
@@ -221,8 +284,12 @@ export default function ImageModal({
 
   return (
     <Dialog open={!!(imageId || imageData)} onClose={onClose} className="relative z-[99999]">
-      {/* Overlay */}
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
+      {/* Overlay（拖曳時會變淡） */}
+      <div
+        className="fixed inset-0 backdrop-blur-sm"
+        aria-hidden="true"
+        style={{ backgroundColor: `rgba(0,0,0,${overlayDim})` }}
+      />
 
       {/* Wrapper（點外面關閉） */}
       <div className="fixed inset-0 flex items-center justify-center p-0 md:p-4" onClick={onClose}>
@@ -231,7 +298,7 @@ export default function ImageModal({
           onClick={(e) => e.stopPropagation()}
           className="
             relative w-full md:max-w-6xl
-            bg-[#1a1a1a] text-white
+            bg-[#1a1a1a] text白
             rounded-none md:rounded-xl shadow-lg
             overflow-y-auto md:overflow-hidden
             snap-y snap-mandatory md:snap-none
@@ -245,10 +312,17 @@ export default function ImageModal({
             paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
           }}
         >
-          {/* ===== Mobile：Section 1 — 滿版圖片 ===== */}
+          {/* ===== Mobile：Section 1 — 滿版圖片（可滑動關閉） ===== */}
           <section
-            className="md:hidden snap-start relative"
-            style={{ minHeight: "calc(var(--app-vh, 1vh) * 100)" }}
+            className="md:hidden snap-start relative touch-none"
+            style={{
+              minHeight: "calc(var(--app-vh, 1vh) * 100)",
+              transform: `translate(${dragX}px, ${dragY}px) scale(${isDragging ? 0.985 : 1})`,
+              transition: isDragging ? "none" : "transform 180ms ease",
+            }}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
           >
             {loading ? (
               <div className="w-full h-full flex items-center justify-center text-gray-400">載入中...</div>
@@ -267,14 +341,14 @@ export default function ImageModal({
 
             {/* 上滑提示 */}
             <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80">
-              ↑ 上滑查看資訊
+              ← 左滑 / ↑ 上滑可關閉
             </div>
           </section>
 
           {/* ===== Mobile：Section 2 — 資訊 & 留言 ===== */}
           <section className="md:hidden snap-start bg-zinc-950 text-zinc-100 border-t border-white/10">
             <div className="flex justify-center pt-3">
-              <div className="h-1.5 w-12 rounded-full bg-white/20" />
+              <div className="h-1.5 w-12 rounded-full bg白/20" />
             </div>
             {image && (
               <div className="p-4 space-y-4">
@@ -304,7 +378,7 @@ export default function ImageModal({
                   )}
                 </div>
 
-                {/* 詳細資訊（保留全部功能） */}
+                {/* 詳細資訊 */}
                 <ImageInfoBox
                   image={{ ...image, user: userForChild }}
                   currentUser={currentUser}
@@ -392,7 +466,7 @@ export default function ImageModal({
               {showScrollTop && (
                 <button
                   onClick={() => rightScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-                  className="absolute bottom-16 right-4 z-20 text-white bg-sky-400 hover:bg-gray-600 rounded-full w-10 h-10 text-xl flex items-center justify-center shadow"
+                  className="absolute bottom-16 right-4 z-20 text-white bg-sky-400 hover:bg-gray-600 rounded-full w-10 h-10 text-xl flex items中心 justify中心 shadow"
                   title="回到頂部"
                 >
                   ↑
