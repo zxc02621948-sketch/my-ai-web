@@ -9,17 +9,14 @@ import ImageInfoBox from "./ImageInfoBox";
 import axios from "axios";
 
 /**
- * 手機：
- * - 三層滑動：prev / current / next 跟著 dragX 位移，形成翻頁預覽
- * - 左/右 快速滑：上一/下一（onNavigate）
- * - 下 快速滑：關閉（補完動畫）
- * - 上 快速滑：捲到資訊
- * - 輕微拖曳：回彈（補完動畫）
- * - 邊界橡皮筋：往沒有鄰居的方向時 dx * 0.35
+ * 手機
+ * - 三層滑動（prev/current/next）＋鄰頁陰影
+ * - 換頁：鬆手→精準補位到 ±width，再切換（不再過頭）
+ * - 邊界橡皮筋：往沒有鄰居方向 dx*0.35
+ * - 上滑看資訊：高門檻（150px 或 17% 高度，或 vy>1500）；小上拉僅回彈不跳段
  *
- * 桌機：
- * - ←/→ 鍵、左右按鈕：上一/下一（onNavigate）
- * - Esc 或 右上角 X：關閉
+ * 桌機
+ * - ←/→ 切換、Esc 關閉，左右按鈕
  */
 
 const defaultAvatarUrl =
@@ -64,12 +61,19 @@ export default function ImageModal({
   const startRef = useRef({ x: 0, y: 0, t: 0, locked: null });
   const [overlayDim, setOverlayDim] = useState(0.6);
 
+  // 門檻（比例＋像素，取較大者）
+  const H_RATIO_X = 0.22; // 水平換頁 22% 寬
+  const V_RATIO_UP = 0.17; // 上滑 17% 高
+  const DIST_X_MIN = 90;   // 最低水平像素門檻
+  const DIST_Y_MIN = 150;  // 最低垂直像素門檻（↑）
+  const VEL_X_THRESH = 1200;
+  const VEL_Y_UP = 1500;
+  const LOCK_DIFF = 14;    // 方向鎖更嚴格
+
   // 動畫控制
   const animatingRef = useRef(false);
-  function easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
-  }
-  function animateTo({ targetX = dragX, targetY = dragY, duration = 220, onDone }) {
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+  function animateTo({ targetX = dragX, targetY = dragY, duration = 240, onDone }) {
     if (animatingRef.current) return;
     animatingRef.current = true;
 
@@ -87,33 +91,28 @@ export default function ImageModal({
       setDragX(x);
       setDragY(y);
 
-      // 水平補間時輕微改變暗度，垂直則逐漸淡一點
       if (Math.abs(targetX) > Math.abs(targetY)) {
         const dist = Math.min(Math.abs(x), 200);
         const alpha = 0.6 - dist / 1000; // 0.6 → ~0.4
         setOverlayDim(Math.max(0.4, alpha));
       } else {
-        setOverlayDim(startOverlay + (0.4 - startOverlay) * k);
+        // 垂直時稍微淡一點
+        setOverlayDim(startOverlay + (0.45 - startOverlay) * k);
       }
 
       if (t < 1) {
         requestAnimationFrame(step);
       } else {
-        animatingRef.current = false;
         onDone?.();
+        requestAnimationFrame(() => { animatingRef.current = false; });
       }
     };
 
     requestAnimationFrame(step);
   }
 
-  // threshold
-  const DIST_THRESH = 100;
-  const VEL_THRESH = 1200;
-  const LOCK_DIFF = 10;
-
   function onTouchStart(e) {
-    if (animatingRef.current) return; // 動畫中不接受新的手勢
+    if (animatingRef.current) return;
     const t = e.touches[0];
     startRef.current = { x: t.clientX, y: t.clientY, t: performance.now(), locked: null };
     setIsDragging(true);
@@ -122,10 +121,15 @@ export default function ImageModal({
 
   function onTouchMove(e) {
     if (!isDragging || animatingRef.current) return;
+
+    const width = panelRef.current?.clientWidth || window.innerWidth;
+    const height = panelRef.current?.clientHeight || window.innerHeight;
+
     const t = e.touches[0];
     let dx = t.clientX - startRef.current.x;
     const dy = t.clientY - startRef.current.y;
 
+    // 更嚴格的方向鎖
     if (startRef.current.locked === null) {
       if (Math.abs(dx) > Math.abs(dy) + LOCK_DIFF) startRef.current.locked = "x";
       else if (Math.abs(dy) > Math.abs(dx) + LOCK_DIFF) startRef.current.locked = "y";
@@ -134,11 +138,16 @@ export default function ImageModal({
     if (startRef.current.locked === "x") {
       e.preventDefault();
 
-      // ⭐ 橡皮筋阻尼：往沒有鄰居的方向時，降低位移量
+      // 邊界橡皮筋阻尼
       const hasPrev = !!prevImage;
       const hasNext = !!nextImage;
       if (dx > 0 && !hasPrev) dx *= 0.35;
       if (dx < 0 && !hasNext) dx *= 0.35;
+
+      // 夾限，避免超過 95% 寬
+      const clamp = width * 0.95;
+      if (dx > clamp) dx = clamp;
+      if (dx < -clamp) dx = -clamp;
     }
 
     setDragX(dx);
@@ -156,59 +165,61 @@ export default function ImageModal({
   function onTouchEnd() {
     if (!isDragging || animatingRef.current) return;
 
+    const width = panelRef.current?.clientWidth || window.innerWidth;
+    const height = panelRef.current?.clientHeight || window.innerHeight;
+
     const dt = (performance.now() - startRef.current.t) / 1000;
     const vx = dragX / Math.max(dt, 0.001);
     const vy = dragY / Math.max(dt, 0.001);
 
-    const swipeLeft  = (dragX < -DIST_THRESH) || (dragX < -20 && -vx > VEL_THRESH);
-    const swipeRight = (dragX >  DIST_THRESH) || (dragX >  20 &&  vx > VEL_THRESH);
-    const swipeUp    = (dragY < -DIST_THRESH) || (dragY < -20 && -vy > VEL_THRESH);
-    const swipeDown  = (dragY >  DIST_THRESH) || (dragY >  20 &&  vy > VEL_THRESH);
+    const needSwitchX =
+      Math.abs(dragX) >= Math.max(DIST_X_MIN, width * H_RATIO_X) || Math.abs(vx) > VEL_X_THRESH;
+    const needInfoUp =
+      -dragY >= Math.max(DIST_Y_MIN, height * V_RATIO_UP) || -vy > VEL_Y_UP;
 
     const locked = startRef.current.locked;
-    const width = panelRef.current?.clientWidth || window.innerWidth;
-
-    // 讓速度影響「補推距離」，更順手（保留少量 throw）
-    const throwDistX = Math.min(80, Math.abs(vx) / 6);
-    const throwDistY = Math.min(100, Math.abs(vy) / 8);
 
     if (locked === "x") {
-      if (swipeLeft && nextImage) {
-        // 往左：推到 -width（+一點 throw），再切換到下一張
+      if (needSwitchX && dragX < 0 && nextImage) {
+        // 精準補位到 -width，再切換（不加 throw）
         animateTo({
-          targetX: -(width + throwDistX),
+          targetX: -width,
           targetY: 0,
-          duration: 240,
+          duration: 260,
           onDone: () => {
-            setDragX(0); setDragY(0); setOverlayDim(0.6);
-            setIsDragging(false);
-            startRef.current.locked = null;
             onNavigate ? onNavigate("next") : onClose?.();
+            // 下一幀靜默歸零
+            requestAnimationFrame(() => {
+              setDragX(0); setDragY(0); setOverlayDim(0.6);
+              setIsDragging(false);
+              startRef.current.locked = null;
+            });
           }
         });
         return;
       }
-      if (swipeRight && prevImage) {
-        // 往右：推到 +width（+一點 throw），再切換到上一張
+      if (needSwitchX && dragX > 0 && prevImage) {
         animateTo({
-          targetX: width + throwDistX,
+          targetX: width,
           targetY: 0,
-          duration: 240,
+          duration: 260,
           onDone: () => {
-            setDragX(0); setDragY(0); setOverlayDim(0.6);
-            setIsDragging(false);
-            startRef.current.locked = null;
             onNavigate ? onNavigate("prev") : onClose?.();
+            requestAnimationFrame(() => {
+              setDragX(0); setDragY(0); setOverlayDim(0.6);
+              setIsDragging(false);
+              startRef.current.locked = null;
+            });
           }
         });
         return;
       }
 
-      // 不達門檻或邊界：回彈
+      // 回彈
       animateTo({
         targetX: 0,
         targetY: 0,
-        duration: 180,
+        duration: 190,
         onDone: () => {
           setOverlayDim(0.6);
           setIsDragging(false);
@@ -219,28 +230,14 @@ export default function ImageModal({
     }
 
     if (locked === "y") {
-      if (swipeDown) {
-        // 下滑關閉：微推一段並淡出，再關閉
-        animateTo({
-          targetX: 0,
-          targetY: Math.max(160, dragY + throwDistY),
-          duration: 180,
-          onDone: () => {
-            setDragX(0); setDragY(0); setOverlayDim(0.6);
-            setIsDragging(false);
-            startRef.current.locked = null;
-            onClose?.();
-          }
-        });
-        return;
-      }
-      if (swipeUp) {
-        // 上滑看資訊：面板本身 smooth scroll
+      if (needInfoUp) {
+        // 上滑顯示資訊：面板本身 smooth scroll
         const panel = panelRef.current;
         if (panel) {
           const h = panel.clientHeight || window.innerHeight;
           panel.scrollTo({ top: h, behavior: "smooth" });
         }
+        // current 回彈到 0（避免殘留位移）
         animateTo({
           targetX: 0,
           targetY: 0,
@@ -254,7 +251,24 @@ export default function ImageModal({
         return;
       }
 
-      // 垂直不達門檻：回彈
+      // 下滑關閉（維持舊邏輯，但門檻相對較高）
+      const needClose = dragY >= Math.max(160, height * 0.16) || vy > 1400;
+      if (needClose) {
+        animateTo({
+          targetX: 0,
+          targetY: Math.max(180, dragY + 60),
+          duration: 180,
+          onDone: () => {
+            setDragX(0); setDragY(0); setOverlayDim(0.6);
+            setIsDragging(false);
+            startRef.current.locked = null;
+            onClose?.();
+          }
+        });
+        return;
+      }
+
+      // 小上拉 / 小下拉：一律回彈
       animateTo({
         targetX: 0,
         targetY: 0,
@@ -268,7 +282,7 @@ export default function ImageModal({
       return;
     }
 
-    // 未鎖成功：一律回彈
+    // 沒鎖成功：回彈
     animateTo({
       targetX: 0,
       targetY: 0,
@@ -460,14 +474,14 @@ export default function ImageModal({
   const canEdit = !!currentUser?._id && !!ownerId && currentUser._id === ownerId;
   const userForChild = userObj || (ownerId ? { _id: ownerId } : undefined);
 
-  // 供手機預覽的前/後一張圖片 URL + peek 進度（陰影用）
+  // 手機預覽 URL + peek 陰影
   const prevUrl = useMemo(() => fileUrlOf(prevImage), [prevImage]);
   const nextUrl = useMemo(() => fileUrlOf(nextImage), [nextImage]);
-  const width = panelRef.current?.clientWidth || (typeof window !== "undefined" ? window.innerWidth : 375);
-  const prevPeek = Math.max(0, Math.min(1, dragX > 0 ? dragX / width : 0));   // 0~1
-  const nextPeek = Math.max(0, Math.min(1, dragX < 0 ? -dragX / width : 0));  // 0~1
-  const prevShade = 0.12 + prevPeek * 0.18;  // 0.12 ~ 0.30
-  const nextShade = 0.12 + nextPeek * 0.18;  // 0.12 ~ 0.30
+  const panelW = panelRef.current?.clientWidth || (typeof window !== "undefined" ? window.innerWidth : 375);
+  const prevPeek = Math.max(0, Math.min(1, dragX > 0 ? dragX / panelW : 0));
+  const nextPeek = Math.max(0, Math.min(1, dragX < 0 ? -dragX / panelW : 0));
+  const prevShade = 0.12 + prevPeek * 0.18; // 0.12~0.30
+  const nextShade = 0.12 + nextPeek * 0.18;
 
   return (
     <Dialog open={!!(imageId || imageData)} onClose={onClose} className="relative z-[99999]">
@@ -502,14 +516,11 @@ export default function ImageModal({
           {/* ===== Mobile：Section 1 — 三層滑動（prev/current/next） ===== */}
           <section
             className="md:hidden snap-start relative touch-pan-y"
-            style={{
-              minHeight: "calc(var(--app-vh, 1vh) * 100)",
-            }}
+            style={{ minHeight: "calc(var(--app-vh, 1vh) * 100)" }}
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
           >
-            {/* 三層容器：用 translateX 實現翻頁預覽 */}
             <div className="absolute inset-0 overflow-hidden">
               {/* prev slide */}
               {prevUrl && (
@@ -520,23 +531,15 @@ export default function ImageModal({
                     transition: isDragging || animatingRef.current ? "none" : "transform 180ms ease",
                   }}
                 >
-                  <img
-                    src={prevUrl}
-                    alt="Prev"
-                    className="max-h-full max-w-full object-contain"
-                    draggable={false}
-                  />
-                  {/* ⭐ 邊緣陰影（右側向左漸層） */}
+                  <img src={prevUrl} alt="Prev" className="max-h-full max-w-full object-contain" draggable={false} />
                   <div
                     className="pointer-events-none absolute top-0 right-0 h-full w-16"
-                    style={{
-                      background: `linear-gradient(to left, rgba(0,0,0,${prevShade}), rgba(0,0,0,0))`,
-                    }}
+                    style={{ background: `linear-gradient(to left, rgba(0,0,0,${prevShade}), rgba(0,0,0,0))` }}
                   />
                 </div>
               )}
 
-              {/* current slide（上下拖曳縮放一點點，強調下滑關閉） */}
+              {/* current slide */}
               <div
                 className="absolute inset-y-0 w-full flex items-center justify-center"
                 style={{
@@ -573,18 +576,10 @@ export default function ImageModal({
                     transition: isDragging || animatingRef.current ? "none" : "transform 180ms ease",
                   }}
                 >
-                  <img
-                    src={nextUrl}
-                    alt="Next"
-                    className="max-h-full max-w-full object-contain"
-                    draggable={false}
-                  />
-                  {/* ⭐ 邊緣陰影（左側向右漸層） */}
+                  <img src={nextUrl} alt="Next" className="max-h-full max-w-full object-contain" draggable={false} />
                   <div
                     className="pointer-events-none absolute top-0 left-0 h-full w-16"
-                    style={{
-                      background: `linear-gradient(to right, rgba(0,0,0,${nextShade}), rgba(0,0,0,0))`,
-                    }}
+                    style={{ background: `linear-gradient(to right, rgba(0,0,0,${nextShade}), rgba(0,0,0,0))` }}
                   />
                 </div>
               )}
@@ -616,13 +611,8 @@ export default function ImageModal({
                   </div>
                   {currentUser && getOwnerId(image) && currentUser._id !== getOwnerId(image) && (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleFollowToggle();
-                      }}
-                      className={`px-3 py-1 text-sm rounded ${
-                        isFollowing ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
-                      }`}
+                      onClick={(e) => { e.stopPropagation(); handleFollowToggle(); }}
+                      className={`px-3 py-1 text-sm rounded ${isFollowing ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}`}
                     >
                       {isFollowing ? "取消追蹤" : "追蹤作者"}
                     </button>
@@ -645,7 +635,6 @@ export default function ImageModal({
 
           {/* ===== Desktop：左右版 + 鍵盤/按鈕 ===== */}
           <div className="hidden md:flex md:flex-row w-full">
-            {/* 左：圖片區 */}
             <div className="flex-1 bg-black relative p-4 flex items-center justify-center">
               {loading ? (
                 <div className="text-gray-400">載入中...</div>
@@ -661,7 +650,6 @@ export default function ImageModal({
                 />
               ) : null}
 
-              {/* ← 左一張（桌機） */}
               <button
                 type="button"
                 aria-label="上一張"
@@ -671,7 +659,6 @@ export default function ImageModal({
                 ←
               </button>
 
-              {/* → 右一張（桌機） */}
               <button
                 type="button"
                 aria-label="下一張"
@@ -681,7 +668,6 @@ export default function ImageModal({
                 →
               </button>
 
-              {/* Esc（桌機） */}
               <button
                 type="button"
                 aria-label="關閉"
@@ -693,7 +679,6 @@ export default function ImageModal({
               </button>
             </div>
 
-            {/* 右：資訊區 */}
             <div className="w-full md:w-[400px] max-h-[90vh] border-l border-white/10 flex flex-col relative">
               <div ref={rightScrollRef} className="flex-1 overflow-y-auto p-4 relative">
                 {image && (
