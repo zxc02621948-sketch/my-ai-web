@@ -58,7 +58,7 @@ export default function HomePage() {
   const loadMoreRef = useRef(null);
   const inFlight = useRef(0);
 
-  // 從 Context 讀值（⚠️ 加入 viewMode）
+  // 從 Context 讀值（含 viewMode）
   const { levelFilters, categoryFilters, resetFilters, viewMode } = useFilterContext();
 
   const selectedRatings = Array.isArray(levelFilters)
@@ -78,6 +78,20 @@ export default function HomePage() {
     fetch(`/api/images/${id}/click`, { method: "POST" }).catch(() => {});
   };
 
+  // ✅ 樂觀預過濾：先用現有 images 立即套用篩選，提升體感
+  const optimisticFilter = () => {
+    setImages((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+      const wantCats = new Set(selectedCategories);
+      const wantRates = new Set(selectedRatings.map(String)); // "all" | "15" | "18"
+      return prev.filter((img) => {
+        const okCat = wantCats.size ? wantCats.has(img.category) : true;
+        const okRate = wantRates.size ? wantRates.has(String(img.rating)) : true;
+        return okCat && okRate;
+      });
+    });
+  };
+
   const fetchImages = async (pageToFetch = 1, q = "", categories = [], ratings = []) => {
     setIsLoading(true);
     try {
@@ -94,10 +108,7 @@ export default function HomePage() {
         ...(rats.length ? { ratings: rats.join(",") } : {}),
       });
 
-      const url = `/api/images?${params.toString()}`;
-      // console.log("▶ fetchImages", url);
-
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(`/api/images?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
       if (myCall !== inFlight.current) return;
 
@@ -154,7 +165,7 @@ export default function HomePage() {
     fetchCurrentUser();
   }, []);
 
-  // ✅ 搜尋 + 排序 + 分類 + 分級：任何一項變動都會觸發
+  // 🔁 搜尋 / 排序 / 分類 / 分級：任何一項變動都觸發
   useEffect(() => {
     const q = (searchParams.get("search") || "").trim();
     const byLogo = sessionStorage.getItem("homepageReset") === "1";
@@ -182,6 +193,9 @@ export default function HomePage() {
     lastSortRef.current = sort;
     lastCatsRef.current = catsStr;
     lastRatsRef.current = ratsStr;
+
+    // ⭐ 先做一次本地樂觀過濾 → 畫面立即變
+    optimisticFilter();
 
     if (!fetchedOnceRef.current) {
       fetchedOnceRef.current = true;
@@ -236,15 +250,14 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* 工具列：只保留排序（篩選面板交給 Header 裡的按鈕） */}
+      {/* 工具列：只保留排序（篩選面板在 Header） */}
       <div className="max-w-6xl mx-auto mb-3 flex items-center justify-end">
         <SortSelect value={sort} onChange={setSort} />
       </div>
 
       <ImageGrid
         images={images}
-        /* ⚠️ 改這裡：把 viewMode 從 Context 傳進去，讓卡片依模式顯示標題 */
-        viewMode={viewMode}  // "default" = 常駐標題；"compact" = hover 顯示
+        viewMode={viewMode} // "default" = 常駐標題；"compact" = hover 顯示
         isLoading={isLoading}
         hasMore={hasMore}
         onSelectImage={async (img) => {
