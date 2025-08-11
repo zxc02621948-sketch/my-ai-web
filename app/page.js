@@ -36,6 +36,13 @@ async function ensureUserOnImage(img) {
   return img;
 }
 
+// 產生「第 1 頁」快取 key
+const keyOf = (q, sort, cats, rats) => {
+  const sc = (cats || []).slice().sort().join("|");
+  const sr = (rats || []).slice().sort().join("|");
+  return `${q || ""}__${sort}__${sc}__${sr}`;
+};
+
 export default function HomePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,6 +65,9 @@ export default function HomePage() {
   const loadMoreRef = useRef(null);
   const inFlight = useRef(0);
 
+  // ⭐ 第 1 頁快取（key = q|sort|cats|rats）
+  const page1CacheRef = useRef(new Map());
+
   // 從 Context 讀值（含 viewMode）
   const { levelFilters, categoryFilters, resetFilters, viewMode } = useFilterContext();
 
@@ -76,20 +86,6 @@ export default function HomePage() {
     if (now - last < 30 * 1000) return;
     localStorage.setItem(key, String(now));
     fetch(`/api/images/${id}/click`, { method: "POST" }).catch(() => {});
-  };
-
-  // ✅ 樂觀預過濾：先用現有 images 立即套用篩選，提升體感
-  const optimisticFilter = () => {
-    setImages((prev) => {
-      if (!Array.isArray(prev) || prev.length === 0) return prev;
-      const wantCats = new Set(selectedCategories);
-      const wantRates = new Set(selectedRatings.map(String)); // "all" | "15" | "18"
-      return prev.filter((img) => {
-        const okCat = wantCats.size ? wantCats.has(img.category) : true;
-        const okRate = wantRates.size ? wantRates.has(String(img.rating)) : true;
-        return okCat && okRate;
-      });
-    });
   };
 
   const fetchImages = async (pageToFetch = 1, q = "", categories = [], ratings = []) => {
@@ -116,6 +112,9 @@ export default function HomePage() {
         const newImages = data.images;
         if (pageToFetch === 1) {
           setImages(newImages);
+          // ✅ 存到第 1 頁快取
+          const k = keyOf(q, sort, cats, rats);
+          page1CacheRef.current.set(k, newImages);
         } else {
           setImages((prev) => {
             const existingIds = new Set(prev.map((img) => String(img._id)));
@@ -194,8 +193,15 @@ export default function HomePage() {
     lastCatsRef.current = catsStr;
     lastRatsRef.current = ratsStr;
 
-    // ⭐ 先做一次本地樂觀過濾 → 畫面立即變
-    optimisticFilter();
+    const k = keyOf(q, sort, selectedCategories, selectedRatings);
+    const cached = page1CacheRef.current.get(k);
+
+    // ⭐ 先用快取（如果有）立即顯示，避免「取消篩選」時空窗
+    if (cached) {
+      setImages(cached);
+      setPage(1);
+      setHasMore(cached.length >= PAGE_SIZE);
+    }
 
     if (!fetchedOnceRef.current) {
       fetchedOnceRef.current = true;
