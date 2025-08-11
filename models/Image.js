@@ -29,13 +29,12 @@ const ImageSchema = new mongoose.Schema(
 
     // 互動
     likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    likesCount: { type: Number, default: 0 },   // ✅ 新增：快取愛心數
+    likesCount: { type: Number, default: 0 },   // ✅ 快取愛心數
     clicks: { type: Number, default: 0 },
-
     completenessScore: { type: Number, default: 0 },
 
-    // 預算分（popular 用它排序）
-    popScore: { type: Number, default: 0 },     // ✅ 新增：熱門分數
+    // ✅ 預算分（popular 直接用它排序）
+    popScore: { type: Number, default: 0 },
 
     // 生成參數
     steps: { type: Number, default: null },

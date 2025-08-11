@@ -1,64 +1,76 @@
+// app/api/like-image/route.js
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
 import jwt from "jsonwebtoken";
-import LikeLog from "@/models/LikeLog";
+
+export const dynamic = "force-dynamic";
+
+function computePopScore(img) {
+  const W_CLICK = 1.0;
+  const W_LIKE = 2.0;
+  const W_COMPLETE = 0.05;
+  const TIMEBOOST_MAX = 10;
+
+  const now = Date.now();
+  const created = new Date(img.createdAt || now).getTime();
+  const hoursSince = Math.max(0, (now - created) / 36e5);
+  const timeBoost = Math.max(0, TIMEBOOST_MAX - hoursSince);
+
+  const clicks = Number(img.clicks || 0);
+  const likesCount = Number(img.likesCount ?? (Array.isArray(img.likes) ? img.likes.length : 0));
+  const comp = Number(img.completenessScore || 0);
+
+  return clicks * W_CLICK + likesCount * W_LIKE + comp * W_COMPLETE + timeBoost;
+}
+
+function getUserIdFromAuth(req) {
+  const auth = req.headers.get("authorization") || "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  const token = m?.[1];
+  if (!token) return null;
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    return decoded?.id || decoded?._id || null;
+  } catch {
+    return null;
+  }
+}
 
 export async function PUT(req) {
-  await connectToDatabase();
-
-  const { searchParams } = new URL(req.url);
-  const imageId = searchParams.get("id");
-  const token = req.headers.get("authorization")?.replace("Bearer ", "");
-
-  if (!imageId || !token) {
-    return NextResponse.json({ message: "缺少參數" }, { status: 400 });
-  }
-
-  let user;
   try {
-    user = jwt.verify(token, process.env.JWT_SECRET);
+    await dbConnect();
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+    const userId = getUserIdFromAuth(req);
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const img = await Image.findById(id);
+    if (!img) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const had = (img.likes || []).some((x) => String(x) === String(userId));
+    if (had) {
+      img.likes = (img.likes || []).filter((x) => String(x) !== String(userId));
+    } else {
+      img.likes = [...(img.likes || []), userId];
+    }
+
+    img.likesCount = Array.isArray(img.likes) ? img.likes.length : 0;
+    img.popScore = computePopScore(img);
+    await img.save();
+
+    return NextResponse.json({
+      ok: true,
+      _id: img._id.toString(),
+      likes: img.likes,
+      likesCount: img.likesCount,
+      popScore: img.popScore,
+    });
   } catch (err) {
-    return NextResponse.json({ message: "驗證失敗" }, { status: 401 });
-  }
-
-  const body = await req.json().catch(() => null);
-  const shouldLike = body?.shouldLike;
-
-  if (typeof shouldLike !== "boolean") {
-    return NextResponse.json({ message: "缺少 shouldLike 參數" }, { status: 400 });
-  }
-
-  try {
-    const image = await Image.findById(imageId);
-    if (!image) {
-      return NextResponse.json({ message: "找不到圖片" }, { status: 404 });
-    }
-
-    const userIdStr = user._id?.toString?.() || user.id?.toString?.();
-    if (!userIdStr) {
-      return NextResponse.json({ message: "找不到用戶 ID" }, { status: 401 });
-    }
-
-    image.likes = image.likes.filter((id) => !!id);
-    const alreadyLiked = image.likes.some((id) => id?.toString?.() === userIdStr);
-
-    if (shouldLike && !alreadyLiked) {
-      image.likes.push(userIdStr);
-      await LikeLog.create({
-        imageId,
-        userId: userIdStr,
-        createdAt: new Date(),
-      });
-    } else if (!shouldLike && alreadyLiked) {
-      image.likes = image.likes.filter((id) => id?.toString?.() !== userIdStr);
-    }
-
-    await image.save();
-
-    return NextResponse.json({ _id: image._id.toString(), likes: image.likes });
-  } catch (err) {
-    console.error("更新愛心失敗", err);
-    return NextResponse.json({ message: "伺服器錯誤" }, { status: 500 });
+    console.error("❌ like-image 失敗:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
