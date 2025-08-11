@@ -20,9 +20,16 @@ import axios from "axios";
 const defaultAvatarUrl =
   "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
 
+// 取得擁有者 ID（不論 user 是物件或字串）
+const getOwnerId = (img) => {
+  if (!img) return null;
+  const u = img.user ?? img.userId;
+  return typeof u === "string" ? u : u?._id ?? null;
+};
+
 export default function ImageModal({
   imageId,
-  imageData,          // ← 新增：可直接帶整包圖片資料進來
+  imageData, // 可直接帶整包圖片資料進來
   onClose,
   currentUser,
   onLikeUpdate,
@@ -40,7 +47,9 @@ export default function ImageModal({
   useEffect(() => {
     const orig = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = orig; };
+    return () => {
+      document.body.style.overflow = orig;
+    };
   }, []);
 
   // --app-vh（以視窗實高為準，避免行動瀏覽器工具列誤差）
@@ -84,21 +93,53 @@ export default function ImageModal({
     })();
   }, [imageId, imageData]);
 
-  // 追蹤狀態
+  // 如果 image.user 只有字串 ID，補抓作者資料（避免顯示未命名用戶／權限判斷失敗）
   useEffect(() => {
-    if (!currentUser || !image?.user) return;
-    const targetId = image.user._id || image.user;
-    setIsFollowing(!!currentUser.following?.includes(targetId));
-  }, [currentUser, image]);
+    if (!image) return;
+    const u = image.user ?? image.userId;
+    if (!u || typeof u !== "string") return; // 已是物件就不抓
+    (async () => {
+      try {
+        // 優先嘗試抓使用者
+        let userObj = null;
+        try {
+          const r = await fetch(`/api/user/${u}`);
+          if (r.ok) {
+            const data = await r.json();
+            userObj = data?.user || data?.data || null;
+          }
+        } catch {}
+        // 退而求其次：再打一次 images API（有的會 populate）
+        if (!userObj && image?._id) {
+          try {
+            const r2 = await fetch(`/api/images/${image._id}`);
+            if (r2.ok) {
+              const d2 = await r2.json();
+              userObj = d2?.image?.user || null;
+            }
+          } catch {}
+        }
+        if (userObj && typeof userObj === "object") {
+          setImage((prev) => (prev ? { ...prev, user: userObj } : prev));
+        }
+      } catch {}
+    })();
+  }, [image]);
+
+  // 追蹤狀態
+  const ownerId = getOwnerId(image);
+  useEffect(() => {
+    if (!currentUser || !ownerId) return;
+    setIsFollowing(!!currentUser.following?.includes(ownerId));
+  }, [currentUser, ownerId]);
 
   const handleFollowToggle = async () => {
-    if (!image?.user) return;
-    const targetId = image.user._id || image.user;
+    if (!ownerId) return;
     try {
       if (isFollowing) {
-        await axios.delete("/api/follow", { data: { userIdToUnfollow: targetId } });
+        await axios.delete("/api/follow", { data: { userIdToUnfollow: ownerId } });
       } else {
-        await axios.post("/api/follow", { userIdToFollow: targetId });
+        await axios.post("/api/follow", { userIdToFollow: ownerId });
       }
       setIsFollowing((v) => !v);
     } catch (err) {
@@ -107,8 +148,8 @@ export default function ImageModal({
   };
 
   const handleUserClick = () => {
-    if (image?.user?._id) {
-      router.push(`/user/${image.user._id}`);
+    if (ownerId) {
+      router.push(`/user/${ownerId}`);
       onClose?.();
     }
   };
@@ -166,6 +207,17 @@ export default function ImageModal({
   const fileUrl = image?.imageId
     ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`
     : image?.imageUrl || "";
+
+  // 供顯示的作者資訊（可能還在補抓中）
+  const userObj = typeof image?.user === "object" ? image.user : null;
+  const avatarUrl = userObj?.image
+    ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${userObj.image}/public`
+    : defaultAvatarUrl;
+  const displayName = userObj?.username || "未命名用戶";
+  const canEdit = !!currentUser?._id && !!ownerId && currentUser._id === ownerId;
+
+  // 傳給子層使用的 user（確保有 _id）
+  const userForChild = userObj || (ownerId ? { _id: ownerId } : undefined);
 
   return (
     <Dialog open={!!(imageId || imageData)} onClose={onClose} className="relative z-[99999]">
@@ -230,20 +282,19 @@ export default function ImageModal({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <img
-                      src={
-                        image.user?.image
-                          ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
-                          : defaultAvatarUrl
-                      }
+                      src={avatarUrl}
                       alt="User Avatar"
                       className="w-12 h-12 rounded-full object-cover border border-white/20 shadow"
                       onClick={handleUserClick}
                     />
-                    <span className="text-sm">{image.user?.username || "未命名用戶"}</span>
+                    <span className="text-sm">{displayName}</span>
                   </div>
-                  {currentUser && image?.user && currentUser._id !== (image.user._id || image.user) && (
+                  {currentUser && ownerId && currentUser._id !== ownerId && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleFollowToggle(); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleFollowToggle();
+                      }}
                       className={`px-3 py-1 text-sm rounded ${
                         isFollowing ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
                       }`}
@@ -255,11 +306,12 @@ export default function ImageModal({
 
                 {/* 詳細資訊（保留全部功能） */}
                 <ImageInfoBox
-                  image={{ ...image, user: image.user || image.userId }}
+                  image={{ ...image, user: userForChild }}
                   currentUser={currentUser}
                   onClose={onClose}
                   onDelete={handleDelete}
                   fileUrl={fileUrl}
+                  canEdit={canEdit}
                 />
 
                 {/* 留言 */}
@@ -295,11 +347,7 @@ export default function ImageModal({
                     <div className="absolute top-15 right-10 flex flex-col items-center z-50">
                       <div onClick={handleUserClick} className="cursor-pointer">
                         <img
-                          src={
-                            image.user?.image
-                              ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
-                              : defaultAvatarUrl
-                          }
+                          src={avatarUrl}
                           alt="User Avatar"
                           className="w-20 h-20 rounded-full object-cover border border-white shadow"
                           onError={(e) => {
@@ -309,12 +357,15 @@ export default function ImageModal({
                         />
                       </div>
                       <span className="text-sm mt-2 text-center select-none">
-                        {image.user?.username || "未命名用戶"}
+                        {displayName}
                       </span>
 
-                      {currentUser && image?.user && currentUser._id !== (image.user._id || image.user) && (
+                      {currentUser && ownerId && currentUser._id !== ownerId && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleFollowToggle(); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFollowToggle();
+                          }}
                           className={`mt-2 px-3 py-1 text-sm rounded ${
                             isFollowing ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
                           }`}
@@ -325,11 +376,12 @@ export default function ImageModal({
                     </div>
 
                     <ImageInfoBox
-                      image={{ ...image, user: image.user || image.userId }}
+                      image={{ ...image, user: userForChild }}
                       currentUser={currentUser}
                       onClose={onClose}
                       onDelete={handleDelete}
                       fileUrl={fileUrl}
+                      canEdit={canEdit}
                     />
 
                     <CommentBox currentUser={currentUser} imageId={image._id} />

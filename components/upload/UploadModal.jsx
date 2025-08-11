@@ -32,10 +32,24 @@ export default function UploadModal() {
 
   useEffect(() => setMounted(true), []);
 
-  // 事件開啟（Header 按鈕請 dispatch 這個事件）
+  // 行動視窗高修正（面板用）
+  useEffect(() => {
+    const setVH = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty("--app-vh", `${vh}px`);
+    };
+    setVH();
+    window.addEventListener("resize", setVH);
+    window.addEventListener("orientationchange", setVH);
+    return () => {
+      window.removeEventListener("resize", setVH);
+      window.removeEventListener("orientationchange", setVH);
+    };
+  }, []);
+
+  // 事件開啟（外部呼叫：window.dispatchEvent(new CustomEvent("openUploadModal", { detail: { user } }))）
   useEffect(() => {
     const open = (e) => {
-      // console.log("[openUploadModal] fired", e?.detail);
       if (e?.detail?.user) setCurrentUser(e.detail.user);
       setIsOpen(true);
     };
@@ -69,64 +83,107 @@ export default function UploadModal() {
     }
   }, [isOpen]);
 
-  // ✅ 核心：沒開就完全不渲染 + 僅在前端掛載後才渲染
   if (!mounted || !isOpen) return null;
 
   const panel = (
     <Dialog open={isOpen} onClose={onClose} className="relative z-[9999]">
+      {/* 背景 */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="w-full max-w-3xl mx-auto bg-neutral-900 text-white rounded-xl p-6 shadow-lg">
-          <Dialog.Title className="text-xl font-bold mb-4">圖片上傳</Dialog.Title>
 
-          {step === 1 && (
-            <UploadStep1 rating={rating} setRating={setRating} onNext={() => setStep(2)} />
-          )}
+      {/* 外層容器：允許在小視窗時整個面板區域滾動 */}
+      <div
+        className="fixed inset-0 overflow-y-auto p-0 md:p-6"
+        style={{
+          paddingTop: "max(env(safe-area-inset-top), 0px)",
+          paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
+        }}
+      >
+        {/* 置中包一層（不使用 items-center 以避免溢出被夾住） */}
+        <div className="min-h-full flex flex-col md:items-center md:justify-center">
+          <Dialog.Panel
+            className="
+              w-full md:max-w-3xl
+              bg-neutral-900 text-white
+              rounded-none md:rounded-xl shadow-lg
+              flex flex-col
+              overflow-hidden
+            "
+            style={{
+              // 手機：全螢幕高；桌機：最多 90vh
+              height: "calc(var(--app-vh, 1vh) * 100)",
+              maxHeight: "90vh",
+            }}
+          >
+            {/* 頂部標題（sticky） */}
+            <div className="shrink-0 sticky top-0 z-10 bg-neutral-900/95 backdrop-blur border-b border-white/10">
+              <div className="px-6 py-4 flex items-center justify-between">
+                <Dialog.Title className="text-lg md:text-xl font-bold">圖片上傳</Dialog.Title>
+                <button
+                  onClick={onClose}
+                  className="hidden md:inline-flex px-3 py-1.5 rounded bg-white/10 hover:bg-white/15 text-sm"
+                >
+                  關閉
+                </button>
+              </div>
+            </div>
 
-          {step === 2 && (
-            <UploadStep2
-              imageFile={imageFile}
-              setStep={setStep}
-              setImageFile={setImageFile}
-              compressedImage={compressedImage}
-              setCompressedImage={setCompressedImage}
-              useOriginal={useOriginal}
-              setUseOriginal={setUseOriginal}
-              compressionInfo={compressionInfo}
-              setCompressionInfo={setCompressionInfo}
-              title={title}
-              setTitle={setTitle}
-              platform={platform}
-              preview={preview}
-              setPreview={setPreview}
-              setPlatform={setPlatform}
-              description={description}
-              setDescription={setDescription}
-              category={category}
-              setCategory={setCategory}
-              tags={tags}
-              setTags={setTags}
-              rating={rating}
-              setRating={setRating}
-              positivePrompt={positivePrompt}
-              setPositivePrompt={setPositivePrompt}
-              negativePrompt={negativePrompt}
-              setNegativePrompt={setNegativePrompt}
-              isUploading={isUploading}
-              setIsUploading={setIsUploading}
-              onClose={onClose}
-              currentUser={currentUser}
-              modelLink={modelLink}
-              setModelLink={setModelLink}
-              loraLink={loraLink}
-              setLoraLink={setLoraLink}
-            />
-          )}
-        </Dialog.Panel>
+            {/* 內容滾動區（真正可捲動的地方） */}
+            <div className="flex-1 overflow-y-auto">
+              {step === 1 && (
+                <div className="px-6 py-4">
+                  <UploadStep1 rating={rating} setRating={setRating} onNext={() => setStep(2)} />
+                </div>
+              )}
+
+              {step === 2 && (
+                // 讓子層吃滿父容器高度（UploadStep2 會用 h-full）
+                <div className="h-full">
+                  <UploadStep2
+                    imageFile={imageFile}
+                    setStep={setStep}
+                    setImageFile={setImageFile}
+                    compressedImage={compressedImage}
+                    setCompressedImage={setCompressedImage}
+                    useOriginal={useOriginal}
+                    setUseOriginal={setUseOriginal}
+                    compressionInfo={compressionInfo}
+                    setCompressionInfo={setCompressionInfo}
+                    title={title}
+                    setTitle={setTitle}
+                    platform={platform}
+                    preview={preview}
+                    setPreview={setPreview}
+                    setPlatform={setPlatform}
+                    description={description}
+                    setDescription={setDescription}
+                    category={category}
+                    setCategory={setCategory}
+                    tags={tags}
+                    setTags={setTags}
+                    rating={rating}
+                    setRating={setRating}
+                    positivePrompt={positivePrompt}
+                    setPositivePrompt={setPositivePrompt}
+                    negativePrompt={negativePrompt}
+                    setNegativePrompt={setNegativePrompt}
+                    isUploading={isUploading}
+                    setIsUploading={setIsUploading}
+                    onClose={onClose}
+                    currentUser={currentUser}
+                    modelLink={modelLink}
+                    setModelLink={setModelLink}
+                    loraLink={loraLink}
+                    setLoraLink={setLoraLink}
+                  />
+                </div>
+              )}
+            </div>
+          </Dialog.Panel>
+        </div>
       </div>
     </Dialog>
   );
 
-  // 用 Portal 掛到 <body>，與 Header/頁面流完全脫鉤
+  // 用 Portal 掛到 <body>
   return createPortal(panel, document.body);
 }

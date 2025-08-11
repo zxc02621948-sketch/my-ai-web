@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import FilterPanel from "@/components/common/FilterPanel";
 import axios from "axios";
@@ -13,7 +13,6 @@ import { createPortal } from "react-dom";
 import { useFilterContext } from "@/components/context/FilterContext";
 import toast from "react-hot-toast";
 import { Package2, Wrench, CircleHelp } from "lucide-react";
-
 
 const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr: false });
 
@@ -45,6 +44,10 @@ export default function Header({
   const userMenuRef = useRef(null);
   const portalContainer = usePortalContainer();
   const searchBoxRef = useRef(null);
+
+  // 篩選面板動態位置 + 是否定位完成（避免左上角閃一下）
+  const [panelStyle, setPanelStyle] = useState({ top: 0, left: 0, width: 320 });
+  const [panelReady, setPanelReady] = useState(false);
 
   const {
     levelFilters,
@@ -110,6 +113,11 @@ export default function Header({
     return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, [filterMenuOpen, userMenuOpen, showDropdown]);
 
+  // 路由/查詢變更時，自動收起篩選面板
+  useEffect(() => {
+    setFilterMenuOpen(false);
+  }, [pathname, searchParams]);
+
   // 搜尋建議
   useEffect(() => {
     const q = searchQuery.trim();
@@ -124,6 +132,38 @@ export default function Header({
     setFilteredSuggestions(list);
     setShowDropdown(list.length > 0);
   }, [searchQuery, suggestions]);
+
+  // 面板動態定位（繪製前先算好）：開啟/視窗大小重算（不再綁 scroll）
+  useLayoutEffect(() => {
+    if (!filterMenuOpen) return;
+
+    setPanelReady(false); // 開啟時先隱藏，定位後再顯示
+
+    const positionPanel = () => {
+      const btn = filterButtonRef.current;
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      const gap = 8;
+      const panelWidth = 320;    // 面板寬
+      const padding = 12;        // 與左右邊界保留
+
+      // ❗ position: fixed 使用「視窗座標」，不需要加 scrollX/scrollY
+      const top = rect.bottom + gap;
+      const desiredLeft = rect.left;
+      const maxLeft = window.innerWidth - panelWidth - padding;
+      const left = Math.max(padding, Math.min(desiredLeft, maxLeft));
+
+      setPanelStyle({ top, left, width: panelWidth });
+      setPanelReady(true);
+    };
+
+    positionPanel();
+    window.addEventListener("resize", positionPanel);
+    return () => {
+      window.removeEventListener("resize", positionPanel);
+    };
+  }, [filterMenuOpen]);
+
 
   const handleInputChange = (e) => {
     isUserTypingRef.current = true;
@@ -227,12 +267,20 @@ export default function Header({
               </div>
             </div>
 
-            {/* 篩選面板（Portal） */}
+            {/* 篩選面板（Portal，動態定位） */}
             {filterMenuOpen &&
               createPortal(
                 <div
                   ref={filterPanelRef}
-                  className="fixed top-[64px] md:top:[72px] left-[calc(120px)] md:left-[calc(405px)] z-[99999]"
+                  style={{
+                    position: "fixed",
+                    top: panelStyle.top,
+                    left: panelStyle.left,
+                    width: panelStyle.width,
+                    maxWidth: "90vw",
+                    zIndex: 99999,
+                    visibility: panelReady ? "visible" : "hidden",
+                  }}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-3 md:p-4">
@@ -245,6 +293,8 @@ export default function Header({
                       viewMode={viewMode}
                       toggleLevelFilter={toggleLevelFilter}
                       toggleCategoryFilter={toggleCategoryFilter}
+                      onToggleLevel={toggleLevelFilter}
+                      onToggleCategory={toggleCategoryFilter}
                       setViewMode={setViewMode}
                     />
                   </div>
@@ -262,7 +312,7 @@ export default function Header({
                   toast("請先登入才能上傳圖片", { icon: "🔒", id: "login-required", duration: 1000 });
                   return;
                 }
-                onUploadClick();
+                onUploadClick?.();
               }}
               className="hidden md:inline-flex items-center gap-2 px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 font-medium"
               title="上傳圖片"
@@ -271,45 +321,42 @@ export default function Header({
               <span>上傳圖片</span>
             </button>
 
-            {/* 獲取模型（外露） */}
+            {/* 獲取模型 */}
             <Link
-              href="/models"  // 若你的實際路徑不同再改
+              href="/models"
               className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
                          bg-gradient-to-r from-emerald-400 to-cyan-500 text-white font-semibold
                          shadow-[0_6px_20px_-6px_rgba(16,185,129,0.55)]
                          hover:shadow-[0_8px_28px_-6px_rgba(6,182,212,0.7)]
-                         transition-all active:translate-y-[1px] focus-visible:outline-none
-                         focus-visible:ring-2 focus-visible:ring-emerald-300/70"
+                         transition-all active:translate-y-[1px]"
               title="獲取模型"
             >
               <Package2 className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
               <span className="hidden xl:inline">獲取模型</span>
             </Link>
 
-            {/* 安裝教學（外露） */}
+            {/* 安裝教學（正確路徑） */}
             <Link
-              href="/tutorial/install"  // 若你的實際路徑不同再改
+              href="/install-guide"
               className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
                          bg-gradient-to-r from-amber-400 to-orange-500 text-white font-semibold
                          shadow-[0_6px_20px_-6px_rgba(245,158,11,0.55)]
                          hover:shadow-[0_8px_28px_-6px_rgba(249,115,22,0.7)]
-                         transition-all active:translate-y-[1px] focus-visible:outline-none
-                         focus-visible:ring-2 focus-visible:ring-amber-300/70"
+                         transition-all active:translate-y-[1px]"
               title="安裝教學"
             >
               <Wrench className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
               <span className="hidden xl:inline">安裝教學</span>
             </Link>
 
-            {/* 新手生成 Q&A（外露） */}
+            {/* 新手生成 Q&A */}
             <Link
               href="/qa"
               className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
                          bg-gradient-to-r from-indigo-400 to-fuchsia-500 text-white font-semibold
                          shadow-[0_6px_20px_-6px_rgba(99,102,241,0.55)]
                          hover:shadow-[0_8px_28px_-6px_rgba(217,70,239,0.7)]
-                         transition-all active:translate-y-[1px] focus-visible:outline-none
-                         focus-visible:ring-2 focus-visible:ring-indigo-300/70"
+                         transition-all active:translate-y-[1px]"
               title="新手生成 Q&A"
             >
               <CircleHelp className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
@@ -359,7 +406,7 @@ export default function Header({
                             className="md:hidden block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
                             onClick={() => {
                               setUserMenuOpen(false);
-                              onUploadClick();
+                              onUploadClick?.();
                             }}
                           >
                             📤 上傳（Beta）
@@ -395,7 +442,7 @@ export default function Header({
                           <button
                             onClick={() => {
                               setUserMenuOpen(false);
-                              onLoginOpen();
+                              onLoginOpen?.();
                             }}
                             className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
                             role="menuitem"
@@ -405,7 +452,7 @@ export default function Header({
                           <button
                             onClick={() => {
                               setUserMenuOpen(false);
-                              onRegisterOpen();
+                              onRegisterOpen?.();
                             }}
                             className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
                             role="menuitem"

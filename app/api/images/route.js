@@ -7,12 +7,11 @@ import mongoose from "mongoose";
 export const dynamic = "force-dynamic";
 
 /**
- * sort：
- * popular(預設) | newest | oldest | mostLikes | random | hybrid
- * hybrid = 置頂最新 N 張，其餘隨機
- *
- * debug：
- * ?debug=1 時 popular 會回傳 score/clicksNum/likesNum/compNum/timeBoost 等欄位
+ * 支援參數：
+ * - page, limit, sort = popular|newest|oldest|mostLikes|random|hybrid
+ * - q = 關鍵字（title/tags/description/prompts/作者名）
+ * - categories = 逗號分隔（例：女孩,建築）
+ * - ratings    = 逗號分隔（例：all,15,18；不帶則預設排除 18）
  */
 export async function GET(req) {
   try {
@@ -25,27 +24,136 @@ export async function GET(req) {
     const pinRecent = Math.max(0, parseInt(url.searchParams.get("pinRecent") || "6", 10));
     const debug = url.searchParams.get("debug") === "1";
 
-    const match = {}; // 之後可加入你的篩選條件
+    // 關鍵字
+    const qRaw = (url.searchParams.get("q") || "").trim();
+    const qRegex = qRaw ? new RegExp(qRaw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
 
-    // --- 基本幾種排序 ---
+    // 分類
+    const categoriesParam = (url.searchParams.get("categories") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    // 分級（不帶 -> 預設排除 18）
+    const ratingsParam = (url.searchParams.get("ratings") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const match = {};
+    if (categoriesParam.length) {
+      match.category = { $in: categoriesParam };
+    }
+    if (ratingsParam.length) {
+      match.rating = { $in: ratingsParam };
+    } else {
+      // 與前端原本邏輯一致：未選任何分級時，排除 18
+      match.rating = { $ne: "18" };
+    }
+
+    const skip = (page - 1) * limit;
+    const usersColl = mongoose.model("User").collection.name;
+
+    // 搜尋條件（需先 lookup 取得 user.username）
+    const searchMatch = qRegex
+      ? {
+          $or: [
+            { title: { $regex: qRegex } },
+            { description: { $regex: qRegex } },
+            { positivePrompt: { $regex: qRegex } },
+            { negativePrompt: { $regex: qRegex } },
+            { tags: { $elemMatch: { $regex: qRegex } } },
+            { "user.username": { $regex: qRegex } },
+          ],
+        }
+      : null;
+
+    const projectBase = {
+      title: 1,
+      imageId: 1,
+      imageUrl: 1,
+      category: 1,
+      rating: 1,
+      tags: 1,
+      likes: 1,
+      createdAt: 1,
+      user: 1,
+      userId: 1,
+      description: 1,
+      positivePrompt: 1,
+      negativePrompt: 1,
+    };
+
+    const findAndPopulate = async (query) => {
+      const docs = await query.populate("user", "username image").lean();
+      return docs;
+    };
+
+    const lookupUser = [
+      {
+        $lookup: {
+          from: usersColl,
+          localField: "user",
+          foreignField: "_id",
+          as: "userObj",
+          pipeline: [{ $project: { username: 1, image: 1 } }],
+        },
+      },
+      {
+        $addFields: {
+          user: {
+            $cond: [
+              { $gt: [{ $size: "$userObj" }, 0] },
+              { $arrayElemAt: ["$userObj", 0] },
+              "$user",
+            ],
+          },
+        },
+      },
+      { $project: { userObj: 0 } },
+    ];
+
+    // ===== newest =====
     if (sort === "newest") {
-      const docs = await Image.find(match)
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean();
+      if (!qRegex) {
+        const docs = await findAndPopulate(
+          Image.find(match).sort({ createdAt: -1 }).skip(skip).limit(limit)
+        );
+        return NextResponse.json({ images: decorate(docs) });
+      }
+      const docs = await Image.aggregate([
+        { $match: match },
+        { $sort: { createdAt: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        { $project: projectBase },
+        ...lookupUser,
+        { $match: searchMatch },
+      ]);
       return NextResponse.json({ images: decorate(docs) });
     }
 
+    // ===== oldest =====
     if (sort === "oldest") {
-      const docs = await Image.find(match)
-        .sort({ createdAt: 1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean();
+      if (!qRegex) {
+        const docs = await findAndPopulate(
+          Image.find(match).sort({ createdAt: 1 }).skip(skip).limit(limit)
+        );
+        return NextResponse.json({ images: decorate(docs) });
+      }
+      const docs = await Image.aggregate([
+        { $match: match },
+        { $sort: { createdAt: 1 } },
+        { $skip: skip },
+        { $limit: limit },
+        { $project: projectBase },
+        ...lookupUser,
+        { $match: searchMatch },
+      ]);
       return NextResponse.json({ images: decorate(docs) });
     }
 
+    // ===== mostLikes =====
     if (sort === "mostlikes") {
       const docs = await Image.aggregate([
         { $match: match },
@@ -65,40 +173,84 @@ export async function GET(req) {
           },
         },
         { $sort: { likesCount: -1, createdAt: -1 } },
-        { $skip: (page - 1) * limit },
+        { $skip: skip },
         { $limit: limit },
+        { $project: { ...projectBase, likesCount: 1 } },
+        ...lookupUser,
+        ...(searchMatch ? [{ $match: searchMatch }] : []),
       ]);
       return NextResponse.json({ images: decorate(docs) });
     }
 
+    // ===== random =====
     if (sort === "random") {
-      const docs = await Image.aggregate([{ $match: match }, { $sample: { size: limit } }]);
+      // 有搜尋：先篩再抽樣
+      if (searchMatch) {
+        const docs = await Image.aggregate([
+          { $match: match },
+          { $project: projectBase },
+          ...lookupUser,
+          { $match: searchMatch },
+          { $sample: { size: limit } },
+        ]);
+        return NextResponse.json({ images: decorate(docs) });
+      }
+      const docs = await Image.aggregate([
+        { $match: match },
+        { $sample: { size: limit } },
+        { $project: projectBase },
+        ...lookupUser,
+      ]);
       return NextResponse.json({ images: decorate(docs) });
     }
 
+    // ===== hybrid（置頂最新 N 張 + 其餘隨機）=====
     if (sort === "hybrid") {
-      const pinned = await Image.find(match).sort({ createdAt: -1 }).limit(pinRecent).lean();
+      // 有搜尋：回退為 newest 搜尋
+      if (searchMatch) {
+        const docs = await Image.aggregate([
+          { $match: match },
+          { $sort: { createdAt: -1 } },
+          { $skip: skip },
+          { $limit: limit },
+          { $project: projectBase },
+          ...lookupUser,
+          { $match: searchMatch },
+        ]);
+        return NextResponse.json({ images: decorate(docs) });
+      }
+
+      const pinned = await Image.find(match)
+        .sort({ createdAt: -1 })
+        .limit(pinRecent)
+        .populate("user", "username image")
+        .lean();
+
       const excludeIds = pinned.map((d) => new mongoose.Types.ObjectId(d._id));
       const remain = Math.max(0, limit - pinned.length);
-      const randoms = remain
-        ? await Image.aggregate([
-            { $match: { ...match, _id: { $nin: excludeIds } } },
-            { $sample: { size: remain } },
-          ])
-        : [];
+
+      let randoms = [];
+      if (remain > 0) {
+        randoms = await Image.aggregate([
+          { $match: { ...match, _id: { $nin: excludeIds } } },
+          { $sample: { size: remain } },
+          { $project: projectBase },
+          ...lookupUser,
+        ]);
+      }
+
       return NextResponse.json({ images: decorate([...pinned, ...randoms]) });
     }
 
-    // --- popular（預設）：加權分數 + debug 開關 ---
+    // ===== popular（預設）=====
     const W_CLICK = 1.0;
     const W_LIKE = 2.0;
-    const W_COMPLETE = 0.05; // completenessScore 0~100 => 0~5 分
+    const W_COMPLETE = 0.05;
     const TIMEBOOST_MAX = 10;
     const now = new Date();
 
-    const pipeline = [
+    const docs = await Image.aggregate([
       { $match: match },
-      // 統一型別
       {
         $addFields: {
           clicksNum: {
@@ -131,16 +283,22 @@ export async function GET(req) {
           _createdAt: { $ifNull: ["$createdAt", now] },
         },
       },
-      // 時間衰減
       {
         $addFields: {
           hoursSince: { $divide: [{ $subtract: [now, "$_createdAt"] }, 1000 * 60 * 60] },
           timeBoost: {
-            $max: [0, { $subtract: [TIMEBOOST_MAX, { $divide: [{ $subtract: [now, "$_createdAt"] }, 1000 * 60 * 60] }] }],
+            $max: [
+              0,
+              {
+                $subtract: [
+                  TIMEBOOST_MAX,
+                  { $divide: [{ $subtract: [now, "$_createdAt"] }, 1000 * 60 * 60] },
+                ],
+              },
+            ],
           },
         },
       },
-      // 加權分數
       {
         $addFields: {
           score: {
@@ -154,25 +312,14 @@ export async function GET(req) {
         },
       },
       { $sort: { score: -1, _createdAt: -1 } },
-      { $skip: (page - 1) * limit },
+      { $skip: skip },
       { $limit: limit },
-    ];
+      { $project: projectBase, ...(debug ? { score: 1, clicksNum: 1, likesNum: 1, compNum: 1, hoursSince: 1, timeBoost: 1 } : {}) },
+      ...lookupUser,
+      ...(searchMatch ? [{ $match: searchMatch }] : []),
+      ...(!debug ? [{ $unset: ["clicksNum", "likesNum", "compNum", "hoursSince", "timeBoost", "score"] }] : []),
+    ]);
 
-    // 沒開 debug 就把內部欄位遮掉
-    if (!debug) {
-      pipeline.push({
-        $project: {
-          clicksNum: 0,
-          likesNum: 0,
-          compNum: 0,
-          hoursSince: 0,
-          timeBoost: 0,
-          score: 0,
-        },
-      });
-    }
-
-    const docs = await Image.aggregate(pipeline);
     return NextResponse.json({ images: decorate(docs), debug });
   } catch (error) {
     console.error("❌ 無法取得圖片列表", error);
