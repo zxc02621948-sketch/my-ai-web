@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-export default function Modal({ isOpen, onClose, title, children }) {
+export default function Modal({ isOpen, onClose, title, children, bottomOffset = 80 }) {
   // ✅ 鎖住背景 scroll
   useEffect(() => {
     if (isOpen) {
@@ -26,8 +26,16 @@ export default function Modal({ isOpen, onClose, title, children }) {
       />
 
       {/* 彈窗內容 */}
-      <div className="flex justify-center items-center min-h-screen px-4">
-        <div className="relative z-10 bg-zinc-900 text-white rounded-2xl shadow-xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto">
+      <div
+        className="flex justify-center items-center min-h-screen px-4"
+        style={{ paddingBottom: `${bottomOffset}px` }} // ⬅ 底部留白，預設 80px
+      >
+        <div
+          className="relative z-10 bg-zinc-900 text-white rounded-2xl shadow-xl p-6 w-full max-w-md overflow-y-auto"
+          style={{
+            maxHeight: `calc(100vh - ${bottomOffset + 40}px)` // ⬅ 扣掉底部留白與額外空間
+          }}
+        >
           {/* 標題區域 */}
           <h2 className="text-lg font-semibold mb-4 text-center">{title}</h2>
 

@@ -64,6 +64,7 @@ export default function UploadStep2({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [metaStatus, setMetaStatus] = useState(null); // null | 'found' | 'none' | 'error'
   const [pasteInfo, setPasteInfo] = useState("");
+  const [confirmAdult, setConfirmAdult] = useState(false); // ✅ 新增：18+ 成年聲明
 
   const scrollAreaRef = useRef(null);
 
@@ -322,11 +323,17 @@ export default function UploadStep2({
   const civitaiRegex = /^https?:\/\/(www\.)?civitai\.com(\/|$)/i;
 
   const handleUpload = async () => {
-    if (!imageFile) return;
+    if (!imageFile) { alert("請先選擇圖片檔"); return; }
     if (!title || !title.trim()) { alert("請輸入圖片標題！"); return; }
     if (!category) { alert("請選擇圖片分類！"); return; }
     if (modelLink && !civitaiRegex.test(modelLink)) { alert("模型連結僅允許 civitai.com 網址。"); return; }
     if (loraLink && !civitaiRegex.test(loraLink)) { alert("LoRA 連結僅允許 civitai.com 網址。"); return; }
+
+    // ✅ 只有 18+ 需要「成年聲明」
+    if (rating === "18" && !confirmAdult) {
+      alert("請勾選『成年聲明』以確認內容不涉及未成年人。");
+      return;
+    }
 
     setIsUploading(true);
     let imageId = null;
@@ -385,6 +392,8 @@ export default function UploadStep2({
         width: width || undefined,
         height: height || undefined,
         modelHash: modelHash || undefined,
+        // 可選：若要記錄成年聲明到後端（需後端支援）
+        adultDeclaration: rating === "18" ? true : undefined,
       };
 
       const metaRes = await fetch("/api/cloudflare-images", {
@@ -487,6 +496,28 @@ export default function UploadStep2({
             <option value="18">18+（限制）</option>
           </select>
         </div>
+
+        {/* ⚠️ 18+ 成年聲明（必勾） */}
+        {rating === "18" && (
+          <div className="space-y-2 border border-red-500/40 rounded-lg p-3 bg-red-900/20">
+            <div className="text-sm text-red-300 font-semibold">18+ 成年聲明（必勾）</div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={confirmAdult}
+                onChange={(e) => setConfirmAdult(e.target.checked)}
+                className="mt-1"
+              />
+              <span>
+                我確認本次上傳內容<strong>僅描繪成年角色</strong>，不包含未成年人或未成年特徵（如兒童/國小國中生情境、兒童制服、兒童配件、身心年幼設定等），
+                並已正確標記為 <b>18+</b>。
+              </span>
+            </label>
+            <p className="text-xs text-red-200/80">
+              若被檢舉或查核涉及未成年內容，帳號可能被限制或移除，內容將被刪除且不另行通知。
+            </p>
+          </div>
+        )}
 
         {/* 基本欄位 */}
         <input

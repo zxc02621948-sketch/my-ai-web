@@ -65,6 +65,11 @@ export default function HomePage() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [currentUser, setCurrentUser] = useState(undefined);
 
+  // ⭐ 新增：首屏是否拿到第 1 頁資料
+  const [fetchedOnce, setFetchedOnce] = useState(false);
+  // ⭐ 新增：請求序號，避免舊請求覆蓋新資料
+  const inFlightId = useRef(0);
+
   const fetchedOnceRef = useRef(false);
   const lastUrlSearchRef = useRef(null);
   const lastSortRef = useRef("popular");
@@ -98,6 +103,12 @@ export default function HomePage() {
     ? categoryFilters.filter(Boolean)
     : [];
 
+  // 🔸 首屏就預載 Masonry / imagesLoaded，避免第一次切換卡頓
+  useEffect(() => {
+    import("masonry-layout");
+    import("imagesloaded");
+  }, []);
+
   const reportClick = (id) => {
     if (!id) return;
     const key = `click:${id}`;
@@ -119,7 +130,9 @@ export default function HomePage() {
     try {
       const cats = Array.isArray(categories) ? categories.filter(Boolean) : [];
       const rats = Array.isArray(ratings) ? ratings.filter(Boolean) : [];
-      const myCall = ++inFlight.current;
+
+      // ⭐ 請求序號：確保後回資料不覆蓋先回資料
+      const myId = ++inFlightId.current;
 
       const apiSort = mapSortForApi(sort);
       const params = new URLSearchParams({
@@ -133,12 +146,15 @@ export default function HomePage() {
 
       const res = await fetch(`/api/images?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
-      if (myCall !== inFlight.current) return;
+
+      // ❗ 如果有更新的請求在路上，就丟掉這次結果
+      if (myId !== inFlightId.current) return;
 
       if (res.ok && Array.isArray(data.images)) {
         const newImages = data.images;
         if (pageToFetch === 1) {
           setImages(newImages);
+          setFetchedOnce(true); // ✅ 拿到第 1 頁
           // ✅ 存到第 1 頁快取
           const k = keyOf(q, apiSort, cats, rats);
           page1CacheRef.current.set(k, newImages);
@@ -156,7 +172,7 @@ export default function HomePage() {
       }
     } catch (err) {
       console.error("載入圖片失敗：", err);
-      setHasMore(false);
+      // 這裡不直接設定空清單為「到底囉」，交給下方 UI 根據 fetchedOnce 判斷
     } finally {
       setIsLoading(false);
     }
@@ -270,28 +286,35 @@ export default function HomePage() {
       setImages(cached);
       setPage(1);
       setHasMore(cached.length >= PAGE_SIZE);
+      setFetchedOnce(true); // 用快取時也視為已拿到第 1 頁
     }
 
     if (!fetchedOnceRef.current) {
       fetchedOnceRef.current = true;
+      setFetchedOnce(false); // 首屏重新取資料
       fetchImages(1, "", selectedCategories, selectedRatings);
       setPage(1);
       return;
     }
 
     if (q === "") {
+      setFetchedOnce(false);
       fetchImages(1, "", selectedCategories, selectedRatings);
     } else {
       const h = setTimeout(() => {
+        setFetchedOnce(false);
         fetchImages(1, q, selectedCategories, selectedRatings);
       }, 250);
       return () => clearTimeout(h);
     }
   }, [searchParams, sort, selectedCategories, selectedRatings]);
 
-  // 無限滾動
+  // 無限滾動（等第 1 頁完成後才啟用，避免誤觸發載第 2 頁）
   useEffect(() => {
-    if (!hasMore || isLoading) return;
+    if (!hasMore || isLoading || !fetchedOnce) return;
+    const el = loadMoreRef.current;
+    if (!el) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
@@ -299,14 +322,12 @@ export default function HomePage() {
           fetchImages(page + 1, q, selectedCategories, selectedRatings);
         }
       },
-      { root: null, rootMargin: "0px", threshold: 1.0 }
+      { root: null, rootMargin: "200px", threshold: 0 }
     );
-    const el = loadMoreRef.current;
-    if (el) observer.observe(el);
-    return () => {
-      if (el) observer.unobserve(el);
-    };
-  }, [hasMore, isLoading, page, sort, searchParams, selectedCategories, selectedRatings]);
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, isLoading, page, sort, searchParams, selectedCategories, selectedRatings, fetchedOnce]);
 
   // 造訪追蹤
   useEffect(() => {
@@ -384,8 +405,7 @@ export default function HomePage() {
     ? images.findIndex((img) => String(img._id) === String(selectedImage._id))
     : -1;
 
-  const prevImage =
-    selectedIndex > 0 ? images[selectedIndex - 1] : undefined;
+  const prevImage = selectedIndex > 0 ? images[selectedIndex - 1] : undefined;
   const nextImage =
     selectedIndex >= 0 && selectedIndex < images.length - 1
       ? images[selectedIndex + 1]
@@ -419,8 +439,12 @@ export default function HomePage() {
         }}
       />
 
+      {/* 底部狀態文案：避免首屏還沒完成就顯示「到底囉」 */}
       <div ref={loadMoreRef} className="py-6 text-center text-zinc-400 text-sm">
-        {hasMore ? "載入更多中..." : "已經到底囉"}
+        {!fetchedOnce && isLoading && "載入中..."}
+        {fetchedOnce && hasMore && "載入更多中..."}
+        {fetchedOnce && !isLoading && images.length === 0 && "目前沒有符合條件的圖片"}
+        {fetchedOnce && !hasMore && images.length > 0 && "已經到底囉"}
       </div>
 
       {selectedImage && currentUser !== undefined && (
@@ -439,7 +463,7 @@ export default function HomePage() {
           }}
           onNavigate={(dir) => navigateFromSelected(dir)}
           onFollowChange={handleFollowChange}
-          followOverrides={followOverrides}   // ⬅️ 傳入覆蓋表
+          followOverrides={followOverrides}
         />
       )}
 
