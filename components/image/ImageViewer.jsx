@@ -23,8 +23,8 @@ export default function ImageViewer({
   const ZOOM_STEP = 1.5;
 
   // 放寬邊界餘量：避免放大後頭頂/鞋尖卡住
-  const SLACK_X = 24; // 左右餘量（畫面座標 px）
-  const SLACK_Y = 56; // 上下餘量（畫面座標 px）
+  const SLACK_X = 48; // 左右餘量（畫面座標 px）
+  const SLACK_Y = 96; // 上下餘量（畫面座標 px）
 
   // ===== 狀態 =====
   const [scale, setScale] = useState(1); // 1..3
