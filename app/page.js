@@ -434,6 +434,7 @@ export default function HomePage() {
         currentUser={currentUser}
         isLikedByCurrentUser={isLikedByCurrentUser}
         onToggleLike={handleToggleLike}
+        gutter={15} // ⬅️ 加這行，控制縫隙
         onLikeUpdate={(updated) => {
           onLikeUpdateHook(updated);
         }}
