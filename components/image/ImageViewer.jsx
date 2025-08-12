@@ -1,7 +1,7 @@
 "use client";
 
 import { Heart, X } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function ImageViewer({
@@ -11,11 +11,87 @@ export default function ImageViewer({
   onToggleLike,
   showClose = false,
   onClose,
-  disableTapZoom = false,
-  onZoomChange,
+  disableTapZoom = false, // 手機時會帶 true：關閉單指/雙擊放大
+  onZoomChange,           // 回報縮放倍率，給外層停用滑頁
 }) {
-  const [clicked, setClicked] = useState(false);
+  const containerRef = useRef(null);
+  const imgRef = useRef(null);
 
+  // 縮放 / 平移
+  const [scale, setScale] = useState(1);              // 1..3
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const wasDragging = useRef(false);
+
+  // 捏合（雙指）
+  const pinchingRef = useRef(false);
+  const pinchStart = useRef({ dist: 0, scale0: 1, pos0: { x: 0, y: 0 }, center: { x: 0, y: 0 } });
+
+  // 拖曳起點
+  const dragOrigin = useRef({ x: 0, y: 0 });
+  const imageOrigin = useRef({ x: 0, y: 0 });
+
+  // 圖片基礎顯示尺寸（scale=1 時的寬高，已做 contain）
+  const baseSizeRef = useRef({ w: 0, h: 0 });
+
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 3;
+  const ZOOM_STEP = 1.5;
+  const isZoomed = scale > 1.001;
+
+  // 對外回報縮放倍率
+  useEffect(() => { onZoomChange?.(scale); }, [scale, onZoomChange]);
+
+  // 讚動畫
+  const [clicked, setClicked] = useState(false);
+  useEffect(() => {
+    if (isLiked) {
+      setClicked(true);
+      const t = setTimeout(() => setClicked(false), 400);
+      return () => clearTimeout(t);
+    } else setClicked(false);
+  }, [isLiked]);
+
+  // ======= 工具 =======
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  // 以焦點為樞紐縮放（transform: translate -> scale）
+  const zoomAround = (focal, nextScale, prevScale, prevPos) => {
+    const k = nextScale / prevScale;
+    return { x: prevPos.x * k + focal.x * (1 - k), y: prevPos.y * k + focal.y * (1 - k) };
+  };
+
+  // 根據容器大小、圖片 natural size 計算「contain 後的基礎寬高」
+  const computeBaseSize = useCallback(() => {
+    const container = containerRef.current;
+    const img = imgRef.current;
+    if (!container || !img || !img.naturalWidth || !img.naturalHeight) return;
+
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    const iw = img.naturalWidth;
+    const ih = img.naturalHeight;
+    const s = Math.min(cw / iw, ch / ih);
+    baseSizeRef.current = { w: iw * s, h: ih * s };
+  }, []);
+
+  // 取得在目前 scale 下，允許的平移範圍（以 translate 前座標衡量）
+  const getClampedPos = useCallback((pos, sc) => {
+    const container = containerRef.current;
+    const { w: bw, h: bh } = baseSizeRef.current;
+    if (!container || !bw || !bh) return pos;
+
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+
+    // 以中心為原點的最大可位移（translate 在 scale 之前，換算如下）
+    const maxX = Math.max(0, (bw - cw / sc) / 2);
+    const maxY = Math.max(0, (bh - ch / sc) / 2);
+
+    return { x: clamp(pos.x, -maxX, maxX), y: clamp(pos.y, -maxY, maxY) };
+  }, []);
+
+  // 視窗高度修正
   useEffect(() => {
     const setVH = () => {
       const vh = window.innerHeight * 0.01;
@@ -30,45 +106,27 @@ export default function ImageViewer({
     };
   }, []);
 
-  const containerRef = useRef(null);
-
-  const [scale, setScale] = useState(1); // 1..3
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const wasDragging = useRef(false);
-
-  const dragOrigin = useRef({ x: 0, y: 0 });
-  const imageOrigin = useRef({ x: 0, y: 0 });
-
-  const clickCount = useRef(0);
-  const clickTimer = useRef(null);
-
-  const pinchingRef = useRef(false);
-  const pinchStart = useRef({
-    dist: 0, scale0: 1, pos0: { x: 0, y: 0 }, center: { x: 0, y: 0 },
-  });
-
-  const ZOOM_MIN = 1;
-  const ZOOM_MAX = 3;
-  const ZOOM_STEP = 1.5;
-  const isZoomed = scale > 1.001;
-
-  useEffect(() => { onZoomChange?.(scale); }, [scale, onZoomChange]);
+  // 圖片載入完/尺寸變更時計算基礎尺寸，並把當前位置夾限（會有回彈）
+  useEffect(() => {
+    computeBaseSize();
+    setPosition((p) => getClampedPos(p, scale));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computeBaseSize]);
 
   useEffect(() => {
-    if (isLiked) {
-      setClicked(true);
-      const t = setTimeout(() => setClicked(false), 400);
-      return () => clearTimeout(t);
-    } else setClicked(false);
-  }, [isLiked]);
+    const onResize = () => {
+      computeBaseSize();
+      setPosition((p) => getClampedPos(p, scale));
+    };
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, [computeBaseSize, getClampedPos, scale]);
 
-  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-  const zoomAround = (focal, nextScale, prevScale, prevPos) => {
-    const k = nextScale / prevScale;
-    return { x: prevPos.x * k + focal.x * (1 - k), y: prevPos.y * k + focal.y * (1 - k) };
-  };
-
+  // ======= 拖曳 =======
   const startDrag = (pt) => {
     if (!isZoomed) return;
     setIsDragging(true);
@@ -81,27 +139,37 @@ export default function ImageViewer({
     wasDragging.current = true;
     const dx = pt.x - dragOrigin.current.x;
     const dy = pt.y - dragOrigin.current.y;
-    setPosition({ x: imageOrigin.current.x + dx, y: imageOrigin.current.y + dy });
+    const next = { x: imageOrigin.current.x + dx, y: imageOrigin.current.y + dy };
+    setPosition(getClampedPos(next, scale)); // 拖曳過程即時夾限
   };
-  const endDrag = () => setIsDragging(false);
+  const endDrag = () => {
+    setIsDragging(false);
+    // 放手時再次夾限（將觸發 CSS 過渡 → 邊界回彈）
+    setPosition((p) => getClampedPos(p, scale));
+  };
 
-  // Mouse
+  // ======= 滑鼠 =======
   const handleMouseDown = (e) => { if (isZoomed) e.stopPropagation(); startDrag({ x: e.clientX, y: e.clientY }); };
   const handleMouseMove = (e) => { if (isZoomed) e.stopPropagation(); moveDrag({ x: e.clientX, y: e.clientY }); };
   const handleMouseUp = () => endDrag();
 
-  // Touch helpers
+  // ======= 觸控 =======
   const getTouches = (e) => Array.from(e.touches || []);
   const dist2 = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-  const centerOf = (a, b, rect) => ({ x: ((a.clientX + b.clientX) / 2) - rect.left, y: ((a.clientY + b.clientY) / 2) - rect.top });
+  const centerOf = (a, b, rect) => ({
+    x: ((a.clientX + b.clientX) / 2) - rect.left,
+    y: ((a.clientY + b.clientY) / 2) - rect.top,
+  });
 
   const handleTouchStart = (e) => {
-    if (isZoomed || (e.touches && e.touches.length > 1)) e.stopPropagation();
+    // 一開始就兩指 → 當下初始化 pinch（✅ 修正第一次在角落）
+    if (e.touches && e.touches.length >= 2 && containerRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
 
-    const ts = getTouches(e);
-    if (ts.length >= 2) {
-      pinchingRef.current = true;
+      const ts = getTouches(e);
       const rect = containerRef.current.getBoundingClientRect();
+      pinchingRef.current = true;
       pinchStart.current = {
         dist: dist2(ts[0], ts[1]),
         scale0: scale,
@@ -111,7 +179,11 @@ export default function ImageViewer({
       setIsDragging(false);
       return;
     }
+
+    // 單指：已放大才拖曳
+    const ts = getTouches(e);
     if (ts.length === 1 && isZoomed) {
+      e.stopPropagation();
       startDrag({ x: ts[0].clientX, y: ts[0].clientY });
     }
   };
@@ -120,18 +192,42 @@ export default function ImageViewer({
     if (isZoomed || pinchingRef.current || isDragging) e.stopPropagation();
 
     const ts = getTouches(e);
+
+    // 單指→雙指的「當下」：立刻初始化 pinch（✅ 正確抓焦點）
+    if (!pinchingRef.current && ts.length >= 2 && containerRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = containerRef.current.getBoundingClientRect();
+      pinchingRef.current = true;
+      pinchStart.current = {
+        dist: dist2(ts[0], ts[1]),
+        scale0: scale,
+        pos0: { ...position },
+        center: centerOf(ts[0], ts[1], rect),
+      };
+      setIsDragging(false);
+    }
+
+    // 雙指縮放中
     if (pinchingRef.current && ts.length >= 2) {
       e.preventDefault();
       e.stopPropagation();
       const rect = containerRef.current.getBoundingClientRect();
       const d = dist2(ts[0], ts[1]);
-      const next = clamp((pinchStart.current.scale0 * d) / Math.max(pinchStart.current.dist, 1), ZOOM_MIN, ZOOM_MAX);
+      const nextScale = clamp(
+        (pinchStart.current.scale0 * d) / Math.max(pinchStart.current.dist, 1),
+        ZOOM_MIN,
+        ZOOM_MAX
+      );
       const focal = centerOf(ts[0], ts[1], rect);
-      const nextPos = zoomAround(focal, next, pinchStart.current.scale0, pinchStart.current.pos0);
-      setScale(next);
+      const nextPosRaw = zoomAround(focal, nextScale, pinchStart.current.scale0, pinchStart.current.pos0);
+      const nextPos = getClampedPos(nextPosRaw, nextScale); // 縮放過程也夾限
+      setScale(nextScale);
       setPosition(nextPos);
       return;
     }
+
+    // 單指拖曳（已放大）
     if (isDragging && ts.length === 1) {
       e.stopPropagation();
       moveDrag({ x: ts[0].clientX, y: ts[0].clientY });
@@ -146,9 +242,13 @@ export default function ImageViewer({
     // 結束 pinch
     if (pinchingRef.current && ts.length < 2) {
       pinchingRef.current = false;
+      // 若倍率很接近 1，重置至完全未放大
       if (scale <= 1.02) {
         setScale(1);
         setPosition({ x: 0, y: 0 });
+      } else {
+        // 放手時做一次回彈夾限
+        setPosition((p) => getClampedPos(p, scale));
       }
     }
 
@@ -158,39 +258,9 @@ export default function ImageViewer({
     }
   };
 
-    // 雙指縮放中
-    if (pinchingRef.current && ts.length >= 2) {
-      e.preventDefault(); 
-      e.stopPropagation();
-
-      const rect = containerRef.current.getBoundingClientRect();
-      const d = dist2(ts[0], ts[1]);
-      const next = clamp(
-        (pinchStart.current.scale0 * d) / Math.max(pinchStart.current.dist, 1),
-        ZOOM_MIN,
-        ZOOM_MAX
-      );
-      // 以「當下兩指中心」當樞紐（手指移動時中心也跟著動）
-      const focal = centerOf(ts[0], ts[1], rect);
-      const nextPos = zoomAround(
-        focal, 
-        next, 
-        pinchStart.current.scale0, 
-        pinchStart.current.pos0
-      );
-
-      setScale(next);
-      setPosition(nextPos);
-      return;
-    }
-
-    if (isDragging && ts.length === 1) {
-      e.stopPropagation();
-      moveDrag({ x: ts[0].clientX, y: ts[0].clientY });
-    }
-  };
-
   // 點擊/雙擊縮放（可停用）
+  const clickCount = useRef(0);
+  const clickTimer = useRef(null);
   const handleClick = (e) => {
     if (disableTapZoom) return;
     e.stopPropagation();
@@ -207,7 +277,8 @@ export default function ImageViewer({
       const clickX = (e.clientX ?? 0) - rect.left;
       const clickY = (e.clientY ?? 0) - rect.top;
       const nextScale = clamp(ZOOM_STEP, ZOOM_MIN, ZOOM_MAX);
-      const nextPos = zoomAround({ x: clickX, y: clickY }, nextScale, 1, { x: 0, y: 0 });
+      const nextPosRaw = zoomAround({ x: clickX, y: clickY }, nextScale, 1, { x: 0, y: 0 });
+      const nextPos = getClampedPos(nextPosRaw, nextScale);
       setScale(nextScale);
       setPosition(nextPos);
       clickTimer.current = setTimeout(() => { clickCount.current = 0; }, 280);
@@ -236,7 +307,8 @@ export default function ImageViewer({
         paddingTop: "max(env(safe-area-inset-top), 0px)",
         paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
         WebkitOverflowScrolling: "touch",
-        touchAction: isZoomed ? "none" : "manipulation", // ✅ 放大時禁用原生手勢，防止外層收到
+        // 放大時禁用瀏覽器原生手勢，防止外層收到
+        touchAction: isZoomed ? "none" : "manipulation",
       }}
       onClick={handleClick}
       onMouseDown={handleMouseDown}
@@ -274,17 +346,26 @@ export default function ImageViewer({
         <span className="text-sm">{image.likes?.length || 0}</span>
       </div>
 
-      {/* 圖片 */}
+      {/* 圖片（注意：onLoad 後計算 baseSize） */}
       <div
         className={`relative ${isZoomed ? "z-20" : ""}`}
-        style={{ transform: combinedTransform, transition: (isDragging || pinchingRef.current) ? "none" : "transform 0.25s ease" }}
+        style={{
+          transform: combinedTransform,
+          transition: (isDragging || pinchingRef.current) ? "none" : "transform 0.25s ease",
+        }}
       >
         <img
+          ref={imgRef}
           src={imageUrl}
           alt={image.title || "圖片"}
           className="rounded select-none object-contain"
           style={{ maxHeight: "calc(var(--app-vh, 1vh) * 100)", maxWidth: "100%" }}
           draggable={false}
+          onLoad={() => {
+            computeBaseSize();
+            // 載入後把位置夾限一次，避免初次縮放跳角落
+            setPosition((p) => getClampedPos(p, scale));
+          }}
         />
       </div>
 
