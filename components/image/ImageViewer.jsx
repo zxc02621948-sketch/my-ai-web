@@ -11,7 +11,7 @@ export default function ImageViewer({
   onToggleLike,
   showClose = false,
   onClose,
-  disableTapZoom = false, // 手機時帶 true：關閉單指/雙擊放大
+  disableTapZoom = false, // 手機用：關閉單指/雙擊放大
   onZoomChange,           // 回報縮放倍率，給外層停用滑頁
 }) {
   const containerRef = useRef(null);
@@ -22,9 +22,13 @@ export default function ImageViewer({
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 1.5;
 
-  // 放寬邊界餘量：避免放大後頭頂/鞋尖卡住
-  const SLACK_X = 48; // 左右餘量（畫面座標 px）
-  const SLACK_Y = 96; // 上下餘量（畫面座標 px）
+  // 固定像素的鬆綁（避免頭頂/鞋尖卡住）
+  const SLACK_X = 48; // px
+  const SLACK_Y = 96; // px
+
+  // ✅ 視窗比例的彈性超界（越放大，可移動越多）
+  const OVERSCROLL_RATIO_X = 0.12; // 12% 視窗寬
+  const OVERSCROLL_RATIO_Y = 0.12; // 12% 視窗高
 
   // ===== 狀態 =====
   const [scale, setScale] = useState(1); // 1..3
@@ -48,7 +52,7 @@ export default function ImageViewer({
   // 外部知會
   useEffect(() => { onZoomChange?.(scale); }, [scale, onZoomChange]);
 
-  // 小讚動畫
+  // 讚動畫
   const [clicked, setClicked] = useState(false);
   useEffect(() => {
     if (isLiked) {
@@ -96,7 +100,7 @@ export default function ImageViewer({
     baseSizeRef.current = { w: iw * s, h: ih * s };
   }, []);
 
-  // 在目前 scale 下，將平移夾限到可視範圍（加入 SLACK 鬆綁）
+  // ✅ 在目前 scale 下，將平移夾限到可視範圍（加入 SLACK + 視窗比例 Overscroll）
   const getClampedPos = useCallback((pos, sc) => {
     const container = containerRef.current;
     const { w: bw, h: bh } = baseSizeRef.current;
@@ -105,10 +109,25 @@ export default function ImageViewer({
     const cw = container.clientWidth;
     const ch = container.clientHeight;
 
-    // 理論可位移（pre-scale 座標）：(bw - cw/sc)/2
-    // 額外加入餘量：畫面 px 需除以 sc 才能回到 pre-scale 座標系
-    const maxX = Math.max(0, (bw - cw / sc) / 2 + SLACK_X / sc);
-    const maxY = Math.max(0, (bh - ch / sc) / 2 + SLACK_Y / sc);
+    // 內容放大後的實際尺寸（畫面座標）
+    const contentW = bw * sc;
+    const contentH = bh * sc;
+
+    // 內容超出的半寬/半高（畫面座標）
+    const halfOverflowX = Math.max(0, (contentW - cw) / 2);
+    const halfOverflowY = Math.max(0, (contentH - ch) / 2);
+
+    // 視窗比例超界 + 固定 SLACK（畫面座標）
+    const extraX = cw * OVERSCROLL_RATIO_X + SLACK_X;
+    const extraY = ch * OVERSCROLL_RATIO_Y + SLACK_Y;
+
+    // 允許的最大位移（畫面座標）
+    const maxScreenX = halfOverflowX + extraX;
+    const maxScreenY = halfOverflowY + extraY;
+
+    // 換回 pre-scale 座標
+    const maxX = maxScreenX / sc;
+    const maxY = maxScreenY / sc;
 
     return { x: clamp(pos.x, -maxX, maxX), y: clamp(pos.y, -maxY, maxY) };
   }, []);
@@ -326,7 +345,7 @@ export default function ImageViewer({
         <button
           onClick={(e) => { e.stopPropagation(); onClose?.(); }}
           aria-label="關閉"
-          className="absolute right-3 top-3 z-30 rounded-full bg-black/60 p-2 text-white backdrop-blur hover:bg黑/70 active:scale-95"
+          className="absolute right-3 top-3 z-30 rounded-full bg-black/60 p-2 text-white backdrop-blur hover:bg-black/70 active:scale-95"
         >
           <X size={20} />
         </button>
@@ -366,7 +385,7 @@ export default function ImageViewer({
           draggable={false}
           onLoad={() => {
             computeBaseSize();
-            setPosition((p) => getClampedPos(p, scale)); // 載入後夾限一次，避免首次縮放跳角落
+            setPosition((p) => getClampedPos(p, scale)); // 載入後夾限，避免首次縮放跳角落
           }}
         />
       </div>
