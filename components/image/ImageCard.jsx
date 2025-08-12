@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
+import NewBadge from "@/components/image/NewBadge";
 
 // ⬇️ 新增：從 ObjectId 推回建立時間（備援）
 function getCreatedMsFromObjectId(id) {
@@ -106,9 +107,7 @@ export default function ImageCard({
       {/* ⬇️ NEW 徽章（左上角） */}
       {isNew && (
         <div className="absolute left-2 top-2 z-20 pointer-events-none">
-          <span className="px-2 py-1 text-[10px] font-bold rounded-md bg-emerald-500/90 text-white shadow">
-            NEW
-          </span>
+          <NewBadge animated /> {/* 這裡會用彩色流動版本 */}
         </div>
       )}
 

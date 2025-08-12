@@ -35,10 +35,13 @@ export default function MobileImageSheet({
   const panelRef = useRef(null);
   const animatingRef = useRef(false);
 
+  // 這次手勢是否從「不該觸發換圖」的元素開始（例如愛心/關閉/更多）
+  const skipNavRef = useRef(false);
+
   // 縮放/多指偵測
-  const pinchingRef = useRef(false);     // 此次手勢是否有多指
-  const zoomedRef = useRef(false);       // 由 ImageViewer 通知是否 scale>1
-  const bypassSwipeRef = useRef(false);  // 此次手勢是否整段不處理滑頁
+  const pinchingRef = useRef(false);
+  const zoomedRef = useRef(false);
+  const bypassSwipeRef = useRef(false);
 
   // 門檻
   const H_RATIO_X = 0.22;
@@ -50,9 +53,9 @@ export default function MobileImageSheet({
   const LOCK_DIFF = 14;
 
   // 輕點判定 & 排除區
-  const TAP_DIST_MAX = 10;      // 輕點最大位移（px）
-  const TAP_TIME_MAX = 250;     // 輕點最大時間（ms）
-  const EXCLUDE_CLOSE_PX = 56;  // 右上角「X」排除方塊
+  const TAP_DIST_MAX = 10;
+  const TAP_TIME_MAX = 250;
+  const EXCLUDE_CLOSE_PX = 56;
 
   const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
   function animateTo({ targetX = dragX, targetY = dragY, duration = 240, onDone }) {
@@ -84,7 +87,14 @@ export default function MobileImageSheet({
   function onTouchStart(e) {
     if (animatingRef.current) return;
 
-    // 只要「此時已放大」或「一開始就是多指」，整段手勢交給 ImageViewer，不做滑頁
+    // ✅ 新增：若起點在 data-stop-nav（愛心/關閉…）之內，整段手勢都不觸發換圖
+    if (e.target.closest("[data-stop-nav]")) {
+      skipNavRef.current = true;
+      return;
+    }
+    skipNavRef.current = false;
+
+    // 縮放/多指 → 交給 ImageViewer
     pinchingRef.current = e.touches.length > 1;
     bypassSwipeRef.current = pinchingRef.current || zoomedRef.current;
 
@@ -95,9 +105,12 @@ export default function MobileImageSheet({
   }
 
   function onTouchMove(e) {
+    // ✅ 若這次手勢是從 data-stop-nav 開始，完全不處理
+    if (skipNavRef.current) return;
+
     if (!isDragging || animatingRef.current) return;
 
-    // ✅ 進行中從單指變雙指：立即切換為 bypass，清除位移
+    // 進行中從單指變雙指：立即改為 bypass
     if (e.touches && e.touches.length > 1) {
       pinchingRef.current = true;
       bypassSwipeRef.current = true;
@@ -107,7 +120,6 @@ export default function MobileImageSheet({
       return;
     }
 
-    // 縮放/多指時，不接管左右滑，交給 ImageViewer 處理
     if (bypassSwipeRef.current || pinchingRef.current || zoomedRef.current) return;
 
     const width = panelRef.current?.clientWidth || window.innerWidth;
@@ -116,7 +128,6 @@ export default function MobileImageSheet({
     let dx = t.clientX - startRef.current.x;
     const dy = t.clientY - startRef.current.y;
 
-    // 方向鎖
     if (startRef.current.locked === null) {
       if (Math.abs(dx) > Math.abs(dy) + LOCK_DIFF) startRef.current.locked = "x";
       else if (Math.abs(dy) > Math.abs(dx) + LOCK_DIFF) startRef.current.locked = "y";
@@ -143,12 +154,17 @@ export default function MobileImageSheet({
   }
 
   function onTouchEnd() {
+    // ✅ 若這次手勢是從 data-stop-nav 開始，結束時清旗標並離開
+    if (skipNavRef.current) {
+      skipNavRef.current = false;
+      return;
+    }
+
     if (!isDragging || animatingRef.current) return;
 
     const width = panelRef.current?.clientWidth || window.innerWidth;
     const height = panelRef.current?.clientHeight || window.innerHeight;
 
-    // 若此手勢被標記為 bypass（縮放/多指/已放大），直接重置，不做任何切頁
     if (bypassSwipeRef.current) {
       bypassSwipeRef.current = false;
       pinchingRef.current = false;
@@ -173,7 +189,6 @@ export default function MobileImageSheet({
 
     const locked = startRef.current.locked;
 
-    // 右上角 X 排除：若起點在右上角 EXCLUDE_CLOSE_PX 內，完全不觸發翻頁
     const panelRect = panelRef.current?.getBoundingClientRect();
     const startX = startRef.current.x;
     const startY = startRef.current.y;
@@ -181,7 +196,6 @@ export default function MobileImageSheet({
     const localY = panelRect ? startY - panelRect.top : startY;
     const inCloseRect = (localX >= width - EXCLUDE_CLOSE_PX) && (localY <= EXCLUDE_CLOSE_PX);
 
-    // ✅ 輕點：距離小、時間短 → 左/右 1/3 翻頁（排除 X 區；且必須未放大）
     if (!zoomedRef.current && !inCloseRect && absDx <= TAP_DIST_MAX && absDy <= TAP_DIST_MAX && elapsedMs <= TAP_TIME_MAX) {
       const leftZone = width / 3;
       const rightZone = (2 * width) / 3;
@@ -203,14 +217,12 @@ export default function MobileImageSheet({
 
     if (locked === "x") {
       if (zoomedRef.current) {
-        // 已放大 → 禁止左右切換，直接回彈
         animateTo({
           targetX: 0, targetY: 0, duration: 160,
           onDone: () => { setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null; }
         });
         return;
       }
-
       if (needSwitchX && dragX < 0 && nextImage) {
         animateTo({
           targetX: -width, targetY: 0, duration: 260,
@@ -229,7 +241,6 @@ export default function MobileImageSheet({
         });
         return;
       }
-      // 回彈
       animateTo({ targetX: 0, targetY: 0, duration: 190, onDone: () => {
         setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
       }});
@@ -261,7 +272,6 @@ export default function MobileImageSheet({
       return;
     }
 
-    // 沒鎖成功：回彈
     animateTo({ targetX: 0, targetY: 0, duration: 160, onDone: () => {
       setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
     }});
@@ -290,7 +300,6 @@ export default function MobileImageSheet({
     : "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
   const displayName = image?.user?.username || "未命名用戶";
 
-  // peek 陰影
   const panelW = panelRef.current?.clientWidth || (typeof window !== "undefined" ? window.innerWidth : 375);
   const prevPeek = Math.max(0, Math.min(1, dragX > 0 ? dragX / panelW : 0));
   const nextPeek = Math.max(0, Math.min(1, dragX < 0 ? -dragX / panelW : 0));
@@ -308,7 +317,6 @@ export default function MobileImageSheet({
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        {/* Overlay（明暗在這個元件內控制，父層固定 0.6） */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{ backgroundColor: `rgba(0,0,0,${overlayDim})` }}
@@ -356,9 +364,7 @@ export default function MobileImageSheet({
                 onToggleLike={onToggleLike}
                 showClose
                 onClose={onClose}
-                // 手機只允許雙指捏合放大
                 disableTapZoom
-                // 由 ImageViewer 回報縮放倍率
                 onZoomChange={(scale) => { zoomedRef.current = (scale || 1) > 1.001; }}
               />
             ) : null}
@@ -382,8 +388,7 @@ export default function MobileImageSheet({
           )}
         </div>
 
-        {/* 手勢提示 */}
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80 text-center px-3 py-1 rounded-full bg-black/30 md:hidden">
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80 text-center px-3 py-1 rounded-full bg-black/30 md:hidden" data-stop-nav>
           ← 上一張　·　→ 下一張　·　↓ 關閉　·　↑ 看資訊　·　點左右可翻頁
         </div>
       </section>
@@ -414,7 +419,7 @@ export default function MobileImageSheet({
               image={image}
               currentUser={currentUser}
               onClose={onClose}
-              onDelete={/* handled in parent */ undefined}
+              onDelete={undefined}
               fileUrl={fileUrlOf(image)}
               canEdit={currentUser?._id && image?.user && (currentUser._id === (image.user._id || image.user))}
               onLikeUpdate={onLikeUpdate}
