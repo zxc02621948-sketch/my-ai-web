@@ -142,12 +142,51 @@ export default function ImageViewer({
     if (isZoomed || pinchingRef.current || isDragging) e.stopPropagation();
 
     const ts = getTouches(e);
+
+    // 結束 pinch
     if (pinchingRef.current && ts.length < 2) {
       pinchingRef.current = false;
-      if (scale <= 1.02) { setScale(1); setPosition({ x: 0, y: 0 }); }
+      if (scale <= 1.02) {
+        setScale(1);
+        setPosition({ x: 0, y: 0 });
+      }
     }
+
+    // 結束拖曳
     if (isDragging && ts.length === 0) {
       endDrag();
+    }
+  };
+
+    // 雙指縮放中
+    if (pinchingRef.current && ts.length >= 2) {
+      e.preventDefault(); 
+      e.stopPropagation();
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const d = dist2(ts[0], ts[1]);
+      const next = clamp(
+        (pinchStart.current.scale0 * d) / Math.max(pinchStart.current.dist, 1),
+        ZOOM_MIN,
+        ZOOM_MAX
+      );
+      // 以「當下兩指中心」當樞紐（手指移動時中心也跟著動）
+      const focal = centerOf(ts[0], ts[1], rect);
+      const nextPos = zoomAround(
+        focal, 
+        next, 
+        pinchStart.current.scale0, 
+        pinchStart.current.pos0
+      );
+
+      setScale(next);
+      setPosition(nextPos);
+      return;
+    }
+
+    if (isDragging && ts.length === 1) {
+      e.stopPropagation();
+      moveDrag({ x: ts[0].clientX, y: ts[0].clientY });
     }
   };
 
