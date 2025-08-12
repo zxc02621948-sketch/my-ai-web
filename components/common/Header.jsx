@@ -46,6 +46,26 @@ export default function Header({
   const searchBoxRefDesktop = useRef(null);
   const searchBoxRefMobile = useRef(null);
 
+  // ====== 自動墊高（避免內容被 fixed header 壓到）======
+  const headerRef = useRef(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (!headerRef.current) return;
+      const h = headerRef.current.getBoundingClientRect().height;
+      setHeaderHeight(Math.ceil(h));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (headerRef.current) ro.observe(headerRef.current);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+  // ======================================================
+
   // 篩選面板動態位置 + 是否定位完成（避免左上角閃一下）
   const [panelStyle, setPanelStyle] = useState({ top: 0, left: 0, width: 320 });
   const [panelReady, setPanelReady] = useState(false);
@@ -137,7 +157,7 @@ export default function Header({
     setShowDropdown(list.length > 0);
   }, [searchQuery, suggestions]);
 
-  // 面板動態定位（繪製前先算好）：開啟/視窗大小重算
+  // 面板動態定位（開啟/視窗大小重算）
   useLayoutEffect(() => {
     if (!filterMenuOpen) return;
 
@@ -186,9 +206,12 @@ export default function Header({
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 bg-zinc-900 border-b border-zinc-700">
+      <header
+        ref={headerRef}
+        className="sticky top-0 left-0 right-0 z-50 bg-zinc-900 border-b border-zinc-700"
+      >
         {/* 第一列：Logo / 篩選 / 桌機搜尋 / 右側功能 */}
-        <div className="px-3 md:px-4 py-2 md:py-3 flex items-center justify-between gap-3">
+        <div className="px-3 md:px-4 py-1 md:py-2 flex items-center justify-between gap-3">
           {/* 左：Logo */}
           <Link
             href="/"
@@ -216,20 +239,23 @@ export default function Header({
           {/* 中：篩選 + 桌機搜尋（手機隱藏） */}
           <div className="flex-1 min-w-0 flex items-center justify-start w-full">
             <div className="flex items-center gap-2 w-full">
-              {/* 篩選 */}
-              <div className="w-10 md:w-[80px] shrink-0">
+              {/* 篩選（手機也顯示文字，顯眼） */}
+              <div className="w-[92px] md:w-[110px] shrink-0">
                 <button
                   ref={filterButtonRef}
                   onClick={() => setFilterMenuOpen((prev) => !prev)}
-                  className="w-full px-2 py-2 md:px-4 rounded text-white text-base font-medium transition duration-200 bg-blue-600 hover:bg-blue-700"
+                  className="w-full px-3 py-2 md:px-4 rounded-lg text-white text-sm md:text-base font-semibold transition
+                             bg-blue-600 hover:bg-blue-700 border border-blue-400/40 shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
                   title="篩選"
                 >
-                  <span className="md:hidden" aria-hidden>⚙︎</span>
-                  <span className="hidden md:inline">篩選</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Wrench className="w-4 h-4" />
+                    <span>篩選</span>
+                  </span>
                 </button>
               </div>
 
-              {/* 桌機搜尋列（手機隱藏，避免擠爆） */}
+              {/* 桌機搜尋列（手機隱藏） */}
               <div className="relative w-full min-w-0 hidden md:block" ref={searchBoxRefDesktop}>
                 <form
                   onSubmit={handleSubmit}
@@ -386,7 +412,7 @@ export default function Header({
 
                   {userMenuOpen && (
                     <div
-                      className="absolute right-0 mt-2 w-48 bg-zinc-800 text-white rounded shadow-md py-1 z-50"
+                      className="absolute right-0 mt-2 w-48 bg-zinc-800 text白 rounded shadow-md py-1 z-50"
                       role="menu"
                     >
                       {currentUser?.username ? (
@@ -400,17 +426,7 @@ export default function Header({
                             我的頁面
                           </Link>
 
-                          {/* 📱 手機：上傳入口（登入狀態） */}
-                          <button
-                            role="menuitem"
-                            className="md:hidden block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
-                            onClick={() => {
-                              setUserMenuOpen(false);
-                              onUploadClick?.();
-                            }}
-                          >
-                            📤 上傳（Beta）
-                          </button>
+                          {/* ⛳ 移除：手機版選單中的上傳入口 */}
 
                           <button
                             onClick={async () => {
@@ -427,17 +443,7 @@ export default function Header({
                         </>
                       ) : (
                         <>
-                          {/* 📱 手機：上傳入口（未登入 → 先開登入） */}
-                          <button
-                            role="menuitem"
-                            className="md:hidden block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
-                            onClick={() => {
-                              setUserMenuOpen(false);
-                              onLoginOpen?.();
-                            }}
-                          >
-                            📤 上傳（需登入）
-                          </button>
+                          {/* ⛳ 移除：未登入時「上傳（需登入）」的手機選單項目 */}
 
                           <button
                             onClick={() => {
@@ -469,8 +475,8 @@ export default function Header({
           </div>
         </div>
 
-        {/* 第二列：📱 手機搜尋專用（佔滿一欄） */}
-        <div className="md:hidden px-3 pb-3 pt-2 border-t border-zinc-700" ref={searchBoxRefMobile}>
+        {/* 第二列：📱 手機搜尋專用（佔滿一欄，壓縮上下距） */}
+        <div className="md:hidden px-3 pb-1.5 pt-1 border-t border-zinc-700" ref={searchBoxRefMobile}>
           <form
             onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }}
             className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
@@ -505,6 +511,57 @@ export default function Header({
               ))}
             </ul>
           )}
+        </div>
+
+        {/* 第三列：📱 手機常用功能快捷鍵（縮小間距） */}
+        <div className="md:hidden px-3 pb-2">
+          <div className="flex gap-2 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+            <Link
+              href="/models"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
+                         bg-gradient-to-r from-emerald-400 to-cyan-500 text-white shrink-0"
+              title="獲取模型"
+            >
+              <Package2 className="w-4 h-4" />
+              <span>獲取模型</span>
+            </Link>
+
+            <Link
+              href="/install-guide"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
+                         bg-gradient-to-r from-amber-400 to-orange-500 text-white shrink-0"
+              title="安裝教學"
+            >
+              <Wrench className="w-4 h-4" />
+              <span>安裝教學</span>
+            </Link>
+
+            <Link
+              href="/qa"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
+                         bg-gradient-to-r from-indigo-400 to-fuchsia-500 text-white shrink-0"
+              title="新手 Q&A"
+            >
+              <CircleHelp className="w-4 h-4" />
+              <span>新手 Q&A</span>
+            </Link>
+
+            {/* 手機：上傳快速鍵（保留） */}
+            <button
+              onClick={() => {
+                if (!currentUser) {
+                  onLoginOpen?.();
+                  return;
+                }
+                onUploadClick?.();
+              }}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
+                         bg-green-600 text-white hover:bg-green-700 shrink-0"
+              title="上傳圖片"
+            >
+              ⬆️ <span>上傳</span>
+            </button>
+          </div>
         </div>
       </header>
 

@@ -289,7 +289,7 @@ export default function HomePage() {
       : undefined;
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white p-4">
+    <main className="min-h-screen bg-zinc-950 text-white px-4 pb-4 pt-0 -mt-2 md:-mt-17">
       {currentUser?.isAdmin && (
         <div className="mb-4">
           <AdminPanel />
