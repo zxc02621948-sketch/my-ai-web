@@ -1,22 +1,25 @@
 "use client";
 
 import { Dialog } from "@headlessui/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
-// 左側大圖（桌機用）
 import ImageViewer from "./ImageViewer";
-
-// 拆分後的子元件
 import MobileImageSheet from "@/components/image/MobileImageSheet";
 import DesktopRightPane from "@/components/image/DesktopRightPane";
+import axios from "axios";
 
-/** 工具：取得作者 id（可能是物件或字串） */
 const getOwnerId = (img) => {
   if (!img) return null;
   const u = img.user ?? img.userId;
   return typeof u === "string" ? u : u?._id ?? null;
 };
+
+const inFollowing = (list, uid) =>
+  Array.isArray(list) &&
+  list.some((f) => {
+    const id = typeof f === "object" && f !== null ? f.userId : f;
+    return String(id) === String(uid);
+  });
 
 export default function ImageModal({
   imageId,
@@ -26,21 +29,18 @@ export default function ImageModal({
   onClose,
   currentUser,
   onLikeUpdate,
-  onNavigate, // "prev" | "next"
+  onNavigate,
+  onFollowChange,     // 父層回寫 currentUser.following
+  followOverrides,    // Map: userId -> boolean（前端優先生效）
 }) {
   const router = useRouter();
 
-  // 主要狀態
   const [image, setImage] = useState(imageData || null);
   const [loading, setLoading] = useState(!imageData);
   const [error, setError] = useState(null);
-
-  // 追蹤狀態
   const [isFollowing, setIsFollowing] = useState(false);
 
-  // =========================
-  // 資料載入：若只有 id 就抓單張
-  // =========================
+  // 載入圖片（若只有 id）
   useEffect(() => {
     if (imageData?._id) {
       setImage(imageData);
@@ -54,7 +54,7 @@ export default function ImageModal({
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/images/${imageId}`);
+        const res = await fetch(`/api/images/${imageId}`, { cache: "no-store" });
         const data = await res.json();
         if (!res.ok) throw new Error("找不到該圖片，可能已被刪除");
         if (alive) {
@@ -70,7 +70,7 @@ export default function ImageModal({
     return () => { alive = false; };
   }, [imageId, imageData]);
 
-  // 若 user 是字串，補抓作者物件
+  // 若 user 是字串 → 補抓作者物件
   useEffect(() => {
     if (!image) return;
     const u = image.user ?? image.userId;
@@ -81,7 +81,7 @@ export default function ImageModal({
       try {
         let userObj = null;
         try {
-          const r = await fetch(`/api/user/${u}`);
+          const r = await fetch(`/api/user/${u}`, { cache: "no-store" });
           if (r.ok) {
             const data = await r.json();
             userObj = data?.user || data?.data || null;
@@ -89,7 +89,7 @@ export default function ImageModal({
         } catch {}
         if (!userObj && image?._id) {
           try {
-            const r2 = await fetch(`/api/images/${image._id}`);
+            const r2 = await fetch(`/api/images/${image._id}`, { cache: "no-store" });
             if (r2.ok) {
               const d2 = await r2.json();
               userObj = d2?.image?.user || null;
@@ -104,30 +104,38 @@ export default function ImageModal({
     return () => { alive = false; };
   }, [image]);
 
-  // 是否已追蹤
+  // 根據 followOverrides / currentUser.following 計算是否已追蹤（覆蓋優先）
   const ownerId = getOwnerId(image);
   useEffect(() => {
-    if (!currentUser || !ownerId) return;
-    setIsFollowing(!!currentUser.following?.includes(ownerId));
-  }, [currentUser, ownerId]);
+    if (!ownerId) return;
+    const ov = followOverrides?.get?.(String(ownerId));
+    if (typeof ov === "boolean") {
+      setIsFollowing(ov);
+    } else {
+      setIsFollowing(inFollowing(currentUser?.following, ownerId));
+    }
+  }, [currentUser, ownerId, followOverrides]);
 
-  // 切換追蹤（交由後端 API；這裡只調整本地狀態）
+  // ✅ 追蹤切換（沿用你舊版：axios + userIdToFollow / userIdToUnfollow）
   const handleFollowToggle = async () => {
     if (!ownerId) return;
+    const next = !isFollowing;
+
+    // 樂觀先亮
+    setIsFollowing(next);
+
     try {
-      // 你的後端已有 /api/follow /api/unfollow，這裡只做 optimistic UI
-      setIsFollowing((v) => !v);
-      const method = isFollowing ? "DELETE" : "POST";
-      await fetch("/api/follow", {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          isFollowing ? { userIdToUnfollow: ownerId } : { userIdToFollow: ownerId }
-        ),
-      });
-    } catch {
-      // 若失敗就還原狀態
-      setIsFollowing((v) => !v);
+      if (next) {
+        await axios.post("/api/follow", { userIdToFollow: ownerId });
+      } else {
+        await axios.delete("/api/follow", { data: { userIdToUnfollow: ownerId } });
+      }
+      // 成功：通知父層同步 currentUser.following + 覆蓋表
+      onFollowChange?.(String(ownerId), next);
+    } catch (e) {
+      // 失敗還原
+      setIsFollowing(!next);
+      console.error("❌ 追蹤切換失敗", e);
     }
   };
 
@@ -135,7 +143,7 @@ export default function ImageModal({
   const handleUserClick = () => {
     if (ownerId) {
       router.push(`/user/${ownerId}`);
-      handleBackdropClick(); // 同一路關閉管道（含 blur）
+      handleBackdropClick();
     }
   };
 
@@ -174,7 +182,8 @@ export default function ImageModal({
       });
       if (res.ok) {
         const data = await res.json();
-        const updated = { ...image, likes: data.likes };
+        const likesArr = Array.isArray(data.likes) ? data.likes : (image.likes || []);
+        const updated = { ...image, likes: likesArr, likesCount: likesArr.length };
         setImage(updated);
         onLikeUpdate?.(updated);
       }
@@ -183,9 +192,6 @@ export default function ImageModal({
     }
   };
 
-  // ==============
-  // 關閉路徑統一：先 blur 焦點，避免 Dialog 還焦到縮圖導致跳動
-  // ==============
   function handleBackdropClick() {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -193,9 +199,7 @@ export default function ImageModal({
     onClose?.();
   }
 
-  // ==============
-  // Body 捲動鎖定＋還原位置（避免關閉後跳到頂）
-  // ==============
+  // Body 鎖定 + 關閉還原 scroll
   useEffect(() => {
     const body = document.body;
     const prev = {
@@ -216,12 +220,11 @@ export default function ImageModal({
       body.style.top = prev.top;
       body.style.width = prev.width;
       body.style.overflow = prev.overflow;
-      // 還原捲動位置到開啟前
       window.scrollTo(0, scrollY);
     };
   }, []);
 
-  // 桌機鍵盤 ←/→/Esc
+  // 桌機快捷鍵
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") {
@@ -238,25 +241,15 @@ export default function ImageModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onNavigate]); // 不把 onClose 放進依賴，避免 handler 變動
+  }, [onNavigate]);
 
   const canEdit =
     !!currentUser?._id && !!ownerId && currentUser._id === ownerId;
 
   return (
     <Dialog open={!!(imageId || imageData)} onClose={handleBackdropClick} className="relative z-[99999]">
-      {/* Overlay（固定 0.6；手機拖曳暗度在子元件內處理視覺即可） */}
-      <div
-        className="fixed inset-0 backdrop-blur-sm"
-        aria-hidden="true"
-        style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
-      />
-
-      {/* Wrapper（點外面關閉） */}
-      <div
-        className="fixed inset-0 flex items-center justify-center p-0 md:p-4"
-        onClick={handleBackdropClick}
-      >
+      <div className="fixed inset-0 backdrop-blur-sm" aria-hidden="true" style={{ backgroundColor: "rgba(0,0,0,0.6)" }} />
+      <div className="fixed inset-0 flex items-center justify-center p-0 md:p-4" onClick={handleBackdropClick}>
         <Dialog.Panel
           onClick={(e) => e.stopPropagation()}
           className="
@@ -275,7 +268,6 @@ export default function ImageModal({
             paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
           }}
         >
-          {/* ====== Mobile：滑動＋資訊留言（子元件） ====== */}
           <MobileImageSheet
             image={image}
             prevImage={prevImage}
@@ -292,7 +284,6 @@ export default function ImageModal({
             onNavigate={onNavigate}
           />
 
-          {/* ====== Desktop 左：大圖（保留左右按鈕與 Esc） ====== */}
           <div className="hidden md:flex md:flex-row w-full">
             <div className="flex-1 bg-black relative p-4 flex items-center justify-center">
               {loading ? (
@@ -309,48 +300,29 @@ export default function ImageModal({
                 />
               ) : null}
 
-              {/* ← 左一張（桌機） */}
               <button
                 type="button"
                 aria-label="上一張"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onNavigate ? onNavigate("prev") : onClose?.();
-                }}
+                onClick={(e) => { e.stopPropagation(); onNavigate ? onNavigate("prev") : onClose?.(); }}
                 className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur text-white text-2xl"
-              >
-                ←
-              </button>
+              >←</button>
 
-              {/* → 右一張（桌機） */}
               <button
                 type="button"
                 aria-label="下一張"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onNavigate ? onNavigate("next") : onClose?.();
-                }}
+                onClick={(e) => { e.stopPropagation(); onNavigate ? onNavigate("next") : onClose?.(); }}
                 className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur text-white text-2xl"
-              >
-                →
-              </button>
+              >→</button>
 
-              {/* Esc（桌機） */}
               <button
                 type="button"
                 aria-label="關閉"
                 title="Esc 關閉"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleBackdropClick();
-                }}
+                onClick={(e) => { e.stopPropagation(); handleBackdropClick(); }}
                 className="hidden md:flex absolute top-3 right-3 items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur text-white text-xl"
-              >
-                ✕
-              </button>
+              >✕</button>
             </div>
 
-            {/* ====== Desktop 右：作者頭像列 + 資訊留言（子元件） ====== */}
             <DesktopRightPane
               image={image}
               currentUser={currentUser}

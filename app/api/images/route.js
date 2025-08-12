@@ -145,7 +145,11 @@ export async function GET(req) {
     if (sort === "mostlikes") {
       const docs = await Image.aggregate([
         { $match: match },
-        { $project: { ...projectBase, likesCount: { $ifNull: ["$likesCount", { $size: { $ifNull: ["$likes", []] } }] } } },
+        { $project: { 
+            ...projectBase,
+            likesCount: { $size: { $ifNull: ["$likes", []] } }  // ✅ 永遠以 likes 陣列計算
+          } 
+        },
         ...lookupUser,
         ...(searchMatch ? [{ $match: searchMatch }] : []),
         { $sort: { likesCount: -1, createdAt: -1 } },

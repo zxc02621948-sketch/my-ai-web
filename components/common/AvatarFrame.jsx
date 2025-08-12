@@ -1,18 +1,5 @@
-"use client";
+import Link from "next/link";
 
-/**
- * AvatarFrame - 可重用頭相框
- *
- * Props
- * - src: 圖片 URL
- * - size: 邊長（px），預設 48
- * - alt: 圖片替代文字
- * - onClick: 點擊事件
- * - className: 外層額外樣式
- * - ring: 是否顯示漸層外環（預設 true）
- * - ringFrom, ringVia, ringTo: 自定義漸層色
- * - status: "online" | "offline" | undefined（右下狀態點）
- */
 export default function AvatarFrame({
   src,
   size = 48,
@@ -24,16 +11,19 @@ export default function AvatarFrame({
   ringVia = "#A78BFA",
   ringTo = "#FF80BF",
   status,
+  userId, // 使用者 ID 或 username
 }) {
   const fallback =
     "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
 
-  return (
+  const clickable = !!userId || !!onClick; // 判斷是否可點
+
+  const avatar = (
     <div
       onClick={onClick}
-      className={`relative shrink-0 ${className}`}
+      className={`relative shrink-0 ${clickable ? "cursor-pointer" : ""} ${className}`}
       style={{ width: size, height: size }}
-      role={onClick ? "button" : undefined}
+      role={clickable ? "button" : undefined}
     >
       <div
         className={`rounded-full ${ring ? "p-[2px]" : ""}`}
@@ -70,5 +60,13 @@ export default function AvatarFrame({
         />
       )}
     </div>
+  );
+
+  return userId ? (
+    <Link href={`/user/${userId}`} passHref>
+      {avatar}
+    </Link>
+  ) : (
+    avatar
   );
 }
