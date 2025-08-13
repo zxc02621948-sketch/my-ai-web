@@ -246,7 +246,7 @@ export default function UserProfilePage() {
 
   return (
     <>
-      <main className="min-h-screen bg-zinc-950 text-white p-4 mt![80px]">
+      <main className="pt-[var(--header-h,64px)]">
         <UserHeader
           userData={userData}
           currentUser={currentUser}
