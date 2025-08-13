@@ -159,6 +159,29 @@ export default function HomePage() {
     return v;
   };
 
+  // ⛑ 保險絲：在啟動抓下一頁的短時間內，如果視窗被硬拉到頂，就把位置拉回來
+  const antiTopJumpRef = useRef({ active: false, y: 0, until: 0 });
+  useEffect(() => {
+    const onScroll = () => {
+      const g = antiTopJumpRef.current;
+      if (!g.active) return;
+      const nowY = window.scrollY || window.pageYOffset || 0;
+      if (nowY < g.y - 200 && performance.now() < g.until) {
+        window.scrollTo({ top: g.y, behavior: "auto" });
+        g.active = false;
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  function armAntiTopJumpGuard(ms = 1500) {
+    antiTopJumpRef.current = {
+      active: true,
+      y: window.scrollY || window.pageYOffset || 0,
+      until: performance.now() + ms,
+    };
+  }
+
   const fetchImages = async (pageToFetch = 1, q = "", categories = [], ratings = []) => {
     setIsLoading(true);
     try {
@@ -322,6 +345,8 @@ export default function HomePage() {
       (entries) => {
         if (entries[0].isIntersecting) {
           const q = (searchParams.get("search") || "").trim();
+          // ⛑ 啟動防跳頂守門員：若未知程式把視窗拉到頂，立刻復位
+          armAntiTopJumpGuard(1500);
           fetchImages(page + 1, q, selectedCategories, selectedRatings);
         }
       },
@@ -360,8 +385,10 @@ export default function HomePage() {
     setSelectedImage(enriched);
     if (enriched?._id) reportClick(enriched._id);
 
+    // 走到尾端會預抓下一頁 → 同樣啟動保險絲
     if (dir === "next" && nextIdx >= images.length - 2 && hasMore && !isLoading) {
       const q = (searchParams.get("search") || "").trim();
+      armAntiTopJumpGuard(1500);
       fetchImages(page + 1, q, selectedCategories, selectedRatings);
     }
   };
