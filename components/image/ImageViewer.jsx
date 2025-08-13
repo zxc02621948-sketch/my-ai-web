@@ -17,6 +17,41 @@ export default function ImageViewer({
   const containerRef = useRef(null);
   const imgRef = useRef(null);
 
+  // ✅【新增】IME 與輸入時，擋掉左右鍵往外冒泡（避免觸發全域換圖）
+  useEffect(() => {
+    const isTypingElement = (el) => {
+      if (!el) return false;
+      const tag = el.tagName?.toUpperCase?.();
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (el.isContentEditable) return true;
+      const role = el.getAttribute?.("role");
+      if (role === "textbox" || role === "combobox" || role === "searchbox") return true;
+      return false;
+    };
+
+    const onKeyDownCapture = (e) => {
+      const key = e.key;
+      if (key !== "ArrowLeft" && key !== "ArrowRight") return;
+
+      // 有修飾鍵就不處理（避免干擾系統/瀏覽器快捷鍵）
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+
+      // 焦點在輸入元件 or 使用 IME 組字（229/Process/isComposing）
+      const typing = isTypingElement(e.target) || isTypingElement(document.activeElement);
+      const composing = e.isComposing || e.key === "Process" || e.keyCode === 229;
+
+      if (typing || composing) {
+        // 只阻止冒泡，讓輸入框保有左右移動游標的預設行為
+        e.stopPropagation();
+        // 不要 preventDefault()
+      }
+    };
+
+    // 用 capture 階段先攔截，避免事件傳到全域換圖的 listener
+    window.addEventListener("keydown", onKeyDownCapture, true);
+    return () => window.removeEventListener("keydown", onKeyDownCapture, true);
+  }, []);
+
   const ZOOM_MIN = 1;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 1.5;
