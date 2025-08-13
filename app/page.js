@@ -105,7 +105,6 @@ export default function HomePage() {
     if (isReload) {
       const prev = history.scrollRestoration;
       try { history.scrollRestoration = "manual"; } catch {}
-
       requestAnimationFrame(() => {
         window.scrollTo({ top: 0, left: 0, behavior: "auto" });
         try { history.scrollRestoration = prev || "auto"; } catch {}
@@ -159,28 +158,53 @@ export default function HomePage() {
     return v;
   };
 
-  // ⛑ 保險絲：在啟動抓下一頁的短時間內，如果視窗被硬拉到頂，就把位置拉回來
-  const antiTopJumpRef = useRef({ active: false, y: 0, until: 0 });
-  useEffect(() => {
-    const onScroll = () => {
-      const g = antiTopJumpRef.current;
+  // ============ ⛑ 防跳頂守門員 2.0 =============
+  const antiTopJumpRef = useRef({
+    active: false,
+    y: 0,
+    until: 0,
+    rafId: 0,
+  });
+
+  // rAF 監看：在守護期內若被硬拉到頂，立刻復位；若使用者往下滑就更新基準
+  const startAntiTopLoop = () => {
+    const g = antiTopJumpRef.current;
+    cancelAnimationFrame(g.rafId || 0);
+    const tick = () => {
       if (!g.active) return;
-      const nowY = window.scrollY || window.pageYOffset || 0;
-      if (nowY < g.y - 200 && performance.now() < g.until) {
-        window.scrollTo({ top: g.y, behavior: "auto" });
+      const now = performance.now();
+      if (now > g.until) {
         g.active = false;
+        return;
       }
+      const cur = window.scrollY || window.pageYOffset || 0;
+      // 被拉到更上面（至少 120px）→ 立刻拉回
+      if (cur < g.y - 120) {
+        window.scrollTo({ top: g.y, behavior: "auto" });
+      } else {
+        // 使用者繼續往下滑：同步新的基準
+        if (cur > g.y) g.y = cur;
+      }
+      g.rafId = requestAnimationFrame(tick);
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    g.rafId = requestAnimationFrame(tick);
+  };
+
   function armAntiTopJumpGuard(ms = 1500) {
     antiTopJumpRef.current = {
       active: true,
       y: window.scrollY || window.pageYOffset || 0,
       until: performance.now() + ms,
+      rafId: 0,
     };
+    startAntiTopLoop();
   }
+
+  useEffect(() => {
+    // 離開頁面時停止 loop
+    return () => cancelAnimationFrame(antiTopJumpRef.current.rafId || 0);
+  }, []);
+  // ==============================================
 
   const fetchImages = async (pageToFetch = 1, q = "", categories = [], ratings = []) => {
     setIsLoading(true);
@@ -335,7 +359,7 @@ export default function HomePage() {
     }
   }, [searchParams, sort, selectedCategories, selectedRatings]);
 
-  // 無限滾動（提早觸發，不要真的撞到底）
+  // 無限滾動（提早觸發，不要真的撞到底）＋ 在抓下一頁前啟動守門員
   useEffect(() => {
     if (!hasMore || isLoading || !fetchedOnce) return;
     const el = loadMoreRef.current;
@@ -345,7 +369,7 @@ export default function HomePage() {
       (entries) => {
         if (entries[0].isIntersecting) {
           const q = (searchParams.get("search") || "").trim();
-          // ⛑ 啟動防跳頂守門員：若未知程式把視窗拉到頂，立刻復位
+          // ⛑ 在這段時間若有人把你拉到頂，會立刻被復位
           armAntiTopJumpGuard(1500);
           fetchImages(page + 1, q, selectedCategories, selectedRatings);
         }
@@ -385,7 +409,7 @@ export default function HomePage() {
     setSelectedImage(enriched);
     if (enriched?._id) reportClick(enriched._id);
 
-    // 走到尾端會預抓下一頁 → 同樣啟動保險絲
+    // 靠近尾端預抓下一頁 → 同樣啟動守門員
     if (dir === "next" && nextIdx >= images.length - 2 && hasMore && !isLoading) {
       const q = (searchParams.get("search") || "").trim();
       armAntiTopJumpGuard(1500);
