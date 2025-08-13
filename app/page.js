@@ -61,6 +61,7 @@ export default function HomePage() {
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [images, setImages] = useState([]);
+  const [previewImages, setPreviewImages] = useState(null); // 本地預覽（避免首點空白）
   const [sort, setSort] = useState("popular");
   const [selectedImage, setSelectedImage] = useState(null);
   const [currentUser, setCurrentUser] = useState(undefined);
@@ -109,20 +110,6 @@ export default function HomePage() {
     import("imagesloaded");
   }, []);
 
-  // 🔸 前端預熱：頁面進來後靜悄悄喚醒 /api/images（避免第一次卡 1 秒）
-  useEffect(() => {
-    const warm = () => {
-      fetch("/api/images", { method: "HEAD", cache: "no-store" }).catch(() => {});
-    };
-    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      const id = window.requestIdleCallback(warm, { timeout: 1500 });
-      return () => window.cancelIdleCallback?.(id);
-    } else {
-      const t = setTimeout(warm, 800);
-      return () => clearTimeout(t);
-    }
-  }, []);
-
   const reportClick = (id) => {
     if (!id) return;
     const key = `click:${id}`;
@@ -132,6 +119,30 @@ export default function HomePage() {
     localStorage.setItem(key, String(now));
     fetch(`/api/images/${id}/click`, { method: "POST" }).catch(() => {});
   };
+
+  // ====== 本地過濾器（用目前已載入的清單先行預覽） ======
+  const norm = (s) => (s ?? "").toString().toLowerCase();
+  function applyLocalFilter(arr, q, cats, rats) {
+    if (!Array.isArray(arr)) return [];
+    const qn = norm(q);
+    const hasQ = !!qn;
+    const hasC = Array.isArray(cats) && cats.length > 0;
+    const hasR = Array.isArray(rats) && rats.length > 0;
+    if (!hasQ && !hasC && !hasR) return arr;
+    return arr.filter((img) => {
+      const t = norm(img?.title);
+      const p = norm(img?.description || img?.positivePrompt || "");
+      const u = norm(img?.user?.username || img?.user?.name || "");
+      const hitQ = !hasQ || t.includes(qn) || p.includes(qn) || u.includes(qn);
+      const ic = img?.category || img?.categories;
+      const imgCats = Array.isArray(ic) ? ic.map(norm) : (ic ? [norm(ic)] : []);
+      const hitC = !hasC || cats.some((c) => imgCats.includes(norm(c)));
+      const r = typeof img?.rating === "number" || typeof img?.rating === "string" ? Number(img.rating) : null;
+      const hitR = !hasR || (r !== null && rats.includes(r));
+      return hitQ && hitC && hitR;
+    });
+  }
+  // =====================================================
 
   const fetchImages = async (pageToFetch = 1, q = "", categories = [], ratings = []) => {
     // 抓下一頁時記錄滾動位置
@@ -168,6 +179,7 @@ export default function HomePage() {
         const newImages = data.images;
         if (pageToFetch === 1) {
           setImages(newImages);
+          setPreviewImages(null); // 正式資料到手，關閉本地預覽
           setFetchedOnce(true); // ✅ 拿到第 1 頁
           // ✅ 存到第 1 頁快取
           const k = keyOf(q, apiSort, cats, rats);
@@ -301,6 +313,9 @@ export default function HomePage() {
       setPage(1);
       setHasMore(cached.length >= PAGE_SIZE);
       setFetchedOnce(true); // 用快取時也視為已拿到第 1 頁
+    } else {
+      // 無快取 → 立即顯示本地預覽，避免首點空白
+      setPreviewImages(applyLocalFilter(images, q, selectedCategories, selectedRatings));
     }
 
     if (!fetchedOnceRef.current) {
@@ -438,8 +453,9 @@ export default function HomePage() {
         <SortSelect value={sort} onChange={setSort} />
       </div>
 
+      {/* 有預覽就先顯示預覽，否則顯示正式資料 */}
       <ImageGrid
-        images={images}
+        images={previewImages ?? images}
         viewMode={viewMode}
         isLoading={isLoading}
         hasMore={hasMore}
