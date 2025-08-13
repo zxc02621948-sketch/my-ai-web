@@ -109,6 +109,20 @@ export default function HomePage() {
     import("imagesloaded");
   }, []);
 
+  // 🔸 前端預熱：頁面進來後靜悄悄喚醒 /api/images（避免第一次卡 1 秒）
+  useEffect(() => {
+    const warm = () => {
+      fetch("/api/images", { method: "HEAD", cache: "no-store" }).catch(() => {});
+    };
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(warm, { timeout: 1500 });
+      return () => window.cancelIdleCallback?.(id);
+    } else {
+      const t = setTimeout(warm, 800);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
   const reportClick = (id) => {
     if (!id) return;
     const key = `click:${id}`;
@@ -412,7 +426,7 @@ export default function HomePage() {
       : undefined;
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white px-4 pb-4 pt-0 -mt-2 md:-mt-17">
+    <main className="min-h-screen bg-zinc-950 text白 px-4 pb-4 pt-0 -mt-2 md:-mt-17">
       {currentUser?.isAdmin && (
         <div className="mb-4">
           <AdminPanel />
@@ -434,7 +448,7 @@ export default function HomePage() {
         currentUser={currentUser}
         isLikedByCurrentUser={isLikedByCurrentUser}
         onToggleLike={handleToggleLike}
-        gutter={15} // ⬅️ 加這行，控制縫隙
+        gutter={15} // ⬅️ 你現有的設定保留
         onLikeUpdate={(updated) => {
           onLikeUpdateHook(updated);
         }}

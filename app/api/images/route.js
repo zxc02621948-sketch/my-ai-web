@@ -6,11 +6,28 @@ import mongoose from "mongoose";
 
 export const dynamic = "force-dynamic";
 
+// ✅ HEAD: 用於預熱（連 DB 後回 204）
+export async function HEAD(req) {
+  try {
+    await dbConnect();
+    return new NextResponse(null, { status: 204 });
+  } catch {
+    // 即使失敗也不要讓前端報紅，回 204
+    return new NextResponse(null, { status: 204 });
+  }
+}
+
 export async function GET(req) {
   try {
     await dbConnect();
 
     const url = new URL(req.url);
+
+    // ✅ 預熱模式：?warm=1（可選備援，與 HEAD 擇一即可）
+    if (url.searchParams.get("warm") === "1") {
+      return new NextResponse(null, { status: 204 });
+    }
+
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
     const limit = Math.max(1, parseInt(url.searchParams.get("limit") || "24", 10));
     const sort = (url.searchParams.get("sort") || "popular").toLowerCase();
