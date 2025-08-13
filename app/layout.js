@@ -11,15 +11,8 @@ import RegisterModal from "@/components/auth/RegisterModal";
 import { FilterProvider } from "@/components/context/FilterContext";
 import ClientToaster from "@/components/common/ClientToaster";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata = {
   title: "AI 創界",
@@ -33,7 +26,7 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="zh-TW">
       <head>
-        {/* 只在「重新整理」時，最早期就把頁面捲到最頂；不影響返回上一頁 */}
+        {/* 全站：只在「重新整理」時最早期置頂；不影響返回/前進 */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -44,24 +37,18 @@ export default async function RootLayout({ children }) {
       : (performance.navigation && performance.navigation.type === 1);
     if (!('scrollRestoration' in history) || !isReload) return;
 
-    // 限定首頁才生效（如不需要可移除此判斷）
-    if (location.pathname !== '/') return;
-
     history.scrollRestoration = 'manual';
     var toTop = function(){ try { window.scrollTo(0, 0); } catch(e){} };
 
-    // 立刻一次，避免瀏覽器先把位置還原到半腰
+    // 立刻頂一次避免瀏覽器先還原到半腰
     toTop();
-
     // DOM 準備好再補一次
     document.addEventListener('DOMContentLoaded', function(){ toTop(); }, { once: true });
-
-    // 資源載完後再補幾次，覆蓋圖片/重排造成的位移
+    // 資源載完後補幾次覆蓋重排位移，最後還原為 auto
     window.addEventListener('load', function(){
       requestAnimationFrame(toTop);
       setTimeout(toTop, 50);
       setTimeout(toTop, 200);
-      // 全部穩定後再還原為 auto（保留返回上一頁會回到原位的體驗）
       setTimeout(function(){ try { history.scrollRestoration = 'auto'; } catch(e){} }, 300);
     }, { once: true });
   } catch (e) {}
@@ -71,9 +58,7 @@ export default async function RootLayout({ children }) {
         />
       </head>
 
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-zinc-950 text-white`}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-zinc-950 text-white`}>
         <CurrentUserProvider>
           <FilterProvider>
             <ClientHeaderWrapper currentUser={currentUser} />
@@ -88,9 +73,7 @@ export default async function RootLayout({ children }) {
 
               <div className="text-center text-sm text-gray-500 mt-10">
                 版本 v0.7.3（2025-08-02）｜
-                <a href="/changelog" className="underline hover:text-white">
-                  查看更新內容
-                </a>
+                <a href="/changelog" className="underline hover:text-white">查看更新內容</a>
               </div>
             </div>
 
