@@ -7,6 +7,7 @@ import ImageViewer from "./ImageViewer";
 import MobileImageSheet from "@/components/image/MobileImageSheet";
 import DesktopRightPane from "@/components/image/DesktopRightPane";
 import axios from "axios";
+import { getLikesFromCache } from "@/lib/likeSync";
 
 const getOwnerId = (img) => {
   if (!img) return null;
@@ -69,6 +70,15 @@ export default function ImageModal({
     })();
     return () => { alive = false; };
   }, [imageId, imageData]);
+
+  useEffect(() => {
+    const id = image?._id || imageId || imageData?._id;
+    if (!id) return;
+    const cached = getLikesFromCache(id);
+    if (cached && Array.isArray(cached)) {
+      setImage((prev) => prev ? { ...prev, likes: cached, likesCount: cached.length } : prev);
+    }
+  }, [image?._id, imageId, imageData]);
 
   // 若 user 是字串 → 補抓作者物件
   useEffect(() => {

@@ -3,6 +3,7 @@
 import { Heart, X } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { updateLikeCacheAndBroadcast } from "@/lib/likeSync";
 
 export default function ImageViewer({
   image,
@@ -358,6 +359,18 @@ export default function ImageViewer({
           data-stop-nav
           onClick={(e) => {
             e.stopPropagation();
+             const meId = currentUser?._id;
+            if (meId && image?._id) {
+              const already = Array.isArray(image.likes) ? image.likes.includes(meId) : false;
+              const nextLiked = !already;
+              const updated = {
+                ...image,
+                likes: nextLiked
+                  ? [ ...(image.likes || []), meId ]
+                  : (image.likes || []).filter((id) => id !== meId),
+              };
+              updateLikeCacheAndBroadcast(updated);
+            }
             onToggleLike?.(image._id);
             if (!isLiked) { setClicked(true); setTimeout(() => setClicked(false), 400); }
           }}
