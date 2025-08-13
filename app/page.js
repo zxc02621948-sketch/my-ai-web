@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import ImageModal from "@/components/image/ImageModal";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import ImageGrid from "@/components/image/ImageGrid";
 import AdminPanel from "@/components/homepage/AdminPanel";
 import BackToTopButton from "@/components/common/BackToTopButton";
@@ -52,7 +52,6 @@ const hasFollow = (list, uid) =>
   });
 
 export default function HomePage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const PAGE_SIZE = 20;
@@ -94,23 +93,21 @@ export default function HomePage() {
     ? categoryFilters.filter(Boolean)
     : [];
 
+  // reload 時固定回頂（不影響返回上一頁）
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const nav = performance.getEntriesByType?.("navigation")?.[0];
     const isReload =
       (nav && nav.type === "reload") ||
-      // 舊 API（某些瀏覽器）
       (window.performance && window.performance.navigation && window.performance.navigation.type === 1);
 
     if (isReload) {
-      const prev = history.scrollRestoration; // 記住原設定
+      const prev = history.scrollRestoration;
       try { history.scrollRestoration = "manual"; } catch {}
 
-      // 下一拍把滾動位置設回頂端
       requestAnimationFrame(() => {
         window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-        // 還原瀏覽器預設行為（保留返回上一頁時的復位體驗）
         try { history.scrollRestoration = prev || "auto"; } catch {}
       });
     }
