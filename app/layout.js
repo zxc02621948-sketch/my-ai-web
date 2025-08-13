@@ -1,3 +1,4 @@
+import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import FeedbackButton from "@/components/common/FeedbackButton";
@@ -33,6 +34,27 @@ export default async function RootLayout({ children }) {
 
   return (
     <html lang="zh-TW">
+      <head>
+        {/* 只在「重新整理」時強制置頂；不影響返回上一頁 */}
+        <Script id="reload-to-top" strategy="beforeInteractive">
+          {`
+            (function () {
+              try {
+                if ('scrollRestoration' in history) {
+                  var nav = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || null;
+                  var isReload = nav ? (nav.type === 'reload')
+                    : (performance.navigation && performance.navigation.type === 1);
+                  if (isReload) {
+                    history.scrollRestoration = 'manual';
+                    window.scrollTo(0, 0);
+                    setTimeout(function () { try { history.scrollRestoration = 'auto'; } catch (e) {} }, 0);
+                  }
+                }
+              } catch (e) {}
+            })();
+          `}
+        </Script>
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-zinc-950 text-white`}
       >
