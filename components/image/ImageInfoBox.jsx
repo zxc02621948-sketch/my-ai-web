@@ -1,7 +1,7 @@
-// ImageInfoBox.jsx
-import { useRef, useState, useMemo } from "react";
+// components/image/ImageInfoBox.jsx
+import { useRef, useState, useMemo, useEffect } from "react";
 import axios from "axios";
-import { X, Trash2, Download, Clipboard, Pencil } from "lucide-react";
+import { X, Trash2, Download, Clipboard, Pencil, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
@@ -11,6 +11,104 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
   const [copiedField, setCopiedField] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const router = useRouter();
+
+  // === 檢舉彈窗狀態 ===
+  const [showReport, setShowReport] = useState(false);
+  const [reportType, setReportType] = useState("category_wrong");
+  const [reportMsg, setReportMsg] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
+
+  // === 追蹤狀態（樂觀 + 同步 UserHeader 的 follow-changed 事件） ===
+  const [followLoading, setFollowLoading] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(!!image?.user?.isFollowing);
+
+  // 切換圖片或 props 更新時同步 isFollowing
+  useEffect(() => {
+    setIsFollowing(!!image?.user?.isFollowing);
+  }, [image?.user?.isFollowing, image?.user?._id]);
+
+  // 監聽來自其他元件（如 UserHeader）的狀態變更
+  useEffect(() => {
+    const onChanged = (e) => {
+      const { targetUserId, isFollowing: next } = e.detail || {};
+      if (String(targetUserId) === String(image?.user?._id)) {
+        setIsFollowing(!!next);
+      }
+    };
+    window.addEventListener("follow-changed", onChanged);
+    return () => window.removeEventListener("follow-changed", onChanged);
+  }, [image?.user?._id]);
+
+  // 點擊追蹤/取消：樂觀更新 + 呼叫 API + 廣播同步
+  const handleFollowToggle = async () => {
+    if (!currentUser || !image?.user?._id || followLoading) return;
+    const willFollow = !isFollowing;
+    setIsFollowing(willFollow);          // 樂觀
+    setFollowLoading(true);
+    try {
+      const token = document.cookie.match(/token=([^;]+)/)?.[1];
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      if (willFollow) {
+        // 若你的實際路由不同，請改為專案內使用的 API
+        await axios.post("/api/follow", { userIdToFollow: image.user._id }, { headers });
+      } else {
+        await axios.delete("/api/follow", { data: { userIdToUnfollow: image.user._id }, headers });
+      }
+      // 廣播給 UserHeader 等元件同步
+      window.dispatchEvent(new CustomEvent("follow-changed", {
+        detail: { targetUserId: String(image.user._id), isFollowing: willFollow },
+      }));
+    } catch (err) {
+      setIsFollowing((prev) => !prev);   // 失敗回滾
+      alert(err?.response?.data?.message || err?.message || "追蹤操作失敗");
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
+  const reportOptions = [
+    { value: "category_wrong", label: "分類錯誤" },
+    { value: "rating_wrong", label: "分級錯誤" },
+    { value: "duplicate", label: "重複/洗版" },
+    { value: "broken", label: "壞圖/無法顯示" },
+    { value: "policy_violation", label: "站規違規" },
+    { value: "other", label: "其他（需說明）" },
+  ];
+
+  const handleReportSubmit = async () => {
+    if (!image?._id) return;
+    // 禁止檢舉自己的作品（再次檢查，避免 DOM 被竄改）
+    if (currentUser && String(currentUser._id) === String(image.user?._id)) {
+      alert("不能檢舉自己的作品");
+      return;
+    }
+    if (reportType === "other" && !reportMsg.trim()) {
+      alert("請填寫說明"); 
+      return;
+    }
+    setReportLoading(true);
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ imageId: image._id, type: reportType, message: reportMsg }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j?.ok) throw new Error(j?.message || `HTTP ${res.status}`);
+      alert("已收到你的檢舉，感謝協助！");
+      setShowReport(false);
+      setReportType("category_wrong");
+      setReportMsg("");
+    } catch (e) {
+      alert(e.message || "提交失敗");
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   const handleDelete = async () => {
     const confirmed = window.confirm("你確定要刪除這張圖片嗎？");
@@ -120,6 +218,17 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* 檢舉（登入且不是作者才顯示） */}
+          {currentUser && String(currentUser._id) !== String(image.user?._id) && (
+            <button
+              onClick={() => setShowReport(true)}
+              className="flex items-center gap-1 px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white text-sm rounded shadow transition"
+              title="檢舉圖片"
+            >
+              <AlertTriangle size={16} />
+            </button>
+          )}
+
           {/* 編輯放在下載左邊；僅作者或管理員可見 */}
           {currentUser &&
             ((String(currentUser._id) === String(image.user?._id)) || currentUser.isAdmin) && (
@@ -166,6 +275,49 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
           </button>
         </div>
       </div>
+
+      {/* 檢舉彈窗 */}
+      {showReport && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 p-4 rounded-lg w-full max-w-md text-white space-y-3">
+            <div className="text-lg font-semibold">檢舉圖片</div>
+            <select
+              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700"
+              value={reportType}
+              onChange={(e) => setReportType(e.target.value)}
+            >
+              {reportOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <textarea
+              className="w-full p-2 rounded bg-zinc-800 border border-zinc-700"
+              rows={4}
+              placeholder={reportType === "other" ? "請輸入檢舉說明…" : "（可選）補充說明"}
+              value={reportMsg}
+              onChange={(e) => setReportMsg(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowReport(false)}
+                className="px-3 py-1 bg-zinc-700 rounded hover:bg-zinc-600"
+                disabled={reportLoading}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleReportSubmit}
+                className="px-3 py-1 bg-rose-600 rounded hover:bg-rose-500"
+                disabled={reportLoading}
+              >
+                {reportLoading ? "送出中…" : "送出檢舉"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 分級 */}
       <div className="mb-3">{getRatingLabel(image.rating)}</div>

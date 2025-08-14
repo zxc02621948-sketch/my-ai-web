@@ -1,56 +1,77 @@
 // utils/parseMeta.js
-// 解析 Stable Diffusion / ComfyUI 圖片的生成參數。
+// 解析 Stable Diffusion / ComfyUI 圖片的生成參數 + 確保拿到真實寬高
 // 用法（前端）：const meta = await extractMetaFromFile(file);
 
 let pako = null;
-try {
-  // optional：沒有也能跑，只是遇到壓縮的 iTXt/zTXt 會跳過
-  pako = require("pako");
-} catch {}
+try { pako = require("pako"); } catch { /* pako 可選，沒裝就跳過壓縮解碼 */ }
 
 const td = new TextDecoder("utf-8");
 const tdLatin1 = new TextDecoder("latin1");
 
-/** 主要入口：從 File/Blob(原檔PNG) 解析出欄位 */
+/**
+ * 主要入口：從 File/Blob 解析出欄位（寬高一定盡力補上）
+ * @param {File|Blob} fileOrBlob
+ * @returns {Promise<Object>}
+ */
 export async function extractMetaFromFile(fileOrBlob) {
   const buf = await fileOrBlob.arrayBuffer().catch(() => null);
   if (!buf) return {};
+
+  // 讀 PNG 內文字區塊
   const chunks = readPngTextChunks(buf);
 
-  // 1) A1111 parameters（最常見）
+  // A) 先從 metadata 抓（A1111 / 通用 JSON / Comfy）
   const params =
-    chunks["parameters"] ||
-    chunks["Parameters"] ||
-    chunks["Comment"] ||
-    chunks["Description"];
-
+    chunks["parameters"] || chunks["Parameters"] || chunks["Comment"] || chunks["Description"];
+  let out = {};
   if (params) {
-    return normalizeA1111(parseA1111Parameters(params));
+    // A1111 文字欄
+    out = normalizeA1111(parseA1111Parameters(params));
+  } else {
+    // 通用 json 欄位
+    const sd =
+      tryParseJson(chunks["sd-metadata"] || chunks["sd_metadata"] || chunks["SD:metadata"]);
+    if (sd && typeof sd === "object") {
+      out = normalizeGeneric(sd);
+    } else {
+      // ComfyUI 常見欄位
+      const comfy =
+        tryParseJson(chunks["workflow"]) ||
+        tryParseJson(chunks["prompt"]) ||
+        tryParseJson(chunks["comfy"]) ||
+        tryParseJson(chunks["ComfyUI"]);
+      if (comfy && typeof comfy === "object") {
+        out = normalizeComfy(comfy);
+      }
+    }
   }
 
-  // 2) sd-metadata（A1111 新版或其它前端）
-  const sd = tryParseJson(
-    chunks["sd-metadata"] || chunks["sd_metadata"] || chunks["SD:metadata"]
-  );
-  if (sd && typeof sd === "object") {
-    return normalizeGeneric(sd);
+  // B) 兜底：若缺 width/height，直接讀檔案像素
+  if (!out.width || !out.height) {
+    const pngSize = readPngSize(buf); // 若是 PNG，直接看 IHDR
+    if (pngSize?.width && pngSize?.height) {
+      out.width = pngSize.width;
+      out.height = pngSize.height;
+    } else if (typeof window !== "undefined") {
+      // 不是 PNG 或讀取失敗 → 用瀏覽器解一次
+      try {
+        const s = await getImageSizeFromBlob(fileOrBlob);
+        if (s.width && s.height) {
+          out.width = s.width;
+          out.height = s.height;
+        }
+      } catch {}
+    }
   }
 
-  // 3) ComfyUI：常見 keyword：workflow / prompt / comfy
-  const comfy =
-    tryParseJson(chunks["workflow"]) ||
-    tryParseJson(chunks["prompt"]) ||
-    tryParseJson(chunks["comfy"]) ||
-    tryParseJson(chunks["ComfyUI"]);
-
-  if (comfy && typeof comfy === "object") {
-    return normalizeComfy(comfy);
-  }
-
-  return {};
+  return removeUndef(out);
 }
 
-/** 讀取 PNG 內所有 tEXt / iTXt / zTXt 的 key → value */
+/**
+ * 讀取 PNG 內所有 tEXt / iTXt / zTXt 的 key → value
+ * @param {ArrayBuffer} arrayBuffer
+ * @returns {Record<string,string>}
+ */
 export function readPngTextChunks(arrayBuffer) {
   const view = new DataView(arrayBuffer);
   const u8 = new Uint8Array(arrayBuffer);
@@ -65,20 +86,14 @@ export function readPngTextChunks(arrayBuffer) {
   while (offset + 8 <= u8.length) {
     const length = view.getUint32(offset); // big-endian
     const type =
-      String.fromCharCode(
-        u8[offset + 4],
-        u8[offset + 5],
-        u8[offset + 6],
-        u8[offset + 7]
-      ) || "";
+      String.fromCharCode(u8[offset + 4], u8[offset + 5], u8[offset + 6], u8[offset + 7]) || "";
     const dataStart = offset + 8;
     const dataEnd = dataStart + length;
+    if (dataEnd + 4 > u8.length) break;
 
-    if (dataEnd + 4 > u8.length) break; // CRC 出界，結束
     const data = u8.slice(dataStart, dataEnd);
 
     if (type === "tEXt") {
-      // keyword\0text (latin-1)
       const zero = data.indexOf(0);
       if (zero > 0) {
         const key = tdLatin1.decode(data.slice(0, zero)).trim();
@@ -86,8 +101,6 @@ export function readPngTextChunks(arrayBuffer) {
         if (key) out[key] = text;
       }
     } else if (type === "iTXt") {
-      // keyword\0compressFlag\0compressMethod\0lang\0translated\0text
-      // 參考規格：若 compressFlag=1，text 為 zlib
       let p = 0;
       const readZ = () => {
         const z = data.indexOf(0, p);
@@ -97,24 +110,17 @@ export function readPngTextChunks(arrayBuffer) {
       };
       const key = td.decode(readZ()).trim();
       const compFlag = (data[p++] ?? 0) === 1;
-      const compMethod = data[p++] ?? 0; // 0=zlib
-      readZ(); // lang
-      readZ(); // translated
+      const compMethod = data[p++] ?? 0;
+      readZ(); // language tag
+      readZ(); // translated keyword
       const rest = data.slice(p);
-
       let text = "";
       try {
-        if (compFlag && compMethod === 0 && pako) {
-          text = td.decode(pako.inflate(rest));
-        } else {
-          text = td.decode(rest);
-        }
-      } catch {
-        /* ignore */
-      }
+        if (compFlag && compMethod === 0 && pako) text = td.decode(pako.inflate(rest));
+        else text = td.decode(rest);
+      } catch {}
       if (key) out[key] = text;
     } else if (type === "zTXt") {
-      // keyword\0compMethod(=0) compressedText
       const zero = data.indexOf(0);
       if (zero > 0) {
         const key = tdLatin1.decode(data.slice(0, zero)).trim();
@@ -123,109 +129,159 @@ export function readPngTextChunks(arrayBuffer) {
         let text = "";
         try {
           if (compMethod === 0 && pako) text = td.decode(pako.inflate(comp));
-        } catch {
-          /* ignore */
-        }
+        } catch {}
         if (key && text) out[key] = text;
       }
     }
 
-    // IEND → 結束
     if (type === "IEND") break;
-    offset = dataEnd + 4; // 跳過 CRC
+    offset = dataEnd + 4; // skip CRC
   }
   return out;
 }
 
-/** 解析 A1111 的 parameters 文本 */
-export function parseA1111Parameters(raw) {
-  if (!raw || typeof raw !== "string") return {};
-  const lines = raw.split(/\r?\n/).map((s) => s.trim());
-
-  const idxNeg = lines.findIndex((l) =>
-    /^negative prompt\s*:/i.test(l) || /^Negative prompt\s*:/i.test(l)
-  );
-
-  let positivePrompt = "";
-  let negativePrompt = "";
-  let cfg = {};
-  if (idxNeg >= 0) {
-    positivePrompt = lines.slice(0, idxNeg).join(" ").trim();
-    negativePrompt = lines[idxNeg].replace(/^negative prompt\s*:/i, "").replace(/^Negative prompt\s*:/i, "").trim();
-    cfg = parseKVs(lines.slice(idxNeg + 1).join(" "));
-  } else {
-    // 找不到 Negative prompt，就全當正向；下一行可能是 KVs
-    positivePrompt = lines[0] || "";
-    cfg = parseKVs(lines.slice(1).join(" "));
-  }
-
-  return {
-    positivePrompt,
-    negativePrompt,
-    ...cfg,
-  };
+/**
+ * 讀 PNG 的 IHDR 實際像素尺寸（讀不到就回 null）
+ * @param {ArrayBuffer} arrayBuffer
+ * @returns {{width:number,height:number}|null}
+ */
+function readPngSize(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+  const u8 = new Uint8Array(arrayBuffer);
+  const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+  for (let i = 0; i < 8; i++) if (u8[i] !== sig[i]) return null;
+  // 第一個 chunk 應為 IHDR，長度 13
+  const type =
+    String.fromCharCode(u8[12], u8[13], u8[14], u8[15]) || "";
+  if (type !== "IHDR") return null;
+  const width = view.getUint32(16);  // 8(sig)+4(len)+4(type) = 16
+  const height = view.getUint32(20);
+  if (!width || !height) return null;
+  return { width, height };
 }
 
-/** 解析 key-value 列（以逗號分隔的「鍵: 值」） */
-function parseKVs(s) {
+/**
+ * 用瀏覽器 Image 解 Blob 拿 naturalWidth/Height（適用 JPG/WEBP/AVIF…）
+ * @param {Blob} blob
+ * @returns {Promise<{width:number,height:number}>}
+ */
+async function getImageSizeFromBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.decoding = "async";
+    await new Promise((res, rej) => {
+      img.onload = res;
+      img.onerror = rej;
+      img.src = url;
+    });
+    return { width: img.naturalWidth || 0, height: img.naturalHeight || 0 };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/* --------------------------- 下面是解析/正規化 --------------------------- */
+
+/**
+ * 解析 A1111 的文字參數塊
+ * 常見格式：
+ *   <prompt>
+ *   Negative prompt: <neg>
+ *   Steps: 28, Sampler: DPM++ 2M Karras, CFG scale: 6, Seed: 12345, Size: 640x832, Model: xxx
+ * @param {string} raw
+ * @returns {Record<string,any>}
+ */
+export function parseA1111Parameters(raw = "") {
+  const text = String(raw || "").replace(/\r\n/g, "\n");
+  const lines = text.split("\n");
+
+  let prompt = "";
+  let negative = "";
+  let kvLine = "";
+
+  // 兩種常見：1) 第一行是 prompt，第二行 Negative prompt:，第三行是 KV
+  //          2) 只有一行大段（含 Negative prompt: 與 KVs）
+  if (lines.length >= 2 && /negative prompt\s*:/i.test(lines[1])) {
+    prompt = lines[0].trim();
+    negative = lines[1].replace(/^\s*negative prompt\s*:\s*/i, "").trim();
+    kvLine = (lines.slice(2).join(", ") || "").trim();
+  } else if (/negative prompt\s*:/i.test(text)) {
+    const [p, rest] = text.split(/negative prompt\s*:/i);
+    prompt = (p || "").trim();
+    const idx = rest.indexOf("\n");
+    if (idx >= 0) {
+      negative = rest.slice(0, idx).trim();
+      kvLine = rest.slice(idx + 1).trim();
+    } else {
+      negative = rest.trim();
+      kvLine = "";
+    }
+  } else {
+    // 沒有 Negative prompt 標記，最後一行多半就是 KVs
+    prompt = lines[0]?.trim() || "";
+    kvLine = (lines.slice(1).join(", ") || "").trim();
+  }
+
+  const kvs = parseKVs(kvLine);
+
+  // 特例：Size / Hires upscale / Hires upscaler 等
+  const size = kvs["Size"] || kvs["size"];
+  const { width, height } = parseSizeStr(size);
+
+  const seed = toNum(kvs["Seed"] ?? kvs["seed"]);
+  const steps = toNum(kvs["Steps"] ?? kvs["steps"]);
+  const cfg_scale = toNum(
+    kvs["CFG scale"] ?? kvs["CFG Scale"] ?? kvs["cfg scale"] ?? kvs["Guidance Scale"]
+  );
+  const sampler = kvs["Sampler"] ?? kvs["sampler"] ?? kvs["Sampler Name"];
+  const model =
+    kvs["Model"] ?? kvs["model"] ?? kvs["Model hash"] ?? kvs["Model Hash"] ?? kvs["ModelName"];
+
+  return removeUndef({
+    prompt,
+    negative_prompt: negative,
+    width,
+    height,
+    steps,
+    cfg_scale,
+    sampler,
+    seed,
+    model,
+    raw: raw,
+  });
+}
+
+/**
+ * 把逗號分隔的 KVs 轉成物件（容忍「key: value, key2: value2」）
+ * @param {string} s
+ */
+function parseKVs(s = "") {
   const out = {};
   if (!s) return out;
-
-  // 先依逗號切，但保留括號/引號內的逗號（簡化處理）
-  const parts = s.split(/,(?=(?:[^()"]|\([^()"]*\)|"[^"]*")*$)/).map((x) => x.trim());
-
-  for (const part of parts) {
-    const m = part.match(/^\s*([^:]+):\s*(.+)\s*$/);
-    if (!m) continue;
-    const key = m[1].trim();
-    const val = m[2].trim();
-
-    switch (key.toLowerCase()) {
-      case "steps":
-        out.steps = toNum(val);
-        break;
-      case "sampler":
-      case "sampler name":
-        out.sampler = val;
-        break;
-      case "cfg scale":
-      case "cfg":
-        out.cfgScale = toNum(val);
-        break;
-      case "seed":
-        out.seed = String(val);
-        break;
-      case "size": {
-        const m2 = val.match(/(\d+)\s*[x×]\s*(\d+)/i);
-        if (m2) {
-          out.width = toNum(m2[1]);
-          out.height = toNum(m2[2]);
-        }
-        break;
-      }
-      case "model":
-      case "model name":
-        out.modelName = val;
-        break;
-      case "model hash":
-      case "hash":
-        out.modelHash = val;
-        break;
-      case "clip skip":
-      case "clipskip":
-        out.clipSkip = toNum(val);
-        break;
-      default:
-        // 其他像 Hires upscaler/denoising… 可視需要加
-        break;
+  // 以逗號為主切，避免 sampler 名稱裡有逗號的情況（罕見），這裡做個最簡耐錯
+  const parts = s.split(/,(?![^()]*\))/g);
+  for (let part of parts) {
+    const m = part.split(":");
+    if (m.length >= 2) {
+      const key = m.shift().trim();
+      const value = m.join(":").trim();
+      if (key) out[key] = value;
     }
   }
-
   return out;
+}
+
+function parseSizeStr(s) {
+  if (!s || typeof s !== "string") return { width: undefined, height: undefined };
+  const m = s.match(/(\d+)\s*[x×]\s*(\d+)/i);
+  if (m) return { width: Number(m[1]), height: Number(m[2]) };
+  return { width: undefined, height: undefined };
 }
 
 function toNum(v) {
-  const n = Number(String(v).replace(/[^\d.+-]/g, ""));
+  if (v === null || v === undefined) return undefined;
+  const n = Number(String(v).trim());
   return Number.isFinite(n) ? n : undefined;
 }
 
@@ -238,84 +294,93 @@ function tryParseJson(s) {
   }
 }
 
-/** 轉成你 DB 欄位名稱（通用 JSON 來源） */
+/**
+ * 正規化通用 JSON（例如 sd-webui png info 有時就是 JSON）
+ */
 function normalizeGeneric(obj = {}) {
-  const out = {};
-  // 嘗試多種常見 key
-  out.positivePrompt = obj.prompt || obj.Prompt || obj.positivePrompt || "";
-  out.negativePrompt =
-    obj.negative_prompt || obj.NegativePrompt || obj.negativePrompt || "";
+  const out = { ...obj };
 
-  out.steps = toNum(obj.steps ?? obj.Steps);
-  out.sampler = obj.sampler ?? obj.Sampler;
-  out.cfgScale = toNum(obj.cfg_scale ?? obj.cfgScale ?? obj.CFG);
-  out.seed = obj.seed != null ? String(obj.seed) : undefined;
-  out.width = toNum(obj.width);
-  out.height = toNum(obj.height);
-  out.modelName = obj.model ?? obj.Model ?? obj.modelName;
-  out.modelHash = obj.model_hash ?? obj.ModelHash ?? obj.modelHash;
-  out.clipSkip = toNum(obj.clip_skip ?? obj.clipSkip);
+  // 常見映射
+  if (out.Size && !out.width && !out.height) {
+    const { width, height } = parseSizeStr(out.Size);
+    out.width = out.width || width;
+    out.height = out.height || height;
+  }
+
+  // 兼容 key 名
+  out.negative_prompt = out.negative_prompt || out.negative || out["Negative prompt"];
+  out.cfg_scale = out.cfg_scale ?? out.cfg ?? out.guidance_scale ?? out["CFG scale"];
+  out.model = out.model || out.model_name || out.Model || out["Model hash"];
 
   return removeUndef(out);
 }
 
-/** 轉 ComfyUI 常見欄位 */
-function normalizeComfy(json) {
-  // Comfy 的結構很多變，這裡挑一些常見位置
+/**
+ * 正規化 ComfyUI 資訊（非常多樣，這裡抓幾個常見）
+ */
+function normalizeComfy(json = {}) {
   const out = {};
 
-  // 1) workflow 類（新）
-  if (json?.workflow && typeof json.workflow === "object") {
-    const wf = json.workflow;
-    out.seed = wf.seed != null ? String(wf.seed) : out.seed;
-    out.steps = toNum(wf.steps ?? out.steps);
-    out.sampler = wf.sampler ?? out.sampler;
-    out.cfgScale = toNum(wf.cfg ?? wf.cfg_scale ?? out.cfgScale);
-    out.modelName = wf.model ?? out.modelName;
-  }
+  // Comfy 的 prompt/workflow 裡，通常 width/height 藏在某個節點（如 KSampler, VAE Decode, Image Size）
+  // 我們做淺掃：找任何具有 width/height 的節點值
+  try {
+    const obj = typeof json === "object" ? json : {};
+    const scan = (v) => {
+      if (!v) return;
+      if (typeof v === "object") {
+        if (Number.isFinite(v.width) && Number.isFinite(v.height)) {
+          out.width = out.width || Number(v.width);
+          out.height = out.height || Number(v.height);
+        }
+        for (const k in v) scan(v[k]);
+      }
+    };
+    scan(obj);
+  } catch {}
 
-  // 2) prompt 類（舊）
-  if (json?.prompt && typeof json.prompt === "object") {
-    const p = json.prompt;
-    // 這裡很依節點命名，你可以再按你的 workflow 做客製映射
-    // 嘗試在樹裡找 seed/steps/cfg/sampler
-    const flat = JSON.stringify(p);
-    const mm = flat.match(/"seed"\s*:\s*("?)(\d+)\1/);
-    if (mm) out.seed = String(mm[2]);
+  // Comfy 沒有標準化的 prompt 欄位；有些 workflow 會在某處放 "positive"/"negative"
+  out.prompt =
+    json.prompt?.positive ||
+    json.positive ||
+    json.pos ||
+    json.prompt ||
+    json.text ||
+    undefined;
 
-    const msteps = flat.match(/"steps"\s*:\s*(\d+)/);
-    if (msteps) out.steps = toNum(msteps[1]);
-
-    const mcfg = flat.match(/"cfg(?:_scale)?"\s*:\s*([\d.]+)/i);
-    if (mcfg) out.cfgScale = toNum(mcfg[1]);
-
-    const msampler = flat.match(/"sampler"\s*:\s*"([^"]+)"/i);
-    if (msampler) out.sampler = msampler[1];
-  }
+  out.negative_prompt =
+    json.prompt?.negative ||
+    json.negative ||
+    json.neg ||
+    undefined;
 
   return removeUndef(out);
 }
 
-/** 轉 A1111 結果到你的 DB 欄位 */
-function normalizeA1111(obj) {
-  const out = {
-    positivePrompt: obj.positivePrompt || "",
-    negativePrompt: obj.negativePrompt || "",
-    steps: toNum(obj.steps),
-    sampler: obj.sampler,
-    cfgScale: toNum(obj.cfgScale),
-    seed: obj.seed != null ? String(obj.seed) : undefined,
-    width: toNum(obj.width),
-    height: toNum(obj.height),
-    modelName: obj.modelName,
-    modelHash: obj.modelHash,
-    clipSkip: toNum(obj.clipSkip),
-  };
+/**
+ * 將 A1111 解析後的欄位再正規化一下
+ */
+function normalizeA1111(obj = {}) {
+  const out = { ...obj };
+
+  // 兼容 key 名
+  out.cfg_scale = out.cfg_scale ?? out.cfg ?? out["CFG scale"] ?? out.guidance_scale;
+
+  // 型別修正
+  if (typeof out.width === "string") out.width = toNum(out.width);
+  if (typeof out.height === "string") out.height = toNum(out.height);
+  if (typeof out.steps === "string") out.steps = toNum(out.steps);
+  if (typeof out.seed === "string") out.seed = toNum(out.seed);
+
   return removeUndef(out);
 }
 
 function removeUndef(o) {
-  const x = { ...o };
-  Object.keys(x).forEach((k) => x[k] === undefined && delete x[k]);
-  return x;
+  const out = {};
+  for (const k in o) {
+    if (o[k] !== undefined && o[k] !== null && o[k] !== "") out[k] = o[k];
+  }
+  return out;
 }
+
+// 也給一個 default 匯出，方便以 import extractMetaFromFile from '...'
+export default extractMetaFromFile;

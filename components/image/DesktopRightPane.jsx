@@ -1,6 +1,8 @@
+// components/image/DesktopRightPane.jsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import axios from "axios";
 import AvatarFrame from "@/components/common/AvatarFrame";
 import ImageInfoBox from "./ImageInfoBox";
 import CommentBox from "./CommentBox";
@@ -13,8 +15,8 @@ const fileUrlOf = (image) =>
 export default function DesktopRightPane({
   image,
   currentUser,
-  isFollowing,
-  onFollowToggle,
+  isFollowing,        // 仍支援父層傳入
+  onFollowToggle,     // 仍支援回呼（選用）
   onUserClick,
   onClose,
   onDelete,
@@ -31,11 +33,78 @@ export default function DesktopRightPane({
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
+  // ===== 追蹤狀態（樂觀 + 與外部同步） =====
+  const ownerId = typeof image?.user === "object" ? image.user._id : image?.user;
+  const [followLoading, setFollowLoading] = useState(false);
+  const [following, setFollowing] = useState(
+    Boolean(isFollowing ?? image?.user?.isFollowing)
+  );
+
+  // props / 圖片切換時，同步目前狀態
+  useEffect(() => {
+    setFollowing(Boolean(isFollowing ?? image?.user?.isFollowing));
+  }, [isFollowing, image?.user?.isFollowing, ownerId]);
+
+  // 監聽其他元件（例如 UserHeader）的廣播
+  useEffect(() => {
+    const onChanged = (e) => {
+      const { targetUserId, isFollowing: next } = e.detail || {};
+      if (ownerId && String(targetUserId) === String(ownerId)) {
+        setFollowing(Boolean(next));
+      }
+    };
+    window.addEventListener("follow-changed", onChanged);
+    return () => window.removeEventListener("follow-changed", onChanged);
+  }, [ownerId]);
+
+  // 追蹤/取消：樂觀 → 呼叫 API → 廣播（失敗回滾）
+  async function handleFollowToggleInternal() {
+    if (!currentUser || !ownerId || followLoading) return;
+    const willFollow = !following;
+
+    // 樂觀更新
+    setFollowing(willFollow);
+    setFollowLoading(true);
+
+    try {
+      // 先通知父層（若有傳進來）
+      onFollowToggle?.(willFollow);
+
+      // 呼叫實際 API（若你的路由不同，改這兩行即可）
+      const token = document.cookie.match(/token=([^;]+)/)?.[1];
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
+      if (willFollow) {
+        await axios.post("/api/follow", { userIdToFollow: ownerId }, { headers });
+      } else {
+        await axios.delete("/api/follow", {
+          data: { userIdToUnfollow: ownerId },
+          headers,
+        });
+      }
+
+      // 廣播讓其他元件同步
+      window.dispatchEvent(
+        new CustomEvent("follow-changed", {
+          detail: { targetUserId: String(ownerId), isFollowing: willFollow },
+        })
+      );
+    } catch (err) {
+      // 回滾
+      setFollowing((prev) => !prev);
+      alert(err?.response?.data?.message || err?.message || "追蹤操作失敗");
+    } finally {
+      setFollowLoading(false);
+    }
+  }
+
   const avatarUrl = image?.user?.image
     ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
     : "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
   const displayName = image?.user?.username || "未命名用戶";
-  const ownerId = typeof image?.user === "object" ? image.user._id : image?.user;
 
   return (
     <div className="w-full md:w-[400px] max-h-[90vh] border-l border-white/10 flex flex-col relative">
@@ -56,14 +125,16 @@ export default function DesktopRightPane({
                 </button>
               </div>
 
-              {currentUser && ownerId && currentUser._id !== ownerId && (
+              {currentUser && ownerId && String(currentUser._id) !== String(ownerId) && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); onFollowToggle?.(); }}
-                  className={`px-3 py-1.5 rounded-md text-sm ${
-                    isFollowing ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
-                  }`}
+                  onClick={(e) => { e.stopPropagation(); handleFollowToggleInternal(); }}
+                  disabled={followLoading}
+                  className={`px-3 py-1.5 rounded-md text-sm text-white ${
+                    following ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+                  } disabled:opacity-50`}
+                  title={following ? "取消追蹤" : "追蹤作者"}
                 >
-                  {isFollowing ? "取消追蹤" : "追蹤作者"}
+                  {following ? "取消追蹤" : "追蹤作者"}
                 </button>
               )}
             </div>

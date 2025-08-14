@@ -35,7 +35,14 @@ export async function GET(req) {
     const debug = url.searchParams.get("debug") === "1";
 
     // 關鍵字
-    const qRaw = (url.searchParams.get("q") || "").trim();
+    const qRaw = (
+      url.searchParams.get("search") ||
+      url.searchParams.get("q") ||
+      url.searchParams.get("query") ||
+      url.searchParams.get("keyword") ||
+      url.searchParams.get("term") ||
+      ""
+    ).trim();
     const qRegex = qRaw ? new RegExp(qRaw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
 
     // 分類
@@ -85,6 +92,8 @@ export async function GET(req) {
       description: 1,
       positivePrompt: 1,
       negativePrompt: 1,
+      width: 1,
+      height: 1,
     };
 
     const lookupUser = [

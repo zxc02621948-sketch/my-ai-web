@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import { useFilterContext } from "@/components/context/FilterContext";
 import toast from "react-hot-toast";
 import { Package2, Wrench, CircleHelp } from "lucide-react";
+import InboxButton from "@/components/common/InboxButton";
 
 const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr: false });
 
@@ -390,6 +391,9 @@ export default function Header({
             </Link>
 
             {currentUser && <NotificationBell currentUser={currentUser} />}
+
+            {/* 新增：信箱按鈕 */}
+            {currentUser && <InboxButton />}
 
             {/* 使用者選單 */}
             <div className="relative" ref={userMenuRef}>

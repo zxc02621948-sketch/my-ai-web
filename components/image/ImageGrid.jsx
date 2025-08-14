@@ -29,7 +29,7 @@ export default function ImageGrid({
       if (!mounted || !gridRef.current) return;
 
       if (msnryRef.current) { msnryRef.current.destroy(); msnryRef.current = null; }
-      if (ilRef.current) { try { ilRef.current.off("progress"); } catch {} ilRef.current = null; }
+      if (ilRef.current) { try { ilRef.current.off("progress"); ilRef.current.off("always"); } catch {} ilRef.current = null; }
 
       msnryRef.current = new Masonry(gridRef.current, {
         itemSelector: ".grid-item",
@@ -41,14 +41,19 @@ export default function ImageGrid({
       });
 
       ilRef.current = imagesLoaded(gridRef.current);
-      ilRef.current.on("progress", () => { msnryRef.current && msnryRef.current.layout(); });
 
+      // ✅ 改成「整批完成」再 layout，避免回捲時的連續 reflow 抖動
+      ilRef.current.on("always", () => {
+        msnryRef.current && msnryRef.current.layout();
+      });
+
+      // 首次也做一次 layout
       msnryRef.current.layout();
     })();
 
     return () => {
       mounted = false;
-      if (ilRef.current) { try { ilRef.current.off("progress"); } catch {} ilRef.current = null; }
+      if (ilRef.current) { try { ilRef.current.off("progress"); ilRef.current.off("always"); } catch {} ilRef.current = null; }
       if (msnryRef.current) { msnryRef.current.destroy(); msnryRef.current = null; }
     };
   }, [list]);
@@ -78,8 +83,8 @@ export default function ImageGrid({
       </div>
 
       <style jsx>{`
-        /* 把 gutter 變數掛在容器本身（styled-jsx 作用域內可被子元素取到） */
-        .my-masonry { --g: 12px; }
+        /* 關閉 scroll anchoring，避免 reflow 時瀏覽器強制鎖位造成回捲抖動 */
+        .my-masonry { --g: 12px; overflow-anchor: none; }
 
         /* 手機：2 欄（1 個縫隙） */
         .my-masonry .grid-sizer,

@@ -125,7 +125,7 @@ export default function UserProfilePage() {
     fetchData();
   }, [id]);
 
-  // 🔔 接收全域的「樂觀更新」事件：同步兩個清單 & modal
+  // 🔔 接收全域的「樂觀更新 - 讚」事件：同步兩個清單 & modal
   useEffect(() => {
     const handleImageLiked = (e) => {
       const updated = e.detail;
@@ -154,22 +154,95 @@ export default function UserProfilePage() {
     return () => window.removeEventListener("image-liked", handleImageLiked);
   }, [currentUser]);
 
-  // 點縮圖時，若 user 欄位不完整，補抓作者資料再開圖
-  const handleSelectImage = async (img) => {
-    let enriched = img;
-    try {
-      const authorId =
-        typeof img.user === "string" ? img.user : img.user?._id || img.user?.id;
+  // ⛓️ 接收全域的「追蹤狀態變更」事件：同步個人頁頭、清單與 modal（關鍵新增）
+  useEffect(() => {
+    const onFollowChanged = (e) => {
+      const targetUserId = e?.detail?.targetUserId;
+      const isFollowing = !!e?.detail?.isFollowing;
+      if (!targetUserId) return;
 
-      if (authorId && (!img.user || !img.user.username)) {
-        const res = await axios.get(`/api/user-info?id=${authorId}`);
-        if (res?.data) {
-          enriched = { ...img, user: res.data };
+      // 1) 若事件目標是此個人頁作者 → 立刻更新頭部按鈕狀態
+      if (String(targetUserId) === String(id)) {
+        setUserData((prev) => (prev ? { ...prev, isFollowing } : prev));
+      }
+
+      // 2) 更新目前登入者的 following 名單（就地同步，避免重整）
+      setCurrentUser((prev) => {
+        if (!prev) return prev;
+        const meList = Array.isArray(prev.following) ? prev.following : [];
+        const isObj = meList.some((f) => typeof f === "object" && f !== null);
+        if (isFollowing) {
+          // 已存在就不重覆加入
+          const exists = meList.some((f) => {
+            const idVal = typeof f === "object" && f !== null ? f.userId : f;
+            return String(idVal) === String(targetUserId);
+          });
+          if (exists) return prev;
+          const nextList = isObj ? [...meList, { userId: String(targetUserId), note: "" }] : [...meList, String(targetUserId)];
+          return { ...prev, following: nextList };
+        } else {
+          const nextList = meList.filter((f) => {
+            const idVal = typeof f === "object" && f !== null ? f.userId : f;
+            return String(idVal) !== String(targetUserId);
+          });
+          return { ...prev, following: nextList };
         }
+      });
+
+      // 3) 同步清單中屬於該作者的圖片的 user.isFollowing（畫面一致）
+      const patchUserFollowFlag = (img) => {
+        const uid = typeof img?.user === "object" ? (img.user._id || img.user.id) : img?.user;
+        if (uid && String(uid) === String(targetUserId)) {
+          const userObj = typeof img.user === "object" ? img.user : { _id: uid };
+          return { ...img, user: { ...userObj, isFollowing } };
+        }
+        return img;
+      };
+      setUploadedImages((prev) => prev.map(patchUserFollowFlag));
+      setLikedImages((prev) => prev.map(patchUserFollowFlag));
+
+      // 4) 若 modal 正顯示同一作者的圖片，也同步裡面的 user.isFollowing
+      setSelectedImage((prev) => {
+        if (!prev) return prev;
+        const uid =
+          typeof prev.user === "object" ? (prev.user._id || prev.user.id) : prev.user;
+        if (uid && String(uid) === String(targetUserId)) {
+          const userObj = typeof prev.user === "object" ? prev.user : { _id: uid };
+          return { ...prev, user: { ...userObj, isFollowing } };
+        }
+        return prev;
+      });
+    };
+
+    window.addEventListener("follow-changed", onFollowChanged);
+    return () => window.removeEventListener("follow-changed", onFollowChanged);
+  }, [id]);
+
+  // 取完整圖片資訊並合併（模型/提示詞/生成參數等）
+  const enrichImage = async (img) => {
+    let full = img;
+    try {
+      // 1) 取完整 image
+      const r = await axios.get(`/api/images/${img._id}`);
+      const apiImage = r?.data?.image || r?.data; // 你的 /api 可能包在 {image}
+      if (apiImage && apiImage._id) {
+        full = { ...full, ...apiImage };
+      }
+      // 2) 作者資料不足時再補抓
+      const authorId =
+        typeof full.user === "string" ? full.user : full.user?._id || full.user?.id;
+      if (authorId && (!full.user || !full.user.username)) {
+        const u = await axios.get(`/api/user-info?id=${authorId}`);
+        if (u?.data) full = { ...full, user: u.data };
       }
     } catch {
-      // 靜默失敗：維持原資料
+      // 靜默失敗，保留原資料
     }
+    return full;
+  };
+
+  const handleSelectImage = async (img) => {
+    const enriched = await enrichImage(img);
     setSelectedImage(enriched);
   };
 
@@ -212,10 +285,11 @@ export default function UserProfilePage() {
   const isLikedByCurrentUser = (image) => {
     const me = currentUser?._id || currentUser?.id;
     return !!(me && Array.isArray(image.likes) && image.likes.includes(me));
+    // eslint-disable-next-line no-unreachable
   };
 
-  // 在 filteredImages 阵列中左右移動
-  const navigateFromSelected = (dir) => {
+  // 在 filteredImages 陣列中左右移動（切換時也補抓完整欄位）
+  const navigateFromSelected = async (dir) => {
     if (!selectedImage) return;
     const list = filteredImages;
     const idx = list.findIndex((img) => String(img._id) === String(selectedImage._id));
@@ -225,7 +299,8 @@ export default function UserProfilePage() {
     if (nextIdx < 0 || nextIdx >= list.length) return; // 邊界
 
     const target = list[nextIdx];
-    setSelectedImage(target);
+    const enriched = await enrichImage(target);
+    setSelectedImage(enriched);
   };
 
   // ✅ 計算前/後一張（給手機拖曳預覽）
@@ -304,8 +379,8 @@ export default function UserProfilePage() {
         {selectedImage && (
           <ImageModal
             imageData={selectedImage}
-            prevImage={prevImage}   // ⬅️ 新增
-            nextImage={nextImage}   // ⬅️ 新增
+            prevImage={prevImage}
+            nextImage={nextImage}
             currentUser={currentUser}
             onLikeUpdate={(updated) => {
               // 共用 hook 先同步 likes

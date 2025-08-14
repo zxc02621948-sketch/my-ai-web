@@ -33,6 +33,11 @@ const userSchema = new mongoose.Schema(
     verificationToken: { type: String },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date }
+    ,
+    // 封鎖與永久鎖（Strike 3 within window）
+    isSuspended: { type: Boolean, default: false },
+    isPermanentSuspension: { type: Boolean, default: false },
+    suspendedAt: { type: Date, default: null }
   },
   {
     timestamps: true

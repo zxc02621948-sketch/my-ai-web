@@ -54,6 +54,7 @@ export async function GET(_req, ctx) {
       author: typeof doc.author === "string" ? doc.author : "",
       modelUrl: modelUrl && isCivitai(modelUrl) ? modelUrl : "",
       loraUrl:  loraUrl  && isCivitai(loraUrl)  ? loraUrl  : "",
+      userId: doc.user?._id || null, // 直接給前端一個頂層 userId
     };
 
     const isOwner =

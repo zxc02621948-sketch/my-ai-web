@@ -49,19 +49,28 @@ export const POP_W_CLICK = toNum(process.env.POP_W_CLICK, 1.0);
 export const POP_W_LIKE = toNum(process.env.POP_W_LIKE, 8.0);
 export const POP_W_COMPLETE = toNum(process.env.POP_W_COMPLETE, 0.05);
 
-// 時間加成：基礎加成 * (衰減率^小時)
-// - 新圖的「基礎加成」寫在文件欄位 initialBoost（由上傳當下決定）
-// - 舊圖沒有 initialBoost 就當 0（沒有時間加成）
-// 可用環境變數調整：NEW 基礎比例 & 衰減率
-export const POP_NEW_BASE_RATIO = toNum(process.env.POP_NEW_BASE_RATIO, 0.8); // 新圖起始 = 目前最高分 * 0.8
-export const POP_DECAY_RATE = toNum(process.env.POP_DECAY_RATE, 0.9);         // 每小時保留 90% → 衰減 10%
+// 🆕 新圖種子（建立新圖時計算並寫入 image.initialBoost）
+export const POP_NEW_BASE_RATIO = toNum(process.env.POP_NEW_BASE_RATIO, 0.8); // 初始加乘 = 當前最高分 * 0.8
+export const POP_NEW_WINDOW_HOURS = toNum(process.env.POP_NEW_WINDOW_HOURS, 10); // 僅在前 10 小時內有效（線性遞減到 0）
 
-/** 從 ObjectId 或 createdAt 取得建立時間 */
+/** likesCount 保障 */
+export function ensureLikesCount(x = {}) {
+  if (typeof x.likesCount === "number") return x.likesCount;
+  if (Array.isArray(x.likes)) return x.likes.length;
+  const n = Number(x.likes || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** 從 ObjectId 或 createdAt 取得建立時間（毫秒） */
 export function getCreatedMs(obj = {}) {
-  if (obj?.createdAt) {
-    const t = new Date(obj.createdAt).getTime();
+  // 1) createdAt
+  if (obj?.createdAt instanceof Date) return obj.createdAt.getTime();
+  if (typeof obj?.createdAt === "number" && Number.isFinite(obj.createdAt)) return obj.createdAt;
+  if (typeof obj?.createdAt === "string") {
+    const t = Date.parse(obj.createdAt);
     if (Number.isFinite(t)) return t;
   }
+  // 2) ObjectId 推回時間
   try {
     const id = obj?._id;
     if (id?.getTimestamp) return id.getTimestamp().getTime();
@@ -70,34 +79,45 @@ export function getCreatedMs(obj = {}) {
       return new Types.ObjectId(id).getTimestamp().getTime();
     }
   } catch {}
+  // 3) fallback：現在
   return Date.now();
 }
 
-/** likesCount 保障（有些文件尚未快取 likesCount） */
-export function ensureLikesCount(x = {}) {
-  if (typeof x.likesCount === "number") return x.likesCount;
-  if (Array.isArray(x.likes)) return x.likes.length;
-  const n = Number(x.likes || 0);
-  return Number.isFinite(n) ? n : 0;
+/** 建立新圖時用：從當前最高分計算初始 seed（固定寫進 image.initialBoost） */
+export function computeInitialBoostFromTop(topScore = 0) {
+  const t = toNum(topScore, 0);
+  return Math.max(0, Math.floor(t * POP_NEW_BASE_RATIO));
 }
 
-/** 時間加成 = (initialBoost || 0) * (POP_DECAY_RATE ^ hours) */
-export function computeTimeBoost(x = {}) {
+/**
+ * 🆕 新圖加乘的「線性遞減」：
+ * - 只有新圖（有 initialBoost > 0）會吃到
+ * - 係數 = max(0, 1 - 經過小時 / POP_NEW_WINDOW_HOURS)
+ * - 超過時間窗即為 0
+ */
+export function computeInitialBoostDecay(x = {}) {
   const base = toNum(x.initialBoost, 0);
-  if (base <= 0) return 0;
-  const hours = Math.floor((Date.now() - getCreatedMs(x)) / 36e5);
-  if (hours <= 0) return base;
-  // 避免浮點毛邊，可四捨五入到小數一位
-  return Math.round(base * Math.pow(POP_DECAY_RATE, hours) * 10) / 10;
+  if (base <= 0) return 0; // 不是新圖（或沒種子）就沒有加乘
+
+  const createdMs = getCreatedMs(x);
+  const hours = Math.max(0, (Date.now() - createdMs) / 36e5);
+
+  if (hours >= POP_NEW_WINDOW_HOURS) return 0;
+
+  const factor = Math.max(0, 1 - hours / POP_NEW_WINDOW_HOURS);
+  const boost = base * factor;
+
+  // 保留 1 位小數，避免排序抖動（可依需求調整）
+  return Math.round(boost * 10) / 10;
 }
 
-/** ✅ Popular 總分公式（只改這裡就好） */
+/** ✅ Popular 總分公式（只有新圖在 10 小時內有加乘且隨時間遞減） */
 export function computePopScore(x = {}) {
   const clicks = toNum(x.clicks, 0);
   const likesCount = ensureLikesCount(x);
   const comp = toNum(x.completenessScore, 0);
-  const timeBoost = computeTimeBoost(x);
-  return clicks * POP_W_CLICK + likesCount * POP_W_LIKE + comp * POP_W_COMPLETE + timeBoost;
+  const decayedBoost = computeInitialBoostDecay(x);
+  return clicks * POP_W_CLICK + likesCount * POP_W_LIKE + comp * POP_W_COMPLETE + decayedBoost;
 }
 
 // ===== 小工具 =====

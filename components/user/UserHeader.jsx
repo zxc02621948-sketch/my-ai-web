@@ -208,7 +208,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
         <div className="flex-1">
           <h1 className="text-2xl font-bold">{userData.username}</h1>
 
-          {isOwnProfile ? (
+          {isOwnProfile || currentUser?.isAdmin ? (
             <p className="text-sm text-gray-400">{userData.email}</p>
           ) : userData.isVerified ? (
             <p className="text-sm text-green-400">✅ 此帳號已驗證</p>

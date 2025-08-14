@@ -78,7 +78,24 @@ export default function UploadStep2({
     }
   };
 
-  // -------- PNG/iTXt/zTXt 解析 --------
+  
+  // 讀取原始檔案實際像素（JPG/PNG/WEBP/AVIF 都可）
+  async function getImageSizeFromFile(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => {
+        const w = img.naturalWidth || img.width || 0;
+        const h = img.naturalHeight || img.height || 0;
+        URL.revokeObjectURL(url);
+        resolve({ width: w, height: h });
+      };
+      img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+      img.src = url;
+    });
+  }
+// -------- PNG/iTXt/zTXt 解析 --------
   const textDecoder = useMemo(() => new TextDecoder("utf-8"), []);
 
   async function extractPngTextChunks(file) {
@@ -298,6 +315,12 @@ export default function UploadStep2({
     const img = new Image();
     img.src = URL.createObjectURL(originalFile);
     img.onload = async () => {
+      const originalW = img.naturalWidth || img.width;
+      const originalH = img.naturalHeight || img.height;
+      // 若 metadata 沒有，使用原圖像素補上
+      setWidth((w) => w || String(originalW));
+      setHeight((h) => h || String(originalH));
+
       const canvas = document.createElement("canvas");
       const MAX_WIDTH = 1280;
       const scaleSize = Math.min(1, MAX_WIDTH / img.width);
@@ -336,6 +359,17 @@ export default function UploadStep2({
     }
 
     setIsUploading(true);
+    // 確保 width/height 為數字（若缺失則即時讀原檔取得）
+    let wNum = Number(width);
+    let hNum = Number(height);
+    if (!Number.isFinite(wNum) || !Number.isFinite(hNum) || !wNum || !hNum) {
+      try {
+        const s = await getImageSizeFromFile(imageFile);
+        wNum = s.width; hNum = s.height;
+        setWidth(String(wNum)); setHeight(String(hNum));
+      } catch {}
+    }
+
     let imageId = null;
 
     try {
@@ -389,8 +423,8 @@ export default function UploadStep2({
         cfgScale: cfgScale || undefined,
         seed: seed || undefined,
         clipSkip: clipSkip || undefined,
-        width: width || undefined,
-        height: height || undefined,
+        width: Number.isFinite(wNum) && wNum ? wNum : undefined,
+        height: Number.isFinite(hNum) && hNum ? hNum : undefined,
         modelHash: modelHash || undefined,
         // 可選：若要記錄成年聲明到後端（需後端支援）
         adultDeclaration: rating === "18" ? true : undefined,

@@ -1,24 +1,42 @@
+// components/image/ImageViewer.jsx
 "use client";
 
-import { Heart, X } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Heart, X } from "lucide-react";
+import AdminModerationBar from "@/components/image/AdminModerationBar";
 import { updateLikeCacheAndBroadcast } from "@/lib/likeSync";
 
+/**
+ * Props:
+ * - image: {_id, title, imageId?, imageUrl?, likes?: string[], user?: {_id}, category?, rating?}
+ * - currentUser: {_id, isAdmin?}
+ * - showClose?: boolean
+ * - onClose?: () => void
+ * - disableTapZoom?: boolean
+ * - onToggleLike?: (imageId) => void
+ */
 export default function ImageViewer({
   image,
   currentUser,
-  isLiked,
-  onToggleLike,
-  showClose = false,
+  showClose = true,
   onClose,
   disableTapZoom = false,
-  onZoomChange,
+  onToggleLike,
 }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
 
-  // ✅【新增】IME 與輸入時，擋掉左右鍵往外冒泡（避免觸發全域換圖）
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+  const [startPointer, setStartPointer] = useState({ x: 0, y: 0 });
+  const [clicked, setClicked] = useState(false);
+  const pinchingRef = useRef(false);
+
+  // Prevent gallery-level left/right navigation while typing in inputs/textarea/contenteditable
   useEffect(() => {
     const isTypingElement = (el) => {
       if (!el) return false;
@@ -29,283 +47,116 @@ export default function ImageViewer({
       if (role === "textbox" || role === "combobox" || role === "searchbox") return true;
       return false;
     };
-
-    const onKeyDownCapture = (e) => {
-      const key = e.key;
-      if (key !== "ArrowLeft" && key !== "ArrowRight") return;
-
-      // 有修飾鍵就不處理（避免干擾系統/瀏覽器快捷鍵）
-      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-
-      // 焦點在輸入元件 or 使用 IME 組字（229/Process/isComposing）
-      const typing = isTypingElement(e.target) || isTypingElement(document.activeElement);
-      const composing = e.isComposing || e.key === "Process" || e.keyCode === 229;
-
-      if (typing || composing) {
-        // 只阻止冒泡，讓輸入框保有左右移動游標的預設行為
+    const onKeyDown = (e) => {
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && isTypingElement(document.activeElement)) {
         e.stopPropagation();
-        // 不要 preventDefault()
       }
     };
-
-    // 用 capture 階段先攔截，避免事件傳到全域換圖的 listener
-    window.addEventListener("keydown", onKeyDownCapture, true);
-    return () => window.removeEventListener("keydown", onKeyDownCapture, true);
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
 
-  const ZOOM_MIN = 1;
-  const ZOOM_MAX = 3;
-  const ZOOM_STEP = 1.5;
-  const SLACK_X = 48;
-  const SLACK_Y = 96;
-  const OVERSCROLL_RATIO_X = 0.12;
-  const OVERSCROLL_RATIO_Y = 0.12;
-
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const wasDragging = useRef(false);
-
-  const pinchingRef = useRef(false);
-  const pinchStart = useRef({ dist: 0, scale0: 1, pos0: { x: 0, y: 0 }, center: { x: 0, y: 0 } });
-  const dragOrigin = useRef({ x: 0, y: 0 });
-  const imageOrigin = useRef({ x: 0, y: 0 });
-  const baseSizeRef = useRef({ w: 0, h: 0 });
-
-  const isZoomed = scale > 1.001;
-
-  useEffect(() => { onZoomChange?.(scale); }, [scale, onZoomChange]);
-
-  const [clicked, setClicked] = useState(false);
-  useEffect(() => {
-    if (isLiked) {
-      setClicked(true);
-      const t = setTimeout(() => setClicked(false), 400);
-      return () => clearTimeout(t);
-    } else setClicked(false);
-  }, [isLiked]);
-
-  useEffect(() => {
-    const setVH = () => {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty("--app-vh", `${vh}px`);
-    };
-    setVH();
-    window.addEventListener("resize", setVH);
-    window.addEventListener("orientationchange", setVH);
-    return () => {
-      window.removeEventListener("resize", setVH);
-      window.removeEventListener("orientationchange", setVH);
-    };
-  }, []);
+  const isLiked = !!(currentUser?._id && Array.isArray(image?.likes) && image.likes.includes(currentUser._id));
 
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
-  const zoomAround = (focal, nextScale, prevScale, prevPos) => {
-    const k = nextScale / prevScale;
-    return { x: prevPos.x * k + focal.x * (1 - k), y: prevPos.y * k + focal.y * (1 - k) };
-  };
+  const getClampedPos = useCallback((pos, s) => {
+    // Keep the image roughly centered within container when zoomed
+    const el = containerRef.current;
+    if (!el) return pos;
+    const rect = el.getBoundingClientRect();
+    // Allow panning roughly one viewport width/height when zoomed
+    const limit = Math.max(0, (s - 1) * 0.5);
+    const limX = rect.width * limit;
+    const limY = rect.height * limit;
+    return { x: clamp(pos.x, -limX, limX), y: clamp(pos.y, -limY, limY) };
+  }, []);
 
   const computeBaseSize = useCallback(() => {
-    const container = containerRef.current;
-    const img = imgRef.current;
-    if (!container || !img || !img.naturalWidth || !img.naturalHeight) return;
-    const cw = container.clientWidth;
-    const ch = container.clientHeight;
-    const iw = img.naturalWidth;
-    const ih = img.naturalHeight;
-    const s = Math.min(cw / iw, ch / ih);
-    baseSizeRef.current = { w: iw * s, h: ih * s };
+    setPosition({ x: 0, y: 0 });
+    setScale(1);
+    setIsZoomed(false);
   }, []);
 
-  const getClampedPos = useCallback((pos, sc) => {
-    const container = containerRef.current;
-    const { w: bw, h: bh } = baseSizeRef.current;
-    if (!container || !bw || !bh) return pos;
+  // ✅ 忽略來自工具列/互動元素的點擊，避免觸發縮放
+  const shouldIgnoreClick = (e) => {
+    const t = e?.target;
+    if (!t) return false;
+    // 任一帶有 data-stop-nav 的祖先
+    if (t.closest?.("[data-stop-nav]")) return true;
+    // 常見互動元素
+    if (t.closest?.("button, a, input, textarea, select, label, [role='button'], [role='menu'], [role='tab']")) {
+      return true;
+    }
+    return false;
+  };
 
-    const cw = container.clientWidth;
-    const ch = container.clientHeight;
+  const handleClick = useCallback((e) => {
+    if (disableTapZoom) return;
+    if (isDragging || pinchingRef.current) return;
+    if (shouldIgnoreClick(e)) return; // ⬅️ 新增
+    setIsZoomed((z) => !z);
+    setScale((z) => (z > 1 ? 1 : 2));
+    setPosition({ x: 0, y: 0 });
+  }, [disableTapZoom, isDragging]);
 
-    const contentW = bw * sc;
-    const contentH = bh * sc;
-
-    const halfOverflowX = Math.max(0, (contentW - cw) / 2);
-    const halfOverflowY = Math.max(0, (contentH - ch) / 2);
-
-    const extraX = cw * OVERSCROLL_RATIO_X + SLACK_X;
-    const extraY = ch * OVERSCROLL_RATIO_Y + SLACK_Y;
-
-    const maxScreenX = halfOverflowX + extraX;
-    const maxScreenY = halfOverflowY + extraY;
-
-    const maxX = maxScreenX / sc;
-    const maxY = maxScreenY / sc;
-
-    return { x: clamp(pos.x, -maxX, maxX), y: clamp(pos.y, -maxY, maxY) };
-  }, []);
-
-  useEffect(() => {
-    computeBaseSize();
-    setPosition((p) => getClampedPos(p, scale));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [computeBaseSize]);
-
-  useEffect(() => {
-    const onResize = () => {
-      computeBaseSize();
-      setPosition((p) => getClampedPos(p, scale));
-    };
-    window.addEventListener("resize", onResize);
-    window.addEventListener("orientationchange", onResize);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("orientationchange", onResize);
-    };
-  }, [computeBaseSize, getClampedPos, scale]);
-
-  const startDrag = (pt) => {
+  const handleMouseDown = useCallback((e) => {
     if (!isZoomed) return;
     setIsDragging(true);
-    wasDragging.current = false;
-    dragOrigin.current = { x: pt.x, y: pt.y };
-    imageOrigin.current = { ...position };
-  };
-  const moveDrag = (pt) => {
+    setStartPointer({ x: e.clientX, y: e.clientY });
+    setStartPos(position);
+  }, [isZoomed, position]);
+
+  const handleMouseMove = useCallback((e) => {
     if (!isDragging) return;
-    wasDragging.current = true;
-    const dx = pt.x - dragOrigin.current.x;
-    const dy = pt.y - dragOrigin.current.y;
-    const next = { x: imageOrigin.current.x + dx, y: imageOrigin.current.y + dy };
-    setPosition(getClampedPos(next, scale));
-  };
-  const endDrag = () => {
+    const dx = e.clientX - startPointer.x;
+    const dy = e.clientY - startPointer.y;
+    setPosition((p) => getClampedPos({ x: startPos.x + dx, y: startPos.y + dy }, scale));
+  }, [isDragging, startPointer, startPos, scale, getClampedPos]);
+
+  const handleMouseUp = useCallback(() => {
     setIsDragging(false);
-    setPosition((p) => getClampedPos(p, scale));
-  };
+  }, []);
 
-  const handleMouseDown = (e) => { if (isZoomed) e.stopPropagation(); startDrag({ x: e.clientX, y: e.clientY }); };
-  const handleMouseMove = (e) => { if (isZoomed) e.stopPropagation(); moveDrag({ x: e.clientX, y: e.clientY }); };
-  const handleMouseUp = () => endDrag();
+  // Basic pinch zoom
+  const startDistanceRef = useRef(0);
+  const startScaleRef = useRef(1);
 
-  const getTouches = (e) => Array.from(e.touches || []);
-  const dist2 = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-  const centerOf = (a, b, rect) => ({
-    x: ((a.clientX + b.clientX) / 2) - rect.left,
-    y: ((a.clientY + b.clientY) / 2) - rect.top,
-  });
+  const getTouches = (evt) => (evt.touches ? Array.from(evt.touches) : []);
+  const distance = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
 
-  const handleTouchStart = (e) => {
-    if (e.touches && e.touches.length >= 2 && containerRef.current) {
-      e.preventDefault();
-      e.stopPropagation();
-      const ts = getTouches(e);
-      const rect = containerRef.current.getBoundingClientRect();
+  const handleTouchStart = useCallback((e) => {
+    const t = getTouches(e);
+    if (t.length === 2) {
       pinchingRef.current = true;
-      pinchStart.current = {
-        dist: dist2(ts[0], ts[1]),
-        scale0: scale,
-        pos0: { ...position },
-        center: centerOf(ts[0], ts[1], rect),
-      };
-      setIsDragging(false);
-      return;
+      startDistanceRef.current = distance(t[0], t[1]);
+      startScaleRef.current = scale;
+    } else if (t.length === 1 && isZoomed) {
+      setIsDragging(true);
+      setStartPointer({ x: t[0].clientX, y: t[0].clientY });
+      setStartPos(position);
     }
-    const ts = getTouches(e);
-    if (ts.length === 1 && isZoomed) {
-      e.stopPropagation();
-      startDrag({ x: ts[0].clientX, y: ts[0].clientY });
-    }
-  };
+  }, [isZoomed, position, scale]);
 
-  const handleTouchMove = (e) => {
-    if (isZoomed || pinchingRef.current || isDragging) e.stopPropagation();
-    const ts = getTouches(e);
-
-    if (!pinchingRef.current && ts.length >= 2 && containerRef.current) {
-      e.preventDefault();
-      e.stopPropagation();
-      const rect = containerRef.current.getBoundingClientRect();
-      pinchingRef.current = true;
-      pinchStart.current = {
-        dist: dist2(ts[0], ts[1]),
-        scale0: scale,
-        pos0: { ...position },
-        center: centerOf(ts[0], ts[1], rect),
-      };
-      setIsDragging(false);
-    }
-
-    if (pinchingRef.current && ts.length >= 2) {
-      e.preventDefault();
-      e.stopPropagation();
-      const rect = containerRef.current.getBoundingClientRect();
-      const d = dist2(ts[0], ts[1]);
-      const nextScale = clamp(
-        (pinchStart.current.scale0 * d) / Math.max(pinchStart.current.dist, 1),
-        ZOOM_MIN,
-        ZOOM_MAX
-      );
-      const focal = centerOf(ts[0], ts[1], rect);
-      const nextPosRaw = zoomAround(focal, nextScale, pinchStart.current.scale0, pinchStart.current.pos0);
-      const nextPos = getClampedPos(nextPosRaw, nextScale);
+  const handleTouchMove = useCallback((e) => {
+    const t = getTouches(e);
+    if (t.length === 2 && pinchingRef.current) {
+      const d = distance(t[0], t[1]);
+      const ratio = d / Math.max(1, startDistanceRef.current);
+      const nextScale = clamp(startScaleRef.current * ratio, 1, 4);
       setScale(nextScale);
-      setPosition(nextPos);
-      return;
+      setIsZoomed(nextScale > 1.01);
+    } else if (t.length === 1 && isDragging) {
+      const dx = t[0].clientX - startPointer.x;
+      const dy = t[0].clientY - startPointer.y;
+      setPosition((p) => getClampedPos({ x: startPos.x + dx, y: startPos.y + dy }, scale));
     }
+  }, [isDragging, startPointer, startPos, scale, getClampedPos]);
 
-    if (isDragging && ts.length === 1) {
-      e.stopPropagation();
-      moveDrag({ x: ts[0].clientX, y: ts[0].clientY });
-    }
-  };
-
-  const handleTouchEnd = (e) => {
-    if (isZoomed || pinchingRef.current || isDragging) e.stopPropagation();
-    const ts = getTouches(e);
-
-    if (pinchingRef.current && ts.length < 2) {
-      pinchingRef.current = false;
-      if (scale <= 1.02) {
-        setScale(1);
-        setPosition({ x: 0, y: 0 });
-      } else {
-        setPosition((p) => getClampedPos(p, scale));
-      }
-    }
-    if (isDragging && ts.length === 0) {
-      endDrag();
-    }
-  };
-
-  const clickCount = useRef(0);
-  const clickTimer = useRef(null);
-  const handleClick = (e) => {
-    if (disableTapZoom) return;
-    e.stopPropagation();
-    if (wasDragging.current) { wasDragging.current = false; return; }
-    clickCount.current += 1;
-    if (clickCount.current === 1) {
-      const container = containerRef.current;
-      if (!container || isZoomed) {
-        clickTimer.current = setTimeout(() => { clickCount.current = 0; }, 280);
-        return;
-      }
-      const rect = container.getBoundingClientRect();
-      const clickX = (e.clientX ?? 0) - rect.left;
-      const clickY = (e.clientY ?? 0) - rect.top;
-      const nextScale = clamp(ZOOM_STEP, ZOOM_MIN, ZOOM_MAX);
-      const nextPosRaw = zoomAround({ x: clickX, y: clickY }, nextScale, 1, { x: 0, y: 0 });
-      const nextPos = getClampedPos(nextPosRaw, nextScale);
-      setScale(nextScale);
-      setPosition(nextPos);
-      clickTimer.current = setTimeout(() => { clickCount.current = 0; }, 280);
-    } else if (clickCount.current === 2) {
-      clearTimeout(clickTimer.current);
-      clickCount.current = 0;
-      setScale(1);
-      setPosition({ x: 0, y: 0 });
-    }
-  };
+  const handleTouchEnd = useCallback(() => {
+    pinchingRef.current = false;
+    setIsDragging(false);
+  }, []);
 
   if (!image || (!image.imageId && !image.imageUrl)) {
     return <div className="text-sm text-red-400 bg-neutral-800 p-2 rounded">⚠️ 無法顯示圖片：缺少 imageId 或 imageUrl。</div>;
@@ -359,7 +210,7 @@ export default function ImageViewer({
           data-stop-nav
           onClick={(e) => {
             e.stopPropagation();
-             const meId = currentUser?._id;
+            const meId = currentUser?._id;
             if (meId && image?._id) {
               const already = Array.isArray(image.likes) ? image.likes.includes(meId) : false;
               const nextLiked = !already;
@@ -426,6 +277,23 @@ export default function ImageViewer({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 管理員工具列（包一層 data-stop-nav，並阻止事件冒泡） */}
+      {currentUser?.isAdmin && image && (
+        <div
+          className="absolute left-3 bottom-3 z-30 max-w-[92%]"
+          data-stop-nav
+          onClick={(e)=>e.stopPropagation()}
+          onPointerDown={(e)=>e.stopPropagation()}
+          onMouseDown={(e)=>e.stopPropagation()}
+          onTouchStart={(e)=>e.stopPropagation()}
+        >
+          <AdminModerationBar
+            image={image}
+            onDone={() => { try { location.reload(); } catch (e) {} }}
+          />
+        </div>
+      )}
     </div>
   );
 }
