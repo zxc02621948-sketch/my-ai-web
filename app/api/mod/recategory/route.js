@@ -1,4 +1,4 @@
-import { modRecategory } from "@/services/moderationService";
+import { modRecategory } from "@/services/ModerationAction";
 import { requireAdmin } from "@/utils/auth";
 
 export const dynamic = "force-dynamic";

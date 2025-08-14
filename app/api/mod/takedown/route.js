@@ -1,4 +1,4 @@
-import { modTakedown } from "@/services/moderationService";
+import { modTakedown } from "@/services/ModerationAction";
 import { requireAdmin } from "@/utils/auth";
 
 export const dynamic = "force-dynamic";

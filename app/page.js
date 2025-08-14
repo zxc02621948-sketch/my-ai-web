@@ -93,7 +93,7 @@ export default function HomePage() {
     ? categoryFilters.filter(Boolean)
     : [];
 
-  // reload 時固定回頂
+  // reload 時固定回頂（不影響返回上一頁）
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -128,7 +128,7 @@ export default function HomePage() {
     fetch(`/api/images/${id}/click`, { method: "POST" }).catch(() => {});
   };
 
-  /* ---------- 本地過濾器（先行預覽 + 保底） ---------- */
+  /* ---------- 本地過濾器（先行預覽） ---------- */
   const norm = (s) => (s ?? "").toString().toLowerCase();
   function applyLocalFilter(arr, q, cats, rats) {
     if (!Array.isArray(arr)) return [];
@@ -219,41 +219,7 @@ export default function HomePage() {
     return () => cancelAnimationFrame(antiTopJumpRef.current.rafId || 0);
   }, []);
 
-  /* ---------- 子函式：用多鍵名打一頁 ---------- */
-  async function fetchOnePage(pageToFetch, q, cats, rats) {
-    const apiSort = mapSortForApi(sort);
-    const baseParams = {
-      page: String(pageToFetch),
-      limit: String(PAGE_SIZE),
-      sort: apiSort,
-      ...(cats.length ? { categories: cats.join(",") } : {}),
-      ...(rats.length ? { ratings: rats.join(",") } : {}),
-    };
-
-    const keys = q ? ["search", "q", "query", "keyword", "term"] : [null];
-    let data = null;
-
-    for (const key of keys) {
-      const params = new URLSearchParams(baseParams);
-      if (key) params.set(key, q);
-      // eslint-disable-next-line no-console
-      console.log("[fetchImages] GET /api/images?" + params.toString());
-
-      const res = await fetch(`/api/images?${params.toString()}`, { cache: "no-store" });
-      const json = await res.json().catch(() => ({}));
-
-      if (Array.isArray(json?.images)) {
-        data = json;
-        if (json.images.length > 0 || key === keys[keys.length - 1]) break;
-      }
-    }
-
-    const serverImages = Array.isArray(data?.images) ? data.images : [];
-    const filtered = q ? applyLocalFilter(serverImages, q, cats, rats) : serverImages;
-    return { serverImages, filtered };
-  }
-
-  /* ---------- 核心：取圖（保底搜尋 + 連續抓頁） ---------- */
+  /* ---------- 核心：單次請求（後端統一吃 search） ---------- */
   const fetchImages = async (pageToFetch = 1, q = "", categories = [], ratings = []) => {
     setIsLoading(true);
     try {
@@ -261,57 +227,38 @@ export default function HomePage() {
       const rats = Array.isArray(ratings) ? ratings.filter(Boolean) : [];
 
       const myId = ++inFlightId.current;
+      const apiSort = mapSortForApi(sort);
 
-      // 先抓當前這一頁
-      let { serverImages, filtered } = await fetchOnePage(pageToFetch, q, cats, rats);
+      const params = new URLSearchParams({
+        page: String(pageToFetch),
+        limit: String(PAGE_SIZE),
+        sort: apiSort,
+        ...(cats.length ? { categories: cats.join(",") } : {}),
+        ...(rats.length ? { ratings: rats.join(",") } : {}),
+      });
+      if (q) params.set("search", q); // ← 統一只送 search
+
+      const res = await fetch(`/api/images?${params.toString()}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+
       if (myId !== inFlightId.current) return;
 
-      let combined = filtered;
-      let curPage = pageToFetch;
-      let lastServerBatchSize = serverImages.length;
-
-      // 若是搜尋而且這一頁沒有命中 → 連續往後抓，最多 5 頁或湊滿至少 24 張為止
-      const WANT = 24;
-      const MAX_PAGES = 5;
-      if (q && pageToFetch === 1 && combined.length < Math.min(WANT, PAGE_SIZE)) {
-        while (
-          combined.length < WANT &&
-          lastServerBatchSize >= PAGE_SIZE &&
-          curPage < MAX_PAGES
-        ) {
-          const nextPage = curPage + 1;
-          const r = await fetchOnePage(nextPage, q, cats, rats);
-          if (myId !== inFlightId.current) return;
-
-          lastServerBatchSize = r.serverImages.length;
-          if (r.filtered.length > 0) {
-            // 去重後追加
-            const existingIds = new Set(combined.map((img) => String(img._id)));
-            const unique = r.filtered.filter((img) => !existingIds.has(String(img._id)));
-            combined = [...combined, ...unique];
-          }
-          curPage = nextPage;
-          if (r.serverImages.length < PAGE_SIZE) break; // 伺服器沒更多
-        }
-      }
+      const serverImages = Array.isArray(data?.images) ? data.images : [];
 
       if (pageToFetch === 1) {
-        setImages(combined);
+        setImages(serverImages);
         setPreviewImages(null);
         setFetchedOnce(true);
-        const apiSort = mapSortForApi(sort);
         const k = keyOf(q, apiSort, cats, rats);
-        page1CacheRef.current.set(k, combined);
+        page1CacheRef.current.set(k, serverImages);
       } else {
         setImages((prev) => {
           const existingIds = new Set(prev.map((img) => String(img._id)));
-          const uniqueNewImages = combined.filter((img) => !existingIds.has(String(img._id)));
+          const uniqueNewImages = serverImages.filter((img) => !existingIds.has(String(img._id)));
           return [...prev, ...uniqueNewImages];
         });
       }
-
-      // hasMore 以「伺服器實際回傳的數量」判斷，不被前端過濾影響
-      setHasMore(serverImages.length >= PAGE_SIZE);
+      setHasMore(serverImages.length >= PAGE_SIZE); // 依伺服器回傳數判斷
       setPage(pageToFetch);
     } catch (err) {
       console.error("載入圖片失敗：", err);
@@ -366,16 +313,7 @@ export default function HomePage() {
 
   /* ---------- 搜尋 / 排序 / 篩選 觸發 ---------- */
   useEffect(() => {
-    const q =
-      (
-        searchParams.get("search") ||
-        searchParams.get("q") ||
-        searchParams.get("query") ||
-        searchParams.get("keyword") ||
-        searchParams.get("term") ||
-        ""
-      ).trim();
-
+    const q = (searchParams.get("search") || "").trim(); // ← 統一讀 search
     const byLogo = sessionStorage.getItem("homepageReset") === "1";
 
     const catsStr = JSON.stringify(selectedCategories);
@@ -447,15 +385,7 @@ export default function HomePage() {
       (entries) => {
         if (entries[0].isIntersecting && !isFetchingRef.current) {
           isFetchingRef.current = true;
-          const q =
-            (
-              searchParams.get("search") ||
-              searchParams.get("q") ||
-              searchParams.get("query") ||
-              searchParams.get("keyword") ||
-              searchParams.get("term") ||
-              ""
-            ).trim();
+          const q = (searchParams.get("search") || "").trim();
           armAntiTopJumpGuard(800);
           Promise.resolve(fetchImages(page + 1, q, selectedCategories, selectedRatings))
             .catch(() => {})
@@ -504,21 +434,13 @@ export default function HomePage() {
     if (enriched?._id) reportClick(enriched._id);
 
     if (dir === "next" && nextIdx >= images.length - 2 && hasMore && !isLoading) {
-      const q =
-        (
-          searchParams.get("search") ||
-          searchParams.get("q") ||
-          searchParams.get("query") ||
-          searchParams.get("keyword") ||
-          searchParams.get("term") ||
-          ""
-        ).trim();
+      const q = (searchParams.get("search") || "").trim();
       armAntiTopJumpGuard(800);
       fetchImages(page + 1, q, selectedCategories, selectedRatings);
     }
   };
 
-  /* ---------- 追蹤同步 ---------- */
+  /* ---------- 追蹤同步（事件） ---------- */
   const handleFollowChange = (ownerId, isNowFollowing) => {
     const uid = String(ownerId);
 
