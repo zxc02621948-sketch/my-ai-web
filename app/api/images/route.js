@@ -1,4 +1,7 @@
-// app/api/images/route.js
+// ✅ 讓 Vercel 優先用 Node 環境 + 靠近 Atlas 的節點（改成你 MongoDB 的區域）
+export const runtime = "nodejs";
+export const preferredRegion = ["hnd1"]; // 東京 → 如果你的 Atlas 在新加坡改成 ["sin1"]
+
 import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
 import { NextResponse } from "next/server";
@@ -12,18 +15,18 @@ export async function HEAD(req) {
     await dbConnect();
     return new NextResponse(null, { status: 204 });
   } catch {
-    // 即使失敗也不要讓前端報紅，回 204
     return new NextResponse(null, { status: 204 });
   }
 }
 
 export async function GET(req) {
   try {
+    // 🛡️ 復用已建立的連線，避免每次 cold start 重連
     await dbConnect();
 
     const url = new URL(req.url);
 
-    // ✅ 預熱模式：?warm=1（可選備援，與 HEAD 擇一即可）
+    // ✅ 可選：雲端 ping /api/images?warm=1 預熱，讓 Serverless 保持熱機
     if (url.searchParams.get("warm") === "1") {
       return new NextResponse(null, { status: 204 });
     }
@@ -34,22 +37,11 @@ export async function GET(req) {
     const pinRecent = Math.max(0, parseInt(url.searchParams.get("pinRecent") || "6", 10));
     const debug = url.searchParams.get("debug") === "1";
 
-    // 關鍵字
-    const qRaw = (
-      url.searchParams.get("search") ||
-      url.searchParams.get("q") ||
-      url.searchParams.get("query") ||
-      url.searchParams.get("keyword") ||
-      url.searchParams.get("term") ||
-      ""
-    ).trim();
-    const qRegex = qRaw ? new RegExp(qRaw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
+    const q = (url.searchParams.get("search") || "").trim();
+    const qRegex = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
 
-    // 分類
     const categoriesParam = (url.searchParams.get("categories") || "")
       .split(",").map((s) => s.trim()).filter(Boolean);
-
-    // 分級（不帶 -> 預設排除 18）
     const ratingsParam = (url.searchParams.get("ratings") || "")
       .split(",").map((s) => s.trim()).filter(Boolean);
 
@@ -75,55 +67,40 @@ export async function GET(req) {
       : null;
 
     const projectBase = {
+      _id: 1,
       title: 1,
-      imageId: 1,
-      imageUrl: 1,
-      category: 1,
-      rating: 1,
-      tags: 1,
-      likes: 1,
-      likesCount: 1,
-      clicks: 1,
-      completenessScore: 1,
-      popScore: 1,
-      createdAt: 1,
-      user: 1,
-      userId: 1,
       description: 1,
       positivePrompt: 1,
       negativePrompt: 1,
-      width: 1,
-      height: 1,
+      tags: 1,
+      category: 1,
+      rating: 1,
+      createdAt: 1,
+      likes: 1,
+      popScore: 1,
+      imageUrl: 1,
+      imageId: 1,
+      userId: 1,
     };
 
     const lookupUser = [
       {
         $lookup: {
           from: usersColl,
-          localField: "user",
+          localField: "userId",
           foreignField: "_id",
-          as: "userObj",
-          pipeline: [{ $project: { username: 1, image: 1 } }],
+          as: "user",
+          pipeline: [{ $project: { _id: 1, username: 1, image: 1 } }],
         },
       },
-      {
-        $addFields: {
-          user: {
-            $cond: [
-              { $gt: [{ $size: "$userObj" }, 0] },
-              { $arrayElemAt: ["$userObj", 0] },
-              "$user",
-            ],
-          },
-        },
-      },
-      { $project: { userObj: 0 } },
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
     ];
 
-    const decorate = (raw = []) =>
-      raw.map((img) => ({
+    const decorate = (docs) =>
+      (docs || []).map((img) => ({
         ...img,
-        author: typeof img.author === "string" ? img.author : "",
+        likesCount: Array.isArray(img.likes) ? img.likes.length : 0,
+        user: img.user || null,
         imageUrl:
           img.imageUrl ||
           (img.imageId
@@ -140,11 +117,11 @@ export async function GET(req) {
       }
       const docs = await Image.aggregate([
         { $match: match },
-        { $sort: { createdAt: -1 } },
-        { $skip: skip }, { $limit: limit },
         { $project: projectBase },
         ...lookupUser,
         { $match: searchMatch },
+        { $sort: { createdAt: -1 } },
+        { $skip: skip }, { $limit: limit },
       ]);
       return NextResponse.json({ images: decorate(docs) });
     }
@@ -158,22 +135,22 @@ export async function GET(req) {
       }
       const docs = await Image.aggregate([
         { $match: match },
-        { $sort: { createdAt: 1 } },
-        { $skip: skip }, { $limit: limit },
         { $project: projectBase },
         ...lookupUser,
         { $match: searchMatch },
+        { $sort: { createdAt: 1 } },
+        { $skip: skip }, { $limit: limit },
       ]);
       return NextResponse.json({ images: decorate(docs) });
     }
 
-    // ===== mostLikes =====（直接用 likesCount）
+    // ===== mostLikes =====
     if (sort === "mostlikes") {
       const docs = await Image.aggregate([
         { $match: match },
         { $project: { 
             ...projectBase,
-            likesCount: { $size: { $ifNull: ["$likes", []] } }  // ✅ 永遠以 likes 陣列計算
+            likesCount: { $size: { $ifNull: ["$likes", []] } }
           } 
         },
         ...lookupUser,
@@ -205,16 +182,16 @@ export async function GET(req) {
       return NextResponse.json({ images: decorate(docs) });
     }
 
-    // ===== hybrid（置頂最新 N 張 + 其餘隨機）=====
+    // ===== hybrid =====
     if (sort === "hybrid") {
       if (searchMatch) {
         const docs = await Image.aggregate([
           { $match: match },
-          { $sort: { createdAt: -1 } },
-          { $skip: skip }, { $limit: limit },
           { $project: projectBase },
           ...lookupUser,
           { $match: searchMatch },
+          { $sort: { createdAt: -1 } },
+          { $skip: skip }, { $limit: limit },
         ]);
         return NextResponse.json({ images: decorate(docs) });
       }
@@ -238,7 +215,7 @@ export async function GET(req) {
       return NextResponse.json({ images: decorate([...pinned, ...randoms]) });
     }
 
-    // ===== popular（✅ 用預算分 popScore）=====
+    // ===== popular =====
     if (!qRegex) {
       const docs = await Image.find(match)
         .sort({ popScore: -1, createdAt: -1, _id: -1 })

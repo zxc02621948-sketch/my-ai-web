@@ -15,8 +15,6 @@ import toast from "react-hot-toast";
 import { Package2, Wrench, CircleHelp } from "lucide-react";
 import InboxButton from "@/components/common/InboxButton";
 
-const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr: false });
-
 export default function Header({
   currentUser,
   setCurrentUser,
@@ -29,15 +27,15 @@ export default function Header({
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState([]);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
-
-  const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null);
 
   const filterButtonRef = useRef(null);
   const inputRef = useRef(null);
@@ -79,14 +77,25 @@ export default function Header({
     viewMode,
     setViewMode,
     resetFilters,
+    setSort, // ← 新增
   } = useFilterContext();
 
   const isUserTypingRef = useRef(false);
   const debounceTimerRef = useRef(null);
 
-  const buildHref = (term) => {
+  // ==== 新增：哪些路由支援「就地搜尋」 ====
+  const LOCAL_SEARCH_PATHS = [
+    /^\/user\//,        // 個人頁
+    /^\/tag\//,         // 標籤頁（如有）
+    /^\/collection\//,  // 收藏/清單頁（如有）
+  ];
+  const supportsLocalSearch = (p) => LOCAL_SEARCH_PATHS.some((re) => re.test(p || ""));
+
+  // ⬇️ 改成「就地或首頁」二選一
+  const buildHref = (term, path = pathname || "/") => {
     const q = (term || "").trim();
-    return q ? `${pathname}?search=${encodeURIComponent(q)}` : pathname;
+    const base = supportsLocalSearch(path) ? path : "/";
+    return q ? `${base}?search=${encodeURIComponent(q)}` : base;
   };
 
   // URL → 輸入框
@@ -96,21 +105,36 @@ export default function Header({
     isUserTypingRef.current = false;
   }, [searchParams]);
 
-  // 輸入框 → URL（debounce）
+  // 輸入框 → URL（debounce：就地或首頁）
   useEffect(() => {
     if (!isUserTypingRef.current) return;
     if (isComposing) return;
     clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
-      const target = buildHref(searchQuery);
+      const target = buildHref(searchQuery, pathname);
       const currentQuery = searchParams.toString();
-      const currentHref = `${pathname}${currentQuery ? `?${currentQuery}` : ""}`;
+      const currentHref = `${(typeof window !== "undefined" ? window.location.pathname : "/")}${currentQuery ? `?${currentQuery}` : ""}`;
       if (currentHref === target) return;
       router.replace(target);
     }, 200);
     return () => clearTimeout(debounceTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, isComposing, pathname, searchParams]);
+  }, [searchQuery, isComposing, pathname]);
+
+  const [liveSuggestions, setLiveSuggestions] = useState(suggestions || []);
+  useEffect(() => {
+    setLiveSuggestions(Array.isArray(suggestions) ? suggestions : []);
+  }, [suggestions]);
+
+  // 監聽首頁的廣播事件（當沒有從 props 傳入時也能更新）
+  useEffect(() => {
+    const onSug = (e) => {
+      const list = Array.isArray(e?.detail) ? e.detail : [];
+      setLiveSuggestions(list);
+    };
+    window.addEventListener("header-suggestions", onSug);
+    return () => window.removeEventListener("header-suggestions", onSug);
+  }, []);
 
   // 點外關閉：篩選面板 + 使用者選單 + 搜尋下拉
   useEffect(() => {
@@ -141,9 +165,9 @@ export default function Header({
   // 路由/查詢變更時，自動收起篩選面板
   useEffect(() => {
     setFilterMenuOpen(false);
-  }, [pathname, searchParams]);
+  }, [searchParams]);
 
-  // 搜尋建議
+  // 搜尋建議（來自 props 或事件）
   useEffect(() => {
     const q = searchQuery.trim();
     if (!q) {
@@ -151,12 +175,12 @@ export default function Header({
       setFilteredSuggestions([]);
       return;
     }
-    const list = suggestions
+    const list = (liveSuggestions || [])
       .filter((s) => typeof s === "string" && s.toLowerCase().includes(q.toLowerCase()))
       .slice(0, 8);
     setFilteredSuggestions(list);
     setShowDropdown(list.length > 0);
-  }, [searchQuery, suggestions]);
+  }, [searchQuery, liveSuggestions]);
 
   // 面板動態定位（開啟/視窗大小重算）
   useLayoutEffect(() => {
@@ -171,7 +195,6 @@ export default function Header({
       const panelWidth = 320;
       const padding = 12;
 
-      // position: fixed → 用視窗座標
       const top = rect.bottom + gap;
       const desiredLeft = rect.left;
       const maxLeft = window.innerWidth - panelWidth - padding;
@@ -189,20 +212,51 @@ export default function Header({
   }, [filterMenuOpen]);
 
   const handleInputChange = (e) => {
+    const v = e.target.value;
     isUserTypingRef.current = true;
-    setSearchQuery(e.target.value);
+    setSearchQuery(v);
+    if (v === "") {
+      // 清空：回「就地或首頁」；只有回首頁才需要廣播顯示全部
+      isUserTypingRef.current = false;
+      clearTimeout(debounceTimerRef.current);
+      setShowDropdown(false);
+
+      const base = supportsLocalSearch(pathname) ? pathname : "/";
+      if (base === "/") {
+        sessionStorage.setItem("homepageShowAll", "1");
+        window.dispatchEvent(new CustomEvent("homepage-show-all", { detail: { ts: Date.now() } }));
+      }
+      router.replace(base);
+    }
   };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     isUserTypingRef.current = false;
     setShowDropdown(false);
-    router.push(buildHref(searchQuery));
+    const q = (searchQuery || "").trim();
+
+    const base = supportsLocalSearch(pathname) ? pathname : "/";
+    if (!q) {
+      // 空字串：就地清空或回首頁；只有回首頁才廣播顯示全部
+      clearTimeout(debounceTimerRef.current);
+      setSearchQuery("");
+      if (base === "/") {
+        sessionStorage.setItem("homepageShowAll", "1");
+        window.dispatchEvent(new CustomEvent("homepage-show-all", { detail: { ts: Date.now() } }));
+      }
+      router.push(base);
+      return;
+    }
+
+    router.push(buildHref(q, pathname));
   };
+
   const handleSuggestionClick = (text) => {
     isUserTypingRef.current = false;
     setSearchQuery(text);
     setShowDropdown(false);
-    router.push(buildHref(text));
+    router.push(buildHref(text, pathname));
   };
 
   return (
@@ -211,14 +265,19 @@ export default function Header({
         ref={headerRef}
         className="sticky top-0 left-0 right-0 z-50 bg-zinc-900 border-b border-zinc-700"
       >
-        {/* 第一列：Logo / 篩選 / 桌機搜尋 / 右側功能 */}
         <div className="px-3 md:px-4 py-1 md:py-2 flex items-center justify-between gap-3">
           {/* 左：Logo */}
           <Link
             href="/"
             className="flex items-center gap-2 md:gap-3 shrink-0"
             onClick={() => {
-              sessionStorage.setItem("homepageReset", "1");
+              // 點 Logo 一樣觸發「顯示全部一次」
+              resetFilters(); // ← 新增這行，重置篩選
+              setSort("popular");    // 重置排序
+              sessionStorage.setItem("homepageShowAll", "1");
+              window.dispatchEvent(new CustomEvent("homepage-show-all", { detail: { ts: Date.now() } }));
+              clearTimeout(debounceTimerRef.current);
+              setSearchQuery("");
               router.push("/");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
@@ -237,10 +296,9 @@ export default function Header({
             </span>
           </Link>
 
-          {/* 中：篩選 + 桌機搜尋（手機隱藏） */}
+          {/* 中：篩選 + 桌機搜尋 */}
           <div className="flex-1 min-w-0 flex items-center justify-start w-full">
             <div className="flex items-center gap-2 w-full">
-              {/* 篩選（手機也顯示文字，顯眼） */}
               <div className="w-[92px] md:w-[110px] shrink-0">
                 <button
                   ref={filterButtonRef}
@@ -256,8 +314,8 @@ export default function Header({
                 </button>
               </div>
 
-              {/* 桌機搜尋列（手機隱藏） */}
-              <div className="relative w-full min-w-0 hidden md:block" ref={searchBoxRefDesktop}>
+              {/* 桌機搜尋列 */}
+              <div className="relative flex-1 min-w-0 hidden md:block" ref={searchBoxRefDesktop}>
                 <form
                   onSubmit={handleSubmit}
                   className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
@@ -332,9 +390,8 @@ export default function Header({
               )}
           </div>
 
-          {/* 右：操作區（緊湊排版） */}
+          {/* 右：操作區 */}
           <div className="flex items-center gap-2 md:gap-2 lg:gap-3 shrink-0">
-            {/* 上傳（桌機顯示） */}
             <button
               onClick={() => {
                 if (!currentUser) {
@@ -343,18 +400,17 @@ export default function Header({
                 }
                 onUploadClick?.();
               }}
-              className="hidden md:inline-flex items-center gap-2 px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 font-medium"
+              className="hidden md:inline-flex items-center gap-2 px-4 py-2 rounded bg-green-600 text白 hover:bg-green-700 font-medium"
               title="上傳圖片"
             >
               <span aria-hidden>⬆️</span>
               <span>上傳圖片</span>
             </button>
 
-            {/* 其他連結（桌機顯示） */}
             <Link
               href="/models"
               className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
-                         bg-gradient-to-r from-emerald-400 to-cyan-500 text-white font-semibold
+                         bg-gradient-to-r from-emerald-400 to-cyan-500 text白 font-semibold
                          shadow-[0_6px_20px_-6px_rgba(16,185,129,0.55)]
                          hover:shadow-[0_8px_28px_-6px_rgba(6,182,212,0.7)]
                          transition-all active:translate-y-[1px]"
@@ -367,7 +423,7 @@ export default function Header({
             <Link
               href="/install-guide"
               className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
-                         bg-gradient-to-r from-amber-400 to-orange-500 text-white font-semibold
+                         bg-gradient-to-r from-amber-400 to-orange-500 text白 font-semibold
                          shadow-[0_6px_20px_-6px_rgba(245,158,11,0.55)]
                          hover:shadow-[0_8px_28px_-6px_rgba(249,115,22,0.7)]
                          transition-all active:translate-y-[1px]"
@@ -380,7 +436,7 @@ export default function Header({
             <Link
               href="/qa"
               className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
-                         bg-gradient-to-r from-indigo-400 to-fuchsia-500 text-white font-semibold
+                         bg-gradient-to-r from-indigo-400 to-fuchsia-500 text白 font-semibold
                          shadow-[0_6px_20px_-6px_rgba(99,102,241,0.55)]
                          hover:shadow-[0_8px_28px_-6px_rgba(217,70,239,0.7)]
                          transition-all active:translate-y-[1px]"
@@ -391,8 +447,6 @@ export default function Header({
             </Link>
 
             {currentUser && <NotificationBell currentUser={currentUser} />}
-
-            {/* 新增：信箱按鈕 */}
             {currentUser && <InboxButton />}
 
             {/* 使用者選單 */}
@@ -403,7 +457,7 @@ export default function Header({
                 <>
                   <button
                     onClick={() => setUserMenuOpen((prev) => !prev)}
-                    className="px-3 md:px-4 py-2 bg-zinc-800 text-white rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[40px] md:min-w-[140px] max-w-[160px] truncate text-left"
+                    className="px-3 md:px-4 py-2 bg-zinc-800 text白 rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[40px] md:min-w-[140px] max-w-[160px] truncate text-left"
                     aria-haspopup="menu"
                     aria-expanded={userMenuOpen}
                     title={currentUser?.username || "登入 / 註冊"}
@@ -430,8 +484,6 @@ export default function Header({
                             我的頁面
                           </Link>
 
-                          {/* ⛳ 移除：手機版選單中的上傳入口 */}
-
                           <button
                             onClick={async () => {
                               setUserMenuOpen(false);
@@ -447,8 +499,6 @@ export default function Header({
                         </>
                       ) : (
                         <>
-                          {/* ⛳ 移除：未登入時「上傳（需登入）」的手機選單項目 */}
-
                           <button
                             onClick={() => {
                               setUserMenuOpen(false);
@@ -479,7 +529,7 @@ export default function Header({
           </div>
         </div>
 
-        {/* 第二列：📱 手機搜尋專用（佔滿一欄，壓縮上下距） */}
+        {/* 第二列：📱 手機搜尋專用 */}
         <div className="md:hidden px-3 pb-1.5 pt-1 border-t border-zinc-700" ref={searchBoxRefMobile}>
           <form
             onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }}
@@ -492,18 +542,18 @@ export default function Header({
               onCompositionStart={() => setIsComposing(true)}
               onCompositionEnd={() => setIsComposing(false)}
               placeholder="搜尋標題、作者、標籤…"
-              className="flex-1 min-w-0 pl-3 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none text-sm"
+              className="flex-1 min-w-0 pl-3 pr-2 py-2 rounded-l bg-zinc-800 text白 placeholder-gray-400 focus:outline-none text-sm"
             />
             <button
               type="submit"
-              className="px-3 py-2 rounded-r bg-zinc-700 text-white hover:bg-zinc-600 text-sm font-medium"
+              className="px-3 py-2 rounded-r bg-zinc-700 text白 hover:bg-zinc-600 text-sm font-medium"
             >
               搜尋
             </button>
           </form>
 
           {showDropdown && !isComposing && (
-            <ul className="mt-1 w-full bg-zinc-800 border border-zinc-700 rounded shadow-md text-sm text-white max-h-60 overflow-y-auto">
+            <ul className="mt-1 w-full bg-zinc-800 border border-zinc-700 rounded shadow-md text-sm text白 max-h-60 overflow-y-auto">
               {filteredSuggestions.map((s, i) => (
                 <li
                   key={i}
@@ -517,13 +567,13 @@ export default function Header({
           )}
         </div>
 
-        {/* 第三列：📱 手機常用功能快捷鍵（縮小間距） */}
+        {/* 第三列：📱 手機常用功能 */}
         <div className="md:hidden px-3 pb-2">
           <div className="flex gap-2 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
             <Link
               href="/models"
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
-                         bg-gradient-to-r from-emerald-400 to-cyan-500 text-white shrink-0"
+                         bg-gradient-to-r from-emerald-400 to-cyan-500 text白 shrink-0"
               title="獲取模型"
             >
               <Package2 className="w-4 h-4" />
@@ -533,7 +583,7 @@ export default function Header({
             <Link
               href="/install-guide"
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
-                         bg-gradient-to-r from-amber-400 to-orange-500 text-white shrink-0"
+                         bg-gradient-to-r from-amber-400 to-orange-500 text白 shrink-0"
               title="安裝教學"
             >
               <Wrench className="w-4 h-4" />
@@ -542,15 +592,14 @@ export default function Header({
 
             <Link
               href="/qa"
-              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
-                         bg-gradient-to-r from-indigo-400 to-fuchsia-500 text-white shrink-0"
+              className="flex items中心 gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
+                         bg-gradient-to-r from-indigo-400 to-fuchsia-500 text白 shrink-0"
               title="新手 Q&A"
             >
               <CircleHelp className="w-4 h-4" />
               <span>新手 Q&A</span>
             </Link>
 
-            {/* 手機：上傳快速鍵（保留） */}
             <button
               onClick={() => {
                 if (!currentUser) {
@@ -560,7 +609,7 @@ export default function Header({
                 onUploadClick?.();
               }}
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
-                         bg-green-600 text-white hover:bg-green-700 shrink-0"
+                         bg-green-600 text白 hover:bg-green-700 shrink-0"
               title="上傳圖片"
             >
               ⬆️ <span>上傳</span>
