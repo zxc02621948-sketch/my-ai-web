@@ -123,9 +123,18 @@ export async function GET(req) {
       platform: 1,
       modelName: 1,
       modelLink: 1,
+      modelHash: 1,
       loraName: 1,
       loraLink: 1,
       author: 1,
+
+      sampler: 1,
+      steps: 1,
+      cfgScale: 1,
+      seed: 1,
+      clipSkip: 1,
+      width: 1,
+      height: 1,
     };
 
     // —— 一律統一 user 連結：先產生 userRef（支援 user/objectId 與 userId/string）——

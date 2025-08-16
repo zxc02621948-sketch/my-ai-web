@@ -1,5 +1,5 @@
 // app/api/cloudflare-images/route.js
-import { connectToDatabase } from "@/lib/mongodb";
+import dbConnect from "@/lib/mongodb";
 import { NextResponse } from "next/server";
 import Image from "@/models/Image";
 import User from "@/models/User";
@@ -9,7 +9,7 @@ import { computeCompleteness } from "@/utils/score"; // 👈 新增
 
 export async function GET(req) {
   try {
-    await connectToDatabase();
+    await dbConnect();   // 改用 dbConnect()
 
     const page = parseInt(req.nextUrl.searchParams.get("page")) || 1;
     const limit = parseInt(req.nextUrl.searchParams.get("limit")) || 20;
@@ -85,7 +85,7 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
-    await connectToDatabase();
+    await dbConnect();
     const body = await req.json();
 
     const {
@@ -112,6 +112,7 @@ export async function POST(req) {
       height,
       modelHash,
       author,
+      username,   // 👈 新增接收
     } = body;
 
     if (!imageId || !title) {
@@ -147,6 +148,7 @@ export async function POST(req) {
       modelHash: modelHash || "",
       userId,
       user: userId,
+      username: username || "",   // 👈 若 schema 有支援就能存
     };
 
     // 👇 即時計算完整度，讓熱門度立即生效

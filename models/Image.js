@@ -12,6 +12,7 @@ const ImageSchema = new mongoose.Schema(
     category: String,
     description: String,
     author: { type: String, default: "" },
+    username: { type: String, default: "" },
 
     modelName: String,
     loraName: String,
