@@ -16,6 +16,7 @@ const PAGE_SIZE = 20;
 
 export default function HomePage() {
   const searchParams = useSearchParams();
+  const userCacheRef = useRef(new Map()); // userId -> userObject
 
   const [images, setImages] = useState([]);
   const [page, setPage] = useState(1);
@@ -25,6 +26,61 @@ export default function HomePage() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [currentUser, setCurrentUser] = useState(undefined);
   const [fetchedOnce, setFetchedOnce] = useState(false);
+
+  // —— 同步追蹤狀態（父層處理器，給 ImageModal 呼叫） ——
+  const handleFollowChange = (targetUserId, isFollowing) => {
+    // 1) 同步正在開啟的大圖
+    setSelectedImage((prev) => {
+      if (!prev) return prev;
+
+      const uid =
+        typeof prev.user === "object" 
+          ? (prev.user?._id || prev.user?.id || prev.user?.userId)
+          : prev.user;
+
+      if (uid && String(uid) === String(targetUserId)) {
+        const userObj = 
+          typeof prev.user === "object" 
+          ? { ...prev.user, _id: prev.user?._id || prev.user?.id || prev.user?.userId }
+          : { _id: uid };
+        return { ...prev, user: { ...userObj, isFollowing } };
+      }
+      return prev;
+    });
+
+    // 2) 同步首頁清單卡片
+    setImages((prev) =>
+      Array.isArray(prev)
+        ? prev.map((img) => {
+            const uid =
+              typeof img.user === "object"
+                ? (img.user?._id || img.user?.id || img.user?.userId)
+                : img.user;
+            if (uid && String(uid) === String(targetUserId)) {
+              const userObj = typeof img.user === "object" ? img.user : { _id: uid };
+              return { ...img, user: { ...userObj, isFollowing } };
+            }
+            return img;
+          })
+        : prev
+    );
+
+    // 3) 同步 currentUser.following
+    setCurrentUser((prev) => {
+      if (!prev) return prev;
+      const uid = String(targetUserId);
+      const list = Array.isArray(prev.following) ? [...prev.following] : [];
+      const getId = (x) => (typeof x === "object" && x !== null ? String(x.userId) : String(x));
+      const exists = list.some((x) => getId(x) === uid);
+
+      let nextList = list;
+      if (isFollowing && !exists) nextList = [...list, uid];
+      if (!isFollowing && exists) nextList = list.filter((x) => getId(x) !== uid);
+
+      return { ...prev, following: nextList };
+    });
+  };
+
 
   const inFlightId = useRef(0);
   const loadMoreRef = useRef(null);
@@ -78,7 +134,8 @@ export default function HomePage() {
 
       if (myId !== inFlightId.current) return; // 只採用最新請求
 
-      const list = Array.isArray(j?.images) ? j.images : [];
+      const listRaw = Array.isArray(j?.images) ? j.images : [];
+      const list = listRaw.map(normalizeImage);
       setHasMore(list.length >= PAGE_SIZE);
 
       if (pageToFetch === 1) {
@@ -98,6 +155,16 @@ export default function HomePage() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const onUpdated = (e) => {
+      const updated = e?.detail?.updated;
+      if (updated?._id) applyUpdatedImage(updated);
+    };
+    window.addEventListener("image-updated", onUpdated);
+    return () => window.removeEventListener("image-updated", onUpdated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 當 search / sort / filters 變 → 清畫面、抓第 1 頁
   useEffect(() => {
@@ -151,8 +218,55 @@ export default function HomePage() {
     return img.likes.includes(uid);
   };
 
+  const normalizeImage = (img) => {
+     if (!img) return img;
+     const raw = img.user ?? img.userId ?? null;
+
+    // 取出 userId（可能是 object 或字串）
+    const uid = typeof raw === "object"
+      ? (raw?._id || raw?.id || raw?.userId || null)
+      : (raw || null);
+    // 統一成物件，至少要有 _id
+    const userObj = (typeof raw === "object")
+      ? { ...raw, _id: uid }
+      : (uid ? { _id: uid } : { _id: null });
+    
+    // isFollowing 的後備來源
+    const isFollowingVal =
+      (typeof raw === "object" ? raw?.isFollowing : img?.isFollowing) ?? false;
+  
+    return { 
+      ...img, 
+      user: { ...userObj, isFollowing: Boolean(isFollowingVal) },
+    };
+  };
+
+  // —— 合併單張更新到列表與當前大圖 —— //
+  const mergeImage = (oldImg, updated) => {
+    if (!oldImg || !updated?._id) return oldImg;
+    if (String(oldImg._id) !== String(updated._id)) return oldImg;
+    // 後端若沒回 user，就保留舊的 user（含 isFollowing）
+    const nextUser =
+      updated.user ||
+      (typeof oldImg.user === "object"
+        ? oldImg.user
+        : (oldImg.user ? { _id: oldImg.user } : undefined));
+    return { ...oldImg, ...updated, ...(nextUser ? { user: nextUser } : {}) };
+  };
+
+  const applyUpdatedImage = (updated) => {
+    if (!updated?._id) return;
+    // ① 合併首頁列表
+    setImages((prev) => (Array.isArray(prev) ? prev.map((it) => mergeImage(it, updated)) : prev));
+    // ② 合併目前開啟的大圖
+    setSelectedImage((prev) => mergeImage(prev, updated));
+  };
+
+ 
   // ImageModal 導航
-  const openImage = (img) => setSelectedImage(img);
+  const openImage = (img) => {
+    setSelectedImage(normalizeImage(img));
+  };
   const idx = selectedImage ? images.findIndex((x) => String(x._id) === String(selectedImage._id)) : -1;
   const prevImage = idx > 0 ? images[idx - 1] : undefined;
   const nextImage = idx >= 0 && idx < images.length - 1 ? images[idx + 1] : undefined;
@@ -205,6 +319,8 @@ export default function HomePage() {
           currentUser={currentUser}
           onLikeUpdate={(updated) => onLikeUpdateHook(updated)}
           onNavigate={(dir) => navigateFromSelected(dir)}
+          onFollowChange={handleFollowChange}
+          onImageUpdated={applyUpdatedImage}   // ← 新增這行
         />
       )}
 

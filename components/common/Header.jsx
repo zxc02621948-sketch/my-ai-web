@@ -26,6 +26,7 @@ export default function Header({
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const safeCall = (fn, ...args) => (typeof fn === "function" ? fn(...args) : undefined);
 
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -271,13 +272,16 @@ export default function Header({
             href="/"
             className="flex items-center gap-2 md:gap-3 shrink-0"
             onClick={() => {
-              // 點 Logo 一樣觸發「顯示全部一次」
-              resetFilters(); // ← 新增這行，重置篩選
-              setSort("popular");    // 重置排序
+              // 這些在非首頁可能還沒被 Provider 提供，先安全判斷再呼叫
+              safeCall(resetFilters);
+              safeCall(setSort, "popular");
+
               sessionStorage.setItem("homepageShowAll", "1");
               window.dispatchEvent(new CustomEvent("homepage-show-all", { detail: { ts: Date.now() } }));
+
               clearTimeout(debounceTimerRef.current);
               setSearchQuery("");
+      
               router.push("/");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}

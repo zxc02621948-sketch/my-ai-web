@@ -105,117 +105,144 @@ export default function UserProfilePage() {
     return () => document.removeEventListener("toggle-filter-panel", handler);
   }, [setFilterMenuOpen]);
 
-  // 讀取個人頁資料
+  // —— 共用工具：彈性取值（各 API 可能有不同鍵名） ——
+  const pickUser = (v) => (v?.user ?? v?.data?.user ?? v ?? null);
+  const pickList = (v) => {
+    if (Array.isArray(v)) return v;
+    if (Array.isArray(v?.images)) return v.images;
+    if (Array.isArray(v?.uploads)) return v.uploads;
+    if (Array.isArray(v?.likedImages)) return v.likedImages;
+    if (Array.isArray(v?.items)) return v.items;
+    if (Array.isArray(v?.data)) return v.data;
+    if (Array.isArray(v?.data?.items)) return v.data.items;
+    if (Array.isArray(v?.data?.images)) return v.data.images;
+    if (Array.isArray(v?.data?.uploads)) return v.data.uploads;
+    if (Array.isArray(v?.data?.likedImages)) return v.data.likedImages;
+    return [];
+  };
+
+  // ====== 追蹤同步：通用取 id 與更新處理 ======
+  const idOf = (v) => {
+    if (!v) return "";
+    if (typeof v === "string") return String(v);
+    return String(v?.userId?._id || v?.userId || v?._id || v?.id || "");
+  };
+  const ownerIdOf = (img) => {
+    if (!img) return "";
+    const u = img.user ?? img.userId;
+    return typeof u === "string" ? String(u) : String(u?._id || u?.id || u?.userId || "");
+  };
+
+  const handleFollowChange = (targetUserId, isFollowing) => {
+    const tid = String(targetUserId);
+
+    // A) 同步目前開啟的大圖
+    setSelectedImage((prev) => {
+      if (!prev) return prev;
+      const uid = ownerIdOf(prev);
+      if (uid && uid === tid) {
+        const userObj =
+          typeof prev.user === "object"
+            ? { ...prev.user, _id: prev.user?._id || prev.user?.id || prev.user?.userId || tid }
+            : { _id: tid };
+        return { ...prev, user: { ...userObj, isFollowing } };
+      }
+      return prev;
+    });
+
+    // B) 同步清單（上傳/已讚）
+    setUploadedImages((prev) =>
+      Array.isArray(prev)
+        ? prev.map((img) => {
+            const uid = ownerIdOf(img);
+            if (uid === tid) {
+              const userObj = typeof img.user === "object" ? img.user : { _id: tid };
+              return { ...img, user: { ...userObj, isFollowing } };
+            }
+            return img;
+          })
+        : prev
+    );
+    setLikedImages((prev) =>
+      Array.isArray(prev)
+        ? prev.map((img) => {
+            const uid = ownerIdOf(img);
+            if (uid === tid) {
+              const userObj = typeof img.user === "object" ? img.user : { _id: tid };
+              return { ...img, user: { ...userObj, isFollowing } };
+            }
+            return img;
+          })
+        : prev
+    );
+
+    // C) 同步目前登入者 following 名單
+    setCurrentUser((prev) => {
+      if (!prev) return prev;
+      const list = Array.isArray(prev.following) ? prev.following.map(idOf).filter(Boolean) : [];
+      let next = list;
+      if (isFollowing && !list.includes(tid)) next = [...list, tid];
+      if (!isFollowing && list.includes(tid)) next = list.filter((x) => x !== tid);
+      return { ...prev, following: next };
+    });
+
+    // D) 廣播給 UserHeader / 其他頁面元件
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("follow-changed", { detail: { targetUserId: tid, isFollowing } })
+      );
+    }
+  };
+
+
+  // 讀取個人頁資料（穩定版）
   useEffect(() => {
     if (!id || id === "undefined") return;
-    const fetchData = async () => {
-      try {
-        const [userRes, uploadsRes, likesRes] = await Promise.all([
-          axios.get(`/api/user-info?id=${id}`),
-          axios.get(`/api/user-images?id=${id}`),
-          axios.get(`/api/user-liked-images?id=${id}`),
-        ]);
-        setUserData(userRes.data);
-        setUploadedImages(uploadsRes.data || []);
-        setLikedImages(likesRes.data || []);
-      } catch (err) {
-        console.error("❌ 讀取用戶資料失敗", err);
+
+    const uid = encodeURIComponent(id);
+    const ac = new AbortController();
+
+    const getJSON = async (url) => {
+      const r = await fetch(url, { cache: "no-store", signal: ac.signal });
+      if (!r.ok) {
+        // 回傳文字方便除錯，但不讓整頁爆
+        const text = await r.text().catch(() => "");
+        throw new Error(`${url} -> HTTP ${r.status}${text ? ` | ${text.slice(0, 160)}` : ""}`);
       }
-    };
-    fetchData();
-  }, [id]);
-
-  // 🔔 接收全域的「樂觀更新 - 讚」事件：同步兩個清單 & modal
-  useEffect(() => {
-    const handleImageLiked = (e) => {
-      const updated = e.detail;
-      const me = currentUser?._id || currentUser?.id;
-
-      // 上傳清單：只同步 likes
-      setUploadedImages((prev) =>
-        prev.map((img) => (img._id === updated._id ? { ...img, likes: updated.likes } : img))
-      );
-
-      // 收藏清單：若已不再喜歡，移除；否則同步 likes
-      setLikedImages((prev) => {
-        const stillLiked = Array.isArray(updated.likes) && updated.likes.includes(me);
-        return stillLiked
-          ? prev.map((img) => (img._id === updated._id ? { ...img, likes: updated.likes } : img))
-          : prev.filter((img) => img._id !== updated._id);
-      });
-
-      // modal 畫面一起同步
-      setSelectedImage((prev) =>
-        prev?._id === updated._id ? { ...prev, likes: updated.likes } : prev
-      );
+      return r.json();
     };
 
-    window.addEventListener("image-liked", handleImageLiked);
-    return () => window.removeEventListener("image-liked", handleImageLiked);
-  }, [currentUser]);
+    (async () => {
+      const [userRes, uploadsRes, likesRes] = await Promise.allSettled([
+        getJSON(`/api/user-info?id=${uid}`),
+        getJSON(`/api/user-images?id=${uid}`),
+        getJSON(`/api/user-liked-images?id=${uid}`),
+      ]);
 
-  // ⛓️ 接收全域的「追蹤狀態變更」事件：同步個人頁頭、清單與 modal（關鍵新增）
-  useEffect(() => {
-    const onFollowChanged = (e) => {
-      const targetUserId = e?.detail?.targetUserId;
-      const isFollowing = !!e?.detail?.isFollowing;
-      if (!targetUserId) return;
-
-      // 1) 若事件目標是此個人頁作者 → 立刻更新頭部按鈕狀態
-      if (String(targetUserId) === String(id)) {
-        setUserData((prev) => (prev ? { ...prev, isFollowing } : prev));
+      if (userRes.status === "fulfilled") {
+        setUserData(pickUser(userRes.value));
+      } else {
+        console.warn("[user-info] failed:", userRes.reason);
+        // 不覆蓋 userData，維持當前狀態（避免顯示空白）
       }
 
-      // 2) 更新目前登入者的 following 名單（就地同步，避免重整）
-      setCurrentUser((prev) => {
-        if (!prev) return prev;
-        const meList = Array.isArray(prev.following) ? prev.following : [];
-        const isObj = meList.some((f) => typeof f === "object" && f !== null);
-        if (isFollowing) {
-          // 已存在就不重覆加入
-          const exists = meList.some((f) => {
-            const idVal = typeof f === "object" && f !== null ? f.userId : f;
-            return String(idVal) === String(targetUserId);
-          });
-          if (exists) return prev;
-          const nextList = isObj ? [...meList, { userId: String(targetUserId), note: "" }] : [...meList, String(targetUserId)];
-          return { ...prev, following: nextList };
-        } else {
-          const nextList = meList.filter((f) => {
-            const idVal = typeof f === "object" && f !== null ? f.userId : f;
-            return String(idVal) !== String(targetUserId);
-          });
-          return { ...prev, following: nextList };
-        }
-      });
+      if (uploadsRes.status === "fulfilled") {
+        const list = pickList(uploadsRes.value);
+        if (list.length || uploadedImages.length === 0) setUploadedImages(list);
+      } else {
+        console.warn("[user-images] failed:", uploadsRes.reason);
+      }
 
-      // 3) 同步清單中屬於該作者的圖片的 user.isFollowing（畫面一致）
-      const patchUserFollowFlag = (img) => {
-        const uid = typeof img?.user === "object" ? (img.user._id || img.user.id) : img?.user;
-        if (uid && String(uid) === String(targetUserId)) {
-          const userObj = typeof img.user === "object" ? img.user : { _id: uid };
-          return { ...img, user: { ...userObj, isFollowing } };
-        }
-        return img;
-      };
-      setUploadedImages((prev) => prev.map(patchUserFollowFlag));
-      setLikedImages((prev) => prev.map(patchUserFollowFlag));
+      if (likesRes.status === "fulfilled") {
+        const list = pickList(likesRes.value);
+        if (list.length || likedImages.length === 0) setLikedImages(list);
+      } else {
+        console.warn("[user-liked-images] failed:", likesRes.reason);
+      }
+    })();
 
-      // 4) 若 modal 正顯示同一作者的圖片，也同步裡面的 user.isFollowing
-      setSelectedImage((prev) => {
-        if (!prev) return prev;
-        const uid =
-          typeof prev.user === "object" ? (prev.user._id || prev.user.id) : prev.user;
-        if (uid && String(uid) === String(targetUserId)) {
-          const userObj = typeof prev.user === "object" ? prev.user : { _id: uid };
-          return { ...prev, user: { ...userObj, isFollowing } };
-        }
-        return prev;
-      });
-    };
-
-    window.addEventListener("follow-changed", onFollowChanged);
-    return () => window.removeEventListener("follow-changed", onFollowChanged);
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // 取完整圖片資訊並合併（模型/提示詞/生成參數等）
@@ -224,9 +251,24 @@ export default function UserProfilePage() {
     try {
       // 1) 取完整 image
       const r = await axios.get(`/api/images/${img._id}`);
-      const apiImage = r?.data?.image || r?.data; // 你的 /api 可能包在 {image}
+      const apiImage = r?.data?.image || r?.data;
       if (apiImage && apiImage._id) {
-        full = { ...full, ...apiImage };
+        // 只用有值的欄位覆蓋，避免 undefined/null 蓋掉原本的資料
+        Object.entries(apiImage).forEach(([key, val]) => {
+          if (val !== undefined && val !== null && val !== "") {
+            full[key] = val;
+          }
+        });
+
+        // 統一模型名稱鍵
+          full.modelName =
+          full.modelName ??
+          full.model_name ??
+          full.model?.name ??
+          full.models?.[0]?.name ??
+          full.metadata?.model ??
+          full.sdModel ??
+          null;
       }
       // 2) 作者資料不足時再補抓
       const authorId =
@@ -236,7 +278,7 @@ export default function UserProfilePage() {
         if (u?.data) full = { ...full, user: u.data };
       }
     } catch {
-      // 靜默失敗，保留原資料
+      // 靜默失敗
     }
     return full;
   };
@@ -246,7 +288,7 @@ export default function UserProfilePage() {
     setSelectedImage(enriched);
   };
 
-  // 畫面用的過濾清單（左右滑手勢以這份陣列為準 → 與畫面一致）
+  // 畫面用的過濾清單
   const filteredImages = useMemo(() => {
     const base = activeTab === "uploads" ? uploadedImages : likedImages;
     const keyword = searchQuery.toLowerCase();
@@ -281,11 +323,10 @@ export default function UserProfilePage() {
     currentUser,
   });
 
-  // 判斷是否被我按讚（防呆）
+  // 判斷是否被我按讚
   const isLikedByCurrentUser = (image) => {
     const me = currentUser?._id || currentUser?.id;
     return !!(me && Array.isArray(image.likes) && image.likes.includes(me));
-    // eslint-disable-next-line no-unreachable
   };
 
   // 在 filteredImages 陣列中左右移動（切換時也補抓完整欄位）
@@ -296,7 +337,7 @@ export default function UserProfilePage() {
     if (idx < 0) return;
 
     const nextIdx = dir === "next" ? idx + 1 : idx - 1;
-    if (nextIdx < 0 || nextIdx >= list.length) return; // 邊界
+    if (nextIdx < 0 || nextIdx >= list.length) return;
 
     const target = list[nextIdx];
     const enriched = await enrichImage(target);
@@ -347,7 +388,7 @@ export default function UserProfilePage() {
           <button
             className={`px-4 py-2 rounded font-medium transition ${
               activeTab === "likes"
-                ? "bg-white text-black shadow"
+                ? "bg-white text-black shadow"   // ← 修正這裡
                 : "bg-zinc-700 text-white hover:bg-zinc-600"
             }`}
             onClick={() => setActiveTab("likes")}
@@ -366,7 +407,7 @@ export default function UserProfilePage() {
           images={filteredImages}
           currentUser={currentUser}
           onToggleLike={handleToggleLike}
-          onSelectImage={handleSelectImage}   // 補抓作者後再開圖
+          onSelectImage={handleSelectImage}
           isLikedByCurrentUser={isLikedByCurrentUser}
           viewMode={viewMode}
           setUploadedImages={setUploadedImages}
@@ -382,20 +423,18 @@ export default function UserProfilePage() {
             prevImage={prevImage}
             nextImage={nextImage}
             currentUser={currentUser}
+            onFollowChange={handleFollowChange}
             onLikeUpdate={(updated) => {
-              // 共用 hook 先同步 likes
               onLikeUpdate(updated);
 
               const me = currentUser?._id || currentUser?.id;
               const stillLiked = Array.isArray(updated.likes) && updated.likes.includes(me);
 
               if (activeTab === "likes") {
-                // 取消喜歡 → 立即從收藏列表移除
                 if (!stillLiked) {
                   setLikedImages((prev) => prev.filter((img) => img._id !== updated._id));
                   setSelectedImage((prev) => (prev?._id === updated._id ? null : prev));
                 } else {
-                  // 仍是喜歡 → 同步 likes
                   setLikedImages((prev) =>
                     prev.map((img) =>
                       img._id === updated._id ? { ...img, likes: updated.likes } : img
@@ -403,7 +442,6 @@ export default function UserProfilePage() {
                   );
                 }
               } else {
-                // 上傳分頁 → 同步 likes
                 setUploadedImages((prev) =>
                   prev.map((img) =>
                     img._id === updated._id ? { ...img, likes: updated.likes } : img
@@ -412,7 +450,7 @@ export default function UserProfilePage() {
               }
             }}
             onClose={() => setSelectedImage(null)}
-            onNavigate={(dir) => navigateFromSelected(dir)}  // 左右切換
+            onNavigate={(dir) => navigateFromSelected(dir)}
           />
         )}
       </main>

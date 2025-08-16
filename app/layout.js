@@ -1,7 +1,7 @@
 // app/layout.js
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import FeedbackButton from "@/components/common/FeedbackButton";
+import FeedbackButton from "../components/common/FeedbackButton";
 import ClientHeaderWrapper from "@/components/common/ClientHeaderWrapper";
 import { CurrentUserProvider } from "@/contexts/CurrentUserContext";
 import { getCurrentUser } from "@/lib/serverAuth";

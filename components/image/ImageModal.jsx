@@ -1,13 +1,14 @@
 "use client";
 
 import { Dialog } from "@headlessui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import ImageViewer from "./ImageViewer";
 import MobileImageSheet from "@/components/image/MobileImageSheet";
 import DesktopRightPane from "@/components/image/DesktopRightPane";
 import axios from "axios";
 import { getLikesFromCache } from "@/lib/likeSync";
+import EditImageModal from "@/components/image/EditImageModal"; // ← 你的編輯彈窗
 
 const getOwnerId = (img) => {
   if (!img) return null;
@@ -33,13 +34,39 @@ export default function ImageModal({
   onNavigate,
   onFollowChange,     // 父層回寫 currentUser.following
   followOverrides,    // Map: userId -> boolean（前端優先生效）
+  onImageUpdated,     // 可選：讓父層也能接到「已更新」
 }) {
   const router = useRouter();
+  const followLockRef = useRef(false);
 
   const [image, setImage] = useState(imageData || null);
   const [loading, setLoading] = useState(!imageData);
   const [error, setError] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
+
+  // === 編輯彈窗：開關 + 回寫 ===
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const openEdit = () => setIsEditOpen(true);
+  const closeEdit = () => setIsEditOpen(false);
+  const handleEditUpdated = (updated) => {
+    if (!updated) return;
+    setImage((prev) => {
+      if (!prev) return updated;
+      const merged = { ...prev, ...updated };
+      // 若後端沒回 user，就保留原本的 user（含 isFollowing）
+      if (!updated.user && prev.user) merged.user = prev.user;
+      return merged;
+    });
+    onImageUpdated?.(updated);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("image-updated", {
+          detail: { imageId: updated._id || image?._id, updated },
+        })
+      );
+    }
+    setIsEditOpen(false);
+  };
 
   // 載入圖片（若只有 id）
   useEffect(() => {
@@ -68,15 +95,27 @@ export default function ImageModal({
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [imageId, imageData]);
+
+  useEffect(() => {
+    if (image && typeof image.user === "string") {
+      setImage((prev) =>
+        prev ? { ...prev, user: { _id: prev.user, isFollowing: false } } : prev
+      );
+    }
+  }, [image]);
 
   useEffect(() => {
     const id = image?._id || imageId || imageData?._id;
     if (!id) return;
     const cached = getLikesFromCache(id);
     if (cached && Array.isArray(cached)) {
-      setImage((prev) => prev ? { ...prev, likes: cached, likesCount: cached.length } : prev);
+      setImage((prev) =>
+        prev ? { ...prev, likes: cached, likesCount: cached.length } : prev
+      );
     }
   }, [image?._id, imageId, imageData]);
 
@@ -111,7 +150,9 @@ export default function ImageModal({
         }
       } catch {}
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [image]);
 
   // 根據 followOverrides / currentUser.following 計算是否已追蹤（覆蓋優先）
@@ -129,23 +170,44 @@ export default function ImageModal({
   // ✅ 追蹤切換（沿用你舊版：axios + userIdToFollow / userIdToUnfollow）
   const handleFollowToggle = async () => {
     if (!ownerId) return;
-    const next = !isFollowing;
+    if (followLockRef.current) return; // 防連點
+    followLockRef.current = true;
 
-    // 樂觀先亮
+    const next = !isFollowing;
     setIsFollowing(next);
 
     try {
+      // 帶上認證，和 DesktopRightPane 的做法一致
+      const token = document.cookie.match(/token=([^;]+)/)?.[1];
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
       if (next) {
-        await axios.post("/api/follow", { userIdToFollow: ownerId });
+        await axios.post(
+          "/api/follow",
+          { userIdToFollow: ownerId },
+          { headers, withCredentials: true }
+        );
       } else {
-        await axios.delete("/api/follow", { data: { userIdToUnfollow: ownerId } });
+        await axios.delete("/api/follow", {
+          data: { userIdToUnfollow: ownerId },
+          headers,
+          withCredentials: true,
+        });
       }
+
       // 成功：通知父層同步 currentUser.following + 覆蓋表
       onFollowChange?.(String(ownerId), next);
     } catch (e) {
       // 失敗還原
       setIsFollowing(!next);
       console.error("❌ 追蹤切換失敗", e);
+    } finally {
+      setTimeout(() => {
+        followLockRef.current = false;
+      }, 300);
     }
   };
 
@@ -192,7 +254,7 @@ export default function ImageModal({
       });
       if (res.ok) {
         const data = await res.json();
-        const likesArr = Array.isArray(data.likes) ? data.likes : (image.likes || []);
+        const likesArr = Array.isArray(data.likes) ? data.likes : image.likes || [];
         const updated = { ...image, likes: likesArr, likesCount: likesArr.length };
         setImage(updated);
         onLikeUpdate?.(updated);
@@ -253,18 +315,28 @@ export default function ImageModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onNavigate]);
 
-  const canEdit =
-    !!currentUser?._id && !!ownerId && currentUser._id === ownerId;
+  const canEdit = !!currentUser?._id && !!ownerId && currentUser._id === ownerId;
 
   return (
-    <Dialog open={!!(imageId || imageData)} onClose={handleBackdropClick} className="relative z-[99999]">
-      <div className="fixed inset-0 backdrop-blur-sm" aria-hidden="true" style={{ backgroundColor: "rgba(0,0,0,0.6)" }} />
-      <div className="fixed inset-0 flex items-center justify-center p-0 md:p-4" onClick={handleBackdropClick}>
+    <Dialog
+      open={!!(imageId || imageData)}
+      onClose={handleBackdropClick}
+      className="relative z-[99999]"
+    >
+      <div
+        className="fixed inset-0 backdrop-blur-sm"
+        aria-hidden="true"
+        style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+      />
+      <div
+        className="fixed inset-0 flex items-center justify-center p-0 md:p-4"
+        onClick={handleBackdropClick}
+      >
         <Dialog.Panel
           onClick={(e) => e.stopPropagation()}
           className="
             relative w-full md:max-w-6xl
-            bg-[#1a1a1a] text-white
+            bg-[#1a1a1a] text白
             rounded-none md:rounded-xl shadow-lg
             overflow-y-auto md:overflow-hidden
             snap-y snap-mandatory md:snap-none
@@ -295,7 +367,7 @@ export default function ImageModal({
           />
 
           <div className="hidden md:flex md:flex-row w-full">
-            <div className="flex-1 bg-black relative p-4 flex items-center justify-center">
+            <div className="flex-1 bg黑 relative p-4 flex items-center justify-center">
               {loading ? (
                 <div className="text-gray-400">載入中...</div>
               ) : error ? (
@@ -313,24 +385,39 @@ export default function ImageModal({
               <button
                 type="button"
                 aria-label="上一張"
-                onClick={(e) => { e.stopPropagation(); onNavigate ? onNavigate("prev") : onClose?.(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate ? onNavigate("prev") : onClose?.();
+                }}
                 className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur text-white text-2xl"
-              >←</button>
+              >
+                ←
+              </button>
 
               <button
                 type="button"
                 aria-label="下一張"
-                onClick={(e) => { e.stopPropagation(); onNavigate ? onNavigate("next") : onClose?.(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate ? onNavigate("next") : onClose?.();
+                }}
                 className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 items-center justify-center w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur text-white text-2xl"
-              >→</button>
+              >
+                →
+              </button>
 
               <button
                 type="button"
                 aria-label="關閉"
                 title="Esc 關閉"
-                onClick={(e) => { e.stopPropagation(); handleBackdropClick(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleBackdropClick();
+                }}
                 className="hidden md:flex absolute top-3 right-3 items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur text-white text-xl"
-              >✕</button>
+              >
+                ✕
+              </button>
             </div>
 
             <DesktopRightPane
@@ -342,8 +429,17 @@ export default function ImageModal({
               onClose={handleBackdropClick}
               onDelete={handleDelete}
               canEdit={canEdit}
+              onEdit={openEdit}   // ← 傳給右欄，讓鉛筆按鈕可以打開編輯彈窗
             />
           </div>
+
+          {/* 編輯彈窗：使用你的現成元件 */}
+          <EditImageModal
+            imageId={image?._id}
+            isOpen={isEditOpen}
+            onClose={closeEdit}
+            onImageUpdated={handleEditUpdated}
+          />
         </Dialog.Panel>
       </div>
     </Dialog>

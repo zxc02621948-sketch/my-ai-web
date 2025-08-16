@@ -233,7 +233,7 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
           {currentUser &&
             ((String(currentUser._id) === String(image.user?._id)) || currentUser.isAdmin) && (
               <button
-                onClick={onEdit}
+                onClick={(e) => { e.stopPropagation(); onEdit?.(); }}
                 className="flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded shadow transition"
                 title="編輯圖片資料"
               >

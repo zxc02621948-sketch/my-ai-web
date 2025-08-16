@@ -1,4 +1,4 @@
-import { connectToDatabase } from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { generateToken } from "@/lib/serverAuth";
@@ -16,7 +16,7 @@ export async function POST(req) {
       );
     }
 
-    await connectToDatabase();
+    await dbConnect();
     const user = await User.findOne({ email }).lean();
     console.log("🪪 使用者完整資料：", user);
 

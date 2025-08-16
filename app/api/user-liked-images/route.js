@@ -1,25 +1,36 @@
+// app/api/user-liked-images/route.js
+export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import Image from "@/models/Image";
 import mongoose from "mongoose";
+import dbConnect from "@/lib/mongodb";
+import Image from "@/models/Image";
+
+const noStore = { headers: { "Cache-Control": "no-store" } };
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
 
-  // 加強檢查 id 是否為合法 ObjectId
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ error: "無效的使用者 ID" }, { status: 400 });
+  if (!id) {
+    return NextResponse.json({ items: [] }, { status: 200, ...noStore });
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return NextResponse.json({ items: [] }, { status: 200, ...noStore });
   }
 
   try {
-    await connectToDatabase();
+    await dbConnect();
 
-    const likedImages = await Image.find({ likes: id }).sort({ createdAt: -1 });
+    // 假設 Image.likes 是 userId 陣列
+    const items = await Image.find({ likes: id })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
 
-    return NextResponse.json(likedImages);
+    return NextResponse.json({ items }, { status: 200, ...noStore });
   } catch (err) {
-    console.error("取得使用者收藏圖片失敗", err);
-    return NextResponse.json({ error: "伺服器錯誤" }, { status: 500 });
+    console.error("[user-liked-images] error:", err);
+    return NextResponse.json({ items: [], error: "server" }, { status: 200, ...noStore });
   }
 }

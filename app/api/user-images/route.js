@@ -1,55 +1,41 @@
+// app/api/user-images/route.js
+export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import Image from "@/models/Image";
+import mongoose from "mongoose";
+import dbConnect from "@/lib/mongodb";          // 依你的專案連線匯出
+import Image from "@/models/Image";             // 依你的模型路徑
+
+const noStore = { headers: { "Cache-Control": "no-store" } };
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
 
+  // 安全：沒參數就回空陣列
   if (!id) {
-    return NextResponse.json({ error: "缺少 userId" }, { status: 400 });
+    return NextResponse.json({ items: [] }, { status: 200, ...noStore });
+  }
+
+  // 安全：ObjectId 格式檢查（格式不對直接回空）
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return NextResponse.json({ items: [] }, { status: 200, ...noStore });
   }
 
   try {
-    await connectToDatabase();
+    await dbConnect();
 
-    const rawImages = await Image.find({ userId: id })
+    // 依你的資料結構調整條件：
+    // 假設 Image.user 是作者的 ObjectId
+    const items = await Image.find({ user: id })
       .sort({ createdAt: -1 })
-      .populate("user", "username image"); // 取上傳者基本資訊
+      .lean()
+      .exec();
 
-    const images = rawImages.map((img) => ({
-      _id: img._id.toString(),
-      title: img.title,
-      imageId: img.imageId,
-      imageUrl:
-        img.imageUrl ||
-        `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/public`,
-      platform: img.platform,
-      positivePrompt: img.positivePrompt,
-      negativePrompt: img.negativePrompt,
-      rating: img.rating,
-      category: img.category,
-      description: img.description,
-      tags: img.tags,
-      author: img.author || "",              // 👈 加上作者
-      createdAt: img.createdAt,
-      user: img.user
-        ? {
-            _id: img.user._id?.toString(),
-            username: img.user.username || "未命名用戶",
-            image: img.user.image || "",
-          }
-        : null,
-      likes: Array.isArray(img.likes)
-        ? img.likes
-            .filter((id) => id && typeof id.toString === "function")
-            .map((id) => id.toString())
-        : [],
-    }));
-
-    return NextResponse.json(images);
+    return NextResponse.json({ items }, { status: 200, ...noStore });
   } catch (err) {
-    console.error("取得使用者上傳圖片失敗", err);
-    return NextResponse.json({ error: "伺服器錯誤" }, { status: 500 });
+    console.error("[user-images] error:", err);
+    // 重要：不要丟 500，回 200 + 空，避免前端整頁報錯
+    return NextResponse.json({ items: [], error: "server" }, { status: 200, ...noStore });
   }
 }
