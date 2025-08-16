@@ -115,6 +115,43 @@ export default function HomePage() {
     return v === "likes" || v === "mostlikes" ? "mostlikes" : v;
   };
 
+  // 在 HomePage 組件內，加這段 useEffect
+  useEffect(() => {
+    const onOpenFromNotification = async (e) => {
+      const id = String(e?.detail?.imageId || "").trim();
+      if (!id) return;
+
+      try {
+        // 從後端抓這張圖的完整資料
+        const r = await fetch(`/api/images/${id}`, { cache: "no-store" });
+        const j = await r.json().catch(() => ({}));
+        const img = j?.image || null;
+  
+        if (img?._id) {
+          // 確保列表中也有（避免不在當前篩選/分頁）
+          setImages((prev) => {
+            const exists = Array.isArray(prev) && prev.some((x) => String(x._id) === String(img._id));
+            return exists ? prev : [normalizeImage(img), ...(Array.isArray(prev) ? prev : [])];
+          });
+
+          // 直接打開大圖
+          setSelectedImage(normalizeImage(img));
+          // 可選：滑到頂，避免使用者看不到 Modal
+          // window.scrollTo({ top: 0, behavior: "smooth" });
+        } else {
+          alert("找不到該圖片，可能已被刪除");
+        }
+      } catch (err) {
+        console.warn("⚠️ 找不到該圖片，可能已被刪除", err);
+        alert("找不到該圖片，可能已被刪除");
+      }
+    };
+
+    window.addEventListener("openImageModal", onOpenFromNotification);
+    return () => window.removeEventListener("openImageModal", onOpenFromNotification);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 核心資料抓取（只以 inFlightId 防舊回應）
   const fetchImages = async (pageToFetch, q, cats, rats) => {
     setIsLoading(true);

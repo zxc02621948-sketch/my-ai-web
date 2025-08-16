@@ -229,7 +229,7 @@ export function parseA1111Parameters(raw = "") {
   const size = kvs["Size"] || kvs["size"];
   const { width, height } = parseSizeStr(size);
 
-  const seed = toNum(kvs["Seed"] ?? kvs["seed"]);
+  const seed = kvs["Seed"] ?? kvs["seed"];
   const steps = toNum(kvs["Steps"] ?? kvs["steps"]);
   const cfg_scale = toNum(
     kvs["CFG scale"] ?? kvs["CFG Scale"] ?? kvs["cfg scale"] ?? kvs["Guidance Scale"]
@@ -368,7 +368,7 @@ function normalizeA1111(obj = {}) {
   // 型別修正
   if (typeof out.width === "string") out.width = toNum(out.width);
   if (typeof out.height === "string") out.height = toNum(out.height);
-  if (typeof out.steps === "string") out.steps = toNum(out.steps);
+  // if (typeof out.steps === "string") out.steps = toNum(out.steps);
   if (typeof out.seed === "string") out.seed = toNum(out.seed);
 
   return removeUndef(out);

@@ -673,10 +673,10 @@ export default function UploadStep2({
           {showAdvanced && (
             <div className="p-4 space-y-3 bg-zinc-900/60">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <input className="p-2 rounded bg-zinc-700" placeholder="Seed" value={seed} onChange={(e) => setSeed(e.target.value)} />
-                <input className="p-2 rounded bg-zinc-700" placeholder="Sampler" value={sampler} onChange={(e) => setSampler(e.target.value)} />
                 <input className="p-2 rounded bg-zinc-700" placeholder="Steps" value={steps} onChange={(e) => setSteps(e.target.value)} />
+                <input className="p-2 rounded bg-zinc-700" placeholder="Sampler" value={sampler} onChange={(e) => setSampler(e.target.value)} />
                 <input className="p-2 rounded bg-zinc-700" placeholder="CFG Scale" value={cfgScale} onChange={(e) => setCfgScale(e.target.value)} />
+                <input className="p-2 rounded bg-zinc-700" placeholder="Seed" value={seed} onChange={(e) => setSeed(e.target.value)} />
                 <input className="p-2 rounded bg-zinc-700" placeholder="Clip skip" value={clipSkip} onChange={(e) => setClipSkip(e.target.value)} />
                 <input className="p-2 rounded bg-zinc-700" placeholder="寬度 (px)" value={width} onChange={(e) => setWidth(e.target.value)} />
                 <input className="p-2 rounded bg-zinc-700" placeholder="高度 (px)" value={height} onChange={(e) => setHeight(e.target.value)} />
