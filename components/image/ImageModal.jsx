@@ -379,6 +379,7 @@ export default function ImageModal({
                   currentUser={currentUser}
                   isLiked={isLikedByCurrent}
                   onToggleLike={toggleLikeOnServer}
+                  showClose={false}
                 />
               ) : null}
 
