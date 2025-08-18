@@ -4,6 +4,14 @@ import { dbConnect } from "@/lib/db";
 import Report from "@/models/Report";
 import { getCurrentUser } from "@/lib/serverAuth";
 import Image from "@/models/Image";
+import mongoose from "mongoose";
+
+// 新增：寄信工具
+import {
+  extractMailFlags,
+  sendAdminMail,
+  makeBasicTemplate,
+} from "@/lib/mailer";
 
 // 取得目前登入者（必要：已登入＝已驗證）
 async function requireUser() {
@@ -31,7 +39,7 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, message: "無效的圖片 ID" }, { status: 400 });
     }
     // 取得圖片，確認作者
-    const img = await Image.findById(imageId).select("user").lean();
+    const img = await Image.findById(imageId).select("user title").lean();
     if (!img) {
       return NextResponse.json({ ok: false, message: "找不到圖片" }, { status: 404 });
     }
@@ -74,6 +82,35 @@ export async function POST(req) {
       type,
       message: typeof message === "string" ? message.slice(0, 2000) : ""
     });
+
+    // =============== 新增：寄信通知管理員 ===============
+    try {
+      const flags = extractMailFlags(req);
+      const html = makeBasicTemplate({
+        title: "🔔 新的圖片檢舉",
+        bodyHtml: `
+          <p><b>圖片 ID：</b> ${imageId}</p>
+          <p><b>檢舉類型：</b> ${type}</p>
+          <p><b>檢舉人：</b> ${user.email || user._id}</p>
+          <p><b>備註：</b><br/>${(doc.message || "-").replace(/\n/g, "<br/>")}</p>
+          <hr/>
+          <p><b>圖片標題：</b> ${img.title || "-"}</p>
+          <p><b>圖片作者 ID：</b> ${img.user}</p>
+        `,
+        footerHtml: "<p>請盡快進入管理後台審核。</p>",
+      });
+
+      await sendAdminMail(
+        {
+          subject: `【檢舉通知】${type} - ${imageId}`,
+          html,
+        },
+        flags
+      );
+    } catch (mailErr) {
+      console.error("寄送檢舉通知失敗：", mailErr);
+    }
+    // ====================================================
 
     return NextResponse.json({ ok: true, reportId: doc._id });
   } catch (err) {

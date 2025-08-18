@@ -170,9 +170,9 @@ export default function MessagesPage() {
 
   const [composeOpen, setComposeOpen] = useState(false);
 
-  // 封存顯示/狀態
-  const [showArchived, setShowArchived] = useState(false);     // 是否顯示封存串
-  const [threadArchived, setThreadArchived] = useState(false); // 當前串是否被我封存
+  // 封存顯示/狀態（安全模式下暫不使用 showArchived）
+  const [showArchived, setShowArchived] = useState(false);
+  const [threadArchived, setThreadArchived] = useState(false);
 
   // 用於取消重複請求 & 避免競態
   const abortRef = useRef(null);
@@ -189,6 +189,7 @@ export default function MessagesPage() {
   /** 取會話列表（左側） */
   async function loadList() {
     try {
+      // 安全模式：永遠只抓未封存（includeArchived=0）
       const r = await fetch(`/api/messages/conversations?includeArchived=${showArchived ? "1" : "0"}`, { cache: "no-store" });
       let j=null; try{ j=await r.json(); }catch{ j=null; }
       if (!r.ok || !j?.ok) return;
@@ -212,6 +213,7 @@ export default function MessagesPage() {
     setErrorMsg("");
 
     try {
+      // 安全模式：完全不帶 includeArchived，後端預設就會過濾 deletedFor
       const qs = new URLSearchParams({ id: cid });
       if (showArchived) qs.set("includeArchived", "1");
       const r = await fetch(`/api/messages/thread?${qs.toString()}`, { cache: "no-store", signal: controller.signal });
@@ -248,25 +250,34 @@ export default function MessagesPage() {
 
   useEffect(() => { loadMe(); loadList(); }, []);
   useEffect(() => { loadThread(activeId); }, [activeId, showArchived]);
+  useEffect(() => { loadList(); }, [showArchived]);
 
   /** 封存（軟刪除）當前會話：只對自己隱藏 */
   async function archiveActive() {
     if (!activeId) return;
     if (!confirm("確定要封存這個會話嗎？（只對你自己隱藏，可再恢復）")) return;
 
-    await fetch("/api/messages/thread/archive", {
+    const res = await fetch("/api/messages/thread/archive", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ conversationId: activeId }),
     });
+    let j=null; try{ j=await res.json(); }catch{ j=null; }
+    if (!res.ok || !j?.ok) {
+      alert("❌ 封存失敗：" + ((j && (j.error||j.message)) || `HTTP ${res.status}`));
+      return;
+    }
+    console.log("[archive] matched=", j?.matched, "modified=", j?.modified);
+    if (!j?.modified) {
+      alert("⚠️ 封存 API 沒有任何訊息被更新（modified=0）。可能是 ID 沒對上或後端條件不完整。");
+    }
 
     setThreadArchived(true);
-    // 若目前未顯示封存列表，就把這串自列表移除
-    if (!showArchived) {
-      setList(prev => prev.filter(x => x.cid !== activeId));
-      setActiveId("");
-      setThread([]);
-    }
+
+    // 安全模式：封存後直接從列表移除並清空右側，不立刻重抓
+    setList(prev => prev.filter(x => x.cid !== activeId));
+    setActiveId("");
+    setThread([]);
     window.dispatchEvent(new CustomEvent("inbox:refresh"));
   }
 
@@ -319,7 +330,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <main className="max-w-6xl mx-auto px-4 py-6 text白">
+    <main className="max-w-6xl mx-auto px-4 py-6 text-white">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">站內信</h1>
         <div className="flex items-center gap-3">

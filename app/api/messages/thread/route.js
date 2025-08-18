@@ -28,33 +28,16 @@ function buildPairFromToQuery(a, b) {
   const isA_sys = a === "system";
   const isB_sys = b === "system";
 
-  const fromA_toB = {
-    $and: [
-      { fromId: isA_sys ? null : a },
-      { toId: isB_sys ? null : b },
-    ],
-  };
-  const fromB_toA = {
-    $and: [
-      { fromId: isB_sys ? null : b },
-      { toId: isA_sys ? null : a },
-    ],
-  };
+  const fromA_toB = { $and: [{ fromId: isA_sys ? null : a }, { toId: isB_sys ? null : b }] };
+  const fromB_toA = { $and: [{ fromId: isB_sys ? null : b }, { toId: isA_sys ? null : a }] };
 
-  // 有些舊資料可能 fromId 或 toId 沒有明確寫 null（未設欄位）
-  // 再補一個「不存在等同於 null」的寬鬆條件（僅在 system 端）
   const lax = [];
   if (isA_sys) {
-    lax.push({
-      $and: [{ fromId: { $exists: false } }, { toId: isB_sys ? null : b }],
-    });
+    lax.push({ $and: [{ fromId: { $exists: false } }, { toId: isB_sys ? null : b }] });
   }
   if (isB_sys) {
-    lax.push({
-      $and: [{ fromId: isA_sys ? null : a }, { toId: { $exists: false } }],
-    });
+    lax.push({ $and: [{ fromId: isA_sys ? null : a }, { toId: { $exists: false } }] });
   }
-
   return { $or: [fromA_toB, fromB_toA, ...lax] };
 }
 
@@ -72,32 +55,36 @@ export async function GET(req) {
     const pair = parsePair(id);
     let items = [];
 
-    // deletedFor 過濾條件：預設排除封存；若 includeArchived=1 則不過濾
+    // ✅ 升級版封存過濾：同時排除 ObjectId 與字串型 userId，並處理空陣列/未設欄位
     const notArchivedFilter = includeArchived
       ? {}
-      : { $or: [{ deletedFor: { $exists: false } }, { deletedFor: { $ne: me._id } }] };
+      : {
+          $or: [
+            { deletedFor: { $exists: false } },
+            { deletedFor: { $size: 0 } },
+            { deletedFor: { $nin: [me._id, meIdStr] } },
+          ],
+        };
 
     if (pair) {
-      // 1) 先用 conversationId 直接抓
-      items = await Message.find({
-        $and: [{ conversationId: id }, notArchivedFilter],
-      })
+      // 1) 直接用 conversationId
+      items = await Message.find({ $and: [{ conversationId: id }, notArchivedFilter] })
         .sort({ createdAt: 1 })
         .lean();
 
-      // 2) 沒資料 → fallback 以 from/to 配對抓，並回填 conversationId
+      // 2) 無資料 → 以 from/to 配對並回填 conversationId
       if (!items.length) {
         const [aRaw, bRaw] = pair;
         const a = asObjectIdOrSystem(aRaw);
         const b = asObjectIdOrSystem(bRaw);
         if (!a || !b) {
-          return new Response(JSON.stringify({ ok: false, error: "INVALID_PAIR_IDS" }), { status: 400 });
+          return new Response(JSON.stringify({ ok: false, error: "INVALID_PAIR_IDS" }), {
+            status: 400,
+          });
         }
 
         const fromToQuery = buildPairFromToQuery(a, b);
-        items = await Message.find({
-          $and: [fromToQuery, notArchivedFilter],
-        })
+        items = await Message.find({ $and: [fromToQuery, notArchivedFilter] })
           .sort({ createdAt: 1 })
           .lean();
 
@@ -129,7 +116,7 @@ export async function GET(req) {
       }
     }
 
-    // 是否被我封存（取其中一則判斷即可）
+    // 是否被我封存（採任一則檢查）
     let archivedForMe = false;
     if (items.length) {
       const sample = await Message.findOne({ conversationId: items[0].conversationId })
@@ -137,7 +124,6 @@ export async function GET(req) {
         .lean();
       archivedForMe = !!(sample?.deletedFor?.some?.((x) => String(x) === meIdStr));
     } else if (includeArchived) {
-      // includeArchived=1 仍撈不到，檢查是否整串被我封存
       const force = await Message.find({ conversationId: id })
         .select({ _id: 1, deletedFor: 1 })
         .limit(1)
@@ -145,7 +131,7 @@ export async function GET(req) {
       archivedForMe = !!(force[0]?.deletedFor?.some?.((x) => String(x) === meIdStr));
     }
 
-    // 標記已讀（我作為收件者的未讀）—封存與否都可標
+    // 標記已讀
     await Message.updateMany(
       {
         toId: me._id,
@@ -155,10 +141,7 @@ export async function GET(req) {
       { $set: { isRead: true, readAt: new Date() } }
     ).catch(() => {});
 
-    return Response.json(
-      { ok: true, items, archivedForMe },
-      { headers: { "cache-control": "no-store" } }
-    );
+    return Response.json({ ok: true, items, archivedForMe }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: e.message || "SERVER_ERROR" }), {
       status: 500,
