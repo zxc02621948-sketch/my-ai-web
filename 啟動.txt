@@ -1,9 +1,15 @@
 啟動伺服器
 npm run dev
 
+模擬部屬啟動
+pnpm install
+pnpm build
+pnpm start
+
+
 更新網站用
 git add .
-git commit -m "更新說明"
+git commit -m "v0.7.68"
 git push
 
 aicreateaworld.com

@@ -4,6 +4,60 @@
 import { useEffect, useMemo, useState } from "react";
 import CATEGORIES from "@/constants/categories"; // ← 分類清單（統一來源）
 
+// === Added helpers: 中文理由與模板選擇（最小改動） ===
+const REASON_LABELS = {
+  policy_violation: "站規違規",
+  category_wrong: "分類錯誤",
+  rating_wrong:   "分級錯誤",
+  duplicate:      "重複/洗版",
+  broken:         "壞圖/無法顯示",
+  other:          "其他",
+};
+
+function buildChineseReason(report, note = "") {
+  const types = Array.isArray(report?.types) ? report.types : (report?.type ? [report.type] : []);
+  const labels = types.map(t => REASON_LABELS[t] || t);
+  const parts = [];
+  if (labels.length) parts.push(`檢舉人舉報原因：${labels.join("、")}`);
+  const extra = (note || report?.message || "").trim();
+  if (extra) parts.push(`違規說明：${extra}`);
+  return parts.join("\n");
+}
+
+function chooseActionKey(report, action) {
+  const types = Array.isArray(report?.types) ? report.types : (report?.type ? [report.type] : []);
+  const set = new Set(types);
+  if (action === "delete") {
+    if (set.has("category_wrong"))   return "takedown.category_wrong";
+    if (set.has("rating_wrong"))     return "takedown.rating_wrong";
+    if (set.has("duplicate"))        return "takedown.duplicate";
+    if (set.has("broken"))           return "takedown.broken";
+    if (set.has("policy_violation")) return "takedown.policy_violation";
+    return "takedown.generic";
+  }
+  if (action === "reclassify") return "recat.nsfw_to_sfw";
+  if (action === "rerate")     return "rerate.fix_label";
+  return "takedown.generic";
+}
+
+// 你的模板白名單（先含你確定可用的 key；不存在就退回 nsfw_in_sfw）
+const KNOWN_TEMPLATES = new Set([
+  "takedown.nsfw_in_sfw",
+  "takedown.generic",
+  "takedown.category_wrong",
+  "takedown.rating_wrong",
+  "takedown.duplicate",
+  "takedown.broken",
+  "takedown.policy_violation",
+  "recat.nsfw_to_sfw",
+  "rerate.fix_label",
+]);
+function ensureKnownTemplate(key) {
+  return KNOWN_TEMPLATES.has(key) ? key : "takedown.nsfw_in_sfw";
+}
+// === /Added helpers ===
+
+
 /** 分級：與站內一致 */
 const RATING_OPTIONS = ["一般", "15", "18"];
 
@@ -136,11 +190,24 @@ export default function AdminReportsPage() {
   }
 
   // 既有管理 API：/api/delete-image
-  async function doModerationAction({ imageId, action, reasonCode, newCategory, newRating, note = "" }) {
+  async function doModerationAction({ imageId, reportId, action, reasonCode, newCategory, newRating, note = "", notify = true, actionKey }) {
     const token = document.cookie.match(/token=([^;]+)/)?.[1];
+
     if (!token) throw new Error("找不到登入憑證（token）");
+    // 對應模板 key（與後端 notifTemplates 一致，可依實際需求調整）
+    const actionKeyMap = {
+      delete: "takedown.nsfw_in_sfw",
+      reclassify: "recat.nsfw_to_sfw",
+      rerate: "rerate.fix_label",
+    };
+
     const payload = {
       imageId,
+      reportId,
+      notify,                                   // 是否同時寄站內信（後端 v9）
+      actionKey: actionKey || actionKeyMap[action] || "takedown.generic",
+      reason: note, // 我們會在呼叫端用 buildChineseReason() 組成中文再丟進來
+      // 向後相容舊後端欄位（保留，不影響 v9）
       adminModeration: true,
       adminAction: action, // 'delete' | 'reclassify' | 'rerate'
       reasonCode,          // 'policy_violation' | 'category_wrong' | 'rating_wrong'
@@ -194,8 +261,12 @@ export default function AdminReportsPage() {
     try {
       await doModerationAction({
         imageId: report.imageId,
+        reportId: report._id,
         action: "delete",
         reasonCode: "policy_violation",
+        notify: true,
+        note: buildChineseReason(report, warningNote),
+        actionKey: ensureKnownTemplate(chooseActionKey(report, "delete")),
       });
       if (sendWarning) {
         const userId = getAuthorId(report.imageId);
@@ -233,9 +304,13 @@ export default function AdminReportsPage() {
     try {
       await doModerationAction({
         imageId: report.imageId,
+        reportId: report._id,
         action: "reclassify",
         reasonCode: "category_wrong",
         newCategory,
+        notify: true,
+        note: buildChineseReason(report, warningNote),
+        actionKey: ensureKnownTemplate(chooseActionKey(report, "reclassify")),
       });
       if (sendWarning) {
         const userId = getAuthorId(report.imageId);
@@ -272,9 +347,13 @@ export default function AdminReportsPage() {
     try {
       await doModerationAction({
         imageId: report.imageId,
+        reportId: report._id,
         action: "rerate",
         reasonCode: "rating_wrong",
         newRating,
+        notify: true,
+        note: buildChineseReason(report, warningNote),
+        actionKey: ensureKnownTemplate(chooseActionKey(report, "rerate")),
       });
       if (sendWarning) {
         const userId = getAuthorId(report.imageId);

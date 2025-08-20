@@ -87,15 +87,40 @@ export async function GET(req) {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const ratingsParam = (url.searchParams.get("ratings") || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+
+    // -------- 新增：ratings 安全解析（白名單 / 忽略雜訊 / 支援 all）--------
+    const parseCSV = (v) => {
+      if (!v) return [];
+      if (Array.isArray(v)) return v.map(String).map(s => s.trim()).filter(Boolean);
+      return String(v).split(",").map(s => s.trim()).filter(Boolean);
+    };
+    const inIf = (arr) => (Array.isArray(arr) && arr.length > 0) ? { $in: arr } : undefined;
+    function normalizeRatings(tokens) {
+      const ALLOWED = new Set(["15", "18", "sfw", "nsfw", "all"]);
+      const clean = tokens
+        .filter(t => !t.includes(":") && !t.includes("="))   // 忽略 15:1 / 18=true 等雜訊
+        .map(t => t.toLowerCase())
+        .filter(t => ALLOWED.has(t));
+      if (clean.includes("all")) return [];                  // all = 不下任何 rating 過濾
+      return Array.from(new Set(clean));
+    }
+
+    const ratingsRawStr = url.searchParams.get("ratings") || "";
+    const ratingsTokens = parseCSV(ratingsRawStr);
+    const ratingsParam = normalizeRatings(ratingsTokens);
+    const hasRatingsParam = url.searchParams.has("ratings");
 
     const match = {};
     if (categoriesParam.length) match.category = { $in: categoriesParam };
-    if (ratingsParam.length) match.rating = { $in: ratingsParam };
-    else match.rating = { $ne: "18" };
+
+    const ratingIn = inIf(ratingsParam);
+    if (ratingIn) {
+      match.rating = ratingIn; // 例如 { $in: ['15','18'] }
+    } else if (!hasRatingsParam) {
+      // 完全沒帶 ratings 參數：保留原預設 → 排除 18
+      match.rating = { $ne: "18" };
+    }
+    // 若有帶 ratings 但最後是空（例如 all 或全是雜訊）→ 不加任何 rating 過濾
 
     const skip = (page - 1) * limit;
     const usersColl = mongoose.model("User").collection.name;
@@ -262,7 +287,7 @@ export async function GET(req) {
     }
 
     const docs = await Image.aggregate(pipeline);
-    return NextResponse.json({ images: decorate(docs) });
+    return NextResponse.json({ images: decorate(docs) }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error("❌ /api/images 失敗：", err);
     return new NextResponse("Failed to fetch images", { status: 500 });

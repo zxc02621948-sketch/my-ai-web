@@ -1,190 +1,274 @@
 // /app/api/delete-image/route.js
+// v11.2 — exact mapping for 6 report categories + robust fallbacks + debugPreview
+
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
 import { getCurrentUser } from "@/lib/serverAuth";
-import mongoose from "mongoose";
+
 import Image from "@/models/Image";
 import Message from "@/models/Message";
+import User from "@/models/User";
+import { renderTemplate } from "@/utils/notifTemplates";
 
-export const dynamic = "force-dynamic";
-
-// 嘗試載入 Report 模型（沒有也可運作）
-let Report = null;
-try {
-  const mod = await import("@/models/Report");
-  Report = mod?.default || mod?.Report || null;
-} catch { /* ignore */ }
-
-const json = (data, status = 200, headers = {}) =>
-  new NextResponse(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8", ...headers },
-  });
-
-const toOid = (v) =>
-  mongoose.Types.ObjectId.isValid(String(v)) ? new mongoose.Types.ObjectId(String(v)) : null;
-
-const pairCid = (a, b) => (String(a) < String(b) ? `pair:${a}:${b}` : `pair:${b}:${a}`);
-
-function normalizeMongoId(raw) {
-  if (raw == null) return null;
-  const s = String(raw).trim();
-  const m = s.match(/^\s*(?:new\s+)?ObjectId\(\s*['"]?([0-9a-fA-F]{24})['"]?\s*\)\s*$/);
-  if (m) return m[1];
-  const m2 = s.match(/([0-9a-fA-F]{24})/);
-  if (m2) return m2[1];
-  return s; // 可能是 Cloudflare UUID
+// ---------- helpers ----------
+function json(data, status = 200, extraHeaders = {}) {
+  return NextResponse.json(data, { status, headers: { ...extraHeaders } });
+}
+function isOid(v) {
+  try { return !!v && mongoose.Types.ObjectId.isValid(String(v)); }
+  catch { return false; }
+}
+function toBool(v) {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "y" || s === "on";
+  }
+  return false;
+}
+function ensureAdmin(user) {
+  return !!user && (user.isAdmin === true || String(user.role || "").toLowerCase() === "admin");
 }
 
-// 讀 JSON / form / query 都吃，避免型別/格式問題
-async function readPayload(req) {
-  const out = {};
-  const ct = req.headers.get("content-type") || "";
-  if (ct.includes("application/json")) {
-    try { Object.assign(out, (await req.json()) || {}); } catch {}
-  } else if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
-    try {
-      const fd = await req.formData();
-      for (const [k, v] of fd.entries()) if (typeof v === "string") out[k] = v;
-    } catch {}
-  }
-  const sp = req.nextUrl?.searchParams;
-  if (sp) for (const k of sp.keys()) if (!(k in out)) out[k] = sp.get(k);
-  return out;
+// ---- text normalize utils ----
+// 移除空白、全形括號/斜線/標點，保留中英文與數字，方便做「顯示文字」直切
+function stripToKey(s) {
+  if (!s) return "";
+  return String(s)
+    .toLowerCase()
+    .replace(/[！＂＃＄％＆＇（）＊＋，－．／：；＜＝＞？＠［＼］＾＿｀｛｜｝～\s]/g, "") // 全形標點+空白
+    .replace(/[()\/\[\],.:;'"`|_+\-]/g, "") // 半形常見符號
+    ;
+}
+function normLoose(s) {
+  if (!s) return "";
+  return String(s)
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[／]/g, "/"); // 全形斜線 → 半形
 }
 
-async function resolveImage(idOrImageId) {
-  // 1) 以 Mongo _id 找
-  if (mongoose.Types.ObjectId.isValid(idOrImageId)) {
-    const byId = await Image.findById(idOrImageId).select("_id user title imageId").lean();
-    if (byId) return { image: byId, mode: "image:_id" };
-  }
-  // 2) 以 Cloudflare imageId 找
-  const byImageId = await Image.findOne({ imageId: idOrImageId }).select("_id user title imageId").lean();
-  if (byImageId) return { image: byImageId, mode: "image:imageId" };
+// ---- category -> actionKey (exact first, then fuzzy) ----
+function pickActionFromReport(rpt) {
+  if (!rpt || typeof rpt !== "object") return { actionKey: null, reason: "" };
 
-  // 3) 若傳入的是 report._id，反查出圖片
-  if (Report && mongoose.Types.ObjectId.isValid(idOrImageId)) {
-    const rpt = await Report.findById(idOrImageId).select("imageId").lean();
-    if (rpt?.imageId) {
-      const norm = normalizeMongoId(rpt.imageId);
-      if (mongoose.Types.ObjectId.isValid(norm)) {
-        const imgA = await Image.findById(norm).select("_id user title imageId").lean();
-        if (imgA) return { image: imgA, mode: "report->image:_id" };
-      }
-      const imgB = await Image.findOne({ imageId: norm }).select("_id user title imageId").lean();
-      if (imgB) return { image: imgB, mode: "report->image:imageId" };
+  const rawReason =
+    rpt.reason || rpt.message || rpt.note ||
+    (Array.isArray(rpt.reasons) ? rpt.reasons.join(", ") : "") || "";
+  const catRaw = rpt.category || rpt.kind || rpt.type || "";
+
+  // 1) 先用「顯示文字」直切（把斜線/括號/空白去掉）
+  const catKey = stripToKey(catRaw);
+
+  // 明確列你下拉的 6 個選項（處理過的 key）：
+  // 分類錯誤 → "分類錯誤"
+  // 分級錯誤 → "分級錯誤"
+  // 重複/洗版 → "重複洗版"
+  // 壞圖/無法顯示 → "壞圖無法顯示"
+  // 站規違規 → "站規違規"
+  // 其他（需說明） → "其他需說明"
+  const EXACT = {
+    "分類錯誤": "takedown.category_wrong",
+    "分級錯誤": "takedown.rating_wrong",
+    "重複洗版": "takedown.duplicate_spam",
+    "壞圖無法顯示": "takedown.broken_image",
+    "站規違規": "takedown.policy_violation",
+    "其他需說明": "takedown.other_with_note",
+  };
+  if (EXACT[catKey]) {
+    return { actionKey: EXACT[catKey], reason: rawReason };
+  }
+
+  // 2) 對不到就做鬆散關鍵字（類別與理由都比）
+  const catN = normLoose(catRaw);
+  const txtN = normLoose(rawReason);
+  const MATCH = [
+    { keys: ["分類錯誤","wrongcategory","categorywrong"], actionKey: "takedown.category_wrong" },
+    { keys: ["分級錯誤","ratingwrong","adult","18","r18","nsfw"], actionKey: "takedown.rating_wrong" },
+    { keys: ["重複/洗版","重複","洗版","duplicate","spam","repeat"], actionKey: "takedown.duplicate_spam" },
+    { keys: ["壞圖/無法顯示","壞圖","無法顯示","broken","corrupt","badfile","loadfail","cantdisplay"], actionKey: "takedown.broken_image" },
+    { keys: ["站規違規","policy","rule","violation","侵權","copyright","ban","違規"], actionKey: "takedown.policy_violation" },
+    { keys: ["其他","其他（需說明）","other"], actionKey: "takedown.other_with_note" },
+  ];
+  for (const m of MATCH) {
+    if (m.keys.some(k => catN.includes(normLoose(k)))) {
+      return { actionKey: m.actionKey, reason: rawReason };
     }
   }
-  return { image: null, mode: "unresolved" };
+  for (const m of MATCH) {
+    if (m.keys.some(k => txtN.includes(normLoose(k)))) {
+      return { actionKey: m.actionKey, reason: rawReason };
+    }
+  }
+
+  // 3) 最後保底
+  return { actionKey: "takedown.policy_violation", reason: rawReason };
 }
 
+// ---- Report model loader ----
+async function getReportModelSafe() {
+  try {
+    const m = await import("@/models/Report");
+    return m?.default || null;
+  } catch {
+    return null;
+  }
+}
+
+// ---- resolve image by multiple hints ----
+async function resolveImageByAny({ idOrImageId, reportId, ReportModel }) {
+  if (idOrImageId && isOid(idOrImageId)) {
+    const img = await Image.findById(idOrImageId)
+      .select("_id user userId imageId title")
+      .lean();
+    if (img) return { image: img, mode: "image:_id" };
+  }
+  if (idOrImageId) {
+    const img = await Image.findOne({ imageId: idOrImageId })
+      .select("_id user userId imageId title")
+      .lean();
+    if (img) return { image: img, mode: "image:imageId" };
+  }
+  if (reportId && ReportModel && isOid(reportId)) {
+    const rpt = await ReportModel.findById(reportId).lean();
+    if (rpt) {
+      const candidates = [rpt.image, rpt.imageId, rpt.targetImageId, rpt.target].filter(Boolean);
+      for (const x of candidates) {
+        if (isOid(x)) {
+          const img = await Image.findById(x)
+            .select("_id user userId imageId title")
+            .lean();
+          if (img) return { image: img, mode: "report:imageRef" };
+        }
+        const img2 = await Image.findOne({ imageId: x })
+          .select("_id user userId imageId title")
+          .lean();
+        if (img2) return { image: img2, mode: "report:imageId" };
+      }
+    }
+  }
+  return { image: null, mode: "notfound" };
+}
+
+// ---- owner id fallback (user or userId) ----
+function ownerObjectIdFromImage(img) {
+  let ownerId = img?.user?._id || img?.user || null;
+  if (!ownerId && img?.userId && /^[0-9a-fA-F]{24}$/.test(String(img.userId))) {
+    ownerId = new mongoose.Types.ObjectId(String(img.userId));
+  }
+  return ownerId;
+}
+
+// ---------- main ----------
 export async function POST(req) {
   try {
     await dbConnect();
 
     const me = await getCurrentUser();
-    if (!me?._id) return json({ ok: false, message: "需要登入" }, 401);
-
-    const body = await readPayload(req);
-    const rawId = body?.imageId ?? body?.id;
-    const inputId = normalizeMongoId(rawId);
-    const reason = typeof body?.reason === "string" ? body.reason : "";
-    const incomingReportId = body?.reportId || body?.report_id || null;
-
-    if (!inputId) return json({ ok: false, message: "缺少 imageId（或 id）" }, 400);
-
-    const { image, mode } = await resolveImage(String(inputId));
-    if (!image) return json({ ok: false, message: `找不到圖片（提供的是 ${inputId}）` }, 404);
-
-    const ownerOid = toOid(image.user);
-    const meOid = toOid(me._id);
-    if (!ownerOid || !meOid) return json({ ok: false, message: "使用者 ID 解析失敗" }, 500);
-
-    const isAdmin = !!me.isAdmin;
-    const isOwner = String(meOid) === String(ownerOid);
-    if (!isAdmin && !isOwner) return json({ ok: false, message: "沒有權限刪除這張圖片" }, 403);
-
-    // 先刪圖
-    await Image.deleteOne({ _id: image._id });
-
-    // ===== 關鍵：自動偵測是否「因檢舉」 =====
-    let matchedReport = null;
-    if (Report) {
-      const queryOr = [
-        { imageId: image._id },                  // 有些報告存的是 ObjectId
-        { imageId: String(image._id) },          // 有些存字串化的 _id
-        { imageId: image.imageId },              // 或存 Cloudflare imageId
-      ];
-      // 若有明確傳入 reportId，就優先找那筆
-      const byRid = mongoose.Types.ObjectId.isValid(incomingReportId)
-        ? await Report.findById(incomingReportId).lean()
-        : null;
-
-      matchedReport =
-        byRid ||
-        (await Report.findOne({ $or: queryOr })
-          .sort({ createdAt: -1 })
-          .lean());
+    if (!ensureAdmin(me)) {
+      return json({ ok: false, message: "需要管理員權限" }, 403);
     }
 
-    const shouldNotify = !!matchedReport; // 只要有檢舉單存在，就寄站內信
-    const results = { shouldNotify, notify: { ok: true }, reportUpdate: { ok: true } };
+    const { searchParams } = new URL(req.url);
+    const q = Object.fromEntries(searchParams.entries());
+    const body = await (async () => { try { return await req.json(); } catch { return {}; } })();
 
-    if (shouldNotify) {
-      // 建對話：管理員 ↔ 作者
+    const idOrImageId = (body?.id ?? body?.imageId ?? q.id ?? q.imageId ?? "").trim();
+    const reportId = (body?.reportId ?? q.reportId ?? "").trim();
+    const debugPreview = toBool(body?.debugPreview ?? q.debugPreview);
+
+    let notify = toBool(body?.notify ?? body?.fromReport ?? q.notify ?? q.fromReport);
+    let actionKey = (body?.actionKey ?? q.actionKey ?? "").trim();
+    let reason = typeof (body?.reason ?? q.reason) === "string" ? (body?.reason ?? q.reason) : "";
+
+    if (!notify && reportId) notify = true;
+
+    const ReportModel = await getReportModelSafe();
+    const { image, mode } = await resolveImageByAny({ idOrImageId, reportId, ReportModel });
+    if (!image) {
+      return json({ ok: false, message: `找不到圖片（提供的是 ${idOrImageId || reportId}）` }, 404);
+    }
+
+    await Image.deleteOne({ _id: image._id });
+
+    let reportDoc = null;
+    if ((!actionKey || !actionKey.length) && reportId && ReportModel && isOid(reportId)) {
+      try { reportDoc = await ReportModel.findById(reportId).lean(); } catch {}
+      if (reportDoc) {
+        const picked = pickActionFromReport(reportDoc);
+        actionKey = picked.actionKey || "takedown.policy_violation";
+        if (!reason) reason = picked.reason || "";
+      }
+    }
+    if (!actionKey || !actionKey.length) actionKey = "takedown.nsfw_in_sfw";
+
+    if (reportDoc) {
       try {
-        const cid = pairCid(meOid, ownerOid);
-        const ref = {
-          type: "action",
-          id: matchedReport?._id || undefined,
-          extra: {
-            action: "delete_due_to_report",
-            reason: reason || undefined,
-            image: { _id: image._id, imageId: image.imageId },
+        await ReportModel.updateOne(
+          { _id: reportDoc._id },
+          { $set: { resolved: true, resolvedAt: new Date(), resolution: "deleted" } }
+        );
+      } catch {}
+    }
+
+    let notifyResult = { ok: false };
+    let tplPreview = null;
+
+    if (notify) {
+      try {
+        let ownerId = ownerObjectIdFromImage(image);
+        if (typeof ownerId === "string" && /^[0-9a-fA-F]{24}$/.test(ownerId)) {
+          ownerId = new mongoose.Types.ObjectId(ownerId);
+        }
+        if (!ownerId) throw new Error("OWNER_NOT_FOUND");
+
+        const owner = await User.findById(ownerId).select("_id username email").lean();
+
+        const ctx = {
+          user: { username: owner?.username || "" },
+          image: {
+            _id: String(image._id),
+            title: image.title || "",
+            imageId: image.imageId || ""
           },
+          // legacy ctx
+          username: owner?.username || "",
+          imageTitle: image.title || "",
+          imageUuid: image.imageId || "",
+          reason: reason || "",
         };
 
-        const created = await Message.create({
-          conversationId: cid,
-          fromId: meOid,
-          toId: ownerOid,
-          subject: "圖片已因檢舉被刪除",
-          body:
-            `你的圖片（${mode.includes("imageId") ? `imageId: ${image.imageId}` : `ID: ${image._id}`}）因檢舉已被管理員刪除。` +
-            (reason ? `\n原因：${String(reason).slice(0, 300)}` : ""),
-          kind: "admin",
-          ref,
+        const tpl = renderTemplate(actionKey, ctx); // { title, subject, body }
+        tplPreview = debugPreview ? { subject: tpl.subject || tpl.title, body: tpl.body } : null;
+
+        const msg = await Message.create({
+          conversationId: `pair:${String(ownerId)}:system`,
+          fromId: null,
+          toId: ownerId,
+          subject: tpl.subject || tpl.title || "(系統通知)",
+          body: tpl.body || "",
+          isSystem: true,
+          archived: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          meta: {
+            actionKey,
+            imageRef: { _id: image._id, imageId: image.imageId || null, title: image.title || "" },
+            reportId: reportDoc?._id || null,
+          },
         });
 
-        // 寫入後硬確認
-        const confirmed = await Message.findById(created._id)
-          .select("_id conversationId fromId toId kind createdAt")
-          .lean();
-
-        results.notify = confirmed
-          ? {
-              ok: true,
-              messageId: String(created._id),
-              conversationId: confirmed.conversationId,
-              toId: String(confirmed.toId),
-              fromId: String(confirmed.fromId),
-            }
-          : { ok: false, error: "created-but-not-found" };
+        notifyResult = {
+          ok: true,
+          conversationId: `pair:${String(ownerId)}:system`,
+          messageId: String(msg._id),
+          actionKey,
+        };
       } catch (e) {
-        console.error("Create message failed:", e);
-        results.notify = { ok: false, error: e?.message || String(e) };
-      }
-
-      // 自動把檢舉單設為「已處置」
-      if (matchedReport && Report) {
-        try {
-          if (matchedReport.status !== "action_taken") {
-            await Report.findByIdAndUpdate(matchedReport._id, { status: "action_taken" }, { new: false });
-          }
-        } catch (e) {
-          results.reportUpdate = { ok: false, error: e?.message || String(e) };
-        }
+        console.error("notify(create Message) failed:", e);
+        notifyResult = { ok: false, error: e?.message || String(e) };
       }
     }
 
@@ -192,14 +276,14 @@ export async function POST(req) {
       {
         ok: true,
         message: "已刪除圖片",
-        deletedId: image._id,
+        deletedId: String(image._id),
         mode,
-        hasReport: !!matchedReport,
-        reportId: matchedReport?._id || null,
-        ...results,
+        notifyUsed: notify,
+        notify: notifyResult,
+        ...(debugPreview ? { tplPreview } : {}),
       },
       200,
-      { "X-Delete-Image-Route": "v10", "X-Has-Report": String(!!matchedReport) }
+      { "X-Delete-Image-Route": "v11.2" }
     );
   } catch (err) {
     console.error("POST /api/delete-image error:", err);
