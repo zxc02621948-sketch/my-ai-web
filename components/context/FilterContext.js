@@ -4,14 +4,14 @@ import { createContext, useContext, useState, useMemo, useCallback, useEffect } 
 
 /** 前端按鈕顯示用 → 後端查詢值 */
 export const labelToRating = {
-  "一般圖片": "all",
+  "一般圖片": "sfw",
   "15+ 圖片": "15",
   "18+ 圖片": "18",
 };
 
 /** 後端值 → 前端顯示用（有需要時可用） */
 export const ratingToLabel = {
-  all: "一般圖片",
+  sfw: "一般圖片",
   "15": "15+ 圖片",
   "18": "18+ 圖片",
 };
