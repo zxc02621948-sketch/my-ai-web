@@ -72,57 +72,94 @@ export async function GET(req) {
     const pinRecent = Math.max(0, parseInt(url.searchParams.get("pinRecent") || "6", 10));
 
     const q = (url.searchParams.get("search") || "").trim();
-    const qRegex = q ? new RegExp(q.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&"), "i") : null;
+    const qRegex = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
 
     const categoriesParam = (url.searchParams.get("categories") || "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
 
-    // -------- ratings 安全解析（加強版）--------
+    // -------- ratings 解析（明確對應）--------
     const parseCSV = (v) => {
       if (!v) return [];
-      if (Array.isArray(v)) return v.map(String).map(s => s.trim()).filter(Boolean);
-      return String(v).split(",").map(s => s.trim()).filter(Boolean);
+      if (Array.isArray(v)) return v.map(String).map((s) => s.trim()).filter(Boolean);
+      return String(v).split(",").map((s) => s.trim()).filter(Boolean);
     };
 
-    // 白名單；含 all → 視為 ["all"]（不套任何過濾）；忽略 15:1 / 18=true 等雜訊
+    // 一般同義詞轉成 "sfw"；15+/18+ 正規化
     function normalizeRatings(tokens) {
-      const ALLOWED = new Set(["15", "18", "sfw", "nsfw", "all"]);
-      const clean = tokens
-        .filter(t => !t.includes(":") && !t.includes("="))
-        .map(t => t.toLowerCase())
-        .filter(t => ALLOWED.has(t));
-      if (clean.includes("all")) return ["all"]; // 核心：有 all 就只保留 all
-      return Array.from(new Set(clean));
+      const mapOne = (t) => {
+        const x = t.toLowerCase();
+        if (["sfw", "general", "g", "一般"].includes(x)) return "sfw";
+        if (["15", "15+", "r15"].includes(x)) return "15";
+        if (["18", "18+", "r18", "nsfw"].includes(x)) return "18";
+        return "";
+      };
+      return Array.from(
+        new Set(tokens.map(mapOne).filter(Boolean))
+      );
     }
-
-    const inIf = (arr) => (Array.isArray(arr) && arr.length > 0) ? { $in: arr } : undefined;
 
     const ratingsRawStr = url.searchParams.get("ratings") || "";
     const hasRatingsParam = url.searchParams.has("ratings");
+    const ratingsTokens = parseCSV(ratingsRawStr);
+    const ratingsParam = normalizeRatings(ratingsTokens);
+    const selected = new Set(ratingsParam);
 
     // ---- 建 where ----
     const match = {};
     if (categoriesParam.length) match.category = { $in: categoriesParam };
 
-    // ratings 解析（try/catch：任何異常一律略過分級過濾，以避免 500）
-    try {
-      const ratingsTokens = parseCSV(ratingsRawStr);
-      const ratingsParam = normalizeRatings(ratingsTokens);
+    // 資料層假設：
+    // - 一般（sfw）多數情況是：rating 缺省 / null / "" / "sfw" / "general"
+    // - 15+：rating === "15"
+    // - 18+：rating === "18"
+    //
+    // 因此：
+    // - 只一般 => { rating: { $nin: ["15", "18"] } }
+    // - 一般 + 15+ => { rating: { $ne: "18" } }
+    // - 一般 + 18+ => { $or: [ { rating: { $nin: ["15","18"] } }, { rating: "18" } ] }
+    // - 15+ => { rating: "15" }
+    // - 18+ => { rating: "18" }
+    // - 15+ + 18+ => { rating: { $in: ["15","18"] } }
+    // - 三顆都沒選（或未帶 ratings）=> 一般 + 15+（安全預設）
 
-      if (ratingsParam.length === 1 && ratingsParam[0] === "all") {
-        // 不加 rating 過濾
-      } else if (ratingsParam.length) {
-        match.rating = inIf(ratingsParam); // 例如 { $in: ['15','18'] }
-      } else if (!hasRatingsParam) {
-        // 完全沒帶 ratings 參數：保留原預設 → 排除 18
-        match.rating = { $ne: "18" };
-      }
-      // 若有帶 ratings 但最後是空（例如全是雜訊）→ 不加任何 rating 過濾
-    } catch (e) {
-      console.warn("ratings-parse-safe-fallback:", e?.message || e);
-      // 出現任何解析異常 → 不加 rating 過濾（避免 500）
+    const hasSfw = selected.has("sfw");
+    const has15 = selected.has("15");
+    const has18 = selected.has("18");
+
+    const applyDefaultGeneralPlus15 = () => {
+      match.rating = { $ne: "18" };
+    };
+
+    if (!hasSfw && !has15 && !has18) {
+      // 未帶或清空 → 一般 + 15+
+      applyDefaultGeneralPlus15();
+    } else if (hasSfw && !has15 && !has18) {
+      // 只一般
+      match.rating = { $nin: ["15", "18"] };
+    } else if (!hasSfw && has15 && !has18) {
+      // 只 15+
+      match.rating = "15";
+    } else if (!hasSfw && !has15 && has18) {
+      // 只 18+
+      match.rating = "18";
+    } else if (hasSfw && has15 && !has18) {
+      // 一般 + 15+
+      applyDefaultGeneralPlus15();
+    } else if (hasSfw && !has15 && has18) {
+      // 一般 + 18+
+      match.$or = [{ rating: { $nin: ["15", "18"] } }, { rating: "18" }];
+    } else if (!hasSfw && has15 && has18) {
+      // 15+ + 18+
+      match.rating = { $in: ["15", "18"] };
+    } else {
+      // 三顆全選（一般 + 15+ + 18+）→ 全部
+      // 以 $or 拆開（包含缺省的一般）
+      match.$or = [
+        { rating: { $nin: ["15", "18"] } },
+        { rating: { $in: ["15", "18"] } },
+      ];
     }
 
     const skip = (page - 1) * limit;
@@ -273,7 +310,10 @@ export async function GET(req) {
             { $sample: { size: remain } },
           ]);
         }
-        return NextResponse.json({ images: decorate([...pinned, ...randoms]) }, { headers: { "Cache-Control": "no-store" } });
+        return NextResponse.json(
+          { images: decorate([...pinned, ...randoms]) },
+          { headers: { "Cache-Control": "no-store" } }
+        );
       }
       default: // popular
         pipeline = [...withSearch, { $sort: { popScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }];
