@@ -1,6 +1,6 @@
 // /app/api/images/route.js
 export const runtime = "nodejs";
-export const preferredRegion = ["hnd1"]; // 依你的 DB 區域調整
+export const preferredRegion = ["hnd1"];
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
@@ -8,14 +8,12 @@ import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
 
-// 小工具
 const bool = (v) => v === true || v === "1" || v === "true";
 
-// ============== A) 一鍵遷移：把 userId: string -> ObjectId，並補 user 欄位 ==============
+// ============== 一鍵遷移（保留原功能） ==============
 async function migrateUserIdStringsToObjectIds({ dryRun = false } = {}) {
   const col = mongoose.connection.collection("images");
 
-  // 型別統計
   const typeStats = await col
     .aggregate([{ $project: { t: { $type: "$userId" } } }, { $group: { _id: "$t", n: { $sum: 1 } } }])
     .toArray();
@@ -33,10 +31,7 @@ async function migrateUserIdStringsToObjectIds({ dryRun = false } = {}) {
     };
   }
 
-  // 1) userId 字串 → ObjectId
   const r1 = await col.updateMany(filterStringUserId, [{ $set: { userId: { $toObjectId: "$userId" } } }]);
-
-  // 2) 若沒有 user 欄位，補上 user = userId（ObjectId）
   const r2 = await col.updateMany(
     { $or: [{ user: { $exists: false } }, { user: null }], userId: { $type: "objectId" } },
     [{ $set: { user: "$userId" } }]
@@ -53,12 +48,8 @@ async function migrateUserIdStringsToObjectIds({ dryRun = false } = {}) {
   };
 }
 
-// =============================== API ===============================
-
 export async function HEAD() {
-  try {
-    await dbConnect();
-  } catch {}
+  try { await dbConnect(); } catch {}
   return new NextResponse(null, { status: 204 });
 }
 
@@ -88,44 +79,55 @@ export async function GET(req) {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    // -------- 新增：ratings 安全解析（白名單 / 忽略雜訊 / 支援 all）--------
+    // -------- ratings 安全解析（加強版）--------
     const parseCSV = (v) => {
       if (!v) return [];
       if (Array.isArray(v)) return v.map(String).map(s => s.trim()).filter(Boolean);
       return String(v).split(",").map(s => s.trim()).filter(Boolean);
     };
-    const inIf = (arr) => (Array.isArray(arr) && arr.length > 0) ? { $in: arr } : undefined;
+
+    // 白名單；含 all → 視為 ["all"]（不套任何過濾）；忽略 15:1 / 18=true 等雜訊
     function normalizeRatings(tokens) {
       const ALLOWED = new Set(["15", "18", "sfw", "nsfw", "all"]);
       const clean = tokens
-        .filter(t => !t.includes(":") && !t.includes("="))   // 忽略 15:1 / 18=true 等雜訊
+        .filter(t => !t.includes(":") && !t.includes("="))
         .map(t => t.toLowerCase())
         .filter(t => ALLOWED.has(t));
-      if (clean.includes("all")) return [];                  // all = 不下任何 rating 過濾
+      if (clean.includes("all")) return ["all"]; // 核心：有 all 就只保留 all
       return Array.from(new Set(clean));
     }
 
+    const inIf = (arr) => (Array.isArray(arr) && arr.length > 0) ? { $in: arr } : undefined;
+
     const ratingsRawStr = url.searchParams.get("ratings") || "";
-    const ratingsTokens = parseCSV(ratingsRawStr);
-    const ratingsParam = normalizeRatings(ratingsTokens);
     const hasRatingsParam = url.searchParams.has("ratings");
 
+    // ---- 建 where ----
     const match = {};
     if (categoriesParam.length) match.category = { $in: categoriesParam };
 
-    const ratingIn = inIf(ratingsParam);
-    if (ratingIn) {
-      match.rating = ratingIn; // 例如 { $in: ['15','18'] }
-    } else if (!hasRatingsParam) {
-      // 完全沒帶 ratings 參數：保留原預設 → 排除 18
-      match.rating = { $ne: "18" };
+    // ratings 解析（try/catch：任何異常一律略過分級過濾，以避免 500）
+    try {
+      const ratingsTokens = parseCSV(ratingsRawStr);
+      const ratingsParam = normalizeRatings(ratingsTokens);
+
+      if (ratingsParam.length === 1 && ratingsParam[0] === "all") {
+        // 不加 rating 過濾
+      } else if (ratingsParam.length) {
+        match.rating = inIf(ratingsParam); // 例如 { $in: ['15','18'] }
+      } else if (!hasRatingsParam) {
+        // 完全沒帶 ratings 參數：保留原預設 → 排除 18
+        match.rating = { $ne: "18" };
+      }
+      // 若有帶 ratings 但最後是空（例如全是雜訊）→ 不加任何 rating 過濾
+    } catch (e) {
+      console.warn("ratings-parse-safe-fallback:", e?.message || e);
+      // 出現任何解析異常 → 不加 rating 過濾（避免 500）
     }
-    // 若有帶 ratings 但最後是空（例如 all 或全是雜訊）→ 不加任何 rating 過濾
 
     const skip = (page - 1) * limit;
     const usersColl = mongoose.model("User").collection.name;
 
-    // —— 基礎輸出欄位（image）——
     const projectBase = {
       _id: 1,
       title: 1,
@@ -142,9 +144,8 @@ export async function GET(req) {
       imageUrl: 1,
       imageId: 1,
       userId: 1,
-      user: 1, // 兼容已有 populate 的狀況
+      user: 1,
 
-      // 右側欄會顯示的欄位
       platform: 1,
       modelName: 1,
       modelLink: 1,
@@ -162,7 +163,6 @@ export async function GET(req) {
       height: 1,
     };
 
-    // —— 一律統一 user 連結：先產生 userRef（支援 user/objectId 與 userId/string）——
     const addUserRef = {
       $addFields: {
         userRef: {
@@ -189,10 +189,9 @@ export async function GET(req) {
           pipeline: [{ $project: { _id: 1, username: 1, image: 1 } }],
         },
       },
-      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } }, // 不丟資料
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
     ];
 
-    // —— 搜尋條件（含 user.username）——
     const searchMatch = qRegex
       ? {
           $or: [
@@ -210,12 +209,10 @@ export async function GET(req) {
         }
       : null;
 
-    // —— 輸出前裝飾：likesCount / imageUrl / user fallback —— 
     const decorate = (docs) =>
       (docs || []).map((img) => {
         const likesCount = Array.isArray(img.likes) ? img.likes.length : img.likesCount || 0;
 
-        // user 物件優先；其餘情況用 userRef 或 userId 給最小物件，避免前端出現「未命名」
         let user =
           img.user && typeof img.user === "object"
             ? img.user
@@ -234,11 +231,9 @@ export async function GET(req) {
         return { ...img, likesCount, user, imageUrl };
       });
 
-    // —— 共用 base pipeline —— 
     const base = [{ $match: match }, { $project: projectBase }, ...lookupUser];
     const withSearch = searchMatch ? [...base, { $match: searchMatch }] : base;
 
-    // —— 統一：首頁（無搜尋）與搜尋都走 aggregate —— 
     let pipeline;
 
     switch (sort) {
@@ -261,7 +256,6 @@ export async function GET(req) {
         pipeline = [...withSearch, { $sample: { size: limit } }];
         break;
       case "hybrid": {
-        // 置頂最新 pinRecent，剩餘用隨機補
         const pinned = await Image.aggregate([
           ...withSearch,
           { $sort: { createdAt: -1, _id: -1 } },
@@ -279,7 +273,7 @@ export async function GET(req) {
             { $sample: { size: remain } },
           ]);
         }
-        return NextResponse.json({ images: decorate([...pinned, ...randoms]) });
+        return NextResponse.json({ images: decorate([...pinned, ...randoms]) }, { headers: { "Cache-Control": "no-store" } });
       }
       default: // popular
         pipeline = [...withSearch, { $sort: { popScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }];
