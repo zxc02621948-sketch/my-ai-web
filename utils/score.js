@@ -55,8 +55,8 @@ export const POP_NEW_WINDOW_HOURS = toNum(process.env.POP_NEW_WINDOW_HOURS, 10);
 
 /** likesCount 保障 */
 export function ensureLikesCount(x = {}) {
-  if (typeof x.likesCount === "number") return x.likesCount;
   if (Array.isArray(x.likes)) return x.likes.length;
+  if (typeof x.likesCount === "number") return x.likesCount;
   const n = Number(x.likes || 0);
   return Number.isFinite(n) ? n : 0;
 }

@@ -7,8 +7,19 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
+import { ensureLikesCount, computePopScore } from "@/utils/score"; // ⭐ 一鍵補救要用
 
 const bool = (v) => v === true || v === "1" || v === "true";
+
+// ---- 與 utils/score.js 對齊的分數常數（可用環境變數覆蓋；保持正數）----
+const toNum = (v, d) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+};
+const POP_W_CLICK = toNum(process.env.POP_W_CLICK, 1.0);
+const POP_W_LIKE = toNum(process.env.POP_W_LIKE, 8.0);
+const POP_W_COMPLETE = toNum(process.env.POP_W_COMPLETE, 0.05);
+const POP_NEW_WINDOW_HOURS = toNum(process.env.POP_NEW_WINDOW_HOURS, 10);
 
 // ============== 一鍵遷移（保留原功能） ==============
 async function migrateUserIdStringsToObjectIds({ dryRun = false } = {}) {
@@ -66,6 +77,49 @@ export async function GET(req) {
       return NextResponse.json(result);
     }
 
+    // ⭐ 一鍵補救舊資料：/api/images?repairLikes=1（可加 &dry=1 預覽）
+    if (url.searchParams.get("repairLikes") === "1") {
+      const dryRun = url.searchParams.get("dry") === "1";
+      let scanned = 0, modified = 0;
+
+      const cursor = Image.find(
+        {},
+        {
+          likes: 1,
+          likesCount: 1,
+          clicks: 1,
+          completenessScore: 1,
+          initialBoost: 1,
+          createdAt: 1,
+          popScore: 1,
+        }
+      ).cursor();
+
+      for await (const img of cursor) {
+        scanned++;
+        const nextLikesCount = ensureLikesCount(img);
+        const nextPop = computePopScore({ ...img.toObject(), likesCount: nextLikesCount });
+
+        const needUpdate =
+          (img.likesCount || 0) !== nextLikesCount ||
+          (img.popScore || 0) !== nextPop;
+
+        if (needUpdate && !dryRun) {
+          img.likesCount = nextLikesCount;
+          img.popScore = nextPop;
+          await img.save();
+        }
+        if (needUpdate) modified++;
+      }
+
+      return NextResponse.json({
+        dryRun,
+        scanned,
+        modified,
+        note: "likesCount 與 popScore 已補正（或預覽）。",
+      });
+    }
+
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
     const limit = Math.max(1, parseInt(url.searchParams.get("limit") || "24", 10));
     const sort = (url.searchParams.get("sort") || "popular").toLowerCase();
@@ -86,7 +140,6 @@ export async function GET(req) {
       return String(v).split(",").map((s) => s.trim()).filter(Boolean);
     };
 
-    // 一般同義詞轉成 "sfw"；15+/18+ 正規化
     function normalizeRatings(tokens) {
       const mapOne = (t) => {
         const x = t.toLowerCase();
@@ -95,13 +148,10 @@ export async function GET(req) {
         if (["18", "18+", "r18", "nsfw"].includes(x)) return "18";
         return "";
       };
-      return Array.from(
-        new Set(tokens.map(mapOne).filter(Boolean))
-      );
+      return Array.from(new Set(tokens.map(mapOne).filter(Boolean)));
     }
 
     const ratingsRawStr = url.searchParams.get("ratings") || "";
-    const hasRatingsParam = url.searchParams.has("ratings");
     const ratingsTokens = parseCSV(ratingsRawStr);
     const ratingsParam = normalizeRatings(ratingsTokens);
     const selected = new Set(ratingsParam);
@@ -110,20 +160,8 @@ export async function GET(req) {
     const match = {};
     if (categoriesParam.length) match.category = { $in: categoriesParam };
 
-    // 資料層假設：
-    // - 一般（sfw）多數情況是：rating 缺省 / null / "" / "sfw" / "general"
-    // - 15+：rating === "15"
-    // - 18+：rating === "18"
-    //
-    // 因此：
-    // - 只一般 => { rating: { $nin: ["15", "18"] } }
-    // - 一般 + 15+ => { rating: { $ne: "18" } }
-    // - 一般 + 18+ => { $or: [ { rating: { $nin: ["15","18"] } }, { rating: "18" } ] }
-    // - 15+ => { rating: "15" }
-    // - 18+ => { rating: "18" }
-    // - 15+ + 18+ => { rating: { $in: ["15","18"] } }
-    // - 三顆都沒選（或未帶 ratings）=> 一般 + 15+（安全預設）
-
+    // 一般（sfw） = rating 缺省/null/""/"sfw"/"general"
+    // 15+ = "15"；18+ = "18"
     const hasSfw = selected.has("sfw");
     const has15 = selected.has("15");
     const has18 = selected.has("18");
@@ -154,13 +192,16 @@ export async function GET(req) {
       // 15+ + 18+
       match.rating = { $in: ["15", "18"] };
     } else {
-      // 三顆全選（一般 + 15+ + 18+）→ 全部
-      // 以 $or 拆開（包含缺省的一般）
+      // 三顆全選（一般 + 15+ + 18+）→ 全部（包含缺省的一般）
       match.$or = [
         { rating: { $nin: ["15", "18"] } },
         { rating: { $in: ["15", "18"] } },
       ];
     }
+
+    // 🔧 切換（=1 啟用 live 分數；否則預設用 DB popScore）
+    const useLive = url.searchParams.get("live") === "1";
+    const debug = url.searchParams.get("debug") === "1";
 
     const skip = (page - 1) * limit;
     const usersColl = mongoose.model("User").collection.name;
@@ -177,7 +218,7 @@ export async function GET(req) {
       createdAt: 1,
       likes: 1,
       likesCount: 1,
-      popScore: 1,
+      popScore: 1, // DB 內的分數（穩定版）
       imageUrl: 1,
       imageId: 1,
       userId: 1,
@@ -198,6 +239,11 @@ export async function GET(req) {
       clipSkip: 1,
       width: 1,
       height: 1,
+
+      // live 分數要用到
+      initialBoost: 1,
+      completenessScore: 1,
+      clicks: 1,
     };
 
     const addUserRef = {
@@ -229,7 +275,7 @@ export async function GET(req) {
       { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
     ];
 
-    const searchMatch = qRegex
+    const qRegexMatch = qRegex
       ? {
           $or: [
             { title: { $regex: qRegex } },
@@ -269,7 +315,36 @@ export async function GET(req) {
       });
 
     const base = [{ $match: match }, { $project: projectBase }, ...lookupUser];
-    const withSearch = searchMatch ? [...base, { $match: searchMatch }] : base;
+    const withSearch = qRegexMatch ? [...base, { $match: qRegexMatch }] : base;
+
+    // 共用：計算 live 分數（供 live=1 或 debug 觀察）
+    const calcLive = {
+      $addFields: {
+        likesCountCalc: {
+          $cond: [
+            { $isArray: "$likes" },
+            { $size: { $ifNull: ["$likes", []] } },
+            { $ifNull: ["$likesCount", 0] },
+          ],
+        },
+        hoursElapsed: { $divide: [{ $subtract: ["$$NOW", "$createdAt"] }, 1000 * 60 * 60] },
+        boostFactor: {
+          $max: [0, { $subtract: [1, { $divide: ["$hoursElapsed", POP_NEW_WINDOW_HOURS] }] }],
+        },
+        decayedBoost: {
+          $round: [{ $multiply: [{ $ifNull: ["$initialBoost", 0] }, "$boostFactor"] }, 1],
+        },
+        baseScore: {
+          $add: [
+            { $multiply: [{ $ifNull: ["$clicks", 0] }, POP_W_CLICK] },
+            { $multiply: ["$likesCountCalc", POP_W_LIKE] },
+            { $multiply: [{ $ifNull: ["$completenessScore", 0] }, POP_W_COMPLETE] },
+          ],
+        },
+        livePopScore: { $add: ["$baseScore", "$decayedBoost"] },
+        popScoreDB: { $ifNull: ["$popScore", 0] }, // 方便 debug
+      },
+    };
 
     let pipeline;
 
@@ -283,7 +358,17 @@ export async function GET(req) {
       case "mostlikes":
         pipeline = [
           ...withSearch,
-          { $addFields: { likesCount: { $size: { $ifNull: ["$likes", []] } } } },
+          {
+            $addFields: {
+              likesCount: {
+                $cond: [
+                  { $isArray: "$likes" },
+                  { $size: { $ifNull: ["$likes", []] } },
+                  { $ifNull: ["$likesCount", 0] },
+                ],
+              },
+            },
+          },
           { $sort: { likesCount: -1, createdAt: -1, _id: -1 } },
           { $skip: skip },
           { $limit: limit },
@@ -306,7 +391,7 @@ export async function GET(req) {
             { $match: { ...match, _id: { $nin: excludeIds } } },
             { $project: projectBase },
             ...lookupUser,
-            ...(searchMatch ? [{ $match: searchMatch }] : []),
+            ...(qRegexMatch ? [{ $match: qRegexMatch }] : []),
             { $sample: { size: remain } },
           ]);
         }
@@ -315,9 +400,27 @@ export async function GET(req) {
           { headers: { "Cache-Control": "no-store" } }
         );
       }
-      default: // popular
-        pipeline = [...withSearch, { $sort: { popScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }];
+      default: {
+        // popular：預設用 DB popScore（穩定），可用 live=1 切到即時計算
+        const useLive = url.searchParams.get("live") === "1";
+        pipeline = useLive
+          ? [
+              ...withSearch,
+              calcLive,
+              { $sort: { livePopScore: -1, createdAt: -1, _id: -1 } },
+              { $skip: skip },
+              { $limit: limit },
+            ]
+          : [
+              ...withSearch,
+              // 也算 live（若 debug=1 會回傳），但排序用 DB popScore
+              calcLive,
+              { $sort: { popScore: -1, createdAt: -1, _id: -1 } },
+              { $skip: skip },
+              { $limit: limit },
+            ];
         break;
+      }
     }
 
     const docs = await Image.aggregate(pipeline);
