@@ -38,11 +38,16 @@ export default function ImageModal({
 }) {
   const router = useRouter();
   const followLockRef = useRef(false);
+  const viewedRef = useRef(new Set());
 
+  // ---- 先定義 state，再根據 state 推導 currentId（修復點） ----
   const [image, setImage] = useState(imageData || null);
   const [loading, setLoading] = useState(!imageData);
   const [error, setError] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
+
+  // 由已載入的 image 為主，否則回退到 props
+  const currentId = image?._id ?? imageId ?? imageData?._id ?? null;
 
   // === 編輯彈窗：開關 + 回寫 ===
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -99,6 +104,33 @@ export default function ImageModal({
       alive = false;
     };
   }, [imageId, imageData]);
+
+  // ✅ 每次「切換到新圖片」時，呼叫一次點擊 API，並把回傳寫回本地 state
+  useEffect(() => {
+    if (!currentId) return;
+
+    // 避免同一張在同一次開啟中被重複計分
+    if (viewedRef.current.has(currentId)) return;
+    viewedRef.current.add(currentId);
+
+    fetch(`/api/images/${currentId}/click`, { method: "POST" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data?.ok) return;
+        // 把 server 更新後的 clicks / likesCount / popScore 回寫到當前 image
+        setImage((prev) =>
+          prev && prev._id === currentId
+            ? {
+                ...prev,
+                clicks: data.clicks ?? prev.clicks,
+                likesCount: data.likesCount ?? prev.likesCount,
+                popScore: data.popScore ?? prev.popScore,
+              }
+            : prev
+        );
+      })
+      .catch(() => {});
+  }, [currentId]);
 
   useEffect(() => {
     if (image && typeof image.user === "string") {
