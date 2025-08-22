@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/cron/recompute-pop",
+      "path": "/api/cron/recompute-pop?secret=index-build-8cf2b9e7-2025",
       "schedule": "0 * * * *"
     }
   ]
