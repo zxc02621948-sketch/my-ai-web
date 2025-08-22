@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function POST(_req, { params }) {
   try {
     await dbConnect();
-    const { id } = params;
+    const { id } = await params;
 
     // 1) 點擊 +1
     await Image.updateOne({ _id: id }, { $inc: { clicks: 1 } });
