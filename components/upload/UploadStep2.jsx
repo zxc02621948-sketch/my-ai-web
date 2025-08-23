@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import pako from "pako";
 import { jwtDecode } from "jwt-decode";
 import CATEGORIES from "@/constants/categories";
+import { civitaiByHash } from "@/lib/civitai"; // ✅ 你剛新增的工具
 
 export default function UploadStep2({
   rating,
@@ -59,6 +60,7 @@ export default function UploadStep2({
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
   const [modelHash, setModelHash] = useState("");
+  const [loraHashes, setLoraHashes] = useState([]);   // ✅ 新增：LoRA hashes 狀態
 
   // ui
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -209,6 +211,17 @@ export default function UploadStep2({
       model: get(/Model:\s*([^,\n]+)/i),
       loras: Array.from(loraSet),
     };
+    // 解析「Lora hashes:」行，補出 loraHashes 陣列，供後續 civitaiByHash 使用
+    const loraHashLine = parameters.match(/Lora hashes\s*:\s*([^\n\r]+)/i)?.[1];
+    if (loraHashLine) {
+      const items = loraHashLine.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+      const hashes = [];
+      for (const it of items) {  
+        const m = it.match(/([0-9a-f]{8,64})/i);
+        if (m) hashes.push(m[1].toLowerCase());
+      }
+      if (hashes.length) out.loraHashes = Array.from(new Set(hashes));
+    }  
 
     if (out.size) {
       const m = out.size.match(/(\d+)x(\d+)/);
@@ -257,6 +270,8 @@ export default function UploadStep2({
     setModelName(parsed.model || "");
     setModelHash(parsed.modelHash || "");
     if (Array.isArray(parsed.loras) && parsed.loras.length) setLoraName(parsed.loras.join(", "));
+    // ✅ 取出剛剛 parser 補的 loraHashes
+    if (Array.isArray(parsed.loraHashes) && parsed.loraHashes.length) setLoraHashes(parsed.loraHashes);
   }
 
   // 當選檔時：讀 PNG Info + 生成預覽 + 壓縮
@@ -398,7 +413,8 @@ export default function UploadStep2({
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
 
-      const metadata = {
+      // ✅ 先準備 metadata（先不送；我們下面會補 Civitai 解析結果後再送）
+        const metadataBase = {
         imageId,
         imageUrl,
         title: title?.trim(),
@@ -408,8 +424,8 @@ export default function UploadStep2({
         platform: platform?.trim() || "Stable Diffusion WebUI",
         modelName: modelName?.trim() || "",
         loraName: loraName?.trim() || "",
-        modelLink: modelLink?.trim() || "",
-        loraLink: loraLink?.trim() || "",
+        modelLink: modelLink?.trim() || "", // 若為空，會嘗試以 hash 自動補
+        loraLink: loraLink?.trim() || "",   // 若為空，但解析到 loraRefs，也可以忽略
         positivePrompt,
         negativePrompt,
         description,
@@ -428,6 +444,70 @@ export default function UploadStep2({
         modelHash: modelHash || undefined,
         // 可選：若要記錄成年聲明到後端（需後端支援）
         adultDeclaration: rating === "18" ? true : undefined,
+      };
+
+      // ✅ Civitai by-hash 查主模型（若使用者沒手動填 modelLink）
+      let modelRef = null;
+      if (!metadataBase.modelLink && modelHash) {
+        try {
+          const ref = await civitaiByHash(modelHash);
+          if (ref) {
+            modelRef = {
+              modelId: ref.modelId ?? undefined,
+              versionId: ref.versionId ?? undefined,
+              modelName: ref.modelName ?? undefined,
+              modelType: ref.modelType ?? undefined,
+              modelLink: ref.links?.modelLink ?? "",
+              versionLink: ref.links?.versionLink ?? "",
+            };
+            // 前端顯示友好：若沒填 modelName/modelLink，就順手補
+            if (!metadataBase.modelName && modelRef.modelName) metadataBase.modelName = modelRef.modelName;
+            if (!metadataBase.modelLink && modelRef.modelLink) metadataBase.modelLink = modelRef.modelLink;
+          }
+        } catch (e) {
+          console.warn("civitai main model lookup failed", e);
+        }
+      }
+
+      // ✅ Civitai by-hash 查 LoRA（若有）
+      let loraRefs = [];
+      if (Array.isArray(loraHashes) && loraHashes.length) {
+        const uniq = Array.from(new Set(loraHashes)).slice(0, 20);
+        for (const h of uniq) {
+          try {
+            const ref = await civitaiByHash(h);
+            if (ref) {
+              loraRefs.push({
+                hash: h,
+                modelId: ref.modelId ?? undefined,
+                versionId: ref.versionId ?? undefined,
+                name: ref.modelName ?? undefined,
+                modelLink: ref.links?.modelLink ?? "",
+                versionLink: ref.links?.versionLink ?? "",
+              });
+            }
+          } catch (e) {
+            console.warn("civitai lora lookup failed", h, e);
+          }
+        }
+      }
+
+      // 若使用者沒手填 loraLink，且有查到 loraRefs，回填一份給欄位與 metadata
+      if (!metadataBase.loraLink && loraRefs.length) {
+        const links = loraRefs
+          .map(r => r.modelLink || r.versionLink)
+          .filter(Boolean);
+        if (links.length) {
+          // 你只有一個欄位 → 以「每行一個」的方式回填，多筆也OK
+          metadataBase.loraLink = links.join("\n");
+        }
+      }
+
+      // ✅ 組合最後要送的 payload
+      const metadata = {
+        ...metadataBase,
+        ...(modelRef ? { modelRef } : {}),
+        ...(loraRefs.length ? { loraHashes, loraRefs } : {}),
       };
 
       const metaRes = await fetch("/api/cloudflare-images", {
@@ -641,6 +721,22 @@ export default function UploadStep2({
           value={loraLink}
           onChange={(e) => setLoraLink(e.target.value)}
         />
+
+        {/* LoRA hashes（可選） */}
+        <input
+          type="text"
+          placeholder="LoRA hashes（可多個；以空格、逗號或換行分隔）"
+          className="w-full p-2 rounded bg-zinc-700"
+          value={(loraHashes || []).join(", ")}
+          onChange={(e) => {
+            const arr = String(e.target.value)
+              .split(/[\s,，、]+/)
+              .map(s => s.trim().toLowerCase())
+              .filter(s => /^[0-9a-f]{8,64}$/.test(s)); // 只收 8–64 位 hex
+            setLoraHashes(arr);
+          }}
+        />
+
         <p className="text-xs text-zinc-400">
           只接受 <span className="underline">civitai.com</span> 的網址（可留白）。
         </p>

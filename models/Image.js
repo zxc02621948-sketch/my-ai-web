@@ -18,6 +18,24 @@ const ImageSchema = new mongoose.Schema(
     loraName: String,
     modelLink: { type: String, default: "" },
     loraLink: { type: String, default: "" },
+    // ✅ 新增：主模型與 LoRA 的「查表結果」結構化紀錄
+    modelRef: {
+      modelId: Number,
+      versionId: Number,
+      modelName: String,
+      modelType: String,      // 'CHECKPOINT' / 'LORA' / 'EMBEDDING'...
+      modelLink: String,      // https://civitai.com/models/:id?modelVersionId=:vid
+      versionLink: String,    // https://civitai.com/model-versions/:vid
+    },
+    loraHashes: [String],
+    loraRefs: [{
+      hash: String,
+      modelId: Number,
+      versionId: Number,
+      name: String,
+      modelLink: String,
+      versionLink: String,
+    }],
 
     tags: [String],
     imageId: String,
@@ -62,6 +80,8 @@ ImageSchema.index({ tags: 1 });
 ImageSchema.index({ imageId: 1 });
 ImageSchema.index({ userId: 1 });
 ImageSchema.index({ popScore: -1, createdAt: -1 });
+ImageSchema.index({ modelHash: 1 });     // 查詢主模型
+ImageSchema.index({ 'loraRefs.hash': 1 }); // 查詢 LoRA
 
 // 取目前最高分（只取 popScore 欄位）
 async function fetchCurrentMaxPopScore(model) {

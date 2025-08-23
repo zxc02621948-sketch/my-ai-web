@@ -167,9 +167,6 @@ export async function POST(req) {
     await dbConnect();
 
     const me = await getCurrentUser();
-    if (!ensureAdmin(me)) {
-      return json({ ok: false, message: "需要管理員權限" }, 403);
-    }
 
     const { searchParams } = new URL(req.url);
     const q = Object.fromEntries(searchParams.entries());
@@ -189,6 +186,16 @@ export async function POST(req) {
     const { image, mode } = await resolveImageByAny({ idOrImageId, reportId, ReportModel });
     if (!image) {
       return json({ ok: false, message: `找不到圖片（提供的是 ${idOrImageId || reportId}）` }, 404);
+    }
+
+    // ✅ 權限：管理員或圖片作者本人可刪除
+    let ownerId = ownerObjectIdFromImage(image);
+    if (typeof ownerId === "string" && /^[0-9a-fA-F]{24}$/.test(ownerId)) {
+      ownerId = new mongoose.Types.ObjectId(ownerId);
+    }
+    const isOwner = me && ownerId && String(ownerId) === String(me._id);
+    if (!ensureAdmin(me) && !isOwner) {
+      return json({ ok: false, message: "需要管理員或作者本人權限" }, 403);
     }
 
     await Image.deleteOne({ _id: image._id });

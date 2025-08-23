@@ -238,6 +238,20 @@ export function parseA1111Parameters(raw = "") {
   const model =
     kvs["Model"] ?? kvs["model"] ?? kvs["Model hash"] ?? kvs["Model Hash"] ?? kvs["ModelName"];
 
+  // 1) 找到 "Lora hashes:" 後面到換行的片段
+  let loraHashes = [];
+  const lhLine = text.match(/Lora hashes\s*:\s*([^\n\r]+)/i)?.[1];
+  if (lhLine) {
+    // 2) 允許「name:hash」「name=hash」或只給「hash」
+    const items = lhLine.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+    for (const item of items) {
+      const m = item.match(/([0-9a-f]{8,64})/i);
+      if (m) loraHashes.push(m[1].toLowerCase());
+    }
+    loraHashes = Array.from(new Set(loraHashes));
+  }
+  
+
   return removeUndef({
     prompt,
     negative_prompt: negative,
@@ -248,6 +262,8 @@ export function parseA1111Parameters(raw = "") {
     sampler,
     seed,
     model,
+    // 有些資料源會把 model 欄塞 hash，這裡不強制命名；前端會再對「Model hash:」單獨解析
+    loraHashes,
     raw: raw,
   });
 }

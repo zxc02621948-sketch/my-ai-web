@@ -11,6 +11,8 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
   const [copiedField, setCopiedField] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const router = useRouter();
+  // 小工具：判斷像網址的字串
+  const looksUrl = (s) => typeof s === "string" && /^https?:\/\//i.test(s?.trim());
 
   // === 檢舉彈窗狀態 ===
   const [showReport, setShowReport] = useState(false);
@@ -113,25 +115,39 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
   const handleDelete = async () => {
     const confirmed = window.confirm("你確定要刪除這張圖片嗎？");
     if (!confirmed) return;
+
     if (!image || !image._id) {
       alert("找不到圖片資訊，無法刪除！");
       return;
     }
-    const token = document.cookie.match(/token=([^;]+)/)?.[1];
-    if (!token) return;
+
+    // 取 token（保留你原本方式；若有 getCookie 可改用 getCookie('token')）
+    const token = document.cookie.match(/(?:^|;\s*)token=([^;]+)/)?.[1];
+    if (!token) {
+      alert("未登入或憑證過期，請先登入。");
+      return;
+    }
+
     try {
-      const res = await axios.post(
-        "/api/delete-image",
-        { imageId: image._id },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (res.status === 200) {
+      const res = await fetch("/api/delete-image", {
+        method: "POST", // 你的 route.js 是 POST
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id: String(image._id) }), // 後端支援 body.id / body.imageId
+      });
+    
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data?.ok) {
         alert("圖片刪除成功！");
         onClose?.();
         window.scrollTo(0, 0);
         setTimeout(() => window.location.reload(), 50);
       } else {
-        alert("刪除失敗，請稍後再試。");
+        console.warn("刪除回應：", data);
+        alert(`刪除失敗：${data?.error || res.statusText || "請稍後再試"}`);
       }
     } catch (err) {
       console.error("❌ 刪除圖片失敗", err);
@@ -333,52 +349,76 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
       <div className="text-sm text-gray-300 mb-3">
         模型名稱：<br />
         {(() => {
-          const name = (image.modelName || "").trim();
-          const link = (image.modelLink || "").trim();
-          const url = link || name;
-          const looksUrl = /^https?:\/\//i.test(url);
-          if (!name && !looksUrl) return <span className="text-white">(未提供)</span>;
-          if (looksUrl) {
+          const ref = image?.modelRef;
+          const name = (ref?.modelName || image?.modelName || "").trim();
+          const url  = (ref?.modelLink || image?.modelLink || "").trim();
+
+          if (!name && !looksUrl(url)) return <span className="text-white">(未提供)</span>;
+          if (looksUrl(url)) {
             return (
               <a
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-400 underline break-words inline-block max-w-[260px]"
+                title={ref?.modelType ? `類型：${ref.modelType}` : undefined}
               >
                 {name || url}
               </a>
             );
           }
-          return (
-            <span className="text-white break-words inline-block max-w-[260px]">{name}</span>
-          );
+            return <span className="text-white break-words inline-block max-w-[260px]">{name}</span>;
         })()}
       </div>
 
       <div className="text-sm text-gray-300 mb-3">
         LoRA 名稱：<br />
-        {(() => {
-          const name = (image.loraName || "").trim();
-          const link = (image.loraLink || "").trim();
-          const url = link || name;
-          const looksUrl = /^https?:\/\//i.test(url);
-          if (!name && !looksUrl) return <span className="text-white">(未提供)</span>;
-          if (looksUrl) {
-            return (
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 underline break-words inline-block max-w-[260px]"
-              >
-                {name || url}
-              </a>
-            );
-          }
-          return (
-            <span className="text-white break-words inline-block max-w-[260px]">{name}</span>
-          );
+        {Array.isArray(image?.loraRefs) && image.loraRefs.length > 0 ? (
+          <ul className="mt-1 space-y-1">
+            {image.loraRefs.map((lr) => {
+              const nm  = (lr?.name || lr?.hash || "").trim();
+              const url = (lr?.modelLink || lr?.versionLink || "").trim();
+              const tag = lr?.hash ? ` #${lr.hash}` : "";
+              return (
+                <li key={lr?.hash || nm} className="leading-snug">
+                  {looksUrl(url) ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 underline break-words inline-block max-w-[260px]"
+                      title={lr?.versionId ? `versionId: ${lr.versionId}` : undefined}
+                    >
+                      {nm}
+                    </a>
+                  ) : (
+                    <span className="text-white break-words inline-block max-w-[260px]">{nm}</span>
+                  )}
+                  {/* 顯示 hash（非必須） */}
+                  {lr?.hash && <span className="ml-1 text-xs text-zinc-400">{tag}</span>}
+                </li>
+              );
+            })}
+          </ul>
+       ) : (() => {
+           // 後備：維持你原本的單筆顯示（loraName/loraLink）
+           const name = (image?.loraName || "").trim();
+           const link = (image?.loraLink || "").trim();
+           const url = link || name;
+           if (!name && !looksUrl(url)) return <span className="text-white">(未提供)</span>;
+           if (looksUrl(url)) {
+             return (
+               <a
+                 href={url}
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 className="text-blue-400 underline break-words inline-block max-w-[260px]"
+               >
+                 {name || url}
+               </a>
+             );
+           }
+          return <span className="text-white break-words inline-block max-w-[260px]">{name}</span>;
         })()}
       </div>
 
@@ -464,6 +504,16 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
                   <Field label="寬度" value={adv.width} />
                   <Field label="高度" value={adv.height} />
                   <Field label="Model hash" value={adv.modelHash} />
+                  <Field
+                    label="LoRA hashes"
+                    value={
+                      (Array.isArray(image?.loraRefs) && image.loraRefs.length > 0)
+                        ? image.loraRefs.map(x => x?.hash).filter(Boolean).join(", ")
+                        : (Array.isArray(image?.loraHashes) && image.loraHashes.length > 0)
+                            ? image.loraHashes.join(", ")
+                            : "—"
+                    }
+                  />
                 </div>
                 <div className="flex items-center justify-between mt-2">
                   <div ref={paramsRef} className="sr-only">
