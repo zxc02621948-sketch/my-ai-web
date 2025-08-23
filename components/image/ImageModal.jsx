@@ -49,6 +49,7 @@ export default function ImageModal({
   // 由已載入的 image 為主，否則回退到 props
   const currentId = image?._id ?? imageId ?? imageData?._id ?? null;
 
+
   // === 編輯彈窗：開關 + 回寫 ===
   const [isEditOpen, setIsEditOpen] = useState(false);
   const openEdit = () => setIsEditOpen(true);

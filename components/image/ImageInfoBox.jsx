@@ -13,6 +13,32 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
   const router = useRouter();
   // 小工具：判斷像網址的字串
   const looksUrl = (s) => typeof s === "string" && /^https?:\/\//i.test(s?.trim());
+  // 多筆切分（支援換行、半形/全形逗號、頓號）
+  const splitList = (s) =>
+    String(s || "")
+      .split(/\r?\n|,|、|，/g)
+      .map(x => x.trim())
+      .filter(Boolean);
+
+  // 從 prompt 裡抓真正出現過的 <lora:NAME:...> 名稱清單
+  const extractLoraNamesFromPrompt = (txt) => {
+    if (!txt) return [];
+    const out = [];
+    const re = /<\s*lora\s*:\s*([^:>]+)\s*:/gi;
+    let m;
+    while ((m = re.exec(String(txt))) !== null) {
+      out.push(m[1].trim());
+    }
+    return Array.from(new Set(out));
+  };
+
+  // 盡量從 image 物件裡收集「可能的正面 prompt」欄位
+  const getPositivePrompt = (image) =>
+    image?.positivePrompt ||
+    image?.prompt ||
+    image?.promptPositive ||
+    image?.meta?.positive ||
+    "";
 
   // === 檢舉彈窗狀態 ===
   const [showReport, setShowReport] = useState(false);
@@ -374,11 +400,11 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
       <div className="text-sm text-gray-300 mb-3">
         LoRA 名稱：<br />
         {Array.isArray(image?.loraRefs) && image.loraRefs.length > 0 ? (
+          // ✅ 有 loraRefs：只顯示 loraRefs，禁止再拼 loraName/loraLink，避免多抓
           <ul className="mt-1 space-y-1">
             {image.loraRefs.map((lr) => {
               const nm  = (lr?.name || lr?.hash || "").trim();
               const url = (lr?.modelLink || lr?.versionLink || "").trim();
-              const tag = lr?.hash ? ` #${lr.hash}` : "";
               return (
                 <li key={lr?.hash || nm} className="leading-snug">
                   {looksUrl(url) ? (
@@ -387,39 +413,73 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-400 underline break-words inline-block max-w-[260px]"
-                      title={lr?.versionId ? `versionId: ${lr.versionId}` : undefined}
                     >
                       {nm}
                     </a>
                   ) : (
                     <span className="text-white break-words inline-block max-w-[260px]">{nm}</span>
                   )}
-                  {/* 顯示 hash（非必須） */}
-                  {lr?.hash && <span className="ml-1 text-xs text-zinc-400">{tag}</span>}
                 </li>
               );
             })}
           </ul>
-       ) : (() => {
-           // 後備：維持你原本的單筆顯示（loraName/loraLink）
-           const name = (image?.loraName || "").trim();
-           const link = (image?.loraLink || "").trim();
-           const url = link || name;
-           if (!name && !looksUrl(url)) return <span className="text-white">(未提供)</span>;
-           if (looksUrl(url)) {
-             return (
-               <a
-                 href={url}
-                 target="_blank"
-                 rel="noopener noreferrer"
-                 className="text-blue-400 underline break-words inline-block max-w-[260px]"
-               >
-                 {name || url}
-               </a>
-             );
-           }
-          return <span className="text-white break-words inline-block max-w-[260px]">{name}</span>;
-        })()}
+        ) : (() => {
+            // ❗ 沒有 loraRefs 才會走到這裡
+            const rawNames = splitList(image?.loraName);
+            const rawLinks = splitList(image?.loraLink).filter(looksUrl);
+
+            // 只允許「真的出現在 <lora:NAME:...>」的名字
+            const pp = getPositivePrompt(image);
+            const validFromPrompt = new Set(
+              extractLoraNamesFromPrompt(pp).map(s => s.toLowerCase())
+            );
+
+            // 過濾掉抽卡語法、花括號、pipe 及與 prompt 毫無關係的名字
+            let names = rawNames
+              .filter(n => n && !/[{}]/.test(n) && !/\|/.test(n))
+              .filter(n => validFromPrompt.size === 0 || validFromPrompt.has(n.toLowerCase()));
+
+            // 如果只有一條連結但名字很多，保留最可能對得上的那個（或第一個）
+            if (rawLinks.length === 1 && names.length > 1) {
+              names = [names.find(n => rawLinks[0].toLowerCase().includes(n.toLowerCase())) || names[0]];
+            }
+            // 名稱比連結多時，最多配對到連結數（避免一堆無連結假項）
+            if (rawLinks.length > 0 && names.length > rawLinks.length) {
+              names = names.slice(0, rawLinks.length);
+            }
+
+            if (names.length === 0 && rawLinks.length === 0) {
+              return <span className="text-white">(未提供)</span>;
+            }
+
+            return (
+              <ul className="mt-1 space-y-1">
+                {(names.length ? names : rawLinks).map((_, idx) => {
+                  const name = (names[idx] || "").trim();
+                  const link = (rawLinks[idx] || "").trim();
+                  const showText = name || link;
+                  return looksUrl(link) ? (
+                    <li key={`${showText}-${idx}`} className="leading-snug">
+                      <a
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 underline break-words inline-block max-w-[260px]"
+                      >
+                        {showText}
+                      </a>
+                    </li>
+                  ) : (
+                    <li key={`${showText}-${idx}`} className="leading-snug">
+                      <span className="text-white break-words inline-block max-w-[260px]">
+                        {showText || "（未提供）"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            );
+          })()}
       </div>
 
       {/* 分類 */}
