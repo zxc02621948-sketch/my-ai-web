@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import pako from "pako";
 import { jwtDecode } from "jwt-decode";
 import CATEGORIES from "@/constants/categories";
-import { civitaiByHash } from "@/lib/civitai"; // ✅ 你剛新增的工具
+import { civitaiByHash } from "@/lib/civitai";
+import { parseComfyWorkflow } from "@/lib/parseComfyWorkflow";
 
 export default function UploadStep2({
   rating,
@@ -16,8 +17,6 @@ export default function UploadStep2({
   setCompressedImage,
   preview,
   setPreview,
-  useOriginal,
-  setUseOriginal,
   compressionInfo,
   setCompressionInfo,
   title,
@@ -36,7 +35,7 @@ export default function UploadStep2({
   setNegativePrompt,
   isUploading,
   setIsUploading,
-  onUpload, // (若外層需要接手，可保留；此檔內也有預設 handleUpload)
+  onUpload,
   onClose,
   currentUser,
   modelLink,
@@ -51,6 +50,14 @@ export default function UploadStep2({
   const [originalSize, setOriginalSize] = useState(0);
   const [compressedSize, setCompressedSize] = useState(0);
 
+  // 使用者是否改動過連結欄位（避免自動覆蓋）
+  const [modelLinkTouched, setModelLinkTouched] = useState(false);
+  const [loraLinkTouched, setLoraLinkTouched] = useState(false);
+
+  // UI 提示：剛剛已自動帶入
+  const [autoFilledModelLink, setAutoFilledModelLink] = useState(false);
+  const [autoFilledLoraLink, setAutoFilledLoraLink] = useState(false);
+
   // advanced
   const [steps, setSteps] = useState("");
   const [sampler, setSampler] = useState("");
@@ -60,28 +67,38 @@ export default function UploadStep2({
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
   const [modelHash, setModelHash] = useState("");
-  const [loraHashes, setLoraHashes] = useState([]);   // ✅ 新增：LoRA hashes 狀態
+  const [loraHashes, setLoraHashes] = useState([]);
 
   // ui
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [metaStatus, setMetaStatus] = useState(null); // null | 'found' | 'none' | 'error'
   const [pasteInfo, setPasteInfo] = useState("");
-  const [confirmAdult, setConfirmAdult] = useState(false); // ✅ 新增：18+ 成年聲明
+  const [confirmAdult, setConfirmAdult] = useState(false);
 
+  // ComfyUI workflow 相關（新增）
+  const [workflowName, setWorkflowName] = useState("");
+  const [workflowRaw, setWorkflowRaw] = useState(""); // 原始 workflow JSON
+  const [promptRaw, setPromptRaw] = useState(""); // PNG 內 prompt 若是 Comfy JSON
+  const [shareWorkflow, setShareWorkflow] = useState(true); // 是否隨作品附檔
+
+  const workflowInputRef = useRef(null);
   const scrollAreaRef = useRef(null);
 
   // ====== Helpers ======
   const getRatingColor = () => {
     switch (rating) {
-      case "all": return "bg-green-600";
-      case "15": return "bg-yellow-500";
-      case "18": return "bg-red-600";
-      default: return "bg-zinc-600";
+      case "all":
+        return "bg-green-600";
+      case "15":
+        return "bg-yellow-500";
+      case "18":
+        return "bg-red-600";
+      default:
+        return "bg-zinc-600";
     }
   };
 
-  
-  // 讀取原始檔案實際像素（JPG/PNG/WEBP/AVIF 都可）
+  // 讀取原始檔案實際像素
   async function getImageSizeFromFile(file) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file);
@@ -93,16 +110,21 @@ export default function UploadStep2({
         URL.revokeObjectURL(url);
         resolve({ width: w, height: h });
       };
-      img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+      img.onerror = (e) => {
+        URL.revokeObjectURL(url);
+        reject(e);
+      };
       img.src = url;
     });
   }
-// -------- PNG/iTXt/zTXt 解析 --------
+
+  // -------- PNG/iTXt/zTXt 解析 --------
   const textDecoder = useMemo(() => new TextDecoder("utf-8"), []);
 
   async function extractPngTextChunks(file) {
     const ab = await file.arrayBuffer();
     const dv = new DataView(ab);
+    // PNG signature
     const sig = [137, 80, 78, 71, 13, 10, 26, 10];
     for (let i = 0; i < sig.length; i++) if (dv.getUint8(i) !== sig[i]) return {};
     let pos = 8;
@@ -136,11 +158,15 @@ export default function UploadStep2({
           return s;
         };
         const key = readToNull();
-        const compressionFlag = raw[p++]; const compressionMethod = raw[p++];
-        readToNull(); readToNull();
+        const compressionFlag = raw[p++];
+        const compressionMethod = raw[p++];
+        readToNull(); // languageTag
+        readToNull(); // translatedKeyword
         let text = "";
         if (compressionFlag === 1 && compressionMethod === 0) {
-          try { text = textDecoder.decode(pako.inflate(raw.slice(p))); } catch {}
+          try {
+            text = textDecoder.decode(pako.inflate(raw.slice(p)));
+          } catch {}
         } else {
           text = textDecoder.decode(raw.slice(p));
         }
@@ -151,11 +177,13 @@ export default function UploadStep2({
         const key = textDecoder.decode(raw.slice(0, Math.max(0, idx)));
         const method = raw[idx + 1];
         let text = "";
-        try { if (method === 0) text = textDecoder.decode(pako.inflate(raw.slice(idx + 2))); } catch {}
+        try {
+          if (method === 0) text = textDecoder.decode(pako.inflate(raw.slice(idx + 2)));
+        } catch {}
         if (key && text) out[key] = text;
       }
 
-      pos = dataEnd + 4;
+      pos = dataEnd + 4; // skip CRC
       if (type === "IEND") break;
     }
     return out;
@@ -211,21 +239,28 @@ export default function UploadStep2({
       model: get(/Model:\s*([^,\n]+)/i),
       loras: Array.from(loraSet),
     };
-    // 解析「Lora hashes:」行，補出 loraHashes 陣列，供後續 civitaiByHash 使用
+
+    // 解析 LoRA hashes
     const loraHashLine = parameters.match(/Lora hashes\s*:\s*([^\n\r]+)/i)?.[1];
     if (loraHashLine) {
-      const items = loraHashLine.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+      const items = loraHashLine
+        .split(/[,\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       const hashes = [];
-      for (const it of items) {  
+      for (const it of items) {
         const m = it.match(/([0-9a-f]{8,64})/i);
         if (m) hashes.push(m[1].toLowerCase());
       }
       if (hashes.length) out.loraHashes = Array.from(new Set(hashes));
-    }  
+    }
 
     if (out.size) {
       const m = out.size.match(/(\d+)x(\d+)/);
-      if (m) { out.width = m[1]; out.height = m[2]; }
+      if (m) {
+        out.width = m[1];
+        out.height = m[2];
+      }
     }
 
     return out;
@@ -237,7 +272,7 @@ export default function UploadStep2({
       const out = {};
       if (data && typeof data === "object") {
         const text = JSON.stringify(data);
-        const gr = (re) => (text.match(re)?.[1] || "");
+        const gr = (re) => text.match(re)?.[1] || "";
         out.seed = gr(/"seed"\s*:\s*(\d+)/i);
         out.cfgScale = gr(/"cfg"\s*:\s*([\d.]+)/i);
         out.sampler = gr(/"sampler(?:_name)?"\s*:\s*"([^"]+)"/i);
@@ -251,9 +286,12 @@ export default function UploadStep2({
           if (name) loras.add(name);
         }
         if (loras.size) out.loras = Array.from(loras);
+        return out;
       }
-      return out;
-    } catch { return null; }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   function applyParsed(parsed) {
@@ -270,61 +308,196 @@ export default function UploadStep2({
     setModelName(parsed.model || "");
     setModelHash(parsed.modelHash || "");
     if (Array.isArray(parsed.loras) && parsed.loras.length) setLoraName(parsed.loras.join(", "));
-    // ✅ 取出剛剛 parser 補的 loraHashes
     if (Array.isArray(parsed.loraHashes) && parsed.loraHashes.length) setLoraHashes(parsed.loraHashes);
   }
 
-  // 當選檔時：讀 PNG Info + 生成預覽 + 壓縮
+  // 當選檔時：讀 PNG Info + 偵測平台 + 壓縮
   useEffect(() => {
-    let revokeUrl = null;
+    if (!imageFile) return;
+    setOriginalSize(imageFile.size || 0);
+
     const run = async () => {
-      if (!imageFile) return;
-      // reset fields
-      setMetaStatus(null);
-      setPositivePrompt(""); setNegativePrompt("");
-      setSteps(""); setSampler(""); setCfgScale(""); setSeed(""); setClipSkip("");
-      setWidth(""); setHeight(""); setModelName(""); setModelHash(""); setLoraName("");
-
-      const url = URL.createObjectURL(imageFile);
-      revokeUrl = url;
-      setPreview(url);
-      setOriginalSize(imageFile.size);
-
       try {
         let parsed = null;
+        let detectedPlatform = null;
+
         if (imageFile.type === "image/png") {
           const chunks = await extractPngTextChunks(imageFile);
-          if (chunks.parameters) {
+
+          // ✅ 優先判斷 ComfyUI：workflow（最準）
+          if (!parsed && (chunks.workflow || chunks.Workflow)) {
+            try {
+              const wfVal = chunks.workflow || chunks.Workflow;
+              const comfy = parseComfyWorkflow(wfVal);
+              if (comfy && Array.isArray(comfy.nodes) && comfy.nodes.length > 0) {
+                parsed = comfy.canonical;
+                detectedPlatform = "ComfyUI";
+                const wfStr = typeof wfVal === "string" ? wfVal : JSON.stringify(wfVal, null, 2);
+                setWorkflowRaw(wfStr);
+              }
+            } catch {}
+          }
+
+          // ✅ ComfyUI：prompt 內就是 Comfy JSON
+          if (!parsed && chunks.prompt) {
+            try {
+              const maybe = parseComfyWorkflow(chunks.prompt);
+              if (maybe && Array.isArray(maybe.nodes) && maybe.nodes.length > 0) {
+                parsed = maybe.canonical;
+                detectedPlatform = "ComfyUI";
+                const prStr = typeof chunks.prompt === "string" ? chunks.prompt : JSON.stringify(chunks.prompt, null, 2);
+                setPromptRaw(prStr);
+              } else {
+                const comfyLite = tryParseComfy(chunks.prompt);
+                if (comfyLite) {
+                  parsed = comfyLite;
+                  detectedPlatform = "ComfyUI";
+                  const prStr = typeof chunks.prompt === "string" ? chunks.prompt : JSON.stringify(chunks.prompt, null, 2);
+                  setPromptRaw(prStr);
+                }
+              }
+            } catch {
+              const comfyLite = tryParseComfy(chunks.prompt);
+              if (comfyLite) {
+                parsed = comfyLite;
+                detectedPlatform = "ComfyUI";
+                const prStr = typeof chunks.prompt === "string" ? chunks.prompt : JSON.stringify(chunks.prompt, null, 2);
+                setPromptRaw(prStr);
+              }
+            }
+          }
+
+          // ✅ A1111 / SD WebUI
+          if (!parsed && chunks.parameters) {
             parsed = parseA1111Parameters(chunks.parameters);
-          } else if (chunks["sd-metadata"] || chunks["sd_metadata"] || chunks["SD:metadata"]) {
+            if (parsed) detectedPlatform = "Stable Diffusion WebUI";
+          } else if (!parsed && (chunks["sd-metadata"] || chunks["sd_metadata"] || chunks["SD:metadata"])) {
             try {
               const json = chunks["sd-metadata"] || chunks["sd_metadata"] || chunks["SD:metadata"];
               const meta = JSON.parse(json);
               parsed = {
                 prompt: meta.prompt || meta.Prompt || "",
                 negative: meta.negative_prompt || meta.NegativePrompt || "",
-                steps: meta.steps, sampler: meta.sampler, cfgScale: meta.cfg_scale ?? meta.cfg,
-                seed: meta.seed, width: meta.width, height: meta.height,
-                model: meta.model || meta.Model, modelHash: meta.model_hash || meta.ModelHash,
+                steps: meta.steps,
+                sampler: meta.sampler,
+                cfgScale: meta.cfg_scale ?? meta.cfg,
+                seed: meta.seed,
+                width: meta.width,
+                height: meta.height,
+                model: meta.model || meta.Model,
+                modelHash: meta.model_hash || meta.ModelHash,
                 clipSkip: meta.clip_skip ?? meta.clipSkip,
               };
+              if (parsed) detectedPlatform = "Stable Diffusion WebUI";
             } catch {}
-          } else if (chunks.prompt) {
-            const comfy = tryParseComfy(chunks.prompt); if (comfy) parsed = comfy;
-          } else if (chunks.workflow) {
-            const comfy = tryParseComfy(chunks.workflow); if (comfy) parsed = comfy;
+          }
+
+          // ✅ 文字啟發式（適配只有 Title/Description 的情況）
+          if (
+            !detectedPlatform &&
+            !chunks.parameters &&
+            !chunks["sd-metadata"] &&
+            !chunks["sd_metadata"] &&
+            !chunks["SD:metadata"]
+          ) {
+            const allText = Object.entries(chunks)
+              .map(([k, v]) => `${String(k)}: ${typeof v === "string" ? v : ""}`)
+              .join("\n")
+              .toLowerCase();
+            if (allText.includes("comfyui")) {
+              detectedPlatform = "ComfyUI";
+            }
+          }
+
+          // ✅ 套用結果
+          if (parsed) {
+            applyParsed(parsed);
+            if (detectedPlatform) setPlatform(detectedPlatform);
+            setMetaStatus("found");
+            setShowAdvanced(true);
+          } else {
+            if (detectedPlatform === "ComfyUI") setPlatform("ComfyUI");
+            setMetaStatus("none");
+          }
+        } else {
+          // 非 PNG：沒有 metadata 可讀 → 以檔名保底（含 comfyui）
+          if (/comfyui/i.test(imageFile.name || "")) {
+            setPlatform("ComfyUI");
           }
         }
-        if (parsed) { applyParsed(parsed); setMetaStatus("found"); setShowAdvanced(true); }
-        else { setMetaStatus("none"); }
-      } catch (e) { console.warn("PNG metadata parse failed", e); setMetaStatus("error"); }
 
-      compressImage(imageFile);
+        // 壓縮
+        await compressImage(imageFile);
+      } catch (e) {
+        console.warn("PNG metadata parse failed", e);
+        setMetaStatus("error");
+      }
     };
+
     run();
-    return () => { if (revokeUrl) URL.revokeObjectURL(revokeUrl); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageFile]);
+  
+  // 只要偵測到主模型 hash，就嘗試查 civitai 並自動填入（除非使用者已手動改過）
+  useEffect(() => {
+    let aborted = false;
+    (async () => {
+      if (!modelHash || modelLinkTouched) return;
+      try {
+        const ref = await civitaiByHash(modelHash);
+        if (!ref || aborted) return;
+        const url = ref?.links?.modelLink || "";
+        if (url) {
+          setModelLink(url);
+          setAutoFilledModelLink(true);
+        }
+      } catch (e) {
+        // 靜默失敗即可
+      }
+    })();
+    return () => { aborted = true; };
+  }, [modelHash, modelLinkTouched]);
+
+  // 有 LoRA hashes 時，彙整多個 civitai 連結自動填入（除非使用者已手動改過）
+  useEffect(() => {
+    let aborted = false;
+    (async () => {
+      if (!Array.isArray(loraHashes) || !loraHashes.length || loraLinkTouched) return;
+      const uniq = Array.from(new Set(loraHashes)).slice(0, 20);
+      const links = [];
+      for (const h of uniq) {
+        try {
+          const ref = await civitaiByHash(h);
+          if (aborted) return;
+          const link = ref?.links?.modelLink || ref?.links?.versionLink || "";
+          if (link) links.push(link);
+        } catch {}
+      }
+      if (!aborted && links.length) {
+        setLoraLink(links.join("\n"));
+        setAutoFilledLoraLink(true);
+      }
+    })();
+    return () => { aborted = true; };
+  }, [loraHashes, loraLinkTouched]);
+
+  useEffect(() => {
+    return () => {
+      if (preview && preview.startsWith("blob:")) {
+        try { URL.revokeObjectURL(preview); } catch {}
+      }
+    };
+  }, [preview]);
+  
+  useEffect(() => {
+    if (!compressedImage) return;
+    const url = URL.createObjectURL(compressedImage);
+    setPreview((old) => {
+      if (old && old.startsWith("blob:")) { try { URL.revokeObjectURL(old); } catch {} }
+      return url;
+    });
+    return () => { try { URL.revokeObjectURL(url); } catch {} };
+  }, [compressedImage, setPreview]);
 
   const compressImage = async (originalFile) => {
     const img = new Image();
@@ -332,7 +505,6 @@ export default function UploadStep2({
     img.onload = async () => {
       const originalW = img.naturalWidth || img.width;
       const originalH = img.naturalHeight || img.height;
-      // 若 metadata 沒有，使用原圖像素補上
       setWidth((w) => w || String(originalW));
       setHeight((h) => h || String(originalH));
 
@@ -357,31 +529,91 @@ export default function UploadStep2({
     };
   };
 
+  // ====== ComfyUI workflow 上傳解析 ======
+  const handleClickWorkflowUpload = () => {
+    workflowInputRef.current?.click();
+  };
+
+  const handleWorkflowFile = async (file) => {
+    if (!file) return;
+    setWorkflowName(file.name || "workflow.json");
+
+    try {
+      const text = await file.text();
+      setWorkflowRaw(text); // 保存原始 workflow 檔
+
+      let comfyParsed = null;
+      try {
+        const asObj = JSON.parse(text);
+        const result = parseComfyWorkflow(asObj);
+        if (result && Array.isArray(result.nodes) && result.nodes.length > 0) {
+          comfyParsed = result.canonical;
+        }
+      } catch {
+        comfyParsed = tryParseComfy(text);
+      }
+
+      if (!comfyParsed) {
+        alert("讀取/解析 ComfyUI workflow 失敗，請確認檔案內容。");
+        return;
+      }
+
+      setPlatform("ComfyUI");
+      applyParsed(comfyParsed);
+      setShowAdvanced(true);
+
+      alert("已解析 workflow 並填入參數！");
+      scrollAreaRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      console.error("workflow parse error", e);
+      alert("解析 workflow 過程中發生錯誤。");
+    }
+  };
+
   // ====== Submit ======
   const civitaiRegex = /^https?:\/\/(www\.)?civitai\.com(\/|$)/i;
 
   const handleUpload = async () => {
-    if (!imageFile) { alert("請先選擇圖片檔"); return; }
-    if (!title || !title.trim()) { alert("請輸入圖片標題！"); return; }
-    if (!category) { alert("請選擇圖片分類！"); return; }
-    if (modelLink && !civitaiRegex.test(modelLink)) { alert("模型連結僅允許 civitai.com 網址。"); return; }
-    if (loraLink && !civitaiRegex.test(loraLink)) { alert("LoRA 連結僅允許 civitai.com 網址。"); return; }
-
-    // ✅ 只有 18+ 需要「成年聲明」
+    if (!imageFile) {
+      alert("請先選擇圖片檔");
+      return;
+    }
+    if (!title || !title.trim()) {
+      alert("請輸入圖片標題！");
+      return;
+    }
+    if (!category) {
+      alert("請選擇圖片分類！");
+      return;
+    }
+    if (modelLink && !civitaiRegex.test(modelLink)) {
+      alert("模型連結僅允許 civitai.com 網址。");
+      return;
+    }
+    if (loraLink) {
+      const lines = loraLink.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      const invalid = lines.some(line => !civitaiRegex.test(line));
+      if (invalid) {
+        alert("LoRA 連結僅允許 civitai.com 網址（多筆請每行一條）。");
+        return;
+      }
+    }
     if (rating === "18" && !confirmAdult) {
       alert("請勾選『成年聲明』以確認內容不涉及未成年人。");
       return;
     }
 
     setIsUploading(true);
-    // 確保 width/height 為數字（若缺失則即時讀原檔取得）
+
     let wNum = Number(width);
     let hNum = Number(height);
     if (!Number.isFinite(wNum) || !Number.isFinite(hNum) || !wNum || !hNum) {
       try {
         const s = await getImageSizeFromFile(imageFile);
-        wNum = s.width; hNum = s.height;
-        setWidth(String(wNum)); setHeight(String(hNum));
+        wNum = s.width;
+        hNum = s.height;
+        setWidth(String(wNum));
+        setHeight(String(hNum));
       } catch {}
     }
 
@@ -394,7 +626,7 @@ export default function UploadStep2({
       if (!urlData.success || !urlData.uploadURL) throw new Error("No uploadURL received");
 
       const formData = new FormData();
-      formData.append("file", useOriginal ? imageFile : compressedImage);
+      formData.append("file", compressedImage);
       const cloudflareRes = await fetch(urlData.uploadURL, { method: "POST", body: formData });
       const cloudflareData = await cloudflareRes.json();
       imageId = cloudflareData?.result?.id;
@@ -413,8 +645,7 @@ export default function UploadStep2({
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
 
-      // ✅ 先準備 metadata（先不送；我們下面會補 Civitai 解析結果後再送）
-        const metadataBase = {
+      const metadataBase = {
         imageId,
         imageUrl,
         title: title?.trim(),
@@ -424,8 +655,8 @@ export default function UploadStep2({
         platform: platform?.trim() || "Stable Diffusion WebUI",
         modelName: modelName?.trim() || "",
         loraName: loraName?.trim() || "",
-        modelLink: modelLink?.trim() || "", // 若為空，會嘗試以 hash 自動補
-        loraLink: loraLink?.trim() || "",   // 若為空，但解析到 loraRefs，也可以忽略
+        modelLink: modelLink?.trim() || "",
+        loraLink: loraLink?.trim() || "",
         positivePrompt,
         negativePrompt,
         description,
@@ -442,11 +673,18 @@ export default function UploadStep2({
         width: Number.isFinite(wNum) && wNum ? wNum : undefined,
         height: Number.isFinite(hNum) && hNum ? hNum : undefined,
         modelHash: modelHash || undefined,
-        // 可選：若要記錄成年聲明到後端（需後端支援）
         adultDeclaration: rating === "18" ? true : undefined,
+        // ⬇️ 新增：若勾選分享 workflow，夾帶到後端
+        comfy: shareWorkflow
+          ? {
+              workflowRaw: workflowRaw || undefined,
+              promptRaw: promptRaw || undefined,
+              allowShare: shareWorkflow, 
+            }
+          : undefined,
       };
 
-      // ✅ Civitai by-hash 查主模型（若使用者沒手動填 modelLink）
+      // 以 hash 自動補 Civtai modelLink
       let modelRef = null;
       if (!metadataBase.modelLink && modelHash) {
         try {
@@ -460,7 +698,6 @@ export default function UploadStep2({
               modelLink: ref.links?.modelLink ?? "",
               versionLink: ref.links?.versionLink ?? "",
             };
-            // 前端顯示友好：若沒填 modelName/modelLink，就順手補
             if (!metadataBase.modelName && modelRef.modelName) metadataBase.modelName = modelRef.modelName;
             if (!metadataBase.modelLink && modelRef.modelLink) metadataBase.modelLink = modelRef.modelLink;
           }
@@ -469,7 +706,6 @@ export default function UploadStep2({
         }
       }
 
-      // ✅ Civitai by-hash 查 LoRA（若有）
       let loraRefs = [];
       if (Array.isArray(loraHashes) && loraHashes.length) {
         const uniq = Array.from(new Set(loraHashes)).slice(0, 20);
@@ -492,18 +728,13 @@ export default function UploadStep2({
         }
       }
 
-      // 若使用者沒手填 loraLink，且有查到 loraRefs，回填一份給欄位與 metadata
       if (!metadataBase.loraLink && loraRefs.length) {
-        const links = loraRefs
-          .map(r => r.modelLink || r.versionLink)
-          .filter(Boolean);
+        const links = loraRefs.map((r) => r.modelLink || r.versionLink).filter(Boolean);
         if (links.length) {
-          // 你只有一個欄位 → 以「每行一個」的方式回填，多筆也OK
           metadataBase.loraLink = links.join("\n");
         }
       }
 
-      // ✅ 組合最後要送的 payload
       const metadata = {
         ...metadataBase,
         ...(modelRef ? { modelRef } : {}),
@@ -524,8 +755,11 @@ export default function UploadStep2({
       console.error("upload failed", err);
       alert("上傳失敗，請稍後再試！");
       if (imageId) {
-        try { await fetch(`/api/delete-cloudflare-image?id=${imageId}`, { method: "DELETE" }); }
-        catch (delErr) { console.error("cleanup failed", delErr); }
+        try {
+          await fetch(`/api/delete-cloudflare-image?id=${imageId}`, { method: "DELETE" });
+        } catch (delErr) {
+          console.error("cleanup failed", delErr);
+        }
       }
     } finally {
       setIsUploading(false);
@@ -579,16 +813,34 @@ export default function UploadStep2({
             type="file"
             className="w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
             accept="image/*"
-            onChange={(e) => { if (e.target.files && e.target.files[0]) setImageFile(e.target.files[0]); }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              setImageFile(f);
+              // 建立預覽，並釋放舊的 blob URL
+              const url = URL.createObjectURL(f);
+              setPreview((old) => {
+                if (old && old.startsWith("blob:")) {
+                  try { URL.revokeObjectURL(old); } catch {}
+                }
+                return url;
+              });
+            }}
           />
           {metaStatus === "found" && (
-            <div className="text-xs text-emerald-400">✅ 已自動讀取到生成參數（已預填於進階參數）</div>
+            <div className="text-xs text-emerald-400">
+              ✅ 已自動讀取到生成參數（已預填於進階參數 / 並自動判斷平台）
+            </div>
           )}
           {metaStatus === "none" && (
-            <div className="text-xs text-zinc-400">ℹ️ 未偵測到 PNG Info，但不影響上傳。你可於下方「進階參數」手動補充或貼上。</div>
+            <div className="text-xs text-zinc-400">
+              ℹ️ 未偵測到 PNG Info，但不影響上傳。你可於下方「進階參數」手動補充或貼上。
+            </div>
           )}
           {metaStatus === "error" && (
-            <div className="text-xs text-red-400">⚠️ 解析 PNG Info 失敗（格式或壓縮導致）。可於「進階參數」手動補充。</div>
+            <div className="text-xs text-red-400">
+              ⚠️ 解析 PNG Info 失敗（格式或壓縮導致）。可於「進階參數」手動補充。
+            </div>
           )}
         </div>
 
@@ -611,7 +863,7 @@ export default function UploadStep2({
           </select>
         </div>
 
-        {/* ⚠️ 18+ 成年聲明（必勾） */}
+        {/* 18+ 成年聲明 */}
         {rating === "18" && (
           <div className="space-y-2 border border-red-500/40 rounded-lg p-3 bg-red-900/20">
             <div className="text-sm text-red-300 font-semibold">18+ 成年聲明（必勾）</div>
@@ -627,9 +879,7 @@ export default function UploadStep2({
                 並已正確標記為 <b>18+</b>。
               </span>
             </label>
-            <p className="text-xs text-red-200/80">
-              若被檢舉或查核涉及未成年內容，帳號可能被限制或移除，內容將被刪除且不另行通知。
-            </p>
+            <p className="text-xs text-red-200/80">若被檢舉或查核涉及未成年內容，帳號可能被限制或移除，內容將被刪除且不另行通知。</p>
           </div>
         )}
 
@@ -659,22 +909,73 @@ export default function UploadStep2({
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             >
-              <option value="" disabled hidden>請選擇分類</option>
-              {CATEGORIES.map((cat) => (<option key={cat} value={cat}>{cat}</option>))}
+              <option value="" disabled hidden>
+                請選擇分類
+              </option>
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
             </select>
           </div>
+
           <div>
             <label className="text-sm text-zinc-400">🛠️ 使用平台</label>
-            <select
-              className="p-2 rounded bg-zinc-700 w-full"
-              value={platform}
-              onChange={(e) => setPlatform(e.target.value)}
-            >
-              <option value="Stable Diffusion WebUI">Stable Diffusion WebUI</option>
-              <option value="ComfyUI">ComfyUI</option>
-              <option value="GPT 生圖">GPT 生圖</option>
-              <option value="其他">其他</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                className="p-2 rounded bg-zinc-700 w-full"
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+              >
+                <option value="Stable Diffusion WebUI">Stable Diffusion WebUI</option>
+                <option value="ComfyUI">ComfyUI</option>
+                <option value="GPT 生圖">GPT 生圖</option>
+                <option value="其他">其他</option>
+              </select>
+
+              {/* ComfyUI：上傳 workflow 按鈕 */}
+              {platform === "ComfyUI" && (
+                <>
+                  <input
+                    ref={workflowInputRef}
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleWorkflowFile(f);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleClickWorkflowUpload}
+                    className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 text-sm text-white"
+                    title="上傳 ComfyUI workflow（.json）並自動解析"
+                  >
+                    上傳 workflow
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* ComfyUI：是否附檔（移除上傳頁的下載按鈕） */}
+            {platform === "ComfyUI" && (
+              <div className="mt-2 text-xs text-zinc-300">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={shareWorkflow}
+                    onChange={(e) => setShareWorkflow(e.target.checked)}
+                  />
+                  上傳時將 workflow 附在作品頁可供下載
+                </label>
+              </div>
+            )}
+
+            {platform === "ComfyUI" && workflowName && (
+              <div className="mt-1 text-xs text-zinc-400">已選擇：{workflowName}</div>
+            )}
           </div>
         </div>
 
@@ -705,8 +1006,16 @@ export default function UploadStep2({
           placeholder="模型 civitai 連結（可選）"
           className="w-full p-2 rounded bg-zinc-700"
           value={modelLink}
-          onChange={(e) => setModelLink(e.target.value)}
+          onChange={(e) => {
+            setModelLink(e.target.value);
+            setModelLinkTouched(true); 
+          }}
         />
+        {autoFilledModelLink && (
+            <div className="text-xs text-emerald-400 mt-1">
+              已自動偵測並填入 civitai 連結
+            </div>
+          )}
         <input
           type="text"
           placeholder="LoRA 名稱（選填；可多個以逗號分隔）"
@@ -714,12 +1023,19 @@ export default function UploadStep2({
           value={loraName}
           onChange={(e) => setLoraName(e.target.value)}
         />
-        <input
-          type="text"
-          placeholder="LoRA civitai 連結（可選）"
-          className="w-full p-2 rounded bg-zinc-700"
+        {autoFilledLoraLink && (
+          <div className="text-xs text-emerald-400 mt-1">
+            已自動偵測並填入 LoRA civitai 連結
+          </div>
+        )}
+        <textarea
+          placeholder="LoRA civitai 連結（可選；多筆請一行一條）"
+          className="w-full p-2 rounded bg-zinc-700 h-20 resize-y"
           value={loraLink}
-          onChange={(e) => setLoraLink(e.target.value)}
+          onChange={(e) => {
+            setLoraLink(e.target.value);
+            setLoraLinkTouched(true);
+          }}
         />
 
         {/* LoRA hashes（可選） */}
@@ -731,8 +1047,8 @@ export default function UploadStep2({
           onChange={(e) => {
             const arr = String(e.target.value)
               .split(/[\s,，、]+/)
-              .map(s => s.trim().toLowerCase())
-              .filter(s => /^[0-9a-f]{8,64}$/.test(s)); // 只收 8–64 位 hex
+              .map((s) => s.trim().toLowerCase())
+              .filter((s) => /^[0-9a-f]{8,64}$/.test(s));
             setLoraHashes(arr);
           }}
         />
@@ -769,26 +1085,63 @@ export default function UploadStep2({
           {showAdvanced && (
             <div className="p-4 space-y-3 bg-zinc-900/60">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <input className="p-2 rounded bg-zinc-700" placeholder="Steps" value={steps} onChange={(e) => setSteps(e.target.value)} />
-                <input className="p-2 rounded bg-zinc-700" placeholder="Sampler" value={sampler} onChange={(e) => setSampler(e.target.value)} />
-                <input className="p-2 rounded bg-zinc-700" placeholder="CFG Scale" value={cfgScale} onChange={(e) => setCfgScale(e.target.value)} />
-                <input className="p-2 rounded bg-zinc-700" placeholder="Seed" value={seed} onChange={(e) => setSeed(e.target.value)} />
-                <input className="p-2 rounded bg-zinc-700" placeholder="Clip skip" value={clipSkip} onChange={(e) => setClipSkip(e.target.value)} />
-                <input className="p-2 rounded bg-zinc-700" placeholder="寬度 (px)" value={width} onChange={(e) => setWidth(e.target.value)} />
-                <input className="p-2 rounded bg-zinc-700" placeholder="高度 (px)" value={height} onChange={(e) => setHeight(e.target.value)} />
-                <input className="p-2 rounded bg-zinc-700" placeholder="Model hash" value={modelHash} onChange={(e) => setModelHash(e.target.value)} />
+                <input
+                  className="p-2 rounded bg-zinc-700"
+                  placeholder="Steps"
+                  value={steps}
+                  onChange={(e) => setSteps(e.target.value)}
+                />
+                <input
+                  className="p-2 rounded bg-zinc-700"
+                  placeholder="Sampler"
+                  value={sampler}
+                  onChange={(e) => setSampler(e.target.value)}
+                />
+                <input
+                  className="p-2 rounded bg-zinc-700"
+                  placeholder="CFG Scale"
+                  value={cfgScale}
+                  onChange={(e) => setCfgScale(e.target.value)}
+                />
+                <input
+                  className="p-2 rounded bg-zinc-700"
+                  placeholder="Seed"
+                  value={seed}
+                  onChange={(e) => setSeed(e.target.value)}
+                />
+                <input
+                  className="p-2 rounded bg-zinc-700"
+                  placeholder="Clip skip"
+                  value={clipSkip}
+                  onChange={(e) => setClipSkip(e.target.value)}
+                />
+                <input
+                  className="p-2 rounded bg-zinc-700"
+                  placeholder="寬度 (px)"
+                  value={width}
+                  onChange={(e) => setWidth(e.target.value)}
+                />
+                <input
+                  className="p-2 rounded bg-zinc-700"
+                  placeholder="高度 (px)"
+                  value={height}
+                  onChange={(e) => setHeight(e.target.value)}
+                />
+                <input
+                  className="p-2 rounded bg-zinc-700"
+                  placeholder="Model hash"
+                  value={modelHash}
+                  onChange={(e) => setModelHash(e.target.value)}
+                />
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs text-zinc-400">
-                  貼上 PNG Info / A1111 參數字串（會嘗試自動解析）
-                </label>
+                <label className="text-xs text-zinc-400">貼上 PNG Info / A1111 參數字串（會嘗試自動解析）</label>
                 <textarea
                   className="w-full p-2 rounded bg-zinc-700 h-24"
                   value={pasteInfo}
                   onChange={(e) => setPasteInfo(e.target.value)}
-                  placeholder={
-`例：
+                  placeholder={`例：
 Prompt...
 Negative prompt: ...
 Steps: 30, Sampler: Euler a, CFG scale: 7, Seed: 12345, Size: 768x1024, Clip skip: 2
@@ -799,8 +1152,12 @@ Steps: 30, Sampler: Euler a, CFG scale: 7, Seed: 12345, Size: 768x1024, Clip ski
                     type="button"
                     onClick={() => {
                       const parsed = parseA1111Parameters(pasteInfo);
-                      if (parsed) { applyParsed(parsed); alert("已解析並填入欄位"); }
-                      else { alert("解析失敗，請確認格式。"); }
+                      if (parsed) {
+                        applyParsed(parsed);
+                        alert("已解析並填入欄位");
+                      } else {
+                        alert("解析失敗，請確認格式。");
+                      }
                       scrollAreaRef.current?.scrollTo({ top: 0, behavior: "smooth" });
                     }}
                     className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm"
@@ -815,6 +1172,12 @@ Steps: 30, Sampler: Euler a, CFG scale: 7, Seed: 12345, Size: 768x1024, Clip ski
                     清空
                   </button>
                 </div>
+
+                {platform === "ComfyUI" && (
+                  <div className="text-xs text-zinc-400">
+                    小提醒：你也可以直接點「上傳 workflow」匯入 ComfyUI 的 JSON 來自動填入參數。
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -826,26 +1189,14 @@ Steps: 30, Sampler: Euler a, CFG scale: 7, Seed: 12345, Size: 768x1024, Clip ski
 
       {/* Sticky Footer */}
       <div className="sticky bottom-0 z-20 bg-[#121212]/90 backdrop-blur border-t border-white/10">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="text-xs text-zinc-400">
-            {useOriginal ? "使用原檔上傳" : "使用壓縮圖上傳"}
-            {originalSize ? `｜原檔 ${(originalSize / 1024 / 1024).toFixed(2)} MB` : ""}
-            {compressedSize ? `｜壓縮 ${(compressedSize / 1024 / 1024).toFixed(2)} MB` : ""}
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm">
-              <input
-                type="checkbox"
-                className="mr-1 align-middle"
-                checked={useOriginal}
-                onChange={(e) => setUseOriginal(e.target.checked)}
-              />
-              使用原檔
-            </label>
+        <div className="flex items-center justify-end px-4 py-3">
+          <div className="flex items-center justify-end px-4 py-3">
             <button
               disabled={isUploading}
               onClick={onUpload ? onUpload : handleUpload}
-              className={`px-4 py-2 rounded text-white ${isUploading ? "bg-zinc-600" : "bg-blue-600 hover:bg-blue-700"} transition`}
+              className={`px-4 py-2 rounded text-white ${
+                isUploading ? "bg-zinc-600" : "bg-blue-600 hover:bg-blue-700"
+              } transition`}
             >
               {isUploading ? "上傳中..." : "上傳"}
             </button>

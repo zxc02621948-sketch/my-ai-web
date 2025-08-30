@@ -70,11 +70,6 @@ export default async function RootLayout({ children }) {
             {/* 主要內容區 */}
             <div className="relative z-0 min-h-screen pt-[80px] px-4 pb-[120px]">
               {children}
-
-              <div className="text-center text-sm text-gray-500 mt-10">
-                版本 v0.7.3（2025-08-02）｜
-                <a href="/changelog" className="underline hover:text-white">查看更新內容</a>
-              </div>
             </div>
 
             <FeedbackButton />

@@ -1,23 +1,76 @@
-// components/image/ImageInfoBox.jsx
 import { useRef, useState, useMemo, useEffect } from "react";
 import axios from "axios";
 import { X, Trash2, Download, Clipboard, Pencil, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
+
+// —— JSON 工具：最小化 & 精簡（去私密路徑、移除 base64 影像）——
+function minifyJson(text) {
+  try {
+    return JSON.stringify(JSON.parse(text));
+  } catch {
+    return text || "";
+  }
+}
+
+function sanitizeComfyWorkflow(text) {
+  try {
+    const obj = JSON.parse(text);
+    const prune = (v) => {
+      if (typeof v === "string") {
+        // 去除內嵌影像（base64）
+        if (/^data:image\/(png|jpe?g|webp);base64,/i.test(v)) return "[data:image]";
+        // 去除本機/雜湊路徑，只留檔名
+        if (/[\\/][^\\/]+\.(?:ckpt|safetensors|png|jpe?g|webp|gif|mp4|mov)$/i.test(v)) {
+          const parts = v.split(/[\/\\]/);
+          return parts[parts.length - 1];
+        }
+        return v;
+      }
+      if (Array.isArray(v)) return v.map(prune);
+      if (v && typeof v === "object") {
+        const out = {};
+        for (const k in v) out[k] = prune(v[k]);
+        return out;
+      }
+      return v;
+    };
+    return JSON.stringify(prune(obj));
+  } catch {
+    // 不是有效 JSON 就至少做最小化
+    return minifyJson(text);
+  }
+}
 
 export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
   const positiveRef = useRef();
   const negativeRef = useRef();
   const paramsRef = useRef();
   const [copiedField, setCopiedField] = useState(null);
+  const [copyTip, setCopyTip] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const router = useRouter();
+  
+  // —— 1 秒冷卻（前端）——
+  const [cooling, setCooling] = useState({}); // 例如 { "copy.workflow": true }
+  const cooldownMs = 1000;
+  function startCooldown(key, ms = cooldownMs) {
+    setCooling((s) => ({ ...s, [key]: true }));
+    setTimeout(() => setCooling((s) => ({ ...s, [key]: false })), ms);
+  }
+  function withCooldown(key, fn, ms = cooldownMs) {
+    return (...args) => {
+      if (cooling[key]) return; // 冷卻期間直接無效，不顯示任何提示
+      startCooldown(key, ms);
+      fn?.(...args);
+    };
+  }
   // 小工具：判斷像網址的字串
   const looksUrl = (s) => typeof s === "string" && /^https?:\/\//i.test(s?.trim());
   // 多筆切分（支援換行、半形/全形逗號、頓號）
   const splitList = (s) =>
     String(s || "")
       .split(/\r?\n|,|、|，/g)
-      .map(x => x.trim())
+      .map((x) => x.trim())
       .filter(Boolean);
 
   // 從 prompt 裡抓真正出現過的 <lora:NAME:...> 名稱清單
@@ -71,7 +124,7 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
   const handleFollowToggle = async () => {
     if (!currentUser || !image?.user?._id || followLoading) return;
     const willFollow = !isFollowing;
-    setIsFollowing(willFollow);          // 樂觀
+    setIsFollowing(willFollow); // 樂觀
     setFollowLoading(true);
     try {
       const token = document.cookie.match(/token=([^;]+)/)?.[1];
@@ -80,17 +133,17 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       };
       if (willFollow) {
-        // 若你的實際路由不同，請改為專案內使用的 API
         await axios.post("/api/follow", { userIdToFollow: image.user._id }, { headers });
       } else {
         await axios.delete("/api/follow", { data: { userIdToUnfollow: image.user._id }, headers });
       }
-      // 廣播給 UserHeader 等元件同步
-      window.dispatchEvent(new CustomEvent("follow-changed", {
-        detail: { targetUserId: String(image.user._id), isFollowing: willFollow },
-      }));
+      window.dispatchEvent(
+        new CustomEvent("follow-changed", {
+          detail: { targetUserId: String(image.user._id), isFollowing: willFollow },
+        })
+      );
     } catch (err) {
-      setIsFollowing((prev) => !prev);   // 失敗回滾
+      setIsFollowing((prev) => !prev); // 失敗回滾
       alert(err?.response?.data?.message || err?.message || "追蹤操作失敗");
     } finally {
       setFollowLoading(false);
@@ -108,13 +161,12 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
 
   const handleReportSubmit = async () => {
     if (!image?._id) return;
-    // 禁止檢舉自己的作品（再次檢查，避免 DOM 被竄改）
     if (currentUser && String(currentUser._id) === String(image.user?._id)) {
       alert("不能檢舉自己的作品");
       return;
     }
     if (reportType === "other" && !reportMsg.trim()) {
-      alert("請填寫說明"); 
+      alert("請填寫說明");
       return;
     }
     setReportLoading(true);
@@ -147,7 +199,6 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
       return;
     }
 
-    // 取 token（保留你原本方式；若有 getCookie 可改用 getCookie('token')）
     const token = document.cookie.match(/(?:^|;\s*)token=([^;]+)/)?.[1];
     if (!token) {
       alert("未登入或憑證過期，請先登入。");
@@ -156,14 +207,14 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
 
     try {
       const res = await fetch("/api/delete-image", {
-        method: "POST", // 你的 route.js 是 POST
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ id: String(image._id) }), // 後端支援 body.id / body.imageId
+        body: JSON.stringify({ id: String(image._id) }),
       });
-    
+
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data?.ok) {
@@ -192,6 +243,31 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
     if (ref.current) copyText(ref.current.innerText, field);
   };
 
+  // ✅ 共用複製：先寫入剪貼簿；失敗則下載備援
+  async function copyJson(kindLabel, text, fallbackFilename = "data.json") {
+    if (!text) return;
+    const finalText = minifyJson(text);
+    try {
+      await navigator.clipboard.writeText(finalText);
+      setCopyTip(`${kindLabel} 已複製`);
+    } catch {
+      try {
+        const blob = new Blob([finalText], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fallbackFilename;
+        a.click();
+        URL.revokeObjectURL(url);
+        setCopyTip(`已下載 ${fallbackFilename}`);
+      } catch {
+        setCopyTip("複製失敗");
+      }
+    } finally {
+      setTimeout(() => setCopyTip(""), 1500);
+    }
+  }
+
   const getRatingLabel = (rating) => {
     switch (rating) {
       case "18":
@@ -212,7 +288,7 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
       lora: image.loraName?.trim(),
       steps: image.steps,
       sampler: image.sampler,
-      cfgScale: image.cfgScale,
+      cfgScale: image.cfgScale ?? image.cfg, // ← 兼容 ComfyUI 的 cfg
       seed: image.seed,
       clipSkip: image.clipSkip,
       width: image.width,
@@ -231,7 +307,6 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
   );
 
   const buildA1111ParameterString = () => {
-    // 用 A1111 常見格式組一行，僅加入存在的欄位
     const parts = [];
     if (image.positivePrompt) parts.push(image.positivePrompt);
     if (image.negativePrompt) parts.push(`Negative prompt: ${image.negativePrompt}`);
@@ -250,6 +325,31 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
   };
 
   const paramsString = buildA1111ParameterString();
+
+  // === ComfyUI 原始 JSON（作品詳情頁顯示用） ===
+  const comfyObj = image?.comfy || image?.raw?.comfy || null;
+  const comfyWorkflowJSON =
+    (typeof comfyObj?.workflowRaw === "string" && comfyObj.workflowRaw.trim()) ||
+    (typeof image?.raw?.comfyWorkflowJson === "string" && image.raw.comfyWorkflowJson.trim()) ||
+    "";
+
+  const comfyPromptJSON =
+    (typeof comfyObj?.promptRaw === "string" && comfyObj.promptRaw.trim()) ||
+    "";
+
+  // 是否作者或管理員
+  const isOwnerOrAdmin = !!currentUser && (
+    String(currentUser._id) === String(image.user?._id) || currentUser.isAdmin
+  );
+
+  // 從後端帶回的公開狀態（相容舊命名 allowComfyShare）
+  const allowShare = (image?.comfy?.allowShare ?? image?.allowComfyShare ?? true);
+
+  // 只有在 (ComfyUI + 有 workflow + (允許公開 或 自己/管理員)) 時才顯示卡片
+  const canSeeComfyJson =
+    image.platform === "ComfyUI" &&
+   (comfyWorkflowJSON || comfyPromptJSON) &&
+    allowShare;
 
   return (
     <div className="relative w-full overflow-x-hidden break-words space-y-4">
@@ -275,25 +375,16 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
           {currentUser &&
             ((String(currentUser._id) === String(image.user?._id)) || currentUser.isAdmin) && (
               <button
-                onClick={(e) => { e.stopPropagation(); onEdit?.(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit?.();
+                }}
                 className="flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded shadow transition"
                 title="編輯圖片資料"
               >
                 <Pencil size={16} />
               </button>
             )}
-
-          {/* 下載原圖 */}
-          <a
-            href={downloadUrl}
-            download
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded shadow transition"
-            title="下載原圖"
-          >
-            <Download size={16} />
-          </a>
 
           {/* 刪除（作者/管理員） */}
           {currentUser &&
@@ -308,11 +399,7 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
             )}
 
           {/* 關閉 */}
-          <button
-            onClick={onClose}
-            className="text-white hover:text-red-400 transition"
-            title="關閉視窗"
-          >
+          <button onClick={onClose} className="text-white hover:text-red-400 transition" title="關閉視窗">
             <X size={20} />
           </button>
         </div>
@@ -367,9 +454,89 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
       <div className="text-sm text-zinc-300 mb-3">
         來源作者： <span className="text-white">{image?.author?.trim() || "—"}</span>
       </div>
-      <div className="text-sm text-gray-300 mb-3">
-        平台：{image.platform?.trim() ? image.platform : "未指定"}
-      </div>
+      <div className="text-sm text-gray-300 mb-3">平台：{image.platform?.trim() ? image.platform : "未指定"}</div>
+
+      {/* ComfyUI：原始 JSON 下載（顯示在資訊欄） */}
+      {canSeeComfyJson && (
+        <div className="rounded-lg border border-white/10 bg-zinc-900/50 p-3 mb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center rounded-full bg-emerald-600/20 text-emerald-300 px-2 py-0.5 text-xs">
+                ComfyUI
+              </span>
+              <span className="text-sm text-zinc-300">
+                提供原始 {comfyWorkflowJSON ? "workflow" : "prompt"} 下載以便復現
+              </span>
+            </div>
+
+            <a
+              href={`data:application/json;charset=utf-8,${encodeURIComponent(
+                comfyWorkflowJSON || comfyPromptJSON
+              )}`}
+              download={`${comfyWorkflowJSON ? "workflow" : "prompt"}_${image?._id || "image"}.json`}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded bg-white/10 hover:bg-white/15 text-sm ${cooling["download.json"] ? "opacity-60 pointer-events-none" : ""}`}
+              onClick={(e) => { if (cooling["download.json"]) { e.preventDefault(); return; } startCooldown("download.json"); }}
+              aria-disabled={!!cooling["download.json"]}
+              title="下載 ComfyUI JSON"
+            >
+              <Download size={16} />
+              下載 {comfyWorkflowJSON ? "workflow.json" : "prompt.json"}
+            </a>
+          </div>
+
+          {/* 🔹 新增：複製 JSON / 精簡版 */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={withCooldown("copy.workflow", () =>
+                copyJson("workflow.json", comfyWorkflowJSON, "workflow.json")
+              )}
+              className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs disabled:opacity-60 disabled:pointer-events-none"
+              disabled={!comfyWorkflowJSON || !!cooling["copy.workflow"]}
+              title="複製到剪貼簿（失敗時自動下載）"
+            >
+              複製 workflow.json
+            </button>
+
+            <button
+              onClick={withCooldown("copy.prompt", () =>
+                copyJson("prompt.json", comfyPromptJSON, "prompt.json")
+              )}
+              className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs disabled:opacity-60 disabled:pointer-events-none"
+              disabled={!comfyPromptJSON || !!cooling["copy.prompt"]}
+              title="複製到剪貼簿（失敗時自動下載）"
+            >
+              複製 prompt.json
+            </button>
+
+            <button
+              onClick={withCooldown("copy.slim", () =>
+                copyJson(
+                  "精簡 workflow.json",
+                  sanitizeComfyWorkflow(comfyWorkflowJSON),
+                  "workflow_slim.json"
+                )
+              )}
+              className="px-2 py-1 rounded bg-teal-600 hover:bg-teal-700 text-white text-xs disabled:opacity-60 disabled:pointer-events-none"
+              disabled={!comfyWorkflowJSON || !!cooling["copy.slim"]}
+              title="去除私密路徑與內嵌影像後再複製（公開分享更安全）"
+            >
+              複製精簡 workflow.json
+            </button>
+
+            {copyTip && <span className="text-xs text-emerald-400">{copyTip}</span>}
+          </div>
+
+          <details className="mt-2 group">
+            <summary className="cursor-pointer text-xs text-zinc-400 group-open:text-zinc-300">
+              預覽 JSON（展開）
+            </summary>
+            <pre className="mt-2 max-h-48 overflow-auto text-xs whitespace-pre-wrap break-words bg-black/30 p-2 rounded">
+{(comfyWorkflowJSON || comfyPromptJSON).slice(0, 4000)}
+{(comfyWorkflowJSON || comfyPromptJSON).length > 4000 ? "\n...（已截斷顯示）" : ""}
+            </pre>
+          </details>
+        </div>
+      )}
 
       {/* 模型 / LoRA */}
       <div className="text-sm text-gray-300 mb-3">
@@ -377,7 +544,7 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
         {(() => {
           const ref = image?.modelRef;
           const name = (ref?.modelName || image?.modelName || "").trim();
-          const url  = (ref?.modelLink || image?.modelLink || "").trim();
+          const url = (ref?.modelLink || image?.modelLink || "").trim();
 
           if (!name && !looksUrl(url)) return <span className="text-white">(未提供)</span>;
           if (looksUrl(url)) {
@@ -393,17 +560,16 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
               </a>
             );
           }
-            return <span className="text-white break-words inline-block max-w-[260px]">{name}</span>;
+          return <span className="text-white break-words inline-block max-w-[260px]">{name}</span>;
         })()}
       </div>
 
       <div className="text-sm text-gray-300 mb-3">
         LoRA 名稱：<br />
         {Array.isArray(image?.loraRefs) && image.loraRefs.length > 0 ? (
-          // ✅ 有 loraRefs：只顯示 loraRefs，禁止再拼 loraName/loraLink，避免多抓
           <ul className="mt-1 space-y-1">
             {image.loraRefs.map((lr) => {
-              const nm  = (lr?.name || lr?.hash || "").trim();
+              const nm = (lr?.name || lr?.hash || "").trim();
               const url = (lr?.modelLink || lr?.versionLink || "").trim();
               return (
                 <li key={lr?.hash || nm} className="leading-snug">
@@ -424,62 +590,61 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
             })}
           </ul>
         ) : (() => {
-            // ❗ 沒有 loraRefs 才會走到這裡
-            const rawNames = splitList(image?.loraName);
-            const rawLinks = splitList(image?.loraLink).filter(looksUrl);
+          const rawNames = splitList(image?.loraName);
+          const rawLinks = splitList(image?.loraLink).filter(looksUrl);
 
-            // 只允許「真的出現在 <lora:NAME:...>」的名字
-            const pp = getPositivePrompt(image);
-            const validFromPrompt = new Set(
-              extractLoraNamesFromPrompt(pp).map(s => s.toLowerCase())
-            );
+          const comfyLoraNames = Array.isArray(image?.loras)
+            ? image.loras.map((x) => (x?.name || "").trim()).filter(Boolean)
+            : [];
 
-            // 過濾掉抽卡語法、花括號、pipe 及與 prompt 毫無關係的名字
-            let names = rawNames
-              .filter(n => n && !/[{}]/.test(n) && !/\|/.test(n))
-              .filter(n => validFromPrompt.size === 0 || validFromPrompt.has(n.toLowerCase()));
+          const pp = getPositivePrompt(image);
+          const validFromPrompt = new Set(extractLoraNamesFromPrompt(pp).map((s) => s.toLowerCase()));
 
-            // 如果只有一條連結但名字很多，保留最可能對得上的那個（或第一個）
-            if (rawLinks.length === 1 && names.length > 1) {
-              names = [names.find(n => rawLinks[0].toLowerCase().includes(n.toLowerCase())) || names[0]];
-            }
-            // 名稱比連結多時，最多配對到連結數（避免一堆無連結假項）
-            if (rawLinks.length > 0 && names.length > rawLinks.length) {
-              names = names.slice(0, rawLinks.length);
-            }
+          let names = (rawNames.length ? rawNames : comfyLoraNames)
+            .filter((n) => n && !/[{}]/.test(n) && !/\|/.test(n))
+            .filter((n) => validFromPrompt.size === 0 || validFromPrompt.has(n.toLowerCase()));
 
-            if (names.length === 0 && rawLinks.length === 0) {
-              return <span className="text-white">(未提供)</span>;
-            }
+          if (rawLinks.length === 1 && names.length > 1) {
+            names = [
+              names.find((n) => rawLinks[0].toLowerCase().includes(n.toLowerCase())) || names[0],
+            ];
+          }
+          if (rawLinks.length > 0 && names.length > rawLinks.length) {
+            names = names.slice(0, rawLinks.length);
+          }
 
-            return (
-              <ul className="mt-1 space-y-1">
-                {(names.length ? names : rawLinks).map((_, idx) => {
-                  const name = (names[idx] || "").trim();
-                  const link = (rawLinks[idx] || "").trim();
-                  const showText = name || link;
-                  return looksUrl(link) ? (
-                    <li key={`${showText}-${idx}`} className="leading-snug">
-                      <a
-                        href={link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 underline break-words inline-block max-w-[260px]"
-                      >
-                        {showText}
-                      </a>
-                    </li>
-                  ) : (
-                    <li key={`${showText}-${idx}`} className="leading-snug">
-                      <span className="text-white break-words inline-block max-w-[260px]">
-                        {showText || "（未提供）"}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            );
-          })()}
+          if (names.length === 0 && rawLinks.length === 0) {
+            return <span className="text-white">(未提供)</span>;
+          }
+
+          return (
+            <ul className="mt-1 space-y-1">
+              {(names.length ? names : rawLinks).map((_, idx) => {
+                const name = (names[idx] || "").trim();
+                const link = (rawLinks[idx] || "").trim();
+                const showText = name || link;
+                return looksUrl(link) ? (
+                  <li key={`${showText}-${idx}`} className="leading-snug">
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 underline break-words inline-block max-w-[260px]"
+                    >
+                      {showText}
+                    </a>
+                  </li>
+                ) : (
+                  <li key={`${showText}-${idx}`} className="leading-snug">
+                    <span className="text-white break-words inline-block max-w-[260px]">
+                      {showText || "（未提供）"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        })()}
       </div>
 
       {/* 分類 */}
@@ -567,11 +732,11 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
                   <Field
                     label="LoRA hashes"
                     value={
-                      (Array.isArray(image?.loraRefs) && image.loraRefs.length > 0)
-                        ? image.loraRefs.map(x => x?.hash).filter(Boolean).join(", ")
-                        : (Array.isArray(image?.loraHashes) && image.loraHashes.length > 0)
-                            ? image.loraHashes.join(", ")
-                            : "—"
+                      Array.isArray(image?.loraRefs) && image.loraRefs.length > 0
+                        ? image.loraRefs.map((x) => x?.hash).filter(Boolean).join(", ")
+                        : Array.isArray(image?.loraHashes) && image.loraHashes.length > 0
+                        ? image.loraHashes.join(", ")
+                        : "—"
                     }
                   />
                 </div>

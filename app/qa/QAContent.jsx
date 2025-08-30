@@ -45,19 +45,19 @@ export default function QAContent() {
             <p>
               Checkpoint（<code>.ckpt</code> / <code>.safetensors</code>）放：
               <code className="bg-zinc-800 px-1.5 py-0.5 rounded">
-                stable-diffusion-webui/models/Stable-diffusion
+                你的webui目錄根/models/Stable-diffusion
               </code>
             </p>
             <p>
               LoRA 放：
               <code className="bg-zinc-800 px-1.5 py-0.5 rounded">
-                stable-diffusion-webui/models/Lora
+                你的webui目錄根/models/Lora
               </code>
             </p>
             <p>
               VAE（可選）放：
               <code className="bg-zinc-800 px-1.5 py-0.5 rounded">
-                stable-diffusion-webui/models/VAE
+                你的webui目錄根/models/VAE
               </code>
             </p>
           </div>

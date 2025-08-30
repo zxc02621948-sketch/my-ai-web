@@ -7,9 +7,10 @@ import { Notification } from "@/models/Notification";
 import mongoose from "mongoose";
 import { computeCompleteness } from "@/utils/score"; // 👈 新增
 
+// === GET: 列表（也可讓詳情頁取用單筆資料） ===
 export async function GET(req) {
   try {
-    await dbConnect();   // 改用 dbConnect()
+    await dbConnect(); // 改用 dbConnect()
 
     const page = parseInt(req.nextUrl.searchParams.get("page")) || 1;
     const limit = parseInt(req.nextUrl.searchParams.get("limit")) || 20;
@@ -36,17 +37,25 @@ export async function GET(req) {
         id: img.imageId,
         title: img.title,
         imageId: img.imageId,
-        platform: img.platform,
-        positivePrompt: img.positivePrompt,
-        negativePrompt: img.negativePrompt,
+        imageUrl: img.imageUrl,
+        platform: img.platform || "",
+        positivePrompt: img.positivePrompt || "",
+        negativePrompt: img.negativePrompt || "",
         rating: img.rating,
         category: img.category,
-        description: img.description,
-        tags: img.tags,
+        description: img.description || "",
+        tags: Array.isArray(img.tags) ? img.tags : [],
+
+        // 模型/LoRA
         modelName: img.modelName || null,
         modelLink: img.modelLink || null,
         loraName: img.loraName || null,
         loraLink: img.loraLink || null,
+        modelRef: img.modelRef || null,
+        loraHashes: Array.isArray(img.loraHashes) ? img.loraHashes : [],
+        loraRefs: Array.isArray(img.loraRefs) ? img.loraRefs : [],
+
+        // 進階參數
         steps: img.steps ?? null,
         sampler: img.sampler || null,
         cfgScale: img.cfgScale ?? null,
@@ -55,7 +64,16 @@ export async function GET(req) {
         width: img.width ?? null,
         height: img.height ?? null,
         modelHash: img.modelHash || null,
-        completenessScore: img.completenessScore ?? null, // 👈 顯示用
+
+        // ✅ 關鍵：把 Comfy 原始 JSON 一併回傳（詳情卡片要用）
+        comfy: img.comfy || { workflowRaw: "", promptRaw: "" },
+        raw: {
+          ...(img.raw || {}),
+          comfyWorkflowJson: img?.raw?.comfyWorkflowJson || "",
+        },
+
+        // 其他
+        completenessScore: img.completenessScore ?? null, // 顯示用
         user: populatedUser
           ? {
               _id: populatedUser._id?.toString(),
@@ -83,6 +101,7 @@ export async function GET(req) {
   }
 }
 
+// === POST: 建立作品（上傳後寫入資料） ===
 export async function POST(req) {
   try {
     await dbConnect();
@@ -112,7 +131,11 @@ export async function POST(req) {
       height,
       modelHash,
       author,
-      username,   // 👈 新增接收
+      username, // 👈 新增接收
+      comfy, // ✅ 新增
+      modelRef,
+      loraHashes,
+      loraRefs,
     } = body;
 
     if (!imageId || !title) {
@@ -148,7 +171,20 @@ export async function POST(req) {
       modelHash: modelHash || "",
       userId,
       user: userId,
-      username: username || "",   // 👈 若 schema 有支援就能存
+      username: username || "", // 若 schema 有支援就能存
+
+      // 參考資訊
+      ...(modelRef ? { modelRef } : {}),
+      ...(Array.isArray(loraHashes) && loraHashes.length ? { loraHashes } : {}),
+      ...(Array.isArray(loraRefs) && loraRefs.length ? { loraRefs } : {}),
+
+      // ✅ 新：存 Comfy block
+      comfy: comfy || undefined,
+
+      // ✅ 舊欄位相容：同步 workflowRaw 一份到 raw.comfyWorkflowJson
+      raw: {
+        comfyWorkflowJson: comfy?.workflowRaw || undefined,
+      },
     };
 
     // 👇 即時計算完整度，讓熱門度立即生效

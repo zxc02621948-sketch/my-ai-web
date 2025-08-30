@@ -5,12 +5,40 @@ import Modal from "@/components/common/Modal";
 import toast from "react-hot-toast";
 import CATEGORIES from "@/constants/categories";
 
+/** 更寬鬆的真值判斷（支援 true/1/"1"/"true"/"yes"/"on"/"public"） */
+function truthy(v) {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "on" || s === "public";
+  }
+  return false;
+}
+
+/** 從圖片物件推論「公開 Comfy」旗標（相容多種命名） */
+function inferAllowComfyShare(img) {
+  const comfy = img?.comfy || {};
+  const raw = img?.raw || {};
+  const candidates = [
+    img.allowComfyShare,     // 你前端傳的欄位
+    comfy.allowShare,        // 模型常見欄位
+    comfy.isPublic,          // 可能的別名
+    comfy.public,
+    comfy.share,
+    comfy.sharePublic,
+    raw.comfyAllowShare,     // 假如存到 raw
+  ];
+  return candidates.some(truthy);
+}
+
 export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdated }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const categoryOptions = CATEGORIES;
 
+  // ✅ 初始不預設公開；等 API 回來依「現況」帶值
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -30,6 +58,7 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
     width: "",
     height: "",
     modelHash: "",
+    allowComfyShare: false, // ⬅️ 改為 false，等載入時依現況更新（取代原本預設 true）:contentReference[oaicite:2]{index=2}
   });
 
   useEffect(() => {
@@ -47,6 +76,10 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
         }
         if (aborted) return;
         const img = payload.image || {};
+
+        // ✅ 依現況推論公開旗標（取代原本用 form.allowComfyShare 回填自己的做法）:contentReference[oaicite:3]{index=3}
+        const allowShareNow = inferAllowComfyShare(img);
+
         setForm({
           title: img.title || "",
           description: img.description || "",
@@ -66,6 +99,7 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
           width: img.width ?? "",
           height: img.height ?? "",
           modelHash: img.modelHash || "",
+          allowComfyShare: allowShareNow, // ⬅️ 依現況
         });
       } catch (err) {
         console.error(err);
@@ -96,6 +130,7 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
         .map((t) => t.trim())
         .filter(Boolean);
 
+      // ✅ 送出時確保是布林
       const body = {
         title: form.title.trim(),
         description: form.description,
@@ -115,6 +150,7 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
         width: form.width === "" ? null : Number(form.width),
         height: form.height === "" ? null : Number(form.height),
         modelHash: form.modelHash,
+        allowComfyShare: !!form.allowComfyShare,
       };
 
       const res = await fetch(`/api/images/${imageId}/edit`, {
@@ -252,6 +288,16 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
             onChange={(e) => handleChange("tags", e.target.value)}
             disabled={loading || saving}
           />
+        </label>
+
+        <label className="flex items-center gap-2 text-sm text-zinc-300">
+          <input
+            type="checkbox"
+            checked={!!form.allowComfyShare}
+            onChange={(e) => handleChange("allowComfyShare", e.target.checked)}
+            disabled={loading || saving}
+          />
+          允許公開 ComfyUI workflow（依現況顯示）
         </label>
 
         {/* 進階參數 */}

@@ -18,7 +18,8 @@ const ImageSchema = new mongoose.Schema(
     loraName: String,
     modelLink: { type: String, default: "" },
     loraLink: { type: String, default: "" },
-    // ✅ 新增：主模型與 LoRA 的「查表結果」結構化紀錄
+
+    // ✅ 結構化紀錄（主模型 / LoRA）
     modelRef: {
       modelId: Number,
       versionId: Number,
@@ -37,6 +38,18 @@ const ImageSchema = new mongoose.Schema(
       versionLink: String,
     }],
 
+    // ✅ ComfyUI 原始 JSON（新欄位）
+    comfy: {
+      workflowRaw: { type: String, default: "" }, // 上傳頁/PNG 解析得到的 workflow.json 原文
+      promptRaw:   { type: String, default: "" }, // 若 PNG 的 prompt 是 Comfy JSON，就放這
+      allowShare:  { type: Boolean, default: false },
+    },
+
+    // ✅ 相容舊欄位（讀舊資料時的 fallback）
+    raw: {
+      comfyWorkflowJson: { type: String, default: "" },
+    },
+
     tags: [String],
     imageId: String,
     imageUrl: String,
@@ -50,12 +63,13 @@ const ImageSchema = new mongoose.Schema(
     clicks: { type: Number, default: 0 },
     completenessScore: { type: Number, default: 0 },
 
-    // ✅ 新增：時間加成基礎值（由新圖決定），之後每小時衰減
+    // ✅ 新圖時間加成
     initialBoost: { type: Number, default: 0 },
 
-    // 總分（popular 用它排序）
+    // 排序用總分
     popScore: { type: Number, default: 0 },
 
+    // 進階參數
     steps: { type: Number, default: null },
     sampler: { type: String, default: "" },
     cfgScale: { type: Number, default: null },
@@ -80,21 +94,20 @@ ImageSchema.index({ tags: 1 });
 ImageSchema.index({ imageId: 1 });
 ImageSchema.index({ userId: 1 });
 ImageSchema.index({ popScore: -1, createdAt: -1 });
-ImageSchema.index({ modelHash: 1 });     // 查詢主模型
-ImageSchema.index({ 'loraRefs.hash': 1 }); // 查詢 LoRA
+ImageSchema.index({ modelHash: 1 });
+ImageSchema.index({ 'loraRefs.hash': 1 });
 
-// 取目前最高分（只取 popScore 欄位）
+// 目前最高分（取 popScore）
 async function fetchCurrentMaxPopScore(model) {
   const top = await model.findOne({}, { popScore: 1 }).sort({ popScore: -1 }).lean();
   return Number.isFinite(top?.popScore) ? Number(top.popScore) : 0;
 }
 
-// 初始化：新文件在存檔前，抓目前最高分的 80% 當 initialBoost，並算出 popScore
+// 新圖：建立 initialBoost 與 popScore
 ImageSchema.pre("save", async function (next) {
   try {
     if (this.isNew) {
       this.likesCount = ensureLikesCount(this);
-      // 目前最高分 * 比例（可由環境變數調整 POP_NEW_BASE_RATIO）
       const max = await fetchCurrentMaxPopScore(this.constructor);
       this.initialBoost = Math.max(0, Math.floor(max * POP_NEW_BASE_RATIO));
       this.popScore = computePopScore(this);
@@ -105,7 +118,7 @@ ImageSchema.pre("save", async function (next) {
   }
 });
 
-// insertMany 也補：用建立時刻的「全站最高分」作為基準
+// insertMany 也補
 ImageSchema.pre("insertMany", async function (next, docs) {
   try {
     if (!Array.isArray(docs) || docs.length === 0) return next();
