@@ -6,6 +6,7 @@ import User from "@/models/User";
 import { Notification } from "@/models/Notification";
 import mongoose from "mongoose";
 import { computeCompleteness } from "@/utils/score"; // 👈 新增
+import { creditPoints } from "@/services/pointsService";
 
 // === GET: 列表（也可讓詳情頁取用單筆資料） ===
 export async function GET(req) {
@@ -191,6 +192,15 @@ export async function POST(req) {
     doc.completenessScore = computeCompleteness(doc);
 
     const newImage = await Image.create(doc);
+
+    // ✅ 積分：上傳成功入帳 +5（每日上限 20）
+    try {
+      if (userId) {
+        await creditPoints({ userId, type: "upload", sourceId: newImage._id, actorUserId: userId, meta: { imageId: newImage._id } });
+      }
+    } catch (e) {
+      console.warn("[points] 上傳入帳失敗：", e);
+    }
 
     // 通知追蹤者（維持原有行為）
     const followers = await User.find({ "following.userId": new mongoose.Types.ObjectId(userId) });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import ImageGrid from "@/components/image/ImageGrid";
 import ImageModal from "@/components/image/ImageModal";
@@ -9,20 +9,38 @@ import BackToTopButton from "@/components/common/BackToTopButton";
 import SortSelect from "@/components/common/SortSelect";
 import { useFilterContext, labelToRating } from "@/components/context/FilterContext";
 import useLikeHandler from "@/hooks/useLikeHandler";
+import { usePlayer } from "@/components/context/PlayerContext";
+
 
 /** ====== 超精簡資料流：去掉預覽/快取/一次性旗標，只保留 inFlightId ====== */
 
 const PAGE_SIZE = 20;
 
 export default function HomePage() {
+  const player = usePlayer();
   const searchParams = useSearchParams();
-  const userCacheRef = useRef(new Map()); // userId -> userObject（保留）
+  
+  // 從 FilterContext 獲取狀態
+  const {
+    levelFilters,
+    categoryFilters,
+    viewMode,
+  } = useFilterContext();
 
+  // 本地狀態
+  const [sort, setSort] = useState("popular");
+
+  // 計算衍生狀態（使用 useMemo 避免無限循環）
+  const selectedCategories = useMemo(() => categoryFilters, [categoryFilters]);
+  const selectedRatings = useMemo(() => 
+    levelFilters.map(label => labelToRating[label]).filter(Boolean), 
+    [levelFilters]
+  );
+  
   const [images, setImages] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [sort, setSort] = useState("popular");
   const [selectedImage, setSelectedImage] = useState(null);
   const [currentUser, setCurrentUser] = useState(undefined);
   const [fetchedOnce, setFetchedOnce] = useState(false);
@@ -88,13 +106,145 @@ export default function HomePage() {
   const ratsRef = useRef([]);
   const sortRef = useRef("popular");
 
-  const { levelFilters, categoryFilters, viewMode } = useFilterContext();
-  const selectedRatings = Array.isArray(levelFilters)
-    ? levelFilters.map((label) => labelToRating[label]).filter(Boolean)
-    : [];
-  const selectedCategories = Array.isArray(categoryFilters)
-    ? categoryFilters.filter(Boolean)
-    : [];
+  // 🚨🚨🚨 FIRST TEST useEffect - 這應該是第一個執行的 useEffect
+  useEffect(() => {
+    console.log('🚨🚨🚨 [FIRST TEST] This is the FIRST useEffect and should execute!');
+  }, []);
+
+  // 回到首頁：關閉並隱藏全域迷你播放器，避免佔位與殘留播放
+  useEffect(() => {
+    try {
+      player?.pause?.();
+      player?.setExternalControls?.(null);
+      player?.setExternalPlaying?.(false);
+      player?.setMiniPlayerEnabled?.(false);
+      player?.setShareMode?.("global");
+    } catch {}
+  }, [player]);
+
+  // 雙軌制訪問追蹤 - 同時記錄防刷量統計和廣告收益統計
+  useEffect(() => {
+    let isLogging = false; // 防止並發請求
+    
+    const logDualTrackVisit = async () => {
+      try {
+        // 防止並發請求
+        if (isLogging) {
+          console.log('🔄 訪問記錄正在進行中，跳過重複請求');
+          return;
+        }
+
+        isLogging = true;
+        const currentPath = window.location.pathname;
+        
+        // 🛡️ 防刷量統計 - 保持原有的嚴格防重複機制
+        const logAntiSpamVisit = async () => {
+          try {
+            // 檢查是否已經在此會話中記錄過訪問
+            const sessionKey = `visit_logged_${currentPath}`;
+            const hasLoggedThisSession = sessionStorage.getItem(sessionKey);
+            
+            if (hasLoggedThisSession) {
+              console.log('🛡️ [防刷量] 此會話已記錄過訪問，跳過重複記錄');
+              return { success: true, skipped: true, reason: 'session' };
+            }
+
+            // 檢查最近是否剛記錄過（防抖機制）
+            const lastLogTime = sessionStorage.getItem('last_visit_log_time');
+            const now = Date.now();
+            if (lastLogTime && (now - parseInt(lastLogTime)) < 1000) { // 1秒內不重複記錄
+              console.log('🛡️ [防刷量] 最近剛記錄過訪問，跳過重複記錄');
+              return { success: true, skipped: true, reason: 'debounce' };
+            }
+            
+            const response = await fetch('/api/log-visit', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                path: currentPath
+              })
+            });
+
+            if (response.ok) {
+              // 標記此會話已記錄過訪問
+              sessionStorage.setItem(sessionKey, 'true');
+              sessionStorage.setItem('last_visit_log_time', now.toString());
+              console.log('✅ [防刷量] 訪問記錄成功');
+              return { success: true, skipped: false };
+            } else {
+              throw new Error(`HTTP ${response.status}`);
+            }
+          } catch (error) {
+            console.warn('🛡️ [防刷量] 訪問記錄失敗:', error);
+            return { success: false, error };
+          }
+        };
+
+        // 💰 廣告收益統計 - 更寬鬆的防重複機制
+        const logAdRevenueVisit = async () => {
+          try {
+            // 廣告統計只檢查很短時間內的重複（避免同一次點擊產生多次記錄）
+            const adLastLogTime = sessionStorage.getItem('last_ad_visit_log_time');
+            const now = Date.now();
+            if (adLastLogTime && (now - parseInt(adLastLogTime)) < 200) { // 200ms內不重複記錄
+              console.log('💰 [廣告統計] 200ms內重複請求，跳過');
+              return { success: true, skipped: true, reason: 'rapid_click' };
+            }
+
+            const response = await fetch('/api/log-ad-visit', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                path: currentPath
+              })
+            });
+
+            if (response.ok) {
+              sessionStorage.setItem('last_ad_visit_log_time', now.toString());
+              const result = await response.json();
+              console.log('💰 [廣告統計] 訪問記錄成功:', result.isDuplicate ? '(後端判定為重複)' : '(新記錄)');
+              return { success: true, skipped: false, isDuplicate: result.isDuplicate };
+            } else {
+              throw new Error(`HTTP ${response.status}`);
+            }
+          } catch (error) {
+            console.warn('💰 [廣告統計] 訪問記錄失敗:', error);
+            return { success: false, error };
+          }
+        };
+
+        // 並行執行兩個統計
+        const [antiSpamResult, adRevenueResult] = await Promise.allSettled([
+          logAntiSpamVisit(),
+          logAdRevenueVisit()
+        ]);
+
+        // 記錄結果
+        console.log('📊 [雙軌統計] 結果:', {
+          防刷量: antiSpamResult.status === 'fulfilled' ? antiSpamResult.value : antiSpamResult.reason,
+          廣告統計: adRevenueResult.status === 'fulfilled' ? adRevenueResult.value : adRevenueResult.reason
+        });
+
+      } catch (error) {
+        console.warn('📊 [雙軌統計] 整體失敗:', error);
+      } finally {
+        isLogging = false;
+      }
+    };
+
+    // 使用 setTimeout 延遲執行，確保頁面完全加載
+    const timeoutId = setTimeout(logDualTrackVisit, 100);
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, []); // 只在組件掛載時執行一次
 
   // 取得目前登入者
   useEffect(() => {
@@ -110,6 +260,15 @@ export default function HomePage() {
     };
     getMe();
   }, []);
+
+  // 添加調試信息
+  useEffect(() => {
+    console.log('🔍 [HomePage] images state:', { 
+      length: images?.length || 0, 
+      isArray: Array.isArray(images),
+      firstImage: images?.[0]?._id || 'none'
+    });
+  }, [images]);
 
   // 排序參數對應後端
   const mapSortForApi = (s) => {
@@ -165,8 +324,11 @@ export default function HomePage() {
 
   // —— 核心資料抓取（只以 inFlightId 防舊回應） ——
   const fetchImages = useCallback(async (pageToFetch, q, cats, rats) => {
+    console.log('🚀 [fetchImages] Starting request', { pageToFetch, q, cats, rats });
+    
     setIsLoading(true);
     const myId = ++inFlightId.current;
+    
     try {
       const params = new URLSearchParams({
         page: String(pageToFetch),
@@ -177,8 +339,37 @@ export default function HomePage() {
       if (Array.isArray(rats) && rats.length) params.set("ratings", rats.join(","));
       if (q) params.set("search", q);
 
-      const r = await fetch(`/api/images?${params.toString()}`, { cache: "no-store" });
-      const j = await r.json().catch(() => ({}));
+      const url = `/api/images?${params.toString()}`;
+      console.log('🌐 [fetchImages] Fetching URL:', url);
+
+      // 添加超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+
+      const r = await fetch(url, { 
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!r.ok) {
+        throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+      }
+
+      const j = await r.json();
+
+      console.log('🔍 [fetchImages] API response:', { 
+        status: r.status, 
+        hasImages: !!j?.images, 
+        imagesLength: j?.images?.length || 0,
+        isArray: Array.isArray(j?.images),
+        firstImageId: j?.images?.[0]?._id || 'none'
+      });
 
       if (myId !== inFlightId.current) return; // 只採用最新請求
 
@@ -186,34 +377,51 @@ export default function HomePage() {
       const list = listRaw.map(normalizeImage);
       setHasMore(list.length >= PAGE_SIZE);
 
+      console.log('🔍 [fetchImages] Setting images:', { 
+        pageToFetch, 
+        listLength: list.length,
+        firstImageId: list[0]?._id || 'none'
+      });
+
       if (pageToFetch === 1) {
+        console.log('🔥 [fetchImages] Setting images for page 1:', list.length, 'images');
         setImages(list);
+        console.log('🔥 [fetchImages] Images set for page 1');
       } else {
-        // 追加前記錄當前 scroll 位置與總高度，避免 layout shift 意外回頂
-        const prevScroll = window.scrollY;
-        const prevHeight = document.documentElement.scrollHeight;
+        // 直接添加新圖片，不做任何滾動位置干預
         setImages((prev) => {
           const exists = new Set(prev.map((x) => String(x._id)));
           const uniq = list.filter((x) => !exists.has(String(x._id)));
           return [...prev, ...uniq];
         });
-        // 下一個 frame 檢查是否被意外拉回頂部；若是，按高度差補償
-        requestAnimationFrame(() => {
-          const nextHeight = document.documentElement.scrollHeight;
-          if (window.scrollY < prevScroll && nextHeight > prevHeight) {
-            const delta = nextHeight - prevHeight;
-            window.scrollTo({ top: prevScroll + delta, behavior: "auto" });
-          }
-        });
       }
       setPage(pageToFetch);
       setFetchedOnce(true);
     } catch (e) {
-      console.error("載入圖片失敗", e);
+      if (myId !== inFlightId.current) return; // 忽略已取消的請求
+      
+      console.error("🚨 [fetchImages] 載入圖片失敗:", e.message || e);
+      
+      // 如果是超時或網路錯誤，可以考慮重試
+      if (e.name === 'AbortError') {
+        console.warn("⏰ [fetchImages] 請求超時");
+      } else if (e.message?.includes('Failed to fetch')) {
+        console.warn("🌐 [fetchImages] 網路連接失敗");
+      }
     } finally {
-      setIsLoading(false);
+      if (myId === inFlightId.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
+
+  // —— 初始載入圖片 ——
+  useEffect(() => {
+    if (selectedRatings.length > 0 && !fetchedOnce) {
+      console.log('🔥 [INITIAL LOAD] Loading images on mount');
+      fetchImages(1, qRef.current, selectedCategories, selectedRatings);
+    }
+  }, [selectedRatings, fetchedOnce, selectedCategories, fetchImages]);
 
   // —— 首頁的第 1 頁載入（搜尋/排序/篩選變更時） ——
   useEffect(() => {
@@ -223,7 +431,11 @@ export default function HomePage() {
     setPage(1);
     setHasMore(true);
     fetchImages(1, q, selectedCategories, selectedRatings);
-  }, [searchParams, sort, JSON.stringify(selectedCategories), JSON.stringify(selectedRatings), fetchImages]);
+  }, [fetchImages, selectedCategories, selectedRatings, searchParams]);
+
+
+
+
 
   // —— 無限捲動（最小依賴 + 使用 refs 讀最新狀態） ——
   useEffect(() => {
@@ -245,9 +457,11 @@ export default function HomePage() {
 
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) handleLoadMore();
+        if (entries[0].isIntersecting) {
+          handleLoadMore();
+        }
       },
-      { root: null, rootMargin: "900px 0px", threshold: 0.01 }
+      { root: null, rootMargin: "500px 0px", threshold: 0.01 }
     );
 
     io.observe(el);
@@ -332,24 +546,22 @@ export default function HomePage() {
         <SortSelect value={sort} onChange={setSort} />
       </div>
 
+
+
       <ImageGrid
         images={images}
         viewMode={viewMode}
-        isLoading={isLoading}
-        hasMore={hasMore}
         onSelectImage={openImage}
-        loadMoreRef={loadMoreRef}
         currentUser={currentUser}
         isLikedByCurrentUser={isLikedByCurrentUser}
         onToggleLike={handleToggleLike}
-        gutter={15}
-        onLikeUpdate={(updated) => onLikeUpdateHook(updated)}
+        onLocalLikeChange={(updated) => onLikeUpdateHook(updated)}
       />
 
-      {/* sentinel：避免錨點導致的捲動錨定（overflow-anchor） */}
+      {/* sentinel：啟用錨點捲動錨定 */}
       <div
         ref={loadMoreRef}
-        style={{ overflowAnchor: "none" }}
+        style={{ overflowAnchor: "auto" }}
         className="py-6 text-center text-zinc-400 text-sm"
       >
         {!fetchedOnce && isLoading && "載入中..."}

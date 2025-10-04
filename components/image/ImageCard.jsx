@@ -23,24 +23,29 @@ export default function ImageCard({
   onToggleLike,
   onLocalLikeChange,
   onLikeUpdate,
+  onImageLoad,         // 新增：圖片載入完成回調
 }) {
   const canLike = !!currentUser;
   const [isLikedLocal, setIsLikedLocal] = useState(isLiked);
-  const [likeCountLocal, setLikeCountLocal] = useState(img.likes?.length || 0);
+  const [likeCountLocal, setLikeCountLocal] = useState(
+    Array.isArray(img?.likes) ? img.likes.length : (img?.likesCount || 0)
+  );
   const [isProcessing, setIsProcessing] = useState(false);
   const [renderKey, setRenderKey] = useState(0);
 
   // ✅ 以父層資料為基準初始化/回補
   useEffect(() => {
     setIsLikedLocal(isLiked);
-    setLikeCountLocal(img.likes?.length || 0);
-  }, [isLiked, img.likes, img._id]);
+    setLikeCountLocal(
+      Array.isArray(img?.likes) ? img.likes.length : (img?.likesCount || 0)
+    );
+  }, [isLiked, img?.likes, img?.likesCount, img?._id]);
 
   // ✅ 監聽全域同步事件（來自 ImageViewer 或其他 ImageCard）
   useEffect(() => {
     const onLiked = (e) => {
       const updated = e.detail;
-      if (!updated || updated._id !== img._id) return;
+      if (!updated || updated._id !== img?._id) return;
 
       // 依事件內容對齊
       const likesArr = Array.isArray(updated.likes) ? updated.likes : [];
@@ -54,7 +59,7 @@ export default function ImageCard({
 
     window.addEventListener("image-liked", onLiked);
     return () => window.removeEventListener("image-liked", onLiked);
-  }, [img._id, currentUser?._id, onLikeUpdate]);
+  }, [img?._id, currentUser?._id, onLikeUpdate]);
 
   const handleLikeClick = async (e) => {
     e.stopPropagation();
@@ -79,12 +84,12 @@ export default function ImageCard({
 
     try {
       // 告知父層 + 🔊 廣播給其他視圖（大圖/其他縮圖）
-      onLocalLikeChange?.(img._id, newLiked);
+      onLocalLikeChange?.(img?._id, newLiked);
       onLikeUpdate?.(updatedImage);
       updateLikeCacheAndBroadcast(updatedImage);
 
       // 呼叫原本 API
-      await onToggleLike(img._id, newLiked);
+      await onToggleLike(img?._id, newLiked);
 
       // 讓 Heart 重跑動畫（照你原有寫法）
       setRenderKey((prev) => prev + 1);
@@ -101,7 +106,7 @@ export default function ImageCard({
           : (img.likes || []).filter((id) => id !== currentUser._id),
       };
       onLikeUpdate?.(rollbackImage);
-      updateLikeCacheAndBroadcast(updatedImage);
+      updateLikeCacheAndBroadcast(rollbackImage);
 
       alert("愛心更新失敗");
     } finally {
@@ -116,17 +121,17 @@ export default function ImageCard({
     } else {
       window.dispatchEvent(
         new CustomEvent("openImageModal", {
-          detail: { imageId: img._id, image: img },
+          detail: { imageId: img?._id, image: img },
         })
       );
     }
   };
 
   const imageUrl =
-    img.imageUrl ||
-    (img.imageId
-      ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/${img.variant || "public"}`
-      : "/default-image.png");
+    img?.imageUrl ||
+    (img?.imageId
+      ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/${img?.variant || "public"}`
+      : "/default-image.svg");
 
   // ⬇️ NEW 判斷（< 10 小時）
   const createdMs = img?.createdAt ? new Date(img.createdAt).getTime() : getCreatedMsFromObjectId(img?._id);
@@ -134,11 +139,11 @@ export default function ImageCard({
 
   return (
     <div
-      className="mb-4 break-inside-avoid cursor-pointer group relative"
+      className="mb-4 cursor-pointer group relative"
       onClick={handleCardClick}
       role="button"
-      title={img.title || "圖片"}
-      aria-label={img.title || "圖片"}
+      title={img?.title || "圖片"}
+      aria-label={img?.title || "圖片"}
     >
       {/* NEW 徽章（左上角） */}
       {isNew && (
@@ -148,36 +153,43 @@ export default function ImageCard({
       )}
 
       {/* 愛心與數量（固定在卡片右上角） */}
-      <div className="absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1">
+      <div 
+        className={`absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1 ${
+          canLike ? "hover:scale-110 cursor-pointer" : "opacity-70"
+        }`}
+        onClick={handleLikeClick}
+      >
         <Heart
           key={renderKey}
-          onClick={handleLikeClick}
           fill={isLikedLocal ? "#f472b6" : "transparent"}
           color={isLikedLocal ? "#f472b6" : likeCountLocal > 0 ? "#f472b6" : "#ccc"}
           strokeWidth={2.5}
-          className={`w-4 h-4 transition duration-200 ${
-            canLike ? "hover:scale-110 cursor-pointer" : "opacity-70"
-          }`}
+          className="w-4 h-4 transition duration-200 pointer-events-none"
         />
-        <span className="text-white text-xs">{likeCountLocal}</span>
+        <span className="text-white text-xs pointer-events-none">{likeCountLocal}</span>
       </div>
 
       {/* 縮圖容器 */}
       <div className="overflow-hidden rounded-lg relative">
         <img
           src={imageUrl}
-          alt={img.title || "圖片"}
-          className="w-full max-w-[512px] object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg"
+          alt={img?.title || "圖片"}
+          className="w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg"
+          onLoad={() => {
+            if (onImageLoad) {
+              onImageLoad();
+            }
+          }}
           onError={(e) => {
             e.currentTarget.onerror = null;
-            e.currentTarget.src = "/default-image.png";
+            e.currentTarget.src = "/default-image.svg";
           }}
         />
 
         {/* hover 顯示模式 */}
         {viewMode !== "default" && (
           <div className="absolute bottom-0 left-0 w-full px-3 py-2 bg-white/85 text-black text-sm text-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-            {img.title || "未命名圖片"}
+            {img?.title || "未命名圖片"}
           </div>
         )}
       </div>
@@ -185,7 +197,7 @@ export default function ImageCard({
       {/* 常駐標題模式 */}
       {viewMode === "default" && (
         <div className="mt-3 mb-1 px-1 text-white text-sm text-center truncate">
-          {img.title || "未命名圖片"}
+          {img?.title || "未命名圖片"}
         </div>
       )}
     </div>

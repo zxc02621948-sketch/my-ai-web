@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
-import dbConnect from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
 
 const noStore = { headers: { "Cache-Control": "no-store" } };

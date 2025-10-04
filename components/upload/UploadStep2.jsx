@@ -81,6 +81,7 @@ export default function UploadStep2({
   const [promptRaw, setPromptRaw] = useState(""); // PNG 內 prompt 若是 Comfy JSON
   const [shareWorkflow, setShareWorkflow] = useState(true); // 是否隨作品附檔
 
+  // AI自動分類相關
   const workflowInputRef = useRef(null);
   const scrollAreaRef = useRef(null);
 
@@ -437,7 +438,7 @@ export default function UploadStep2({
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageFile]);
-  
+
   // 只要偵測到主模型 hash，就嘗試查 civitai 並自動填入（除非使用者已手動改過）
   useEffect(() => {
     let aborted = false;
@@ -852,15 +853,19 @@ export default function UploadStep2({
         )}
 
         {/* 分級 */}
-        <div className="flex items-center gap-4">
-          <div className={`text-xl font-bold px-4 py-2 rounded text-white inline-block ${getRatingColor()}`}>
-            目前選擇：{rating === "all" ? "一般 All" : rating === "15" ? "15+ 清涼" : "18+ 限制"}
+        <div className="space-y-3">
+          <div className="flex items-center gap-4">
+            <div className={`text-xl font-bold px-4 py-2 rounded text-white inline-block ${getRatingColor()}`}>
+              目前選擇：{rating === "all" ? "一般 All" : rating === "15" ? "15+ 清涼" : "18+ 限制"}
+            </div>
+            <select className="p-2 rounded bg-zinc-700" value={rating} onChange={(e) => setRating(e.target.value)}>
+              <option value="all">一般（All）</option>
+              <option value="15">15+（輕限）</option>
+              <option value="18">18+（限制）</option>
+            </select>
           </div>
-          <select className="p-2 rounded bg-zinc-700" value={rating} onChange={(e) => setRating(e.target.value)}>
-            <option value="all">一般（All）</option>
-            <option value="15">15+（輕限）</option>
-            <option value="18">18+（限制）</option>
-          </select>
+
+          {/* 移除自動分級功能 - 改為用戶手動選擇 */}
         </div>
 
         {/* 18+ 成年聲明 */}
@@ -891,6 +896,20 @@ export default function UploadStep2({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
+        {/* 標籤與描述 */}
+        <input
+          type="text"
+          placeholder="標籤（以空格或逗號分隔，例如：可愛 貓耳 女僕）"
+          className="w-full p-2 rounded bg-zinc-700"
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+        />
+        <textarea
+          placeholder="描述（選填）"
+          className="w-full p-2 rounded bg-zinc-700 h-28"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
         <input
           type="text"
           placeholder="來源作者（選填）"
@@ -918,6 +937,8 @@ export default function UploadStep2({
                 </option>
               ))}
             </select>
+            
+            {/* 移除自動分級功能 - 改為用戶手動選擇 */}
           </div>
 
           <div>
@@ -1056,21 +1077,6 @@ export default function UploadStep2({
         <p className="text-xs text-zinc-400">
           只接受 <span className="underline">civitai.com</span> 的網址（可留白）。
         </p>
-
-        {/* 標籤與描述 */}
-        <input
-          type="text"
-          placeholder="標籤（以空格或逗號分隔，例如：可愛 貓耳 女僕）"
-          className="w-full p-2 rounded bg-zinc-700"
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-        />
-        <textarea
-          placeholder="描述（選填）"
-          className="w-full p-2 rounded bg-zinc-700 h-28"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
 
         {/* 進階參數 */}
         <div className="rounded-lg border border-white/10">

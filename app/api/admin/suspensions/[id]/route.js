@@ -4,12 +4,13 @@ import { dbConnect } from "@/lib/db";
 import { getCurrentUser } from "@/lib/serverAuth";
 import User from "@/models/User";
 
-export async function PATCH(req, { params }) {
+export async function PATCH(req, ctx) {
   await dbConnect();
   const admin = await getCurrentUser();
   if (!admin || !admin.isAdmin) {
     return NextResponse.json({ ok: false, message: "沒有權限" }, { status: 403 });
   }
+  const params = await ctx;
   const id = params?.id;
   const body = await req.json().catch(() => ({}));
   const { unlock = false } = body;

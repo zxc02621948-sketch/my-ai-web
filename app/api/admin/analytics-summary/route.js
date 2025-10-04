@@ -21,17 +21,23 @@ export async function GET(req) {
   const summary = [];
 
   for (let i = 0; i < 7; i++) {
+    // 計算本地日期
     const localDate = new Date();
     localDate.setDate(localDate.getDate() - i);
-
+    
     // 取出當地年月日
     const dateLabel = localDate.toISOString().split("T")[0];
 
-    // 明確建構 UTC 時區的當天 00:00:00 ～ 23:59:59
-    const start = new Date(`${dateLabel}T00:00:00.000Z`);
-    const end = new Date(`${dateLabel}T23:59:59.999Z`);
+    // 建構本地時間的開始和結束，然後轉換為 UTC 進行查詢
+    const localStart = new Date(dateLabel + 'T00:00:00');
+    const localEnd = new Date(dateLabel + 'T23:59:59.999');
+    
+    // 轉換為 UTC 時間進行數據庫查詢
+    const start = new Date(localStart.getTime() - localStart.getTimezoneOffset() * 60000);
+    const end = new Date(localEnd.getTime() - localEnd.getTimezoneOffset() * 60000);
 
-    const [visitGroup, newUsers, uploads, likes, comments] = await Promise.all([
+    const [uniqueUsersResult, totalVisitsResult, newUsers, uploads, likes, comments] = await Promise.all([
+      // 計算獨立用戶數（混合識別：已登錄用戶按 userId，匿名用戶按 IP+UserAgent）
       VisitorLog.aggregate([
         {
           $match: {
@@ -42,14 +48,32 @@ export async function GET(req) {
           $group: {
             _id: {
               $cond: [
-                { $ifNull: ["$visitId", false] },
-                "$visitId",
-                "$ip",
-              ],
+                { $and: [{ $ne: ["$userId", null] }, { $ne: ["$userId", undefined] }] },
+                { type: "user", id: "$userId" },
+                { type: "anonymous", id: { $concat: ["$ip", "|", "$userAgent"] } }
+              ]
             },
-            count: { $sum: 1 },
           },
         },
+        {
+          $count: "uniqueUsers"
+        }
+      ]),
+      // 計算總訪問次數（按 visitId 計算）
+      VisitorLog.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: start, $lte: end },
+          },
+        },
+        {
+          $group: {
+            _id: "$visitId",
+          },
+        },
+        {
+          $count: "totalVisits"
+        }
       ]),
       User.countDocuments({ createdAt: { $gte: start, $lte: end } }),
       Image.countDocuments({ createdAt: { $gte: start, $lte: end } }),
@@ -59,8 +83,8 @@ export async function GET(req) {
 
     summary.push({
       date: dateLabel,
-      uniqueIps: visitGroup.length,
-      totalVisits: visitGroup.reduce((sum, v) => sum + v.count, 0),
+      uniqueUsers: uniqueUsersResult[0]?.uniqueUsers || 0,
+      totalVisits: totalVisitsResult[0]?.totalVisits || 0,
       newUsers,
       imagesUploaded: uploads,
       likesGiven: likes,

@@ -1,63 +1,72 @@
 // app/api/edit-user/route.js
 import { dbConnect } from "@/lib/db";
-import { getCurrentUser } from "@/lib/serverAuth";
 import User from "@/models/User";
+import { requireAuth } from "@/lib/authUtils";
+import { apiError, apiSuccess, withErrorHandling } from "@/lib/errorHandler";
 
-export async function POST(req) {
-  await dbConnect();
-
-  try {
-    const currentUser = await getCurrentUser(req);
-
-    if (!currentUser) {
-      return new Response(JSON.stringify({ error: "未登入" }), { status: 401 });
+export const PUT = requireAuth(
+  withErrorHandling(async (req, context) => {
+    const { user } = context;
+    const { username, bio, backupEmail, defaultMusicUrl } = await req.json();
+    
+    await dbConnect();
+    
+    // 檢查用戶是否存在
+    const userRecord = await User.findById(user._id);
+    if (!userRecord) {
+      return apiError("找不到使用者", 404);
     }
-
-    const body = await req.json();
-    const { username, bio, backupEmail } = body;
-
-    const user = await User.findById(currentUser._id);
-    if (!user) {
-      return new Response(JSON.stringify({ error: "找不到使用者" }), { status: 404 });
-    }
-
+    
     // 限制 bio 字數
-    const safeBio = typeof bio === "string" ? bio.slice(0, 80) : "";
-
+    const safeBio = typeof bio === "string" ? bio.slice(0, 60) : "";
+    
     // ✅ 備用信箱處理
     if (backupEmail !== undefined) {
       // 不可與主信箱相同
-      if (backupEmail === user.email) {
-        return new Response(JSON.stringify({ error: "備用信箱不能與主信箱相同" }), { status: 400 });
+      if (backupEmail === userRecord.email) {
+        return apiError("備用信箱不能與主信箱相同", 400);
       }
-
+      
       // 不可為他人註冊過的主信箱
       const existingUser = await User.findOne({ email: backupEmail });
-      if (existingUser && existingUser._id.toString() !== currentUser._id.toString()) {
-        return new Response(JSON.stringify({ error: "這個信箱已被其他帳號註冊，無法作為備用信箱" }), {
-          status: 400,
-        });
+      if (existingUser && existingUser._id.toString() !== user._id.toString()) {
+        return apiError("這個信箱已被其他帳號註冊，無法作為備用信箱", 400);
       }
-
+      
       // 若備用信箱不同才更新
-      if (user.backupEmail !== backupEmail) {
-        user.backupEmail = backupEmail;
-        user.isBackupEmailVerified = false;
+      if (userRecord.backupEmail !== backupEmail) {
+        userRecord.backupEmail = backupEmail;
+        userRecord.isBackupEmailVerified = false;
       }
     }
 
+    // ✅ 音樂連結（僅允許 YouTube / youtu.be，且必須為 https）
+    if (defaultMusicUrl !== undefined) {
+      const val = String(defaultMusicUrl || "").trim();
+      if (val === "") {
+        userRecord.defaultMusicUrl = ""; // 清空設定
+      } else {
+        try {
+          const u = new URL(val);
+          const host = u.hostname.toLowerCase();
+          const allowedHosts = ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"]; 
+          const isHttps = u.protocol === "https:";
+          if (!isHttps || !allowedHosts.includes(host)) {
+            return apiError("音樂連結僅接受 https 的 YouTube 或 youtu.be 連結", 400);
+          }
+          userRecord.defaultMusicUrl = val;
+        } catch {
+          return apiError("音樂連結格式不正確", 400);
+        }
+      }
+    }
+    
     // 其他欄位
-    user.username = username || user.username;
-    user.bio = safeBio;
-
-    await user.save();
-
-    return new Response(JSON.stringify(user), { status: 200 });
-  } catch (err) {
-    console.error("編輯使用者資料失敗：", err);
-    return new Response(
-     JSON.stringify({ error: "伺服器錯誤", message: err.message }),
-      { status: 500 }
-    );
-  }
-}
+    userRecord.username = username || userRecord.username;
+    userRecord.bio = safeBio;
+    
+    await userRecord.save();
+    
+    return apiSuccess(userRecord);
+  })
+);

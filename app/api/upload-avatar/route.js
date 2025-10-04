@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 
 const CLOUDFLARE_ACCOUNT_HASH = "qQdazZfBAN4654_waTSV7A"; // ⬅️ 你的 Cloudflare 資訊
@@ -9,8 +9,11 @@ const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN; // ⬅️ 你必�
 export async function POST(req) {
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get("id");
+  
+  console.log("🔧 upload-avatar 收到請求:", { userId });
 
   if (!userId) {
+    console.log("❌ 缺少使用者 ID");
     return NextResponse.json({ error: "缺少使用者 ID" }, { status: 400 });
   }
 
@@ -46,10 +49,24 @@ export async function POST(req) {
     const imageUrl = `https://imagedelivery.net/${CLOUDFLARE_ACCOUNT_HASH}/${imageId}/avatar`;
 
     // 2. 寫入 MongoDB
-    await connectToDatabase();
-    await User.findByIdAndUpdate(userId, { image: imageUrl });
+    await dbConnect();
+    console.log("🔧 準備更新用戶頭像:", { userId, imageUrl });
+    
+    const updateResult = await User.findByIdAndUpdate(userId, { 
+      image: imageUrl,
+      avatar: imageUrl 
+    }, { new: true });
+    
+    console.log("🔧 數據庫更新結果:", updateResult ? "成功" : "失敗");
+    console.log("🔧 更新後的用戶數據:", {
+      image: updateResult?.image,
+      avatar: updateResult?.avatar
+    });
 
-    return NextResponse.json({ image: imageUrl });
+    return NextResponse.json({ 
+      success: true,
+      image: imageUrl 
+    });
   } catch (err) {
     console.error("頭貼上傳錯誤", err);
     return NextResponse.json({ error: "伺服器錯誤" }, { status: 500 });

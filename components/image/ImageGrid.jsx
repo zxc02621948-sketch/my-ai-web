@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import ImageCard from "./ImageCard";
 
 export default function ImageGrid({
@@ -11,105 +11,113 @@ export default function ImageGrid({
   onSelectImage,
   onToggleLike,
   onLocalLikeChange,
+  onLikeUpdate,
   viewMode,
 }) {
-  const list = images?.length ? images : (filteredImages || []);
-  const gridRef = useRef(null);
-  const msnryRef = useRef(null);
-  const ilRef = useRef(null);
+  const list = useMemo(() => {
+    return images?.length ? images : (filteredImages || []);
+  }, [images, filteredImages]);
+  const [columns, setColumns] = useState(5);
+  const [columnArrays, setColumnArrays] = useState([]);
 
+  // 監聽窗口大小變化，計算欄數
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!gridRef.current) return;
-      const [{ default: Masonry }, { default: imagesLoaded }] = await Promise.all([
-        import("masonry-layout"),
-        import("imagesloaded"),
-      ]);
-      if (!mounted || !gridRef.current) return;
-
-      if (msnryRef.current) { msnryRef.current.destroy(); msnryRef.current = null; }
-      if (ilRef.current) { try { ilRef.current.off("progress"); ilRef.current.off("always"); } catch {} ilRef.current = null; }
-
-      msnryRef.current = new Masonry(gridRef.current, {
-        itemSelector: ".grid-item",
-        columnWidth: ".grid-sizer",
-        percentPosition: true,
-        gutter: 12,
-        horizontalOrder: true,
-        transitionDuration: "0.2s",
-      });
-
-      ilRef.current = imagesLoaded(gridRef.current);
-
-      // ✅ 改成「整批完成」再 layout，避免回捲時的連續 reflow 抖動
-      ilRef.current.on("always", () => {
-        msnryRef.current && msnryRef.current.layout();
-      });
-
-      // 首次也做一次 layout
-      msnryRef.current.layout();
-    })();
-
-    return () => {
-      mounted = false;
-      if (ilRef.current) { try { ilRef.current.off("progress"); ilRef.current.off("always"); } catch {} ilRef.current = null; }
-      if (msnryRef.current) { msnryRef.current.destroy(); msnryRef.current = null; }
+    const updateColumns = () => {
+      const width = window.innerWidth;
+      let newColumns;
+      if (width >= 1024) {
+        newColumns = 5;
+      } else if (width >= 768) {
+        newColumns = 3;
+      } else {
+        newColumns = 2;
+      }
+      
+      setColumns(newColumns);
     };
-  }, [list]);
 
-  if (!list?.length) return null;
+    updateColumns();
+    window.addEventListener('resize', updateColumns);
+    return () => window.removeEventListener('resize', updateColumns);
+  }, []); // 移除 columns 依賴避免無限循環
+
+  // 將圖片按左到右順序分配到各列
+  useEffect(() => {
+    if (!list || list.length === 0) {
+      setColumnArrays([]);
+      return;
+    }
+
+    const newColumnArrays = Array.from({ length: columns }, () => []);
+    
+    // 按順序將圖片分配到各列（左到右）
+    list.forEach((image, index) => {
+      const columnIndex = index % columns;
+      newColumnArrays[columnIndex].push(image);
+    });
+
+    setColumnArrays(newColumnArrays);
+  }, [list, columns]);
+
+  // 如果沒有圖片，顯示空狀態
+  if (!list || list.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-500">
+        <p>沒有找到圖片</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full px-3 md:px-4 mx-auto box-border">
-      <div ref={gridRef} className="my-masonry">
-        {/* 只提供寬度參考，不要放內容 */}
-        <div className="grid-sizer" />
-        {list.map((img, i) => (
-          <div key={img._id || i} className="grid-item">
-            <div className="card-wrap">
-              <ImageCard
-                img={img}
-                viewMode={viewMode}
-                currentUser={currentUser}
-                isLiked={isLikedByCurrentUser?.(img)}
-                onClick={() => onSelectImage?.(img)}
-                onToggleLike={() => onToggleLike?.(img._id)}
-                onLocalLikeChange={onLocalLikeChange}
-              />
-            </div>
+    <div className="image-grid-container">
+      <style jsx>{`
+        .image-grid-container {
+          padding: 10px;
+        }
+        
+        .image-grid {
+          display: flex;
+          gap: 10px;
+          max-width: 100%;
+          margin: 0 auto;
+          align-items: flex-start;
+        }
+        
+        .grid-column {
+          width: calc((100% - ${(columns - 1) * 10}px) / ${columns});
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          flex-shrink: 0;
+        }
+        
+        .grid-item {
+          width: 100%;
+          overflow: hidden;
+          border-radius: 8px;
+        }
+      `}</style>
+      
+      <div className="image-grid">
+        {columnArrays.map((columnImages, columnIndex) => (
+          <div key={columnIndex} className="grid-column">
+            {columnImages.map((image) => (
+              <div key={image._id} className="grid-item">
+                <ImageCard
+                  img={image}
+                  currentUser={currentUser}
+                  isLiked={isLikedByCurrentUser?.(image)}
+                  onClick={onSelectImage}
+                  onToggleLike={onToggleLike}
+                  onLocalLikeChange={onLocalLikeChange}
+                  onLikeUpdate={onLikeUpdate}
+                  viewMode={viewMode}
+                />
+              </div>
+            ))}
           </div>
         ))}
       </div>
-
-      <style jsx>{`
-        /* 關閉 scroll anchoring，避免 reflow 時瀏覽器強制鎖位造成回捲抖動 */
-        .my-masonry { --g: 12px; overflow-anchor: none; }
-
-        /* 手機：2 欄（1 個縫隙） */
-        .my-masonry .grid-sizer,
-        .my-masonry .grid-item {
-          width: calc((100% - var(--g)) / 2);
-          box-sizing: border-box;
-        }
-        .my-masonry .card-wrap { margin-bottom: var(--g); }
-
-        /* md ≥ 768px：3 欄（2 個縫隙） */
-        @media (min-width: 768px) {
-          .my-masonry .grid-sizer,
-          .my-masonry .grid-item {
-            width: calc((100% - 2 * var(--g)) / 3);
-          }
-        }
-
-        /* lg ≥ 1024px：5 欄（4 個縫隙） */
-        @media (min-width: 1024px) {
-          .my-masonry .grid-sizer,
-          .my-masonry .grid-item {
-            width: calc((100% - 4 * var(--g)) / 5);
-          }
-        }
-      `}</style>
     </div>
   );
 }

@@ -6,10 +6,11 @@ import { computePopScore, ensureLikesCount } from "@/utils/score";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(_req, { params }) {
+export async function POST(_req, ctx) {
   try {
     await dbConnect();
-    const { id } = await params;
+    const params = await ctx;
+    const { id } = params;
 
     // 1) 點擊 +1
     await Image.updateOne({ _id: id }, { $inc: { clicks: 1 } });

@@ -48,7 +48,7 @@ export default function AnalyticsPage() {
               <td className="border px-2 py-1">{row.imagesUploaded ?? 0}</td>
               <td className="border px-2 py-1">{row.likesGiven ?? 0}</td>
               <td className="border px-2 py-1">{row.commentsPosted ?? 0}</td>
-              <td className="border px-2 py-1">{row.uniqueIps ?? 0}</td>
+              <td className="border px-2 py-1">{row.uniqueUsers ?? 0}</td>
               <td className="border px-2 py-1">{row.totalVisits ?? 0}</td>
             </tr>
           ))}

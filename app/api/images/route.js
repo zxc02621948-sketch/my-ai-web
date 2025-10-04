@@ -170,7 +170,7 @@ export async function GET(req) {
 
     const projectBase = {
       _id: 1, title: 1, description: 1, positivePrompt: 1, negativePrompt: 1, tags: 1, category: 1, rating: 1,
-      createdAt: 1, likes: 1, likesCount: 1, popScore: 1, imageUrl: 1, imageId: 1, userId: 1, user: 1,
+      createdAt: 1, likes: 1, likesCount: 1, popScore: 1, imageUrl: 1, imageId: 1, variant: 1, userId: 1, user: 1,
       platform: 1, modelName: 1, modelLink: 1, modelHash: 1, loraName: 1, loraLink: 1, author: 1,
       sampler: 1, steps: 1, cfgScale: 1, seed: 1, clipSkip: 1, width: 1, height: 1,
       initialBoost: 1, completenessScore: 1, clicks: 1,

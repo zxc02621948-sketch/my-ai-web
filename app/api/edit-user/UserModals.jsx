@@ -22,8 +22,8 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: "找不到使用者" }), { status: 404 });
     }
 
-    // 安全驗證：最多 80 字簡介
-    const safeBio = typeof bio === "string" ? bio.slice(0, 80) : "";
+    // 安全驗證：最多 60 字簡介
+    const safeBio = typeof bio === "string" ? bio.slice(0, 60) : "";
 
     // 寫入欄位（email 可之後搭配驗證流程）
     user.username = username || user.username;

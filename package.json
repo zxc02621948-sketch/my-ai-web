@@ -39,8 +39,10 @@
     "react-easy-crop": "^5.5.0",
     "react-hot-toast": "^2.5.2",
     "react-masonry-css": "^1.0.16",
+    "react-youtube": "^10.1.0",
     "resend": "^4.7.0",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "ytdl-core": "^4.11.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

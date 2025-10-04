@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import User from "@/models/User";
 import Image from "@/models/Image";
 import { Notification } from "@/models/Notification";
+import { creditPoints } from "@/services/pointsService";
 
 export async function GET(req, context) {
   await dbConnect();
@@ -85,6 +86,16 @@ export async function POST(req, context) {
 
     // ✨ 新增通知處理區塊
     const image = await Image.findById(imageId);
+
+    // ✅ 積分：為作品作者入帳 +1（每日上限5），同用戶同作品同日僅計一次
+    try {
+      const authorId = image?.user || image?.userId;
+      if (authorId && String(authorId) !== String(userId)) {
+        await creditPoints({ userId: authorId, type: "comment_received", sourceId: imageId, actorUserId: userId, meta: { commentId: newComment._id } });
+      }
+    } catch (e) {
+      console.warn("[points] comment_received 入帳失敗：", e);
+    }
 
     // 📨 通知圖片作者
     if (!parentCommentId && userId !== image.user.toString()) {

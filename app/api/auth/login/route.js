@@ -1,85 +1,67 @@
 import { dbConnect } from "@/lib/db";
-import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { generateToken } from "@/lib/serverAuth";
 import User from "@/models/User";
+import { apiError, apiSuccess, withErrorHandling } from "@/lib/errorHandler";
 
-export async function POST(req) {
-  try {
-    const { email, password } = await req.json();
-    console.log("📥 收到帳密：", { email, password });
+export const POST = withErrorHandling(async (req) => {
+  const { email, password } = await req.json();
+  console.log("📥 收到帳密：", { email, password });
 
-    if (!email || !password) {
-      return NextResponse.json(
-        { success: false, message: "請輸入帳號與密碼" },
-        { status: 400 }
-      );
-    }
+  if (!email || !password) {
+    return apiError("請輸入帳號與密碼", 400);
+  }
 
-    await dbConnect();
-    const user = await User.findOne({ email }).lean();
-    console.log("🪪 使用者完整資料：", user);
+  await dbConnect();
+  const user = await User.findOne({ email }).lean();
+  console.log("🪪 使用者完整資料：", user);
 
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: "帳號不存在" },
-        { status: 401 }
-      );
-    }
+  if (!user) {
+    return apiError("帳號不存在", 401);
+  }
 
-    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+  const isPasswordCorrect = await bcrypt.compare(password, user.password);
 
-    if (!isPasswordCorrect) {
-      return NextResponse.json(
-        { success: false, message: "密碼錯誤" },
-        { status: 401 }
-      );
-    }
+  if (!isPasswordCorrect) {
+    return apiError("密碼錯誤", 401);
+  }
 
-    // ✅ 不再寄驗證信！只提示未驗證狀態
-    if (!user.isVerified) {
-      return NextResponse.json(
-        { success: false, message: "尚未驗證", reason: "unverified" },
-        { status: 403 }
-      );
-    }
+  // ✅ 不再寄驗證信！只提示未驗證狀態
+  if (!user.isVerified) {
+    return apiError("尚未驗證", 403, { reason: "unverified" });
+  }
 
-    const payload = {
-      id: user._id,
-      email: user.email,
+  const payload = {
+    id: user._id,
+    email: user.email,
+    username: user.username,
+    isAdmin: user.isAdmin || false,
+  };
+
+  console.log("🎯 token payload：", payload);
+
+  const token = generateToken(payload);
+
+  const responseData = {
+    token,
+    user: {
+      _id: user._id,
       username: user.username,
       isAdmin: user.isAdmin || false,
-    };
+    },
+    message: "登入成功"
+  };
 
-    console.log("🎯 token payload：", payload);
+  // 設置 cookie
+  const cookieOptions = {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  };
 
-    const token = generateToken(payload);
-
-    const response = NextResponse.json({
-      success: true,
-      message: "登入成功",
-      token,
-      user: {
-        _id: user._id,
-        username: user.username,
-        isAdmin: user.isAdmin || false,
-      },
-    });
-
-    response.cookies.set("token", token, {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
-
-    return response;
-  } catch (error) {
-    console.error("❌ 登入錯誤：", error);
-    return NextResponse.json(
-      { success: false, message: "伺服器錯誤" },
-      { status: 500 }
-    );
-  }
-}
+  const response = apiSuccess(responseData);
+  response.cookies.set("token", token, cookieOptions);
+  return response;
+});

@@ -33,7 +33,7 @@ export default function ImageModal({
   onLikeUpdate,
   onNavigate,
   onFollowChange,     // 父層回寫 currentUser.following
-  followOverrides,    // Map: userId -> boolean（前端優先生效）
+  followOverrides,    // Map: userId -> boolean（前端優先）
   onImageUpdated,     // 可選：讓父層也能接到「已更新」
 }) {
   const router = useRouter();
@@ -291,6 +291,12 @@ export default function ImageModal({
         const updated = { ...image, likes: likesArr, likesCount: likesArr.length };
         setImage(updated);
         onLikeUpdate?.(updated);
+        // 廣播目前登入者積分（若後端有提供）
+        const balance = data?.currentUserPointsBalance;
+        const uid = currentUser?._id || currentUser?.id;
+        if (typeof balance === "number" && uid) {
+          window.dispatchEvent(new CustomEvent("points-updated", { detail: { userId: String(uid), pointsBalance: Number(balance) } }));
+        }
       }
     } catch (err) {
       console.error("❌ 點讚失敗", err);
@@ -304,7 +310,7 @@ export default function ImageModal({
     onClose?.();
   }
 
-  // Body 鎖定 + 關閉還原 scroll
+  // Body 鎖定 + 關閉還原 scroll（修復無限滾動時的跳躍問題）
   useEffect(() => {
     const body = document.body;
     const prev = {
@@ -313,10 +319,11 @@ export default function ImageModal({
       width: body.style.width,
       overflow: body.style.overflow,
     };
-    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const initialScrollY = window.scrollY || window.pageYOffset || 0;
+    const initialDocumentHeight = document.documentElement.scrollHeight;
 
     body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
+    body.style.top = `-${initialScrollY}px`;
     body.style.width = "100%";
     body.style.overflow = "hidden";
 
@@ -325,7 +332,32 @@ export default function ImageModal({
       body.style.top = prev.top;
       body.style.width = prev.width;
       body.style.overflow = prev.overflow;
-      window.scrollTo(0, scrollY);
+      
+      // 檢查頁面高度是否發生變化（無限滾動可能改變頁面高度）
+      const currentDocumentHeight = document.documentElement.scrollHeight;
+      const heightChanged = Math.abs(currentDocumentHeight - initialDocumentHeight) > 100;
+      
+      if (heightChanged) {
+        // 如果頁面高度顯著變化，使用更安全的滾動恢復策略
+        // 確保滾動位置不會超出新的頁面範圍
+        const maxScrollY = Math.max(0, currentDocumentHeight - window.innerHeight);
+        const safeScrollY = Math.min(initialScrollY, maxScrollY);
+        
+        console.log('🔧 [ImageModal] 檢測到頁面高度變化，安全恢復滾動位置:', {
+          initialScrollY,
+          safeScrollY,
+          initialHeight: initialDocumentHeight,
+          currentHeight: currentDocumentHeight
+        });
+        
+        // 使用 requestAnimationFrame 確保 DOM 更新完成後再滾動
+        requestAnimationFrame(() => {
+          window.scrollTo(0, safeScrollY);
+        });
+      } else {
+        // 頁面高度沒有顯著變化，使用原始滾動位置
+        window.scrollTo(0, initialScrollY);
+      }
     };
   }, []);
 

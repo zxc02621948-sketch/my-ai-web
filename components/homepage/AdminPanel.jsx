@@ -143,6 +143,9 @@ export default function AdminPanel() {
         <div className="text-yellow-400 underline hover:text-yellow-300">
           <Link href="/admin/analytics">📊 查看流量紀錄</Link>
         </div>
+        <div className="text-yellow-400 underline hover:text-yellow-300">
+          <Link href="/admin/ad-analytics">💰 廣告收益統計</Link>
+        </div>
         <div className="text-yellow-400 underline hover:text黃-300">
           <Link href="/admin/feedbacks">📩 使用者回報</Link>
         </div>

@@ -1,41 +1,93 @@
+import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
+import User from "@/models/User";
+import Image from "@/models/Image";
+import LikeLog from "@/models/LikeLog";
+import Comment from "@/models/Comment";
 import VisitorLog from "@/models/VisitorLog";
-import { verifyToken } from "@/lib/serverAuth";
-import { nanoid } from "nanoid";
 
-export async function POST(req) {
-  await dbConnect();
-
-  const { pathname } = await req.json();
-  const ip = req.headers.get("x-forwarded-for") || req.headers.get("host");
-  const userAgent = req.headers.get("user-agent") || "";
-  const cookieHeader = req.headers.get("cookie") || "";
-
-  // 讀取 token
-  const token = cookieHeader.match(/token=([^;]+)/)?.[1];
-  const tokenData = token ? verifyToken(token) : null;
-  const userId = tokenData?.id || null;
-
-  // ✅ 從 header 中讀取 visitId（cookie）
-  let visitId = cookieHeader.match(/visit_id=([^;]+)/)?.[1];
-
-  // ✅ 如果沒有就先給一個（不寫 cookie，純紀錄用）
-  if (!visitId) {
-    visitId = nanoid(); // 還是給統計用識別
-  }
-
+export async function GET() {
   try {
-    await VisitorLog.create({
-      path: pathname,
-      ip,
-      visitId,
-      userAgent,
-      userId,
-    });
+    await dbConnect();
 
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
+    // 今天 0 點
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const days = [];
+
+    // 取最近 7 天
+    for (let i = 6; i >= 0; i--) {
+      const start = new Date(today);
+      start.setDate(today.getDate() - i);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 1);
+
+      // 註冊
+      const registrations = await User.countDocuments({
+        createdAt: { $gte: start, $lt: end },
+      });
+
+      // 上傳（Image 集合）
+      const uploads = await Image.countDocuments({
+        createdAt: { $gte: start, $lt: end },
+      });
+
+      // 愛心（LikeLog 集合）
+      const likes = await LikeLog.countDocuments({
+        createdAt: { $gte: start, $lt: end },
+      });
+
+      // 留言
+      const comments = await Comment.countDocuments({
+        createdAt: { $gte: start, $lt: end },
+      });
+
+      // 訪問次數
+      const visits = await VisitorLog.countDocuments({
+        createdAt: { $gte: start, $lt: end },
+      });
+
+      // 訪問人數 (混合識別：已登錄用戶按 userId，匿名用戶按 IP+UserAgent)
+      const uniqueUsersResult = await VisitorLog.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: start, $lt: end },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $cond: [
+                { $and: [{ $ne: ["$userId", null] }, { $ne: ["$userId", undefined] }] },
+                { type: "user", id: "$userId" },
+                { type: "anonymous", id: { $concat: ["$ip", "|", "$userAgent"] } }
+              ]
+            },
+          },
+        },
+        {
+          $count: "uniqueUsers"
+        }
+      ]);
+
+      days.push({
+        date: start.toISOString().split("T")[0], // YYYY-MM-DD
+        registrations,
+        uploads,
+        likes,
+        comments,
+        people: uniqueUsersResult[0]?.uniqueUsers || 0,
+        visits,
+      });
+    }
+
+    return NextResponse.json({ ok: true, summary: days });
   } catch (err) {
-    console.error("❌ 寫入訪問紀錄失敗", err);
-    return new Response("Internal Server Error", { status: 500 });
+    console.error("Analytics summary error:", err);
+    return NextResponse.json(
+      { ok: false, error: "伺服器錯誤" },
+      { status: 500 }
+    );
   }
 }

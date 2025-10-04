@@ -1,0 +1,54 @@
+.container {
+  width: 100%;
+  padding: 20px;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--grid-columns, 5), 1fr);
+  gap: 20px;
+  transform: translateZ(0);
+  will-change: contents;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.item {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+.item.loaded {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.item:hover {
+  transform: translateY(-2px) scale(1.02);
+  transition: transform 0.2s ease;
+}
+
+.item img {
+  width: 100%;
+  border-radius: 8px;
+  display: block;
+}
+
+.loadMoreSentinel {
+  height: 20px;
+  margin: 20px 0;
+  visibility: hidden;
+}
+
+/* Responsive behavior is now handled by JavaScript setting --grid-columns CSS custom property */

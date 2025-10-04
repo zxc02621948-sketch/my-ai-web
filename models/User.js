@@ -38,6 +38,20 @@ const userSchema = new mongoose.Schema(
     isSuspended: { type: Boolean, default: false },
     isPermanentSuspension: { type: Boolean, default: false },
     suspendedAt: { type: Date, default: null }
+    ,
+    // ✅ 積分餘額（Phase A）
+    pointsBalance: { type: Number, default: 0 },
+
+    // ✅ 使用者預設音樂來源（播放頁讀取）
+    defaultMusicUrl: { type: String, default: '' },
+
+    // ✅ 迷你播放器購買狀態與樣式（僅個人頁顯示）
+    miniPlayerPurchased: { type: Boolean, default: false },
+    miniPlayerTheme: { type: String, default: 'modern' },
+
+    // ✅ 頭像框系統
+    currentFrame: { type: String, default: 'default' },
+    ownedFrames: [{ type: String, default: ['default'] }]
   },
   {
     timestamps: true

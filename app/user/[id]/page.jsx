@@ -9,6 +9,9 @@ import UserImageGrid from "@/components/user/UserImageGrid";
 import UserEditModal from "@/components/user/UserEditModal";
 import { useFilterContext } from "@/components/context/FilterContext";
 import useLikeHandler from "@/hooks/useLikeHandler";
+import PointsHistoryModal from "@/components/user/PointsHistoryModal";
+import { usePlayer } from "@/components/context/PlayerContext";
+// 重複 import 修正：axios 已在檔案頂部引入
 
 const labelToRating = {
   "一般圖片": "all",
@@ -20,6 +23,7 @@ export default function UserProfilePage() {
   const { id } = useParams();
   const params = useSearchParams();
   const router = useRouter();
+  const player = usePlayer();
 
   const {
     levelFilters,
@@ -41,20 +45,31 @@ export default function UserProfilePage() {
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
+  const [isPointsModalOpen, setPointsModalOpen] = useState(false);
 
   // ✅ 讀 URL 的 search 當唯一資料源（就地搜尋）
   const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
+    try { player.resetExternalBridge?.(); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     setSearchQuery((params.get("search") || "").trim());
   }, [params]);
 
-  // 分頁切換時把 tab 寫回 URL（保留既有的 search 等參數）
+  // 分頁切換時把 tab 寫回 URL（僅在實際變更時才導引，避免重複 replace 造成 ChunkLoadError）
   useEffect(() => {
-    const sp = new URLSearchParams(params.toString());
-    if (activeTab === "likes") sp.set("tab", "likes");
-    else sp.delete("tab");
-    const href = `${window.location.pathname}${sp.toString() ? `?${sp.toString()}` : ""}`;
-    router.replace(href);
+    if (typeof window === "undefined") return;
+    // 以目前網址列為基準，僅調整 tab 參數（保留 IDE / Next 的內部參數）
+    const currentSp = new URLSearchParams(window.location.search);
+    const before = currentSp.toString();
+    if (activeTab === "likes") currentSp.set("tab", "likes");
+    else currentSp.delete("tab");
+    const after = currentSp.toString();
+    if (after === before) return; // 沒有差異，不需要 replace
+    const href = `${window.location.pathname}${after ? `?${after}` : ""}`;
+    try { router.replace(href); } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -88,7 +103,7 @@ export default function UserProfilePage() {
   }, []);
 
   const isOwnProfile =
-    currentUser && (currentUser._id === id || currentUser.id === id);
+    currentUser && (currentUser._id === id || currentUser.id === id || currentUser.username === id);
 
   // 目前登入者
   useEffect(() => {
@@ -104,6 +119,69 @@ export default function UserProfilePage() {
     document.addEventListener("toggle-filter-panel", handler);
     return () => document.removeEventListener("toggle-filter-panel", handler);
   }, [setFilterMenuOpen]);
+
+  // ✅ 監聽積分更新事件，針對當前個人頁即時更新顯示
+  useEffect(() => {
+    const onPointsUpdated = (e) => {
+      const { userId, pointsBalance } = e.detail || {};
+      if (!userId) return;
+
+      // 當以 username 瀏覽自己的個人頁時，也要正確比對與更新
+      const viewingByUsername = !!currentUser && String(id) === String(currentUser?.username);
+      const viewingById = !!currentUser && (String(id) === String(currentUser?._id) || String(id) === String(currentUser?.id));
+
+      const eventIsCurrentUser = String(userId) === String(currentUser?._id) || String(userId) === String(currentUser?.id);
+      const eventMatchesPageUser = String(userId) === String(userData?._id);
+
+      const shouldUpdate = eventMatchesPageUser || (eventIsCurrentUser && (viewingByUsername || viewingById));
+      if (!shouldUpdate) return; // 只更新目前所看的用戶
+
+      setUserData((prev) => {
+        const base = prev || { _id: currentUser?._id, username: currentUser?.username };
+        return { ...base, pointsBalance: Number(pointsBalance ?? 0) };
+      });
+    };
+    window.addEventListener("points-updated", onPointsUpdated);
+    return () => window.removeEventListener("points-updated", onPointsUpdated);
+  }, [id, userData?._id, currentUser?._id, currentUser?.username]);
+
+  // ✅ 監聽迷你播放器開通事件，立即更新個人頁與啟用播放器
+  useEffect(() => {
+    const onPurchased = (e) => {
+      const { userId, theme } = e.detail || {};
+      if (!userId) return;
+
+      // 當以 username 瀏覽自己的個人頁時，也要正確比對與更新
+      const viewingByUsername = !!currentUser && String(id) === String(currentUser?.username);
+      const viewingById =
+        !!currentUser &&
+        (String(id) === String(currentUser?._id) || String(id) === String(currentUser?.id));
+
+      const eventIsCurrentUser =
+        String(userId) === String(currentUser?._id) || String(userId) === String(currentUser?.id);
+      const eventMatchesPageUser = String(userId) === String(userData?._id);
+
+      const shouldUpdate = eventMatchesPageUser || (eventIsCurrentUser && (viewingByUsername || viewingById));
+      if (!shouldUpdate) return; // 只更新目前所看的用戶
+
+      setUserData((prev) => {
+        const base = prev || { _id: currentUser?._id, username: currentUser?.username };
+        return {
+          ...base,
+          miniPlayerPurchased: true,
+          miniPlayerTheme: String(theme || base?.miniPlayerTheme || "modern"),
+        };
+      });
+
+      try {
+        player?.setMiniPlayerEnabled?.(true);
+        player?.setShareMode?.("page");
+        localStorage.setItem("miniPlayerTheme", String(theme || "modern"));
+      } catch {}
+    };
+    window.addEventListener("mini-player-purchased", onPurchased);
+    return () => window.removeEventListener("mini-player-purchased", onPurchased);
+  }, [id, userData?._id, currentUser?._id, currentUser?.username]);
 
   // —— 共用工具：彈性取值（各 API 可能有不同鍵名） ——
   const pickUser = (v) => (v?.user ?? v?.data?.user ?? v ?? null);
@@ -213,35 +291,170 @@ export default function UserProfilePage() {
     };
 
     (async () => {
-      const [userRes, uploadsRes, likesRes] = await Promise.allSettled([
-        getJSON(`/api/user-info?id=${uid}`),
-        getJSON(`/api/user-images?id=${uid}`),
-        getJSON(`/api/user-liked-images?id=${uid}`),
-      ]);
-
-      if (userRes.status === "fulfilled") {
-        setUserData(pickUser(userRes.value));
-      } else {
-        console.warn("[user-info] failed:", userRes.reason);
-        // 不覆蓋 userData，維持當前狀態（避免顯示空白）
+      // 先抓 user-info，避免被其他請求阻塞而遲遲不顯示
+      try {
+        const userJson = await getJSON(`/api/user-info?id=${uid}`).catch(() => null);
+        if (userJson) {
+          const picked = pickUser(userJson);
+          setUserData(picked);
+          const hasPlayer = !!picked?.miniPlayerPurchased;
+          if (hasPlayer) {
+            try {
+              player?.setMiniPlayerEnabled?.(true);
+              player?.setShareMode?.("page");
+              localStorage.setItem("miniPlayerTheme", String(picked?.miniPlayerTheme || "modern"));
+            } catch {}
+          } else {
+            try { player?.setMiniPlayerEnabled?.(false); } catch {}
+          }
+          try {
+            const u = picked || {};
+            const url = String(u.defaultMusicUrl || "");
+            if (hasPlayer && url) {
+              player?.setSource?.(url);
+              player?.setOriginUrl?.(url);
+              try {
+                const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
+                const t = o?.data?.title;
+                player?.setTrackTitle?.(t || url);
+              } catch {
+                player?.setTrackTitle?.(url);
+              }
+              // 同步到全域播放清單：若 localStorage 有使用者清單則合併，並帶入 title，避免跑馬燈顯示 watch
+              try {
+                const key = `playlist_${id}`;
+                let saved = [];
+                try { saved = JSON.parse(localStorage.getItem(key) || "[]"); } catch {}
+                const sanitized = Array.isArray(saved) ? saved.filter((it) => it && it.url) : [];
+                const firstTitle = (typeof t === "string" && t.trim().length) ? t : url;
+                const merged = [{ url, title: firstTitle }, ...sanitized.filter((it) => it.url !== url)];
+                player?.setPlaylist?.(merged);
+                player?.setActiveIndex?.(0);
+              } catch {}
+              // 預設暫停，讓使用者點擊圖示開始播放
+              // （全域橋接會載入 YouTube 內嵌播放器，但不自動播放）
+            } else if (hasPlayer) {
+              // 若尚未設定預設音源，嘗試從播放清單備援載入第一首
+              try {
+                const key = `playlist_${id}`;
+                let saved = [];
+                try { saved = JSON.parse(localStorage.getItem(key) || "[]"); } catch {}
+                if (Array.isArray(saved) && saved.length > 0 && saved[0]?.url) {
+                  const firstUrl = String(saved[0].url || "");
+                  if (firstUrl) {
+                    player?.setSource?.(firstUrl);
+                    player?.setOriginUrl?.(firstUrl);
+                    try {
+                      const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(firstUrl)}`);
+                      const t = o?.data?.title;
+                      player?.setTrackTitle?.(t || firstUrl);
+                    } catch {
+                      player?.setTrackTitle?.(firstUrl);
+                    }
+                    // 同步到全域播放清單與目前索引
+                    try { player?.setPlaylist?.(saved.filter((it) => it && it.url)); } catch {}
+                    try { player?.setActiveIndex?.(0); } catch {}
+                  }
+                }
+              } catch {}
+            }
+          } catch {}
+        } else {
+          // 備援：改用 axios 再試一次，若仍失敗至少填入基本物件避免卡載入
+          try {
+            const r2 = await axios.get(`/api/user-info?id=${uid}`);
+            const backup = pickUser(r2?.data || r2);
+            if (backup) {
+              setUserData(backup);
+              const hasPlayer2 = !!backup?.miniPlayerPurchased;
+              if (hasPlayer2) {
+                try {
+                  player?.setMiniPlayerEnabled?.(true);
+                  player?.setShareMode?.("page");
+                  localStorage.setItem("miniPlayerTheme", String(backup?.miniPlayerTheme || "modern"));
+                } catch {}
+              } else {
+                try { player?.setMiniPlayerEnabled?.(false); } catch {}
+              }
+              // 同步載入使用者預設音樂（即使走備援資料流也要載入）
+              try {
+                const url = String(backup.defaultMusicUrl || "");
+                if (hasPlayer2 && url) {
+                  player?.setSource?.(url);
+                  player?.setOriginUrl?.(url);
+                  try {
+                    const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
+                    const t = o?.data?.title;
+                    player?.setTrackTitle?.(t || url);
+                  } catch {
+                    player?.setTrackTitle?.(url);
+                  }
+                  // 預設暫停，等待使用者互動開始播放
+                } else if (hasPlayer2) {
+                  // 備援：從本地播放清單載入第一首
+                  try {
+                    const key = `playlist_${id}`;
+                    let saved = [];
+                    try { saved = JSON.parse(localStorage.getItem(key) || "[]"); } catch {}
+                    if (Array.isArray(saved) && saved.length > 0 && saved[0]?.url) {
+                      const firstUrl = String(saved[0].url || "");
+                      if (firstUrl) {
+                        player?.setSource?.(firstUrl);
+                        player?.setOriginUrl?.(firstUrl);
+                        try {
+                          const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(firstUrl)}`);
+                          const t = o?.data?.title;
+                          player?.setTrackTitle?.(t || firstUrl);
+                        } catch {
+                          player?.setTrackTitle?.(firstUrl);
+                        }
+                      }
+                    }
+                  } catch {}
+                }
+              } catch {}
+            } else {
+              setUserData({ _id: uid, pointsBalance: 0 });
+              // 找不到使用者時不啟用播放器（需購買才顯示）
+              try { player?.setMiniPlayerEnabled?.(false); } catch {}
+            }
+          } catch (e) {
+            setUserData({ _id: uid, pointsBalance: 0 });
+            try { player?.setMiniPlayerEnabled?.(false); } catch {}
+          }
+        }
+      } catch (e) {
+        setUserData({ _id: uid, pointsBalance: 0 });
+        try { player?.setMiniPlayerEnabled?.(false); } catch {}
       }
 
-      if (uploadsRes.status === "fulfilled") {
-        const list = pickList(uploadsRes.value);
-        if (list.length || uploadedImages.length === 0) setUploadedImages(list);
-      } else {
-        console.warn("[user-images] failed:", uploadsRes.reason);
-      }
+      // 並行抓取上傳與收藏清單（不阻塞 user-info 顯示）
+      getJSON(`/api/user-images?id=${uid}`)
+        .then((val) => {
+          const list = pickList(val);
+          if (list.length || uploadedImages.length === 0) setUploadedImages(list);
+        })
+        .catch((err) => {
+          console.warn("[user-images] failed:", err);
+        });
 
-      if (likesRes.status === "fulfilled") {
-        const list = pickList(likesRes.value);
-        if (list.length || likedImages.length === 0) setLikedImages(list);
-      } else {
-        console.warn("[user-liked-images] failed:", likesRes.reason);
-      }
+      getJSON(`/api/user-liked-images?id=${uid}`)
+        .then((val) => {
+          const list = pickList(val);
+          if (list.length || likedImages.length === 0) setLikedImages(list);
+        })
+        .catch((err) => {
+          console.warn("[user-liked-images] failed:", err);
+        });
     })();
 
-    return () => ac.abort();
+    return () => {
+      ac.abort();
+      // 離開個人頁時僅恢復分享模式為 global，不關閉迷你播放器（避免返回後需要重新啟用）
+      try {
+        player?.setShareMode?.("global");
+      } catch {}
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -357,7 +570,11 @@ export default function UserProfilePage() {
       : undefined;
 
   if (!userData) {
-    return <div className="text-white p-4">載入中...</div>;
+    return (
+      <div className="text-white p-4">
+        載入中...（若卡住請稍候或稍後重試）
+      </div>
+    );
   }
 
   return (
@@ -369,9 +586,11 @@ export default function UserProfilePage() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           onUpdate={() => {
-            axios.get(`/api/user-info?id=${id}`).then((res) => setUserData(res.data));
+            // 強制刷新頁面以顯示新的頭像
+            window.location.reload();
           }}
           onEditOpen={() => setEditModalOpen(true)}
+          onPointsOpen={() => setPointsModalOpen(true)}
         />
 
         <div className="flex gap-4 mb-6">
@@ -458,10 +677,15 @@ export default function UserProfilePage() {
       <UserEditModal
         isOpen={isEditModalOpen}
         onClose={() => setEditModalOpen(false)}
-        currentUser={currentUser}
+        currentUser={userData}
         onUpdate={(updated) => {
           setUserData((prev) => ({ ...prev, ...updated }));
         }}
+      />
+
+      <PointsHistoryModal
+        isOpen={isPointsModalOpen}
+        onClose={() => setPointsModalOpen(false)}
       />
     </>
   );
