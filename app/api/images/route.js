@@ -1,7 +1,9 @@
 // /app/api/images/route.js
 export const runtime = "nodejs";
 export const preferredRegion = ["hnd1"];
-export const dynamic = "force-dynamic";
+// 移除 force-dynamic，允许缓存
+// export const dynamic = "force-dynamic";
+export const revalidate = 30; // 缓存 30 秒后重新验证
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
