@@ -57,12 +57,6 @@ export default function YoutubeFallback({ videoId, startSeconds = 0, onReady, on
       playerapiid: 1, // 啟用播放器 API ID
       // 添加更多穩定性設置
       html5: 1, // 強制使用 HTML5 播放器
-      // 添加更多錯誤處理
-      error: 0, // 禁用錯誤覆蓋
-      // 添加更多兼容性設置
-      allowfullscreen: 0,
-      allowscriptaccess: "always",
-      wmode: "transparent",
     },
   }), [currentOrigin, startSeconds]); // 依賴 currentOrigin 和 startSeconds
 

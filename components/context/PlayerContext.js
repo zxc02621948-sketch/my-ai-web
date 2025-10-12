@@ -83,7 +83,7 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
   const [autoPlayAfterBridge, setAutoPlayAfterBridge] = useState(false);
   const [playlist, setPlaylist] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
-  
+
   // 播放器擁有者資訊（用於釘選功能）
   const [playerOwner, setPlayerOwner] = useState(null); // { userId, username }
 
