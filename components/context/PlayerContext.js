@@ -10,7 +10,24 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolumeState] = useState(1);
+  
+  // ✅ 修复：从 localStorage 读取音量，默认 0.5 (50%)
+  const [volume, setVolumeState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('playerVolume');
+        if (saved) {
+          const vol = parseFloat(saved);
+          if (!isNaN(vol) && vol >= 0 && vol <= 1) {
+            return vol;
+          }
+        }
+      } catch (e) {
+        console.warn('读取音量失败:', e);
+      }
+    }
+    return 0.5; // 默认 50%
+  });
   const [volumeSynced, setVolumeSynced] = useState(false);
   
   // 真正的音量控制函數
@@ -26,6 +43,13 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
     
     // 更新狀態
     setVolumeState(validVolume);
+    
+    // ✅ 修复：保存到 localStorage
+    try {
+      localStorage.setItem('playerVolume', validVolume.toString());
+    } catch (e) {
+      console.warn("🔧 保存音量失敗:", e);
+    }
     
     // 標記音量已同步
     setVolumeSynced(true);
