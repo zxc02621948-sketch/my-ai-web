@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
@@ -42,7 +42,7 @@ export async function POST(req) {
       return NextResponse.json({ success: false, message: "未滿 18 歲無法註冊" }, { status: 403 });
     }
 
-    await connectToDatabase();
+    await dbConnect();
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {

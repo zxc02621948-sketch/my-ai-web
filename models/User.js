@@ -44,14 +44,66 @@ const userSchema = new mongoose.Schema(
 
     // ✅ 使用者預設音樂來源（播放頁讀取）
     defaultMusicUrl: { type: String, default: '' },
+    
+    // ✅ 播放清單（存儲用戶的完整播放清單）
+    playlist: { 
+      type: [{ 
+        title: String, 
+        url: String 
+      }], 
+      default: [] 
+    },
 
     // ✅ 迷你播放器購買狀態與樣式（僅個人頁顯示）
     miniPlayerPurchased: { type: Boolean, default: false },
     miniPlayerTheme: { type: String, default: 'modern' },
+    miniPlayerExpiry: { type: Date, default: null }, // 播放器過期時間（體驗券）
+    playerCouponUsed: { type: Boolean, default: false }, // 1日免費體驗券是否已使用
 
     // ✅ 頭像框系統
     currentFrame: { type: String, default: 'default' },
-    ownedFrames: [{ type: String, default: ['default'] }]
+    ownedFrames: [{ type: String, default: ['default'] }],
+    frameSettings: { type: Object, default: {} },
+    
+    // ✅ 功能解鎖狀態
+    frameColorEditorUnlocked: { type: Boolean, default: false },
+    
+    // ✅ 曝光分數系統
+    exposureMultiplier: { type: Number, default: 1.0 },
+    exposureBonus: { type: Number, default: 0 },
+    exposureExpiry: { type: Date, default: null },
+    exposureType: { type: String, enum: ['temporary', 'permanent'], default: 'temporary' },
+    
+    // ✅ 權力券系統
+    powerCoupons: { type: Number, default: 0 },
+    activePowerImages: [{ type: mongoose.Schema.Types.ObjectId, ref: "Image" }],
+    lastPowerUse: { type: Date, default: null },
+    
+    // ✅ 訂閱狀態
+    isSubscribed: { type: Boolean, default: false },
+    subscriptionExpiry: { type: Date, default: null },
+    subscriptionType: { type: String, enum: ['monthly', 'yearly'], default: null },
+    
+    // ✅ 釘選播放器系統（使用 Mixed 類型避免嵌套對象問題）
+    pinnedPlayer: {
+      type: {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        username: { type: String },
+        playlist: [{ 
+          title: { type: String },
+          url: { type: String }
+        }],
+        pinnedAt: { type: Date },
+        expiresAt: { type: Date },
+        currentIndex: { type: Number, default: 0 },
+        currentTime: { type: Number, default: 0 },
+        isPlaying: { type: Boolean, default: false }
+      },
+      default: undefined
+    },
+    pinnedPlayerSettings: {
+      showReminder: { type: Boolean, default: true }
+    }
   },
   {
     timestamps: true

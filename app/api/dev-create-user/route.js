@@ -1,12 +1,12 @@
 // /app/api/dev-create-user/route.js
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { connectToDatabase } from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 
 export async function POST(req) {
   try {
-    await connectToDatabase();
+    await dbConnect();
 
     const { email, username, password, isAdmin } = await req.json();
 

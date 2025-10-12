@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
-import dbConnect from "@/lib/mongodb";          // 依你的專案連線匯出
+import { dbConnect } from "@/lib/db";          // 統一使用 db.js
 import Image from "@/models/Image";             // 依你的模型路徑
 
 const noStore = { headers: { "Cache-Control": "no-store" } };

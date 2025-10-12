@@ -1,9 +1,9 @@
-import { connectToDatabase } from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 
 export async function GET(req) {
   try {
-    await connectToDatabase();
+    await dbConnect();
     const token = new URL(req.url).searchParams.get("token");
     console.log("📥 收到驗證請求 token：", token);
 

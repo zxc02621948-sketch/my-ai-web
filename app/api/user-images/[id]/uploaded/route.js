@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 
 export async function GET(req, ctx) {
   await connectToDB();
-  const params = await ctx;
+  const params = await ctx.params;
   const images = await Image.find({ user: params.id }).sort({ createdAt: -1 });
   return NextResponse.json(images);
 }

@@ -1,6 +1,8 @@
 import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 import PointsTransaction from "@/models/PointsTransaction";
+import { getLevelIndex } from "@/utils/pointsLevels";
+import { grantLevelRewards } from "@/utils/levelRewards";
 
 // 以 UTC 日期做每日上限
 function dateKeyOf(date = new Date()) {
@@ -65,9 +67,38 @@ export async function creditPoints({ userId, type, sourceId = null, actorUserId 
     meta,
   });
 
-  await User.updateOne({ _id: userId }, { $inc: { pointsBalance: add } });
+  // 獲取用戶當前積分，檢查等級提升
+  const user = await User.findById(userId);
+  if (!user) {
+    return { ok: false, reason: "user_not_found" };
+  }
+  
+  const oldPoints = user.pointsBalance || 0;
+  const newPoints = oldPoints + add;
+  const oldLevel = getLevelIndex(oldPoints);
+  const newLevel = getLevelIndex(newPoints);
+  
+  // 更新積分
+  user.pointsBalance = newPoints;
+  
+  // 檢查是否升級
+  let levelUpRewards = null;
+  if (newLevel > oldLevel) {
+    // 升級了！發放獎勵
+    levelUpRewards = await grantLevelRewards(user, oldLevel, newLevel);
+  }
+  
+  await user.save();
 
-  return { ok: true, added: add, txId: tx._id };
+  return { 
+    ok: true, 
+    added: add, 
+    txId: tx._id,
+    levelUp: newLevel > oldLevel,
+    oldLevel,
+    newLevel,
+    rewards: levelUpRewards
+  };
 }
 
 function toObjectId(id) {

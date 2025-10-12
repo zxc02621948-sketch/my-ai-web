@@ -1,0 +1,67 @@
+{
+  "timestamp": "2025-10-06T11:43:06.050Z",
+  "issues": [
+    {
+      "type": "直接訪問 current 屬性",
+      "file": "components/context/PlayerContext.js",
+      "severity": "HIGH",
+      "message": "發現 19 個 直接訪問 current 屬性，可能導致 null 引用錯誤",
+      "matches": [
+        ".current.d",
+        ".current.c",
+        ".current.v",
+        ".current.p",
+        ".current.p",
+        ".current.r",
+        ".current.p",
+        ".current.p",
+        ".current.p",
+        ".current.p",
+        ".current.p",
+        ".current.s",
+        ".current.s",
+        ".current.c",
+        ".current.c",
+        ".current.s",
+        ".current.s",
+        ".current.r",
+        ".current.s"
+      ]
+    },
+    {
+      "type": "直接訪問 current 屬性",
+      "file": "components/player/GlobalYouTubeBridge.jsx",
+      "severity": "HIGH",
+      "message": "發現 9 個 直接訪問 current 屬性，可能導致 null 引用錯誤",
+      "matches": [
+        ".current.g",
+        ".current.g",
+        ".current.s",
+        ".current.s",
+        ".current.d",
+        ".current.d",
+        ".current.p",
+        ".current.p",
+        ".current.p"
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "type": "YT_READY 旗標使用",
+      "file": "components/context/PlayerContext.js",
+      "message": "期望 2 個 YT_READY 旗標使用，但發現 3 個"
+    },
+    {
+      "type": "YT_READY 旗標使用",
+      "file": "components/player/GlobalYouTubeBridge.jsx",
+      "message": "期望 2 個 YT_READY 旗標使用，但發現 1 個"
+    }
+  ],
+  "summary": {
+    "totalIssues": 2,
+    "highSeverityIssues": 2,
+    "mediumSeverityIssues": 0,
+    "totalWarnings": 2
+  }
+}

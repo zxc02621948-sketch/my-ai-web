@@ -4,7 +4,7 @@ import User from "@/models/User";
 
 const CLOUDFLARE_ACCOUNT_HASH = "qQdazZfBAN4654_waTSV7A"; // ⬅️ 你的 Cloudflare 資訊
 const CLOUDFLARE_UPLOAD_URL = `https://api.cloudflare.com/client/v4/accounts/5c6250a0576aa4ca0bb9cdf32be0bee1/images/v1`;
-const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN; // ⬅️ 你必須在 .env 設定
+const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || "NKLeyPVUMWLGI4MTFmPNnDZj0ZgWA5xj0tS2bQEA"; // ⬅️ 你必須在 .env 設定
 
 export async function POST(req) {
   const { searchParams } = new URL(req.url);
@@ -25,6 +25,13 @@ export async function POST(req) {
   }
 
   try {
+    console.log("🔧 開始上傳到 Cloudflare:", { 
+      fileName: file.name, 
+      fileSize: file.size, 
+      fileType: file.type,
+      hasToken: !!CLOUDFLARE_API_TOKEN 
+    });
+
     // 1. 上傳到 Cloudflare
     const cloudflareRes = await fetch(CLOUDFLARE_UPLOAD_URL, {
       method: "POST",
@@ -38,11 +45,16 @@ export async function POST(req) {
       })(),
     });
 
+    console.log("🔧 Cloudflare 響應狀態:", cloudflareRes.status);
     const cfResult = await cloudflareRes.json();
+    console.log("🔧 Cloudflare 響應結果:", cfResult);
 
     if (!cfResult.success) {
       console.error("Cloudflare 上傳失敗", cfResult);
-      return NextResponse.json({ error: "上傳失敗" }, { status: 500 });
+      return NextResponse.json({ 
+        error: "上傳失敗", 
+        details: cfResult.errors || "未知錯誤" 
+      }, { status: 500 });
     }
 
     const imageId = cfResult.result.id;

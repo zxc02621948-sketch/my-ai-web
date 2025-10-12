@@ -1,4 +1,4 @@
-import { connectToDatabase } from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import User from "@/models/User";
 
@@ -10,7 +10,7 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: "缺少 token 或新密碼" }), { status: 400 });
     }
 
-    await connectToDatabase();
+    await dbConnect();
     const user = await User.findOne({
       resetPasswordToken: token,
       resetPasswordExpires: { $gt: new Date() }, // 有效時間內

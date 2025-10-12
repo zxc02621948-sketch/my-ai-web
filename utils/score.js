@@ -120,6 +120,33 @@ export function computePopScore(x = {}) {
   return clicks * POP_W_CLICK + likesCount * POP_W_LIKE + comp * POP_W_COMPLETE + decayedBoost;
 }
 
+/**
+ * ✅ 計算曝光分數加成（整合用戶曝光設定）
+ * @param {Object} image - 圖片物件
+ * @param {Object} user - 用戶物件（包含曝光設定）
+ * @returns {number} 最終分數
+ */
+export function computeExposureScore(image = {}, user = {}) {
+  // 基礎分數計算
+  const baseScore = computePopScore(image);
+  
+  // 檢查用戶是否有曝光加成
+  if (!user || !user.exposureMultiplier || user.exposureMultiplier <= 1.0) {
+    return baseScore;
+  }
+  
+  // 檢查曝光是否過期
+  if (user.exposureExpiry && new Date() > new Date(user.exposureExpiry)) {
+    return baseScore;
+  }
+  
+  // 應用曝光加成：(基礎分數 + 額外分數) × 倍數
+  const exposureBonus = toNum(user.exposureBonus, 0);
+  const finalScore = (baseScore + exposureBonus) * user.exposureMultiplier;
+  
+  return Math.round(finalScore * 10) / 10; // 保留1位小數
+}
+
 // ===== 小工具 =====
 function hasText(s) {
   return typeof s === "string" && s.trim().length > 0;

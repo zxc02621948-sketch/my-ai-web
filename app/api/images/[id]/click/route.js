@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function POST(_req, ctx) {
   try {
     await dbConnect();
-    const params = await ctx;
+    const params = await ctx.params;
     const { id } = params;
 
     // 1) 點擊 +1

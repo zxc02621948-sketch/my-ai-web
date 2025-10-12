@@ -106,21 +106,80 @@ export default function HomePage() {
   const ratsRef = useRef([]);
   const sortRef = useRef("popular");
 
-  // 🚨🚨🚨 FIRST TEST useEffect - 這應該是第一個執行的 useEffect
-  useEffect(() => {
-    console.log('🚨🚨🚨 [FIRST TEST] This is the FIRST useEffect and should execute!');
-  }, []);
 
   // 回到首頁：關閉並隱藏全域迷你播放器，避免佔位與殘留播放
   useEffect(() => {
-    try {
-      player?.pause?.();
-      player?.setExternalControls?.(null);
-      player?.setExternalPlaying?.(false);
-      player?.setMiniPlayerEnabled?.(false);
-      player?.setShareMode?.("global");
-    } catch {}
-  }, [player]);
+    // ✅ 立即禁用播放器，避免閃現
+    player?.setMiniPlayerEnabled?.(false);
+    
+    const checkPinnedPlayer = async () => {
+      try {
+        // 檢查是否有釘選播放器
+        const res = await fetch('/api/current-user');
+        const userData = await res.json();
+        const pinnedPlayer = userData?.user?.pinnedPlayer || userData?.pinnedPlayer;
+        
+        const hasPinnedPlayer = pinnedPlayer?.userId && 
+          pinnedPlayer?.expiresAt && 
+          new Date(pinnedPlayer.expiresAt) > new Date();
+        
+        // ✅ 首頁必須禁用 MiniPlayer（除非有釘選且未過期）
+        if (!hasPinnedPlayer) {
+          player?.pause?.();
+          player?.setExternalControls?.(null);
+          player?.setExternalPlaying?.(false);
+          // ✅ 清空播放器狀態，確保 GlobalYouTubeBridge 不會渲染
+          player?.setSrc?.('');
+          player?.setOriginUrl?.('');
+          player?.setTrackTitle?.('');
+          player?.setPlaylist?.([]);
+        } else {
+          // ✅ 載入釘選的播放清單
+          const playlist = pinnedPlayer.playlist || [];
+          if (playlist.length > 0) {
+            const currentIndex = pinnedPlayer.currentIndex || 0;
+            const currentTrack = playlist[currentIndex];
+            
+            player?.setPlaylist?.(playlist);
+            player?.setActiveIndex?.(currentIndex);
+            player?.setPlayerOwner?.({ 
+              userId: pinnedPlayer.userId, 
+              username: pinnedPlayer.username 
+            });
+            
+            if (currentTrack) {
+              player?.setSrc?.(currentTrack.url);
+              player?.setOriginUrl?.(currentTrack.url);
+              player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
+            }
+          }
+          
+          // 確保 MiniPlayer 是啟用的
+          player?.setMiniPlayerEnabled?.(true);
+        }
+        
+        player?.setShareMode?.("global");
+      } catch (error) {
+        console.error('🏠 首頁檢查釘選播放器失敗:', error);
+        // ✅ 如果檢查失敗，預設禁用 MiniPlayer（安全起見）
+        player?.setMiniPlayerEnabled?.(false);
+        player?.setShareMode?.("global");
+      }
+    };
+    
+    checkPinnedPlayer();
+    
+    // 監聽釘選變更事件，重新檢查並載入播放清單
+    const handlePinnedChange = () => {
+      checkPinnedPlayer();
+    };
+    
+    window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
+    
+    return () => {
+      window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
+    };
+  }, []); // 只在組件掛載時執行一次，避免重複禁用播放器
 
   // 雙軌制訪問追蹤 - 同時記錄防刷量統計和廣告收益統計
   useEffect(() => {
@@ -261,20 +320,31 @@ export default function HomePage() {
     getMe();
   }, []);
 
-  // 添加調試信息
-  useEffect(() => {
-    console.log('🔍 [HomePage] images state:', { 
-      length: images?.length || 0, 
-      isArray: Array.isArray(images),
-      firstImage: images?.[0]?._id || 'none'
-    });
-  }, [images]);
+  // 調試信息已移除
 
   // 排序參數對應後端
   const mapSortForApi = (s) => {
     const v = (s || "").toLowerCase();
     return v === "likes" || v === "mostlikes" ? "mostlikes" : v;
   };
+
+  // 圖片合併和更新函數
+  const mergeImage = (oldImg, updated) => {
+    if (!oldImg || !updated?._id) return oldImg;
+    if (String(oldImg._id) !== String(updated._id)) return oldImg;
+    const nextUser =
+      updated.user ||
+      (typeof oldImg.user === "object"
+        ? oldImg.user
+        : (oldImg.user ? { _id: oldImg.user } : undefined));
+    return { ...oldImg, ...updated, ...(nextUser ? { user: nextUser } : {}) };
+  };
+
+  const applyUpdatedImage = useCallback((updated) => {
+    if (!updated?._id) return;
+    setImages((prev) => (Array.isArray(prev) ? prev.map((it) => mergeImage(it, updated)) : prev));
+    setSelectedImage((prev) => mergeImage(prev, updated));
+  }, []);
 
   // —— 通知 → 直接打開指定圖片 ——
   useEffect(() => {
@@ -311,7 +381,7 @@ export default function HomePage() {
     };
     window.addEventListener("image-updated", onUpdated);
     return () => window.removeEventListener("image-updated", onUpdated);
-  }, []);
+  }, [applyUpdatedImage]);
 
   // —— 同步最新的查詢條件到 refs（避免閉包舊值） ——
   useEffect(() => {
@@ -324,7 +394,7 @@ export default function HomePage() {
 
   // —— 核心資料抓取（只以 inFlightId 防舊回應） ——
   const fetchImages = useCallback(async (pageToFetch, q, cats, rats) => {
-    console.log('🚀 [fetchImages] Starting request', { pageToFetch, q, cats, rats });
+    // 調試信息已移除
     
     setIsLoading(true);
     const myId = ++inFlightId.current;
@@ -340,7 +410,7 @@ export default function HomePage() {
       if (q) params.set("search", q);
 
       const url = `/api/images?${params.toString()}`;
-      console.log('🌐 [fetchImages] Fetching URL:', url);
+      // 調試信息已移除
 
       // 添加超时控制
       const controller = new AbortController();
@@ -363,13 +433,7 @@ export default function HomePage() {
 
       const j = await r.json();
 
-      console.log('🔍 [fetchImages] API response:', { 
-        status: r.status, 
-        hasImages: !!j?.images, 
-        imagesLength: j?.images?.length || 0,
-        isArray: Array.isArray(j?.images),
-        firstImageId: j?.images?.[0]?._id || 'none'
-      });
+      // 調試信息已移除
 
       if (myId !== inFlightId.current) return; // 只採用最新請求
 
@@ -494,23 +558,6 @@ export default function HomePage() {
     const isFollowingVal =
       (typeof raw === "object" ? raw?.isFollowing : img?.isFollowing) ?? false;
     return { ...img, user: { ...userObj, isFollowing: Boolean(isFollowingVal) } };
-  };
-
-  const mergeImage = (oldImg, updated) => {
-    if (!oldImg || !updated?._id) return oldImg;
-    if (String(oldImg._id) !== String(updated._id)) return oldImg;
-    const nextUser =
-      updated.user ||
-      (typeof oldImg.user === "object"
-        ? oldImg.user
-        : (oldImg.user ? { _id: oldImg.user } : undefined));
-    return { ...oldImg, ...updated, ...(nextUser ? { user: nextUser } : {}) };
-  };
-
-  const applyUpdatedImage = (updated) => {
-    if (!updated?._id) return;
-    setImages((prev) => (Array.isArray(prev) ? prev.map((it) => mergeImage(it, updated)) : prev));
-    setSelectedImage((prev) => mergeImage(prev, updated));
   };
 
   // ImageModal 導航

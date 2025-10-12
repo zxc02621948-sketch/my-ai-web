@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 import jwt from "jsonwebtoken";
 
 export async function PATCH(req) {
-  await connectToDatabase();
+  await dbConnect();
   const { targetUserId, note } = await req.json();
 
   const authHeader = req.headers.get("authorization");

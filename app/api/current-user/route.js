@@ -31,12 +31,41 @@ export async function GET() {
     return NextResponse.json(null, { status: 200 });
   }
 
-  const user = await User.findById(userId).select("-password");
-  if (!user) {
+  // 使用原生查詢避免 Mongoose 緩存問題
+  const mongoose = await import('mongoose');
+  const db = mongoose.default.connection.db;
+  const usersCollection = db.collection('users');
+  
+  const userRaw = await usersCollection.findOne(
+    { _id: new mongoose.default.Types.ObjectId(userId) },
+    { projection: { password: 0 } } // 排除 password 字段
+  );
+  
+  if (!userRaw) {
     return NextResponse.json(null, { status: 200 });
   }
+  
+      const user = userRaw;
 
-  return NextResponse.json({
+
+      return NextResponse.json({
+    user: {
+      _id: user._id,
+      email: user.email,
+      username: user.username,
+      image: user.image,
+      isVerified: user.isVerified,
+      isAdmin: user.isAdmin,
+      createdAt: user.createdAt?.toISOString() ?? null,
+      following: user.following ?? [],
+      pointsBalance: user.pointsBalance ?? 0,
+      defaultMusicUrl: user.defaultMusicUrl || "",
+      ownedFrames: user.ownedFrames || ['default'],
+      currentFrame: user.currentFrame || 'default',
+      pinnedPlayer: user.pinnedPlayer || null,
+      pinnedPlayerSettings: user.pinnedPlayerSettings || { showReminder: true },
+    },
+    // 兼容舊代碼（直接在根層級）
     _id: user._id,
     email: user.email,
     username: user.username,
@@ -47,5 +76,9 @@ export async function GET() {
     following: user.following ?? [],
     pointsBalance: user.pointsBalance ?? 0,
     defaultMusicUrl: user.defaultMusicUrl || "",
+    ownedFrames: user.ownedFrames || ['default'],
+    currentFrame: user.currentFrame || 'default',
+    pinnedPlayer: user.pinnedPlayer || null,
+    pinnedPlayerSettings: user.pinnedPlayerSettings || { showReminder: true },
   });
 }

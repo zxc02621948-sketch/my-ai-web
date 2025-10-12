@@ -1,6 +1,6 @@
 // app/api/auth/resend-verification/route.js
 
-import { connectToDatabase } from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 import { sendVerificationEmail } from "@/lib/email";
 import { v4 as uuidv4 } from "uuid";
@@ -16,7 +16,7 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: "缺少 email" }), { status: 400 });
     }
 
-    await connectToDatabase();
+    await dbConnect();
     const user = await User.findOne({ email });
 
     if (!user) {

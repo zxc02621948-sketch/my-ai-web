@@ -9,6 +9,7 @@ const TYPE_LABEL = {
   like_given: "給予愛心",
   comment_received: "獲得留言",
   daily_login: "每日登入",
+  admin_gift: "管理員發送",
 };
 
 const TYPE_COLOR = {
@@ -17,6 +18,7 @@ const TYPE_COLOR = {
   like_given: "text-red-300",
   comment_received: "text-green-300",
   daily_login: "text-blue-300",
+  admin_gift: "text-purple-300",
 };
 
 export default function PointsHistoryModal({ isOpen, onClose }) {
@@ -28,7 +30,7 @@ export default function PointsHistoryModal({ isOpen, onClose }) {
     const run = async () => {
       setLoading(true);
       try {
-        const res = await fetch("/api/points/history?limit=100&days=90", { credentials: "include" });
+        const res = await fetch(`/api/points/history?limit=100&days=90&t=${Date.now()}`, { credentials: "include" });
         const data = await res.json();
         setRows(Array.isArray(data?.data) ? data.data : []);
       } catch (err) {
@@ -45,7 +47,7 @@ export default function PointsHistoryModal({ isOpen, onClose }) {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="積分記錄">
-      <div className="text-white max-h-[70vh] overflow-y-auto">
+      <div className="text-white max-h-[50vh] overflow-y-auto pr-2">
         {loading ? (
           <p className="text-gray-400">載入中...</p>
         ) : rows.length === 0 ? (
@@ -58,12 +60,12 @@ export default function PointsHistoryModal({ isOpen, onClose }) {
               const date = new Date(row.createdAt).toLocaleString();
               const sign = row.points >= 0 ? "+" : "";
               return (
-                <li key={String(row._id)} className="py-2 flex items-center justify-between">
-                  <div className="flex flex-col">
+                <li key={String(row._id)} className="py-2 flex items-center">
+                  <div className="flex flex-col flex-1 pr-6">
                     <span className={`text-sm ${color}`}>{label}</span>
                     <span className="text-xs text-gray-500">{date}</span>
                   </div>
-                  <div className="text-sm font-semibold text-yellow-400">{sign}{row.points}</div>
+                  <div className="text-sm font-semibold text-yellow-400 flex-shrink-0">{sign}{row.points}</div>
                 </li>
               );
             })}

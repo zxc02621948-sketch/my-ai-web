@@ -13,7 +13,9 @@ export default function ProductCard({
   isPurchased,
   onPurchase,
   loading,
-  features = []
+  features = [],
+  isLimitedPurchase = false,
+  limitMessage = ""
 }) {
   return (
     <div className="bg-zinc-800/40 border border-zinc-700/60 rounded-lg p-6 relative">
@@ -70,19 +72,28 @@ export default function ProductCard({
         </div>
       )}
       
+      {/* 限購提示 */}
+      {isLimitedPurchase && limitMessage && (
+        <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-600/50 rounded-lg">
+          <p className="text-yellow-400 text-sm">{limitMessage}</p>
+        </div>
+      )}
+      
       {/* 購買按鈕 */}
       <button
         onClick={onPurchase}
-        disabled={loading || isPurchased}
+        disabled={loading || isPurchased || isLimitedPurchase}
         className={`w-full py-2 px-4 rounded-lg font-medium transition-all ${
           isPurchased
             ? "bg-zinc-700 text-gray-400 cursor-not-allowed"
+            : isLimitedPurchase
+            ? "bg-gray-600 text-gray-400 cursor-not-allowed"
             : loading
             ? "bg-blue-600 opacity-70 cursor-wait"
             : "bg-blue-600 hover:bg-blue-700 text-white"
         }`}
       >
-        {isPurchased ? "已購買" : loading ? "處理中..." : "立即購買"}
+        {isPurchased ? "已購買" : isLimitedPurchase ? "限購中" : loading ? "處理中..." : "立即購買"}
       </button>
     </div>
   );

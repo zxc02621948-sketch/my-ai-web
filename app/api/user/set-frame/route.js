@@ -4,8 +4,7 @@ import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 import User from "@/models/User";
 
 const VALID_FRAMES = [
-  "default", "cat-ears", "flame-ring", "flower-wreath", 
-  "ai-generated", "animals", "flowers", "leaves"
+  "default", "ai-generated", "animals", "leaves", "magic-circle", "magic-circle-2"
 ];
 
 export async function POST(req) {
@@ -28,8 +27,8 @@ export async function POST(req) {
 
     const body = await req.json();
     console.log("🔧 請求體:", body);
-    const { frameId } = body;
-    console.log("🔧 設置頭像框請求:", { frameId, currentUser: currentUser._id, ownedFrames: currentUser.ownedFrames });
+    const { frameId, settings } = body;
+    console.log("🔧 設置頭像框請求:", { frameId, settings, currentUser: currentUser._id, ownedFrames: currentUser.ownedFrames });
     
     if (!frameId || !VALID_FRAMES.includes(frameId)) {
       console.log("❌ 無效的頭像框:", frameId, "有效選項:", VALID_FRAMES);
@@ -39,11 +38,21 @@ export async function POST(req) {
     // 所有頭像框都是免費的，不需要檢查擁有權
     console.log("🔧 設置頭像框:", frameId, "（所有頭像框都是免費的）");
 
-    // 更新用戶的當前頭像框
-    await User.findByIdAndUpdate(
+    // 更新用戶的當前頭像框和設定
+    const updateData = { currentFrame: frameId };
+    if (settings) {
+      updateData.frameSettings = {
+        ...(currentUser.frameSettings || {}),
+        [frameId]: settings
+      };
+    }
+    
+    console.log("🔧 準備更新數據庫:", updateData);
+    const result = await User.findByIdAndUpdate(
       currentUser._id,
-      { currentFrame: frameId }
+      updateData
     );
+    console.log("🔧 數據庫更新結果:", result ? "成功" : "失敗");
 
     return NextResponse.json({
       success: true,

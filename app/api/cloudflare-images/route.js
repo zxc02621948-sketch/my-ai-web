@@ -1,5 +1,5 @@
 // app/api/cloudflare-images/route.js
-import dbConnect from "@/lib/mongodb";
+import { dbConnect } from "@/lib/db";
 import { NextResponse } from "next/server";
 import Image from "@/models/Image";
 import User from "@/models/User";

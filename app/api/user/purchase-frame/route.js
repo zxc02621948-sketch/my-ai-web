@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth/getCurrentUser";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import User from "@/models/User";
 
 const FRAME_COSTS = {
@@ -11,38 +11,40 @@ const FRAME_COSTS = {
   "ai-generated": 0,
   "animals": 0,
   "flowers": 0,
-  "leaves": 0
+  "leaves": 0,
+  "magic-circle": 0,
+  "magic-circle-2": 0
 };
 
 export async function POST(req) {
   try {
     await dbConnect();
     
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromRequest(req);
     if (!currentUser) {
       return NextResponse.json({ error: "未登入" }, { status: 401 });
     }
 
     const { frameId, cost } = await req.json();
     
+    console.log("🔧 購買頭像框請求:", { frameId, cost, currentUser: currentUser._id });
+    
     if (!frameId) {
+      console.log("❌ 缺少 frameId");
       return NextResponse.json({ error: "請選擇頭像框" }, { status: 400 });
     }
 
     const expectedCost = FRAME_COSTS[frameId];
+    console.log("🔧 價格檢查:", { frameId, cost, expectedCost, match: cost === expectedCost });
+    
     if (expectedCost === undefined) {
+      console.log("❌ 無效的頭像框:", frameId);
       return NextResponse.json({ error: "無效的頭像框" }, { status: 400 });
     }
 
-    if (cost !== expectedCost) {
+    if (Number(cost) !== Number(expectedCost)) {
+      console.log("❌ 價格不匹配:", { cost, expectedCost, costType: typeof cost, expectedType: typeof expectedCost });
       return NextResponse.json({ error: "價格不匹配" }, { status: 400 });
-    }
-
-    // 檢查積分是否足夠
-    if (currentUser.pointsBalance < cost) {
-      return NextResponse.json({ 
-        error: `積分不足！需要 ${cost} 積分，你目前有 ${currentUser.pointsBalance} 積分` 
-      }, { status: 400 });
     }
 
     // 檢查是否已擁有此頭像框
@@ -53,11 +55,10 @@ export async function POST(req) {
       }, { status: 400 });
     }
 
-    // 扣除積分並添加頭像框
+    // 所有頭像框都是免費的，直接添加
     const updatedUser = await User.findByIdAndUpdate(
       currentUser._id,
       {
-        $inc: { pointsBalance: -cost },
         $addToSet: { ownedFrames: frameId }
       },
       { new: true }

@@ -5,7 +5,7 @@ const PointsTransactionSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     type: { 
       type: String, 
-      enum: ["upload", "like_received", "comment_received", "daily_login", "like_given"], 
+      enum: ["upload", "like_received", "comment_received", "daily_login", "like_given", "admin_gift"], 
       required: true 
     },
     points: { type: Number, required: true },

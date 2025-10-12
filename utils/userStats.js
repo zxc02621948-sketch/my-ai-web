@@ -1,10 +1,10 @@
 // utils/userStats.js
+import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 import Image from "@/models/Image";
 import Comment from "@/models/Comment";
 import PointsTransaction from "@/models/PointsTransaction";
-import mongoose from "mongoose";
 
 /**
  * 計算用戶的統計數據
@@ -28,29 +28,13 @@ export async function calculateUserStats(userId) {
   try {
     await dbConnect();
 
-    // 並行執行所有查詢以提高性能
-    const [
-      worksCount,
-      followersCount,
-      followingCount,
-      userImages,
-      commentsCount,
-    ] = await Promise.all([
-      // 作品數量 - 用戶上傳的圖片數量
-      Image.countDocuments({ userId }),
-      
-      // 追蹤者數量 - 有多少人追蹤這個用戶
-      User.countDocuments({ "following.userId": userId }),
-      
-      // 追蹤中數量 - 這個用戶追蹤了多少人
-      User.findById(userId).then(user => user?.following?.length || 0),
-      
-      // 獲取用戶的所有圖片（用於計算收藏和點讚）
-      Image.find({ userId }, { likes: 1, _id: 1 }).lean(),
-      
-      // 評論數量 - 用戶發表的評論數量
-      Comment.countDocuments({ userId }),
-    ]);
+    // 簡化查詢以避免 webpack 模組錯誤
+    const worksCount = await Image.countDocuments({ userId });
+    const followersCount = await User.countDocuments({ "following.userId": userId });
+    const user = await User.findById(userId);
+    const followingCount = user?.following?.length || 0;
+    const userImages = await Image.find({ userId }, { likes: 1, _id: 1 }).lean();
+    const commentsCount = await Comment.countDocuments({ userId });
 
     // 計算總點讚數 - 用戶所有作品獲得的點讚總數
     const likesCount = userImages.reduce((total, image) => {
@@ -83,19 +67,16 @@ export async function calculateUserStats(userId) {
       };
     }
 
-    const [monthlyAgg, totalAgg] = await Promise.all([
-      PointsTransaction.aggregate([
-        { $match: { userId: validUserId, createdAt: { $gte: startOfMonthUTC, $lt: startOfNextMonthUTC } } },
-        { $group: { _id: null, total: { $sum: "$points" } } },
-      ]),
-      PointsTransaction.aggregate([
-        { $match: { userId: validUserId } },
-        { $group: { _id: null, total: { $sum: "$points" } } },
-      ]),
+    // 直接使用已查詢的用戶積分餘額作為 totalEarned
+    const totalEarned = user?.pointsBalance || 0;
+    
+    // 計算本月積分（從交易記錄）
+    const monthlyAgg = await PointsTransaction.aggregate([
+      { $match: { userId: validUserId, createdAt: { $gte: startOfMonthUTC, $lt: startOfNextMonthUTC } } },
+      { $group: { _id: null, total: { $sum: "$points" } } },
     ]);
-
+    
     const monthlyEarned = Number(monthlyAgg?.[0]?.total || 0);
-    const totalEarned = Number(totalAgg?.[0]?.total || 0);
 
     return {
       worksCount,

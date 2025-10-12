@@ -1,0 +1,30 @@
+{
+  "timestamp": "2025-10-06T11:08:48.548Z",
+  "issues": [
+    {
+      "type": "Ready 旗標使用不完整",
+      "file": "PlayerContext.js",
+      "severity": "HIGH",
+      "message": "window.__YT_READY__ 只使用了 1 次，可能缺少清理邏輯"
+    },
+    {
+      "type": "延遲時間過短",
+      "file": "GlobalYouTubeBridge.jsx",
+      "severity": "MEDIUM",
+      "message": "延遲時間 1ms 可能過短，建議至少 200ms"
+    }
+  ],
+  "suggestions": [
+    {
+      "type": "遞歸風險",
+      "message": "setSrcWithAudio 可能導致無限遞歸，建議加入最大重試次數"
+    }
+  ],
+  "fixes": [],
+  "summary": {
+    "totalIssues": 2,
+    "highSeverityIssues": 1,
+    "mediumSeverityIssues": 1,
+    "totalSuggestions": 1
+  }
+}

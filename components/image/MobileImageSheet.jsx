@@ -281,9 +281,18 @@ export default function MobileImageSheet({
     };
   }, []);
 
-  const avatarUrl = image?.user?.image
-    ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
-    : "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
+  const avatarUrl = (() => {
+    if (typeof image?.user?.image === "string" && image.user.image.trim() !== "") {
+      // 如果已經是完整 URL，直接使用
+      if (image.user.image.startsWith('http')) {
+        return image.user.image;
+      }
+      // 如果是 ID，構建完整 URL
+      return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/avatar`;
+    }
+    // 使用默認頭像
+    return "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/avatar";
+  })();
   const displayName = image?.user?.username || "未命名用戶";
 
   return (
@@ -351,7 +360,13 @@ export default function MobileImageSheet({
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <AvatarFrame src={avatarUrl} size={48} onClick={onUserClick} />
+                <AvatarFrame 
+                  src={avatarUrl} 
+                  size={48} 
+                  frameId={image?.user?.currentFrame || "default"}
+                  showFrame={true}
+                  onClick={onUserClick} 
+                />
                 <span className="text-sm">{displayName}</span>
               </div>
               {currentUser && image?.user && currentUser._id !== (image.user._id || image.user) && (

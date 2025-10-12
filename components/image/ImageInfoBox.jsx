@@ -41,7 +41,7 @@ function sanitizeComfyWorkflow(text) {
   }
 }
 
-export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
+export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPowerCouponUse }) {
   const positiveRef = useRef();
   const negativeRef = useRef();
   const paramsRef = useRef();
@@ -383,6 +383,21 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit }) {
                 title="編輯圖片資料"
               >
                 <Pencil size={16} />
+              </button>
+            )}
+
+          {/* 權力券使用按鈕；僅作者可見 */}
+          {currentUser &&
+            String(currentUser._id) === String(image.user?._id) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPowerCouponUse?.(image._id);
+                }}
+                className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded shadow transition"
+                title="使用權力券增加曝光度"
+              >
+                🎫 權力券
               </button>
             )}
 

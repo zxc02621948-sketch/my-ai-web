@@ -1,4 +1,3 @@
-<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-  <!-- 預設無頭像框，只是一個透明的圓形 -->
-  <circle cx="50" cy="50" r="50" fill="none" stroke="none"/>
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0.5" y="0.5" width="99" height="99" rx="49.5" stroke="#3F3F46" stroke-opacity="0.5" stroke-width="1"/>
 </svg>

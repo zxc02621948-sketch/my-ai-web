@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
-import { verifyToken } from "@/lib/serverAuth";
+import { getCurrentUser } from "@/lib/serverAuth";
 import User from "@/models/User";
 import mongoose from "mongoose";
 
@@ -13,25 +13,26 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const idFromQuery = searchParams.get("id");
 
-    const token = req.headers.get("authorization")?.replace("Bearer ", "");
-    const decoded = token ? verifyToken(token) : null;
-
-    const rawId = idFromQuery || decoded?.id;
-
     let user = null;
-    if (rawId && mongoose.Types.ObjectId.isValid(rawId)) {
-      user = await User.findById(rawId);
-    } else if (idFromQuery) {
-      // 當路由使用 username 時，允許以 username 取得
-      user = await User.findOne({ username: idFromQuery });
-    } else if (decoded?.id && mongoose.Types.ObjectId.isValid(decoded.id)) {
-      user = await User.findById(decoded.id);
+    
+    // 如果有查詢參數，優先使用查詢參數
+    if (idFromQuery) {
+      if (mongoose.Types.ObjectId.isValid(idFromQuery)) {
+        user = await User.findById(idFromQuery);
+      } else {
+        // 當路由使用 username 時，允許以 username 取得
+        user = await User.findOne({ username: idFromQuery });
+      }
+    } else {
+      // 否則使用當前登入用戶
+      user = await getCurrentUser();
     }
 
     if (!user) {
       // 以 200 空物件回應，避免前端卡載入或重試風暴
       return NextResponse.json({}, { status: 200, headers: { "Cache-Control": "no-store" } });
     }
+
 
     return NextResponse.json({
       _id: user._id,
@@ -45,12 +46,18 @@ export async function GET(req) {
       pointsBalance: user.pointsBalance ?? 0,
       // ✅ 播放器：使用者預設音樂 URL
       defaultMusicUrl: user.defaultMusicUrl || '',
+      // ✅ 播放清單：完整播放清單
+      playlist: user.playlist || [],
       // ✅ 迷你播放器：購買與樣式
       miniPlayerPurchased: !!user.miniPlayerPurchased,
       miniPlayerTheme: user.miniPlayerTheme || 'modern',
       // ✅ 頭像框系統
       currentFrame: user.currentFrame || 'default',
-      ownedFrames: user.ownedFrames || ['default']
+      ownedFrames: user.ownedFrames || ['default'],
+      frameSettings: user.frameSettings || {},
+      
+      // ✅ 功能解鎖狀態
+      frameColorEditorUnlocked: user.frameColorEditorUnlocked || false
     }, { status: 200, headers: { "Cache-Control": "no-store" } });
 
   } catch (err) {

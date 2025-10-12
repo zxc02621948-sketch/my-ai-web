@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
 import NewBadge from "@/components/image/NewBadge";
+import FireEffect from "@/components/image/FireEffect";
 import { updateLikeCacheAndBroadcast } from "@/lib/likeSync"; 
 
 // ⬇️ 從 ObjectId 推回建立時間（備援）
@@ -152,6 +153,14 @@ export default function ImageCard({
         </div>
       )}
 
+      {/* 權力券火焰效果（左下角） */}
+      {img?.powerUsed && img?.powerExpiry && new Date(img.powerExpiry) > new Date() && (
+        <FireEffect 
+          powerExpiry={img.powerExpiry}
+          powerType={img.powerType}
+        />
+      )}
+
       {/* 愛心與數量（固定在卡片右上角） */}
       <div 
         className={`absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1 ${
@@ -200,6 +209,7 @@ export default function ImageCard({
           {img?.title || "未命名圖片"}
         </div>
       )}
+
     </div>
   );
 }

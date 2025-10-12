@@ -24,7 +24,7 @@ export async function GET(req, context) {
       })
       .populate({
         path: "userId",
-        select: "username image",
+        select: "username image currentFrame",
       });
 
     const comments = rawComments.map((c) => {
@@ -35,6 +35,7 @@ export async function GET(req, context) {
         userId: obj.userId?._id?.toString() || null,
         userName: obj.userId?.username || "匿名用戶",
         userImage: obj.userId?.image || "/default-avatar.png",
+        userFrame: obj.userId?.currentFrame || "default",
         imageId: obj.imageId,
         createdAt: obj.createdAt,
         parentCommentId: obj.parentCommentId?._id?.toString() || null,
@@ -125,7 +126,7 @@ export async function POST(req, context) {
     }
 
     const populated = await Comment.findById(newComment._id)
-      .populate({ path: "userId", select: "username image" })
+      .populate({ path: "userId", select: "username image currentFrame" })
       .populate({
         path: "parentCommentId",
         populate: {
@@ -143,6 +144,7 @@ export async function POST(req, context) {
       userId: obj.userId?._id?.toString() || null,
       userName: obj.userId?.username || "匿名用戶",
       userImage: obj.userId?.image || "/default-avatar.png",
+      userFrame: obj.userId?.currentFrame || "default",
       imageId: obj.imageId,
       createdAt: obj.createdAt,
       parentCommentId: obj.parentCommentId?._id?.toString() || null,

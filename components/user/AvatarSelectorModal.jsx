@@ -6,63 +6,14 @@ import { getCroppedImg } from "@/lib/cropImage";
 import { Slider } from "@mui/material";
 import Image from "next/image";
 import AvatarFrame from "@/components/common/AvatarFrame";
-
-const FRAME_OPTIONS = [
-  {
-    id: "default",
-    name: "預設",
-    preview: "/frames/default.svg",
-    description: "無頭像框"
-  },
-  {
-    id: "cat-ears",
-    name: "貓耳",
-    preview: "/frames/cat-ears.svg",
-    description: "可愛的貓耳頭像框"
-  },
-  {
-    id: "flame-ring",
-    name: "火焰環",
-    preview: "/frames/flame-ring.svg",
-    description: "燃燒的火焰環頭像框"
-  },
-  {
-    id: "flower-wreath",
-    name: "花環",
-    preview: "/frames/flower-wreath.svg",
-    description: "美麗的花環頭像框"
-  },
-  {
-    id: "ai-generated",
-    name: "AI 生成",
-    preview: "/frames/ai-generated-7899315_1280.png",
-    description: "AI 生成的藝術頭像框"
-  },
-  {
-    id: "animals",
-    name: "動物",
-    preview: "/frames/animals-5985896_1280.png",
-    description: "動物主題頭像框"
-  },
-  {
-    id: "flowers",
-    name: "花朵",
-    preview: "/frames/flowers-1973874_1280.png",
-    description: "花朵圖案頭像框"
-  },
-  {
-    id: "leaves",
-    name: "葉子",
-    preview: "/frames/leaves-6649803_1280.png",
-    description: "自然葉子頭像框"
-  }
-];
+import FrameTierSelector from "./FrameTierSelector";
 
 export default function AvatarSelectorModal({ 
   isOpen, 
   onClose, 
   currentFrame, 
-  onAvatarUpdate 
+  onAvatarUpdate,
+  userPoints = 0 
 }) {
   const [step, setStep] = useState(1); // 1: 選擇頭像框, 2: 選擇圖片, 3: 裁剪圖片
   const [selectedFrame, setSelectedFrame] = useState(currentFrame || "default");
@@ -70,6 +21,7 @@ export default function AvatarSelectorModal({
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [showFrameSelector, setShowFrameSelector] = useState(false);
 
   const onCropChange = (c) => setCrop(c);
   const onZoomChange = (z) => setZoom(z);
@@ -79,6 +31,7 @@ export default function AvatarSelectorModal({
 
   const handleFrameSelect = (frameId) => {
     setSelectedFrame(frameId);
+    setShowFrameSelector(false);
   };
 
   const handleImageSelect = (event) => {
@@ -94,218 +47,225 @@ export default function AvatarSelectorModal({
   };
 
   const handleConfirm = async () => {
-    if (selectedImage && croppedAreaPixels) {
-      const file = await getCroppedImg(selectedImage, croppedAreaPixels, "image/jpeg");
-      onAvatarUpdate(file, selectedFrame);
-    } else {
-      // 只更新頭像框，不更新圖片
-      onAvatarUpdate(null, selectedFrame);
+    try {
+      let imageFile = null;
+      
+      if (selectedImage && croppedAreaPixels) {
+        // 裁剪圖片
+        const croppedImage = await getCroppedImg(selectedImage, croppedAreaPixels);
+        imageFile = croppedImage;
+      }
+      
+      // 調用父組件的更新函數
+      await onAvatarUpdate(imageFile, selectedFrame);
+      onClose();
+    } catch (error) {
+      console.error("處理圖片時發生錯誤:", error);
+      alert("處理圖片時發生錯誤，請重試");
     }
-    onClose();
   };
 
   const handleBack = () => {
-    if (step === 3) {
-      setStep(2);
+    if (step === 1) {
+      onClose();
     } else if (step === 2) {
       setStep(1);
+    } else if (step === 3) {
+      setStep(2);
     }
   };
 
-  const resetModal = () => {
+  const handleClose = () => {
     setStep(1);
     setSelectedFrame(currentFrame || "default");
     setSelectedImage(null);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setCroppedAreaPixels(null);
-  };
-
-  const handleClose = () => {
-    resetModal();
     onClose();
   };
 
   if (!isOpen) return null;
 
+  // 顯示頭像框選擇器
+  if (showFrameSelector) {
+    return (
+      <FrameTierSelector
+        isOpen={showFrameSelector}
+        onClose={() => setShowFrameSelector(false)}
+        currentFrame={selectedFrame}
+        onFrameSelect={handleFrameSelect}
+        userPoints={userPoints}
+      />
+    );
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
-    <div className="bg-zinc-900 rounded-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col relative shadow-2xl">
-      {/* 標題欄 */}
-      <div className="flex items-center justify-between p-6 border-b border-zinc-700">
-        <h2 className="text-2xl font-bold text-white">
-          {step === 1 && "選擇頭像框"}
-          {step === 2 && "選擇圖片"}
-          {step === 3 && "裁剪圖片"}
-        </h2>
-        <button
-          onClick={handleClose}
-          className="text-gray-400 hover:text-white text-2xl"
-        >
-          ×
-        </button>
-      </div>
-
-      {/* 內容區域 */}
-      <div className="p-6 overflow-y-auto flex-1 min-h-0">
-        {step === 1 && (
-          <div>
-            <p className="text-gray-400 mb-6">選擇你喜歡的頭像框樣式</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {FRAME_OPTIONS.map((frame) => {
-                const isSelected = selectedFrame === frame.id;
-
-                return (
-                  <div
-                    key={frame.id}
-                    className={`relative bg-zinc-800 rounded-lg p-4 cursor-pointer transition-all duration-200 ${
-                      isSelected 
-                        ? "ring-2 ring-blue-500 bg-blue-500/20" 
-                        : "hover:bg-zinc-700"
-                    }`}
-                    onClick={() => handleFrameSelect(frame.id)}
-                  >
-                    <div className="relative w-20 h-20 mx-auto mb-3">
-                      <AvatarFrame
-                        src="https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public"
-                        size={80}
-                        frameId={frame.id}
-                        showFrame={true}
-                        ring={false}
-                      />
-                    </div>
-
-                    <div className="text-center">
-                      <h3 className="text-sm font-semibold text-white mb-1">{frame.name}</h3>
-                      <p className="text-xs text-gray-400 mb-2">{frame.description}</p>
-                      <div className="text-xs text-green-400">免費</div>
-                    </div>
-
-                    {isSelected && (
-                      <div className="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-xs">✓</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="text-center">
-            <p className="text-gray-400 mb-6">選擇新的頭像圖片（可選）</p>
-            <div className="border-2 border-dashed border-zinc-600 rounded-lg p-8 hover:border-zinc-500 transition-colors">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageSelect}
-                className="hidden"
-                id="avatar-upload"
-              />
-              <label
-                htmlFor="avatar-upload"
-                className="cursor-pointer block"
-              >
-                <div className="text-4xl mb-4">📷</div>
-                <p className="text-white mb-2">點擊選擇圖片</p>
-                <p className="text-gray-400 text-sm">或拖拽圖片到此處</p>
-              </label>
-            </div>
-            <p className="text-gray-500 text-sm mt-4">
-              如果不想更換圖片，可以直接跳過此步驟
-            </p>
-          </div>
-        )}
-
-        {step === 3 && selectedImage && (
-          <div className="flex flex-col items-center">
-            <div className="w-full max-w-[400px] aspect-square bg-black relative rounded-lg overflow-hidden mb-4">
-              <Cropper
-                image={selectedImage}
-                crop={crop}
-                zoom={zoom}
-                aspect={1}
-                cropShape="round"
-                showGrid={false}
-                onCropChange={onCropChange}
-                onZoomChange={onZoomChange}
-                onCropComplete={onCropAreaComplete}
-              />
-            </div>
-
-            <div className="w-full max-w-[400px]">
-              <Slider
-                value={zoom}
-                min={1}
-                max={3}
-                step={0.1}
-                onChange={(e, z) => setZoom(z)}
-                className="mb-4"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 底部按鈕 */}
-      <div className="flex items-center justify-between p-6 border-t border-zinc-700 bg-zinc-900 flex-shrink-0 relative z-10">
-        <div className="text-sm text-gray-400">
-          {step === 1 && "選擇頭像框來個性化你的頭像"}
-          {step === 2 && "選擇新的頭像圖片"}
-          {step === 3 && "調整圖片大小和位置"}
-        </div>
-        <div className="flex gap-3">
-          {step > 1 && (
-            <button
-              onClick={handleBack}
-              className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
-            >
-              上一步
-            </button>
-          )}
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+      <div className="bg-zinc-800 rounded-xl max-w-md w-full mx-4 max-h-[85vh] flex flex-col shadow-2xl">
+        {/* 標題 */}
+        <div className="flex justify-between items-center p-6 border-b border-zinc-700">
+          <h2 className="text-xl font-bold text-white">
+            {step === 1 && "選擇頭像框"}
+            {step === 2 && "選擇圖片"}
+            {step === 3 && "裁剪圖片"}
+          </h2>
           <button
             onClick={handleClose}
-            className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+            className="text-gray-400 hover:text-white transition-colors"
           >
-            取消
+            ✕
           </button>
+        </div>
+
+        {/* 內容區域 */}
+        <div className="p-6 overflow-y-auto flex-1 min-h-0">
           {step === 1 && (
-            <div className="flex gap-3">
-              <button
-                onClick={() => handleConfirm()}
-                className="px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
-              >
-                確認選擇
-              </button>
-              <button
-                onClick={() => setStep(2)}
-                className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-              >
-                下一步
-              </button>
+            <div className="space-y-4">
+              {/* 預覽 */}
+              <div className="text-center">
+                <h3 className="text-white mb-4">預覽效果</h3>
+                <div className="flex justify-center">
+                  <AvatarFrame
+                    src="https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public"
+                    size={120}
+                    frameId={selectedFrame}
+                    showFrame={true}
+                  />
+                </div>
+              </div>
+
+              {/* 頭像框選擇 */}
+              <div className="space-y-3">
+                <h3 className="text-white font-medium">選擇頭像框</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setSelectedFrame("default")}
+                    className={`p-3 rounded-lg border-2 transition-colors ${
+                      selectedFrame === "default"
+                        ? "border-blue-500 bg-blue-500/20"
+                        : "border-zinc-600 hover:border-zinc-500"
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-zinc-600"></div>
+                      <span className="text-white text-sm">預設</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setShowFrameSelector(true)}
+                    className="p-3 rounded-lg border-2 border-zinc-600 hover:border-purple-500 transition-colors"
+                  >
+                    <div className="text-center">
+                      <div className="w-12 h-12 mx-auto mb-2 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg">
+                        ✨
+                      </div>
+                      <span className="text-white text-sm">更多頭像框</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
+
           {step === 2 && (
-            <button
-              onClick={() => handleConfirm()}
-              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-            >
-              完成（僅更新頭像框）
-            </button>
+            <div className="space-y-4">
+              <h3 className="text-white font-medium">選擇圖片</h3>
+              <div className="border-2 border-dashed border-zinc-600 rounded-lg p-8 text-center">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                  id="image-upload"
+                />
+                <label
+                  htmlFor="image-upload"
+                  className="cursor-pointer block"
+                >
+                  <div className="text-gray-400 mb-2">
+                    <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <p className="text-white">點擊選擇圖片</p>
+                  <p className="text-gray-400 text-sm">支持 JPG, PNG, GIF 格式</p>
+                </label>
+              </div>
+            </div>
           )}
-          {step === 3 && (
-            <button
-              onClick={handleConfirm}
-              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-            >
-              確認更新
-            </button>
+
+          {step === 3 && selectedImage && (
+            <div className="space-y-4">
+              <h3 className="text-white font-medium">裁剪圖片</h3>
+              <div className="relative w-full h-64 bg-zinc-700 rounded-lg overflow-hidden">
+                <Cropper
+                  image={selectedImage}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={1}
+                  onCropChange={onCropChange}
+                  onCropAreaComplete={onCropAreaComplete}
+                  onZoomChange={onZoomChange}
+                  showGrid={false}
+                  style={{
+                    containerStyle: {
+                      width: "100%",
+                      height: "100%",
+                      position: "relative"
+                    }
+                  }}
+                />
+              </div>
+              
+              {/* 縮放控制 */}
+              <div className="space-y-2">
+                <label className="text-white text-sm">縮放</label>
+                <Slider
+                  value={zoom}
+                  min={1}
+                  max={3}
+                  step={0.1}
+                  onChange={(_, value) => onZoomChange(value)}
+                  sx={{
+                    color: '#3B82F6',
+                    '& .MuiSlider-thumb': {
+                      backgroundColor: '#3B82F6',
+                    },
+                  }}
+                />
+              </div>
+            </div>
           )}
+        </div>
+
+        {/* 底部按鈕 */}
+        <div className="p-6 border-t border-zinc-700 relative z-10">
+          <div className="flex gap-3">
+            <button
+              onClick={handleBack}
+              className="flex-1 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors"
+            >
+              {step === 1 ? "取消" : "返回"}
+            </button>
+            <button
+              onClick={() => {
+                if (step === 1) {
+                  setStep(2);
+                } else if (step === 2) {
+                  // 跳過裁剪，直接確認
+                  handleConfirm();
+                } else {
+                  handleConfirm();
+                }
+              }}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              {step === 3 ? "確認" : "下一步"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
   );
 }

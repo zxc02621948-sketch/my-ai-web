@@ -13,7 +13,8 @@ import FollowListButton from "./FollowListButton";
 import Link from "next/link";
 import PointsStoreModal from "./PointsStoreModal";
 import LevelDisplay from "./LevelDisplay";
-import AvatarSelectorModal from "./AvatarSelectorModal";
+import UnifiedAvatarModal from "./UnifiedAvatarModal";
+import LevelRewardsModal from "./LevelRewardsModal";
 import { useRouter } from "next/navigation";
 
 const cloudflarePrefix = "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/";
@@ -30,7 +31,7 @@ const getTokenFromCookie = () => {
   return document.cookie.split("; ").find(row => row.startsWith("token="))?.split("=")[1] || null;
 };
 
-export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen, onPointsOpen }) {
+export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen, onPointsOpen, onPowerCouponOpen, onUserDataUpdate }) {
   const router = useRouter();
   const isOwnProfile =
     !!currentUser && !!userData && String(currentUser._id) === String(userData._id);
@@ -51,7 +52,15 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
   const [statsLoading, setStatsLoading] = useState(true);
   const [isStoreOpen, setStoreOpen] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(userData?.currentFrame || "default");
-  const [isAvatarSelectorOpen, setAvatarSelectorOpen] = useState(false);
+  const [isAvatarModalOpen, setAvatarModalOpen] = useState(false);
+  const [isLevelRewardsModalOpen, setLevelRewardsModalOpen] = useState(false);
+
+  // 同步 userData 的 currentFrame 到本地狀態
+  useEffect(() => {
+    if (userData?.currentFrame) {
+      setCurrentFrame(userData.currentFrame);
+    }
+  }, [userData?.currentFrame]);
 
   // 避免切換時被外部 currentUser 舊值覆蓋
   const suppressAutoSyncRef = useRef(false);
@@ -99,6 +108,19 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
     return () => window.removeEventListener("follow-changed", onChanged);
   }, [userData?._id]);
 
+  // D) 監聽用戶數據更新事件
+  useEffect(() => {
+    const onUserDataUpdated = (e) => {
+      const { userData: updatedUserData } = e.detail || {};
+      if (updatedUserData && onUserDataUpdate) {
+        console.log("🔧 收到用戶數據更新事件:", updatedUserData);
+        onUserDataUpdate(updatedUserData);
+      }
+    };
+    window.addEventListener("user-data-updated", onUserDataUpdated);
+    return () => window.removeEventListener("user-data-updated", onUserDataUpdated);
+  }, [onUserDataUpdate]);
+
   // ====== 獲取統計數據 ======
   useEffect(() => {
     const fetchUserStats = async () => {
@@ -124,59 +146,50 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
   }, [userData?._id]);
 
 
-  const handleFrameSelect = async (frameId) => {
+
+  // 頭像框更新處理
+  const handleFrameSelect = async (frameId, settings) => {
     try {
-      console.log("🔧 前端發送設置頭像框請求:", frameId);
+      console.log("🔧 準備設置頭像框:", frameId, "設定:", settings);
       const response = await axios.post("/api/user/set-frame", {
-        frameId: frameId
+        frameId: frameId,
+        settings: settings
       });
-      
-      console.log("🔧 前端收到響應:", response.data);
+
       if (response.data.success) {
+        console.log("🔧 頭像框設置成功:", response.data);
         setCurrentFrame(frameId);
-        onUpdate?.();
+        
+        // 重新加載頁面以獲取最新的設定
+        window.location.reload();
+      } else {
+        throw new Error(response.data.error || "設置失敗");
       }
     } catch (error) {
-      console.error("設置頭像框失敗:", error);
-      console.error("錯誤詳情:", error.response?.data);
+      console.error("❌ 頭像框設置失敗:", error);
+      alert(error.response?.data?.error || "設置頭像框失敗，請重試");
+      throw error;
     }
   };
 
-  const handleAvatarUpdate = async (imageFile, frameId) => {
+  // 頭像上傳處理
+  const handleImageUpload = async (imageFile) => {
     try {
-      // 更新頭像框
-      if (frameId && frameId !== currentFrame) {
-        try {
-          await handleFrameSelect(frameId);
-        } catch (frameError) {
-          console.error("設置頭像框失敗:", frameError);
-          throw frameError; // 重新拋出錯誤
-        }
-      }
+      console.log("🔧 準備上傳頭像，用戶 ID:", userData._id);
+      const formData = new FormData();
+      formData.append("file", imageFile);
+      
+      const response = await axios.post(`/api/upload-avatar?id=${userData._id}`, formData);
 
-      // 更新頭像圖片
-      console.log("🔧 檢查 imageFile:", imageFile ? "有文件" : "無文件");
-      if (imageFile) {
-        console.log("🔧 準備上傳頭像，用戶 ID:", userData._id);
-        const formData = new FormData();
-        formData.append("file", imageFile);
-        
-        const response = await axios.post(`/api/upload-avatar?id=${userData._id}`, formData, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
-
-        console.log("🔧 頭像上傳響應:", response.data);
-        if (response.data.success) {
-          console.log("🔧 頭像上傳成功，觸發頁面刷新");
-          onUpdate?.();
-        }
-      } else if (frameId && frameId !== currentFrame) {
-        // 如果只是更新頭像框，也需要刷新頁面
-        console.log("🔧 只更新頭像框，觸發頁面刷新");
+      console.log("🔧 頭像上傳響應:", response.data);
+      if (response.data.success) {
+        console.log("🔧 頭像上傳成功，觸發頁面刷新");
         onUpdate?.();
       }
     } catch (error) {
-      console.error("更新頭像失敗:", error);
+      console.error("❌ 頭像上傳失敗:", error);
+      alert("上傳失敗，請重試");
+      throw error;
     }
   };
 
@@ -274,10 +287,14 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                     frameId={currentFrame}
                     showFrame={true}
                     ring={false}
+                    frameColor={userData?.frameSettings?.[currentFrame]?.color || "#ffffff"}
+                    frameOpacity={userData?.frameSettings?.[currentFrame]?.opacity || 1}
+                    layerOrder={userData?.frameSettings?.[currentFrame]?.layerOrder || "frame-on-top"}
+                    frameTransparency={userData?.frameSettings?.[currentFrame]?.frameOpacity || 1}
                   />
                   {isOwnProfile && (
                     <button
-                      onClick={() => setAvatarSelectorOpen(true)}
+                      onClick={() => setAvatarModalOpen(true)}
                       className="absolute -bottom-1 -right-1 bg-blue-500 text-white text-xs rounded-full px-3 py-1 cursor-pointer hover:bg-blue-600 shadow-lg z-40"
                     >
                       更換
@@ -427,7 +444,21 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
           <div className="bg-zinc-900/50 rounded-r-xl p-4 border-t border-r border-b border-zinc-700/50 h-full">
             {/* 積分總覽 - 橫式排列 */}
             <div className="mb-4">
-              <h3 className="text-lg font-semibold mb-3 text-gray-200">積分總覽</h3>
+              <div className="flex items-center gap-3 mb-3">
+                <h3 className="text-lg font-semibold text-gray-200">積分總覽</h3>
+                
+                {/* 等級獎勵按鈕 */}
+                {isOwnProfile && (
+                  <button
+                    onClick={() => setLevelRewardsModalOpen(true)}
+                    className="px-3 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-2 whitespace-nowrap"
+                    title="查看等級獎勵"
+                  >
+                    <span className="text-lg">🏆</span>
+                    <span className="hidden sm:inline">等級獎勵</span>
+                  </button>
+                )}
+              </div>
               
               {/* 等級顯示 */}
               <div className="mb-4">
@@ -472,6 +503,12 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                   >
                     📊 積分記錄
                   </button>
+                  <button
+                    onClick={() => onPowerCouponOpen?.()}
+                    className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-3 rounded-lg font-medium transition-all duration-200 text-sm"
+                  >
+                    🎫 權力券
+                  </button>
                 </div>
               </div>
 
@@ -509,12 +546,25 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       {/* 積分商店彈窗 */}
       <PointsStoreModal isOpen={isStoreOpen} onClose={() => setStoreOpen(false)} userData={userData} />
       
-      {/* 頭像選擇器 */}
-      <AvatarSelectorModal 
-        isOpen={isAvatarSelectorOpen} 
-        onClose={() => setAvatarSelectorOpen(false)} 
+      {/* 統一頭像模態框 */}
+      <UnifiedAvatarModal 
+        isOpen={isAvatarModalOpen} 
+        onClose={() => setAvatarModalOpen(false)} 
         currentFrame={currentFrame}
-        onAvatarUpdate={handleAvatarUpdate}
+        onFrameSelect={handleFrameSelect}
+        onImageUpload={handleImageUpload}
+        userPoints={userData?.pointsBalance || 0}
+        userAvatar={imageUrl}
+        frameSettings={userData?.frameSettings || {}}
+        frameColorEditorUnlocked={userData?.frameColorEditorUnlocked || false}
+      />
+
+      {/* 等級獎勵模態框 */}
+      <LevelRewardsModal 
+        isOpen={isLevelRewardsModalOpen} 
+        onClose={() => setLevelRewardsModalOpen(false)}
+        userPoints={userData?.pointsBalance || 0}
+        ownedFrames={userData?.ownedFrames || []}
       />
     </div>
   );

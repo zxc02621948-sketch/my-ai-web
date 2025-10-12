@@ -26,12 +26,14 @@ export default async function RootLayout({ children }) {
 
   return (
     <html lang="zh-TW">
-      <head />
+      <head>
+        <script src="https://www.youtube.com/iframe_api" async></script>
+      </head>
 
       <body className={`antialiased min-h-screen bg-zinc-950 text-white`}>
         <CurrentUserProvider>
           <FilterProvider>
-            <PlayerProvider defaultShareMode="global" defaultMiniPlayerEnabled={true} defaultSeekable={false} tabBehavior="pause_only">
+            <PlayerProvider defaultShareMode="global" defaultMiniPlayerEnabled={true} defaultSeekable={false}>
               <ClientHeaderWrapper currentUser={currentUser} />
 
               <UploadModal />
@@ -47,9 +49,9 @@ export default async function RootLayout({ children }) {
               <ClientToaster />
               <AdFooterPlaceholder />
 
-              {/* 全域迷你播放器與 YouTube 橋接 */}
-              <MiniPlayer />
-              <GlobalYouTubeBridge />
+                  {/* 全域迷你播放器與 YouTube 橋接 */}
+                  <MiniPlayer />
+                  <GlobalYouTubeBridge />
 
             </PlayerProvider>
           </FilterProvider>

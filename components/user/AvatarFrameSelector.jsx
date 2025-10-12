@@ -59,6 +59,20 @@ const FRAME_OPTIONS = [
     preview: "/frames/leaves-6649803_1280.png",
     cost: 0,
     description: "自然葉子頭像框"
+  },
+  {
+    id: "magic-circle",
+    name: "魔法陣",
+    preview: "/frames/魔法陣1.png",
+    cost: 0,
+    description: "神秘的魔法陣頭像框"
+  },
+  {
+    id: "magic-circle-2",
+    name: "魔法陣2",
+    preview: "/frames/魔法陣2.png",
+    cost: 0,
+    description: "進階版魔法陣頭像框"
   }
 ];
 

@@ -24,12 +24,7 @@ export default function AvatarCropModal({ isOpen, onClose, imageSrc, onCropCompl
   const handleConfirm = async () => {
     const file = await getCroppedImg(imageSrc, croppedAreaPixels, "image/jpeg"); // ✅ 固定輸出 jpeg
 
-    console.log("🐞 DEBUG | file:", file);
-    console.log("🐞 DEBUG | file.name:", file.name);
-    console.log("🐞 DEBUG | file.type:", file.type);
-    console.log("🐞 DEBUG | file instanceof File:", file instanceof File);
-    console.log("🐞 上傳檔案確認：", file);
-    console.log("➡️ 類型：", file.type);
+    // 調試信息已移除
 
     onCropComplete(file);
     onFrameSelect?.(selectedFrame);
@@ -89,7 +84,19 @@ export default function AvatarCropModal({ isOpen, onClose, imageSrc, onCropCompl
       name: "葉子",
       preview: "/frames/leaves-6649803_1280.png",
       description: "自然葉子頭像框"
-    }
+    },
+  {
+    id: "magic-circle",
+    name: "魔法陣",
+    preview: "/frames/魔法陣1.png",
+    description: "神秘的魔法陣頭像框"
+  },
+  {
+    id: "magic-circle-2",
+    name: "魔法陣2",
+    preview: "/frames/魔法陣2.png",
+    description: "進階版魔法陣頭像框"
+  }
   ];
 
   return (

@@ -18,7 +18,7 @@ export default function Modal({ isOpen, onClose, title, children, bottomOffset =
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+    <div className="fixed inset-0 z-[99999] overflow-hidden">
       {/* 背景遮罩 */}
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm"

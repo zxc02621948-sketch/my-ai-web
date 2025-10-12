@@ -20,7 +20,8 @@ export default function DesktopRightPane({
   onClose,
   onDelete,
   canEdit,
-  onEdit
+  onEdit,
+  onPowerCouponUse
 }) {
   const rightScrollRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -122,9 +123,18 @@ export default function DesktopRightPane({
     }
   }
 
-  const avatarUrl = image?.user?.image
-    ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/public`
-    : "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/public";
+  const avatarUrl = (() => {
+    if (typeof image?.user?.image === "string" && image.user.image.trim() !== "") {
+      // 如果已經是完整 URL，直接使用
+      if (image.user.image.startsWith('http')) {
+        return image.user.image;
+      }
+      // 如果是 ID，構建完整 URL
+      return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.user.image}/avatar`;
+    }
+    // 使用默認頭像
+    return "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/avatar";
+  })();
   const displayName = image?.user?.username || "未命名用戶";
 
   return (
@@ -139,6 +149,8 @@ export default function DesktopRightPane({
                   src={avatarUrl}
                   size={64}
                   userId={ownerId}
+                  frameId={image?.user?.currentFrame || "default"}
+                  showFrame={true}
                   onClick={onUserClick}
                 />
                 <button
@@ -173,6 +185,7 @@ export default function DesktopRightPane({
               fileUrl={fileUrlOf(image)}
               canEdit={canEdit}
               onEdit={onEdit}
+              onPowerCouponUse={onPowerCouponUse}
             />
             <CommentBox currentUser={currentUser} imageId={image._id} />
           </>

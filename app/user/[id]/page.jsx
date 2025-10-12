@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import axios from "axios";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import ImageModal from "@/components/image/ImageModal";
@@ -10,7 +10,10 @@ import UserEditModal from "@/components/user/UserEditModal";
 import { useFilterContext } from "@/components/context/FilterContext";
 import useLikeHandler from "@/hooks/useLikeHandler";
 import PointsHistoryModal from "@/components/user/PointsHistoryModal";
+import PointsStoreModal from "@/components/user/PointsStoreModal";
+import PowerCouponModal from "@/components/user/PowerCouponModal";
 import { usePlayer } from "@/components/context/PlayerContext";
+import UnpinReminderModal from "@/components/player/UnpinReminderModal";
 // 重複 import 修正：axios 已在檔案頂部引入
 
 const labelToRating = {
@@ -37,6 +40,17 @@ export default function UserProfilePage() {
   const [userData, setUserData] = useState(null);
   const [uploadedImages, setUploadedImages] = useState([]);
   const [likedImages, setLikedImages] = useState([]);
+  const [pinnedPlayerData, setPinnedPlayerData] = useState(null);
+  const playlistLoadedRef = useRef(null); // 追踪已載入的播放清單，避免重複載入
+  const lastPageIdRef = useRef(id); // 追踪上次訪問的頁面 ID
+
+  // ✅ 當頁面 ID 改變時，清除播放清單載入標記
+  useEffect(() => {
+    if (lastPageIdRef.current !== id) {
+      playlistLoadedRef.current = null;
+      lastPageIdRef.current = id;
+    }
+  }, [id]);
 
   // ✅ 從 URL 讀取目前分頁（預設 uploads）
   const [activeTab, setActiveTab] = useState(
@@ -45,7 +59,33 @@ export default function UserProfilePage() {
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
+  const [isPowerCouponModalOpen, setPowerCouponModalOpen] = useState(false);
   const [isPointsModalOpen, setPointsModalOpen] = useState(false);
+  const [isStoreOpen, setStoreOpen] = useState(false);
+
+  // ✅ 確保返回個人頁面時播放器狀態正確恢復
+  useEffect(() => {
+    // 當進入個人頁面時，設置分享模式為 "page"
+    try {
+      player?.setShareMode?.("page");
+    } catch {}
+    
+    // 清理函數：離開個人頁面時恢復為 "global"
+    return () => {
+      try {
+        player?.setShareMode?.("global");
+      } catch {}
+    };
+  }, [id, player]); // 當頁面 ID 改變時重新執行
+  
+  // ✅ 當 userData 載入後，檢查並啟用播放器
+  useEffect(() => {
+    if (userData?.miniPlayerPurchased) {
+      try {
+        player?.setMiniPlayerEnabled?.(true);
+      } catch {}
+    }
+  }, [userData?.miniPlayerPurchased, player]); // 當播放器權限改變時執行
 
   // ✅ 讀 URL 的 search 當唯一資料源（就地搜尋）
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,10 +147,39 @@ export default function UserProfilePage() {
 
   // 目前登入者
   useEffect(() => {
-    axios
-      .get("/api/current-user")
-      .then((res) => setCurrentUser(res.data))
-      .catch(() => setCurrentUser(null));
+    const fetchCurrentUser = async () => {
+      try {
+        const res = await axios.get("/api/current-user");
+        const userData = res.data.user || res.data;
+        
+        setCurrentUser(userData);
+        
+        // 檢查是否有釘選播放器
+        if (userData?.pinnedPlayer?.userId) {
+          const pinned = userData.pinnedPlayer;
+          // 檢查是否過期
+          const now = new Date();
+          if (pinned.expiresAt && new Date(pinned.expiresAt) > now) {
+            setPinnedPlayerData(pinned);
+          }
+        }
+      } catch {
+        setCurrentUser(null);
+      }
+    };
+    
+    fetchCurrentUser();
+    
+    // 監聽釘選變更事件，重新獲取 currentUser
+    const handlePinnedChange = () => {
+      fetchCurrentUser();
+    };
+    
+    window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
+    
+    return () => {
+      window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
+    };
   }, []);
 
   // 篩選面板快捷事件（保留）
@@ -308,57 +377,82 @@ export default function UserProfilePage() {
             try { player?.setMiniPlayerEnabled?.(false); } catch {}
           }
           try {
-            const u = picked || {};
-            const url = String(u.defaultMusicUrl || "");
-            if (hasPlayer && url) {
-              player?.setSource?.(url);
-              player?.setOriginUrl?.(url);
-              try {
-                const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
-                const t = o?.data?.title;
-                player?.setTrackTitle?.(t || url);
-              } catch {
-                player?.setTrackTitle?.(url);
-              }
-              // 同步到全域播放清單：若 localStorage 有使用者清單則合併，並帶入 title，避免跑馬燈顯示 watch
-              try {
-                const key = `playlist_${id}`;
-                let saved = [];
-                try { saved = JSON.parse(localStorage.getItem(key) || "[]"); } catch {}
-                const sanitized = Array.isArray(saved) ? saved.filter((it) => it && it.url) : [];
-                const firstTitle = (typeof t === "string" && t.trim().length) ? t : url;
-                const merged = [{ url, title: firstTitle }, ...sanitized.filter((it) => it.url !== url)];
-                player?.setPlaylist?.(merged);
-                player?.setActiveIndex?.(0);
-              } catch {}
-              // 預設暫停，讓使用者點擊圖示開始播放
-              // （全域橋接會載入 YouTube 內嵌播放器，但不自動播放）
-            } else if (hasPlayer) {
-              // 若尚未設定預設音源，嘗試從播放清單備援載入第一首
-              try {
-                const key = `playlist_${id}`;
-                let saved = [];
-                try { saved = JSON.parse(localStorage.getItem(key) || "[]"); } catch {}
-                if (Array.isArray(saved) && saved.length > 0 && saved[0]?.url) {
-                  const firstUrl = String(saved[0].url || "");
-                  if (firstUrl) {
-                    player?.setSource?.(firstUrl);
-                    player?.setOriginUrl?.(firstUrl);
-                    try {
-                      const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(firstUrl)}`);
-                      const t = o?.data?.title;
-                      player?.setTrackTitle?.(t || firstUrl);
-                    } catch {
-                      player?.setTrackTitle?.(firstUrl);
-                    }
-                    // 同步到全域播放清單與目前索引
-                    try { player?.setPlaylist?.(saved.filter((it) => it && it.url)); } catch {}
-                    try { player?.setActiveIndex?.(0); } catch {}
-                  }
-                }
-              } catch {}
-            }
-          } catch {}
+    const u = picked || {};
+    
+    // ✅ 優先從數據庫讀取播放清單（這樣訪客也能聽到作者的音樂）
+    const userPlaylist = Array.isArray(u.playlist) && u.playlist.length > 0 ? u.playlist : [];
+    
+    // ✅ 等待 currentUser 載入完成（undefined = 載入中，null = 未登入）
+    if (currentUser === undefined) {
+      // 不執行任何播放清單載入邏輯，靜默跳過
+      return;
+    }
+    
+    // ✅ 只有已登入用戶才檢查釘選播放器
+    let hasPinnedPlayer = false;
+    let isPinnedThisPage = false;
+    let currentUserPinnedPlayer = null;
+    let pinnedUserIdStr = '';
+    let currentPageIdStr = String(id || '');
+    
+    if (currentUser && currentUser !== null) {
+      currentUserPinnedPlayer = currentUser.pinnedPlayer;
+      hasPinnedPlayer = currentUserPinnedPlayer?.userId && 
+        currentUserPinnedPlayer?.expiresAt && 
+        new Date(currentUserPinnedPlayer.expiresAt) > new Date();
+      
+      // ✅ 轉換為字符串進行比較（確保 ObjectId 和 string 可以正確比較）
+      pinnedUserIdStr = currentUserPinnedPlayer?.userId?.toString() || '';
+      isPinnedThisPage = pinnedUserIdStr === currentPageIdStr;
+    }
+    
+    // ✅ 如果有釘選 + 釘選的不是當前頁面 → 不做任何操作（保持釘選狀態）
+    if (hasPinnedPlayer && !isPinnedThisPage) {
+      // ✅ 什麼都不做，保持釘選的播放器狀態
+      // playerOwner 應該維持釘選的用戶，不應該改為當前頁面的用戶
+      // 播放清單應該維持釘選的播放清單，不應該重新載入
+    }
+    // ✅ 如果沒有釘選 OR 釘選的就是當前頁面 → 載入當前頁面的播放清單
+    else if (hasPlayer && userPlaylist.length > 0) {
+      // ✅ 更新 playerOwner（只在沒有釘選或釘選自己時）
+      if (picked?.username) {
+        player?.setPlayerOwner?.({ userId: id, username: picked.username });
+      }
+      // 有播放清單：載入第一首
+      const firstItem = userPlaylist[0];
+      const firstUrl = String(firstItem.url || "");
+      const firstTitle = String(firstItem.title || firstUrl);
+      
+      if (firstUrl) {
+        // ✅ 必須同時設置 src 和 originUrl 確保 YouTube 播放器正確渲染
+        player?.setSrc?.(firstUrl);
+        player?.setOriginUrl?.(firstUrl);
+        player?.setTrackTitle?.(firstTitle);
+        player?.setPlaylist?.(userPlaylist);
+        player?.setActiveIndex?.(0);
+      }
+    } else if (!hasPinnedPlayer && hasPlayer) {
+      // 沒有播放清單，檢查是否有單首預設音樂（只在沒有釘選時載入）
+      const url = String(u.defaultMusicUrl || "");
+      if (url) {
+        player?.setSrc?.(url);
+        player?.setOriginUrl?.(url);
+        try {
+          const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
+          const t = o?.data?.title;
+          player?.setTrackTitle?.(t || url);
+          player?.setPlaylist?.([{ url, title: t || url }]);
+          player?.setActiveIndex?.(0);
+        } catch {
+          player?.setTrackTitle?.(url);
+          player?.setPlaylist?.([{ url, title: url }]);
+          player?.setActiveIndex?.(0);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[個人頁面] 播放清單載入錯誤:', error);
+  }
         } else {
           // 備援：改用 axios 再試一次，若仍失敗至少填入基本物件避免卡載入
           try {
@@ -378,39 +472,66 @@ export default function UserProfilePage() {
               }
               // 同步載入使用者預設音樂（即使走備援資料流也要載入）
               try {
-                const url = String(backup.defaultMusicUrl || "");
-                if (hasPlayer2 && url) {
-                  player?.setSource?.(url);
-                  player?.setOriginUrl?.(url);
-                  try {
-                    const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
-                    const t = o?.data?.title;
-                    player?.setTrackTitle?.(t || url);
-                  } catch {
-                    player?.setTrackTitle?.(url);
+                // ✅ 等待 currentUser 載入完成
+                if (currentUser === undefined) {
+                  // 靜默跳過
+                  return;
+                }
+                
+                // ✅ 檢查是否有釘選播放器（從 currentUser 獲取）
+                const currentUserPinnedPlayer = currentUser?.pinnedPlayer;
+                const hasPinnedPlayer = currentUserPinnedPlayer?.userId && 
+                  currentUserPinnedPlayer?.expiresAt && 
+                  new Date(currentUserPinnedPlayer.expiresAt) > new Date();
+                
+                // ✅ 重新計算 isPinnedThisPage（備援流程中需要獨立計算）
+                const pinnedUserIdStr = currentUserPinnedPlayer?.userId?.toString() || '';
+                const currentPageIdStr = String(id || '');
+                const isPinnedThisPage = pinnedUserIdStr === currentPageIdStr;
+                
+                // ✅ 優先從數據庫讀取播放清單（備援流程）
+                const userPlaylist = Array.isArray(backup.playlist) && backup.playlist.length > 0 ? backup.playlist : [];
+                
+                // ✅ 如果有釘選 + 釘選的不是當前頁面 → 不做任何操作（保持釘選狀態）
+                if (hasPinnedPlayer && !isPinnedThisPage) {
+                  // ✅ 什麼都不做，保持釘選的播放器狀態
+                }
+                // ✅ 如果沒有釘選 OR 釘選的就是當前頁面 → 載入當前頁面的播放清單
+                else if (hasPlayer2 && userPlaylist.length > 0) {
+                  // ✅ 更新 playerOwner（只在沒有釘選或釘選自己時）
+                  if (backup?.username) {
+                    player?.setPlayerOwner?.({ userId: id, username: backup.username });
                   }
-                  // 預設暫停，等待使用者互動開始播放
-                } else if (hasPlayer2) {
-                  // 備援：從本地播放清單載入第一首
-                  try {
-                    const key = `playlist_${id}`;
-                    let saved = [];
-                    try { saved = JSON.parse(localStorage.getItem(key) || "[]"); } catch {}
-                    if (Array.isArray(saved) && saved.length > 0 && saved[0]?.url) {
-                      const firstUrl = String(saved[0].url || "");
-                      if (firstUrl) {
-                        player?.setSource?.(firstUrl);
-                        player?.setOriginUrl?.(firstUrl);
-                        try {
-                          const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(firstUrl)}`);
-                          const t = o?.data?.title;
-                          player?.setTrackTitle?.(t || firstUrl);
-                        } catch {
-                          player?.setTrackTitle?.(firstUrl);
-                        }
-                      }
+                  // 有播放清單：載入第一首
+                  const firstItem = userPlaylist[0];
+                  const firstUrl = String(firstItem.url || "");
+                  const firstTitle = String(firstItem.title || firstUrl);
+                  
+                  if (firstUrl) {
+                    player?.setSrc?.(firstUrl);
+                    player?.setOriginUrl?.(firstUrl);
+                    player?.setTrackTitle?.(firstTitle);
+                    player?.setPlaylist?.(userPlaylist);
+                    player?.setActiveIndex?.(0);
+                  }
+                } else if (!hasPinnedPlayer && hasPlayer2) {
+                  // 沒有播放清單，檢查是否有單首預設音樂（只在沒有釘選時載入）
+                  const url = String(backup.defaultMusicUrl || "");
+                  if (url) {
+                    player?.setSrc?.(url);
+                    player?.setOriginUrl?.(url);
+                    try {
+                      const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
+                      const t = o?.data?.title;
+                      player?.setTrackTitle?.(t || url);
+                      player?.setPlaylist?.([{ url, title: t || url }]);
+                      player?.setActiveIndex?.(0);
+                    } catch {
+                      player?.setTrackTitle?.(url);
+                      player?.setPlaylist?.([{ url, title: url }]);
+                      player?.setActiveIndex?.(0);
                     }
-                  } catch {}
+                  }
                 }
               } catch {}
             } else {
@@ -424,6 +545,7 @@ export default function UserProfilePage() {
           }
         }
       } catch (e) {
+        console.error('🔧 [最外層錯誤] 用戶資料載入失敗:', e);
         setUserData({ _id: uid, pointsBalance: 0 });
         try { player?.setMiniPlayerEnabled?.(false); } catch {}
       }
@@ -456,7 +578,7 @@ export default function UserProfilePage() {
       } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, currentUser]); // 重新加回 currentUser，但用 ref 防止重複載入
 
   // 取完整圖片資訊並合併（模型/提示詞/生成參數等）
   const enrichImage = async (img) => {
@@ -577,8 +699,39 @@ export default function UserProfilePage() {
     );
   }
 
+  const handleUnpinPlayer = async () => {
+    try {
+      await axios.delete('/api/player/pin');
+      setPinnedPlayerData(null);
+      player?.setIsPlaying?.(false);
+      
+      // 觸發全局事件
+      window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
+        detail: { isPinned: false } 
+      }));
+      
+      // ✅ 重新獲取 currentUser，觸發播放清單重新載入
+      const res = await axios.get('/api/current-user');
+      const userData = res.data.user || res.data;
+      setCurrentUser(userData);
+    } catch (error) {
+      console.error('解除釘選失敗:', error);
+      throw error;
+    }
+  };
+
   return (
     <>
+      {/* 釘選播放器提示彈窗 */}
+      <UnpinReminderModal
+        pageUserId={id}
+        pageUsername={userData?.username}
+        pageHasPlayer={!!userData?.miniPlayerPurchased}
+        currentPinnedUserId={pinnedPlayerData?.userId}
+        currentPinnedUsername={pinnedPlayerData?.username}
+        onUnpin={handleUnpinPlayer}
+      />
+      
       <main className="pt-[var(--header-h,64px)]">
         <UserHeader
           userData={userData}
@@ -591,6 +744,11 @@ export default function UserProfilePage() {
           }}
           onEditOpen={() => setEditModalOpen(true)}
           onPointsOpen={() => setPointsModalOpen(true)}
+          onPowerCouponOpen={() => setPowerCouponModalOpen(true)}
+          onUserDataUpdate={(updatedUserData) => {
+            console.log("🔧 更新用戶數據:", updatedUserData);
+            setUserData(updatedUserData);
+          }}
         />
 
         <div className="flex gap-4 mb-6">
@@ -686,6 +844,17 @@ export default function UserProfilePage() {
       <PointsHistoryModal
         isOpen={isPointsModalOpen}
         onClose={() => setPointsModalOpen(false)}
+      />
+      
+      <PointsStoreModal
+        isOpen={isStoreOpen}
+        onClose={() => setStoreOpen(false)}
+        userData={userData}
+      />
+      <PowerCouponModal
+        isOpen={isPowerCouponModalOpen}
+        onClose={() => setPowerCouponModalOpen(false)}
+        userData={userData}
       />
     </>
   );

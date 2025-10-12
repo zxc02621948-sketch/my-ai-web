@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
+import User from "@/models/User";
 import { ensureLikesCount, computePopScore } from "@/utils/score";
 import { getCurrentUser } from "@/lib/serverAuth";
 import { stripComfyIfNotAllowed } from "@/lib/sanitizeComfy";
@@ -174,6 +175,8 @@ export async function GET(req) {
       platform: 1, modelName: 1, modelLink: 1, modelHash: 1, loraName: 1, loraLink: 1, author: 1,
       sampler: 1, steps: 1, cfgScale: 1, seed: 1, clipSkip: 1, width: 1, height: 1,
       initialBoost: 1, completenessScore: 1, clicks: 1,
+      // ⭐ 權力券相關字段
+      powerUsed: 1, powerExpiry: 1, powerType: 1, powerUsedAt: 1,
       // ⭐ 會帶出 comfy 與 raw.comfyWorkflowJson，但回傳前會經 stripComfyIfNotAllowed 清掉不該看的
       comfy: 1, "raw.comfyWorkflowJson": 1,
     }; // ← 這裡原本就有把 comfy 帶出去，需在回傳前清理掉不該看的:contentReference[oaicite:1]{index=1}
@@ -201,7 +204,7 @@ export async function GET(req) {
           localField: "userRef",
           foreignField: "_id",
           as: "user",
-          pipeline: [{ $project: { _id: 1, username: 1, image: 1 } }],
+          pipeline: [{ $project: { _id: 1, username: 1, image: 1, currentFrame: 1 } }],
         },
       },
       { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
@@ -258,9 +261,23 @@ export async function GET(req) {
             { $ifNull: ["$likesCount", 0] },
           ],
         },
-        hoursElapsed: { $divide: [{ $subtract: ["$$NOW", "$createdAt"] }, 1000 * 60 * 60] },
+        // 計算有效的「上架時間」（權力券會重置這個時間）
+        effectiveCreatedAt: {
+          $cond: [
+            {
+              $and: [
+                { $eq: ["$powerUsed", true] },
+                { $ne: [{ $ifNull: ["$powerUsedAt", null] }, null] }
+              ]
+            },
+            "$powerUsedAt",  // 使用過權力券：用權力券時間作為新的上架時間
+            "$createdAt"     // 沒用過：用真實上架時間
+          ]
+        },
+        // 統一計算加成（只有一套邏輯）
+        hoursElapsed: { $divide: [{ $subtract: ["$$NOW", "$effectiveCreatedAt"] }, 1000 * 60 * 60] },
         boostFactor: { $max: [0, { $subtract: [1, { $divide: ["$hoursElapsed", POP_NEW_WINDOW_HOURS] }] } ] },
-        decayedBoost: { $round: [{ $multiply: [{ $ifNull: ["$initialBoost", 0] }, "$boostFactor"] }, 1] },
+        finalBoost: { $round: [{ $multiply: [{ $ifNull: ["$initialBoost", 0] }, "$boostFactor"] }, 1] },
         baseScore: {
           $add: [
             { $multiply: [{ $ifNull: ["$clicks", 0] }, POP_W_CLICK] },
@@ -268,7 +285,7 @@ export async function GET(req) {
             { $multiply: [{ $ifNull: ["$completenessScore", 0] }, POP_W_COMPLETE] },
           ],
         },
-        livePopScore: { $add: ["$baseScore", "$decayedBoost"] },
+        livePopScore: { $add: ["$baseScore", "$finalBoost"] },
         popScoreDB: { $ifNull: ["$popScore", 0] },
       },
     };
@@ -337,9 +354,40 @@ export async function GET(req) {
         return NextResponse.json({ images: decorate(merged) }, { headers: { "Cache-Control": "no-store" } });
       }
       default: {
-        pipeline = useLive
-          ? [...withSearch, calcLive, { $sort: { livePopScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }]
-          : [...withSearch, calcLive, { $sort: { popScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }];
+        // 如果有登入用戶，需要整合曝光分數計算
+        const currentUserForExposure = await getCurrentUser().catch(() => null);
+        if (currentUserForExposure) {
+          const user = await User.findById(currentUserForExposure._id);
+          if (user && user.exposureMultiplier > 1.0 && user.exposureExpiry && new Date() < new Date(user.exposureExpiry)) {
+            // 用戶有曝光加成，需要重新計算分數
+            const exposureCalc = {
+              $addFields: {
+                exposureBonus: user.exposureBonus || 0,
+                exposureMultiplier: user.exposureMultiplier || 1.0,
+                finalScore: {
+                  $multiply: [
+                    { $add: ["$livePopScore", user.exposureBonus || 0] },
+                    user.exposureMultiplier || 1.0
+                  ]
+                }
+              }
+            };
+            
+            pipeline = useLive
+              ? [...withSearch, calcLive, exposureCalc, { $sort: { finalScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }]
+              : [...withSearch, calcLive, exposureCalc, { $sort: { finalScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }];
+          } else {
+            // 沒有曝光加成，使用原本邏輯
+            pipeline = useLive
+              ? [...withSearch, calcLive, { $sort: { livePopScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }]
+              : [...withSearch, calcLive, { $sort: { popScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }];
+          }
+        } else {
+          // 未登入用戶，使用原本邏輯
+          pipeline = useLive
+            ? [...withSearch, calcLive, { $sort: { livePopScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }]
+            : [...withSearch, calcLive, { $sort: { popScore: -1, createdAt: -1, _id: -1 } }, { $skip: skip }, { $limit: limit }];
+        }
         break;
       }
     }

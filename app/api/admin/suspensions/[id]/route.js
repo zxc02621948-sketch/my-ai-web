@@ -10,7 +10,7 @@ export async function PATCH(req, ctx) {
   if (!admin || !admin.isAdmin) {
     return NextResponse.json({ ok: false, message: "沒有權限" }, { status: 403 });
   }
-  const params = await ctx;
+    const params = await ctx.params;
   const id = params?.id;
   const body = await req.json().catch(() => ({}));
   const { unlock = false } = body;

@@ -25,6 +25,7 @@ function removeCommentById(comments, id) {
 
 export default function CommentBox({ imageId, onAddComment, currentUser, onlyList = false, onlyInput = false }) {
   const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState("");
   const [replyMap, setReplyMap] = useState({});
   const [replyInputs, setReplyInputs] = useState({});
@@ -33,11 +34,14 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
   useEffect(() => {
     if (!imageId) return;
     const fetchComments = async () => {
+      setLoading(true);
       try {
         const res = await axios.get(`/api/comments/${imageId}`);
         setComments(res.data);
       } catch (err) {
         console.error("留言讀取錯誤：", err);
+      } finally {
+        setLoading(false);
       }
     };
     fetchComments();
@@ -56,16 +60,18 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
         parentCommentId: typeof parentCommentId === "string" ? parentCommentId : null,
       });
 
+      // 使用 API 返回的完整數據，包含 userFrame
       const newCommentObj = {
         _id: res.data._id,
-        text,
-        userId: currentUser?._id || "匿名用戶",
-        userName: currentUser?.username || "匿名用戶",
-        userImage: currentUser?.image || DEFAULT_AVATAR_IDS.hidden,
-        createdAt: new Date(),
-        parentCommentId: parentCommentId || null,
-        parentUserId: res.data.parentUserId || null,
-        parentUserName: res.data.parentUserName || null,
+        text: res.data.text,
+        userId: res.data.userId,
+        userName: res.data.userName,
+        userImage: res.data.userImage,
+        userFrame: res.data.userFrame, // 添加 userFrame 字段
+        createdAt: res.data.createdAt,
+        parentCommentId: res.data.parentCommentId,
+        parentUserId: res.data.parentUserId,
+        parentUserName: res.data.parentUserName,
         replies: [],
       };
 
@@ -137,7 +143,9 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
         <>
           <h3 className="text-lg font-bold mb-2">留言區</h3>
           <div className="space-y-3 p-2 bg-neutral-800 rounded-md">
-            {comments.length === 0 ? (
+            {loading ? (
+              <p className="text-gray-400 text-sm">載入留言中...</p>
+            ) : comments.length === 0 ? (
               <p className="text-gray-400 text-sm">目前還沒有留言。</p>
             ) : (
               comments
