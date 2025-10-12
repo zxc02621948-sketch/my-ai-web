@@ -43,3 +43,4 @@ async function testTotalEarned() {
 
 testTotalEarned();
 
+

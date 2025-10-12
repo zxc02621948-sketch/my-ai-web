@@ -118,3 +118,4 @@ export default function PowerCouponModal({ isOpen, onClose, userData }) {
   );
 }
 
+

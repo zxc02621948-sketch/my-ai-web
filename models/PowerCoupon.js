@@ -39,3 +39,4 @@ PowerCouponSchema.index({ expiry: 1 });
 
 export default mongoose.models.PowerCoupon || mongoose.model("PowerCoupon", PowerCouponSchema);
 
+
