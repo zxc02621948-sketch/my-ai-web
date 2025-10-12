@@ -11,7 +11,7 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   
-  // ✅ 修复：从 localStorage 读取音量，默认 0.5 (50%)
+  // ✅ 修复：从 localStorage 读取音量，默认 1.0 (100%)
   const [volume, setVolumeState] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -26,9 +26,10 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
         console.warn('读取音量失败:', e);
       }
     }
-    return 0.5; // 默认 50%
+    return 1.0; // 默认 100%（符合 YouTube 默认值）
   });
-  const [volumeSynced, setVolumeSynced] = useState(false);
+  // 初始化时就标记为已同步（因为已从 localStorage 加载）
+  const [volumeSynced, setVolumeSynced] = useState(true);
   
   // 真正的音量控制函數
   const setVolume = useCallback((newVolume) => {

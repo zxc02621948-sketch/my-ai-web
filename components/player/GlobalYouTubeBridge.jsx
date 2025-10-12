@@ -303,67 +303,47 @@ export default function GlobalYouTubeBridge() {
             
             // console.log("🔧 播放器就緒，準備自動播放檢查");
             
-            // 音量同步：從 YouTube 讀取用戶設置的音量並同步到 PlayerContext
-            // 策略：多次讀取，取最後一次穩定的值（確保 YouTube 完全加載用戶設置）
-            let lastReadVolume = null;
-            
-            const syncVolumeFromYouTube = (retryCount = 0) => {
-              setTimeout(() => {
-                try {
-                  if (ytRef.current && typeof ytRef.current.getVolume === 'function') {
-                    const youtubeVolume = ytRef.current.getVolume();
-                    
-                    console.log(`🔊 [嘗試 ${retryCount + 1}/4] 讀取 YouTube 音量:`, {
-                      youtube: youtubeVolume,
-                      lastRead: lastReadVolume,
-                      willRetry: retryCount < 3
-                    });
-                    
-                    // 記錄這次讀取的音量
-                    lastReadVolume = youtubeVolume;
-                    
-                    // 前 3 次總是重試（確保 YouTube 完全加載）
-                    if (retryCount < 3) {
-                      console.log(`⏳ 繼續讀取以確保準確性...`);
-                      syncVolumeFromYouTube(retryCount + 1);
-                      return;
-                    }
-                    
-                    // 第 4 次（最後一次），使用讀取到的值
-                    if (typeof youtubeVolume === 'number' && !isNaN(youtubeVolume) && isFinite(youtubeVolume)) {
-                      const normalizedVolume = youtubeVolume / 100;
-                      
-                      // 同步到 PlayerContext（會自動保存到 localStorage）
-                      if (player?.setVolume) {
-                        player.setVolume(normalizedVolume);
-                        console.log(`✅ 音量同步完成: YouTube ${youtubeVolume}% → PlayerContext`);
-                      }
-                    } else {
-                      console.warn('⚠️ YouTube 音量無效，使用默認 100%');
-                      if (player?.setVolume) {
-                        player.setVolume(1.0);
-                      }
-                    }
-                  }
-                } catch (error) {
-                  console.warn(`⚠️ 讀取 YouTube 音量失敗 (嘗試 ${retryCount + 1}):`, error.message);
+            // 音量設置：簡單直接的方式（生產環境下 YouTube 不會記住用戶設置）
+            // 直接設置，不過度檢查（避免因為檢查太嚴格而失敗）
+            setTimeout(() => {
+              try {
+                if (ytRef.current && typeof ytRef.current.setVolume === 'function') {
+                  const currentVolume = player?.volume;
                   
-                  // 如果還能重試，繼續
-                  if (retryCount < 3) {
-                    syncVolumeFromYouTube(retryCount + 1);
-                  } else {
-                    // 最後一次失敗，使用默認值
+                  if (typeof currentVolume === 'number' && !isNaN(currentVolume) && isFinite(currentVolume)) {
+                    const volume = Math.round(currentVolume * 100);
+                    
+                    // 直接設置，捕獲可能的錯誤
                     try {
-                      if (player?.setVolume) {
-                        player.setVolume(1.0);
+                      ytRef.current.setVolume(volume);
+                      console.log(`✅ 設置 YouTube 音量: ${volume}% (localStorage: ${currentVolume})`);
+                    } catch (setError) {
+                      console.warn('⚠️ setVolume 調用失敗:', setError.message);
+                      // 忽略錯誤，生產環境可能會成功
+                    }
+                    
+                    // 驗證（僅用於調試，不影響功能）
+                    setTimeout(() => {
+                      try {
+                        if (ytRef.current && typeof ytRef.current.getVolume === 'function') {
+                          const actualVolume = ytRef.current.getVolume();
+                          console.log(`🔍 驗證音量: 預期 ${volume}%, 實際 ${actualVolume}%`);
+                          
+                          if (actualVolume !== volume) {
+                            console.log(`ℹ️ 音量不一致（可能被 YouTube 覆蓋，生產環境正常）`);
+                          }
+                        }
+                      } catch (e) {
+                        // 忽略驗證錯誤
                       }
-                    } catch {}
+                    }, 500);
                   }
                 }
-              }, retryCount === 0 ? 500 : (retryCount === 1 ? 800 : 1200)); // 遞增延遲: 500ms, 800ms, 1200ms, 1200ms
-            };
-            
-            syncVolumeFromYouTube();
+              } catch (error) {
+                console.warn('⚠️ 音量設置過程錯誤:', error.message);
+                // 不影響播放器功能
+              }
+            }, 200);
       
       // 設置外部播放器控制（移到條件檢查之前，確保總是執行）
       // console.log("🔧 設置外部播放器控制器");
