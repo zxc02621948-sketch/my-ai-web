@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 export const preferredRegion = ["hnd1"];
 // 移除 force-dynamic，允许缓存
 // export const dynamic = "force-dynamic";
-export const revalidate = 30; // 缓存 30 秒后重新验证
+export const revalidate = 60; // 缓存 60 秒（适合低流量时期，提高缓存命中率）
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
