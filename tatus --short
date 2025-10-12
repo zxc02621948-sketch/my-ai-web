@@ -108,4 +108,40 @@
  package-lock.json                                  | 2398 [32m+++++++++[m[31m-----------[m
  package.json                                       |    1 [32m+[m
  player-debug-report.json                           |   69 [32m+[m
- player-deep-analysis.json                
+ player-deep-analysis.json                          |   30 [32m+[m
+ player-fix-test-results.json                       |   32 [32m+[m
+ public/frames/cat-ears.svg                         |   21 [31m-[m
+ public/frames/default.svg                          |    5 [32m+[m[31m-[m
+ public/frames/flame-ring.svg                       |   16 [31m-[m
+ public/frames/flower-wreath.svg                    |   37 [31m-[m
+ public/frames/flowers-1973874_1280.png             |  Bin [31m706324[m -> [32m0[m bytes
+ .../\351\255\224\346\263\225\351\231\2431.png"     |  Bin [31m0[m -> [32m2026066[m bytes
+ .../\351\255\224\346\263\225\351\231\2432.png"     |  Bin [31m0[m -> [32m2207711[m bytes
+ public/store/color-palette.png                     |    1 [32m+[m
+ public/store/color-palette.svg                     |   15 [32m+[m
+ scripts/check-pinned-player.js                     |   47 [32m+[m
+ scripts/check-power-images.js                      |   59 [32m+[m
+ scripts/check-specific-user.js                     |   28 [31m-[m
+ scripts/check-user-status.js                       |   22 [32m+[m
+ scripts/compare-scores.js                          |   96 [32m+[m
+ scripts/fix-expired-power-boost.js                 |  127 [32m++[m
+ scripts/fix-user-data.js                           |   29 [32m+[m
+ scripts/sync-all-popscores.js                      |  158 [32m++[m
+ scripts/test-lv3-player-reward.js                  |  125 [32m+[m
+ scripts/test-pinned-save.js                        |   65 [32m+[m
+ scripts/test-player-coupon-expiry.js               |  149 [32m++[m
+ scripts/test-power-boost-decay.js                  |  115 [32m+[m
+ scripts/verify-player-expiry.js                    |  116 [32m+[m
+ services/pointsService.js                          |   35 [32m+[m[31m-[m
+ simple-fix.js                                      |  170 [32m++[m
+ test-comprehensive-debug.js                        |  356 [32m+++[m
+ test-pause-video-fix.js                            |  218 [32m++[m
+ test-player-automation.js                          |  296 [32m+++[m
+ test-player.html                                   |  361 [32m+++[m
+ test-summary.md                                    |   76 [32m+[m
+ test-total-earned.js                               |   44 [32m+[m
+ utils/levelRewards.js                              |  133 [32m++[m
+ utils/pointsLevels.js                              |   15 [32m+[m[31m-[m
+ utils/score.js                                     |   27 [32m+[m
+ utils/userStats.js                                 |   51 [32m+[m[31m-[m
+ 146 files changed, 15930 insertions(+), 2918 deletions(-)
