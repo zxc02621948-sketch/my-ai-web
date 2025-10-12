@@ -304,65 +304,63 @@ export default function GlobalYouTubeBridge() {
             // console.log("🔧 播放器就緒，準備自動播放檢查");
             
             // 音量同步：從 YouTube 讀取用戶設置的音量並同步到 PlayerContext
-            // 使用延遲 + 重試機制確保讀取到正確的音量（而非初始化時的默認值）
+            // 策略：多次讀取，取最後一次穩定的值（確保 YouTube 完全加載用戶設置）
+            let lastReadVolume = null;
+            
             const syncVolumeFromYouTube = (retryCount = 0) => {
               setTimeout(() => {
                 try {
                   if (ytRef.current && typeof ytRef.current.getVolume === 'function') {
                     const youtubeVolume = ytRef.current.getVolume();
-                    const currentPlayerVolume = player?.volume;
                     
-                    console.log(`🔊 [嘗試 ${retryCount + 1}/5] 讀取 YouTube 音量:`, {
+                    console.log(`🔊 [嘗試 ${retryCount + 1}/4] 讀取 YouTube 音量:`, {
                       youtube: youtubeVolume,
-                      playerContext: currentPlayerVolume,
-                      willRetry: youtubeVolume === 100 && currentPlayerVolume && currentPlayerVolume < 1 && retryCount < 4
+                      lastRead: lastReadVolume,
+                      willRetry: retryCount < 3
                     });
                     
-                    // 判斷是否需要重試：
-                    // - YouTube 返回 100%
-                    // - 但 PlayerContext 有較小的音量（說明用戶之前設置過）
-                    // - 還沒超過重試上限
-                    // 這種情況很可能是 YouTube 還沒加載用戶設置
-                    if (youtubeVolume === 100 && 
-                        currentPlayerVolume && 
-                        currentPlayerVolume < 1 && 
-                        retryCount < 4) {
-                      console.log(`⏳ YouTube 音量為 100% 但 localStorage 為 ${Math.round(currentPlayerVolume * 100)}%，可能還沒加載完成，繼續重試...`);
+                    // 記錄這次讀取的音量
+                    lastReadVolume = youtubeVolume;
+                    
+                    // 前 3 次總是重試（確保 YouTube 完全加載）
+                    if (retryCount < 3) {
+                      console.log(`⏳ 繼續讀取以確保準確性...`);
                       syncVolumeFromYouTube(retryCount + 1);
                       return;
                     }
                     
-                    // 讀取到有效的音量值，同步到 PlayerContext
+                    // 第 4 次（最後一次），使用讀取到的值
                     if (typeof youtubeVolume === 'number' && !isNaN(youtubeVolume) && isFinite(youtubeVolume)) {
                       const normalizedVolume = youtubeVolume / 100;
                       
                       // 同步到 PlayerContext（會自動保存到 localStorage）
                       if (player?.setVolume) {
                         player.setVolume(normalizedVolume);
-                        console.log(`✅ 音量同步成功: YouTube ${youtubeVolume}% → PlayerContext ${normalizedVolume}`);
+                        console.log(`✅ 音量同步完成: YouTube ${youtubeVolume}% → PlayerContext`);
                       }
                     } else {
                       console.warn('⚠️ YouTube 音量無效，使用默認 100%');
                       if (player?.setVolume) {
-                        player.setVolume(1.0); // 默認 100%
+                        player.setVolume(1.0);
                       }
                     }
                   }
                 } catch (error) {
                   console.warn(`⚠️ 讀取 YouTube 音量失敗 (嘗試 ${retryCount + 1}):`, error.message);
-                  // 如果是最後一次重試，使用默認值
-                  if (retryCount >= 4) {
+                  
+                  // 如果還能重試，繼續
+                  if (retryCount < 3) {
+                    syncVolumeFromYouTube(retryCount + 1);
+                  } else {
+                    // 最後一次失敗，使用默認值
                     try {
                       if (player?.setVolume) {
-                        player.setVolume(1.0); // 默認 100%
+                        player.setVolume(1.0);
                       }
                     } catch {}
-                  } else {
-                    // 繼續重試
-                    syncVolumeFromYouTube(retryCount + 1);
                   }
                 }
-              }, retryCount === 0 ? 300 : (retryCount === 1 ? 600 : 1000)); // 遞增延遲: 300ms, 600ms, 1000ms...
+              }, retryCount === 0 ? 500 : (retryCount === 1 ? 800 : 1200)); // 遞增延遲: 500ms, 800ms, 1200ms, 1200ms
             };
             
             syncVolumeFromYouTube();
