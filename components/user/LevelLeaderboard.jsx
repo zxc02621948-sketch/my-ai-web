@@ -76,9 +76,9 @@ export default function LevelLeaderboard({ limit = 10 }) {
                 {/* 頭像 */}
                 <div className="flex-shrink-0">
                   <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center overflow-hidden">
-                    {user.avatar ? (
+                    {user.image ? (
                       <img 
-                        src={user.avatar} 
+                        src={user.image} 
                         alt={user.username}
                         className="w-full h-full object-cover"
                       />

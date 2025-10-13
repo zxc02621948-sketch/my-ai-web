@@ -139,8 +139,37 @@ export async function POST(req) {
       loraRefs,
     } = body;
 
-    if (!imageId || !title) {
-      return NextResponse.json({ message: "缺少必要欄位" }, { status: 400 });
+    // 验证必填字段
+    if (!imageId || !title || !title.trim()) {
+      return NextResponse.json({ message: "缺少图片 ID 或标题" }, { status: 400 });
+    }
+    
+    if (!category || !category.trim()) {
+      return NextResponse.json({ message: "请选择图片分类" }, { status: 400 });
+    }
+    
+    if (!rating || !['all', '15', '18'].includes(rating)) {
+      return NextResponse.json({ message: "请选择有效的分级" }, { status: 400 });
+    }
+    
+    // 验证 18+ 图片的成年声明
+    if (rating === '18' && !body.adultDeclaration) {
+      return NextResponse.json({ message: "18+ 图片必须勾选成年声明" }, { status: 400 });
+    }
+    
+    // 验证尺寸（如果提供）
+    if (width !== undefined && width !== null) {
+      const w = Number(width);
+      if (!Number.isFinite(w) || w <= 0 || w > 20000) {
+        return NextResponse.json({ message: "图片宽度无效（必须是 1-20000 之间的数字）" }, { status: 400 });
+      }
+    }
+    
+    if (height !== undefined && height !== null) {
+      const h = Number(height);
+      if (!Number.isFinite(h) || h <= 0 || h > 20000) {
+        return NextResponse.json({ message: "图片高度无效（必须是 1-20000 之间的数字）" }, { status: 400 });
+      }
     }
 
     const imageUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageId}/public`;

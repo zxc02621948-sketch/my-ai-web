@@ -65,14 +65,12 @@ export async function POST(req) {
     console.log("🔧 準備更新用戶頭像:", { userId, imageUrl });
     
     const updateResult = await User.findByIdAndUpdate(userId, { 
-      image: imageUrl,
-      avatar: imageUrl 
+      image: imageUrl
     }, { new: true });
     
     console.log("🔧 數據庫更新結果:", updateResult ? "成功" : "失敗");
     console.log("🔧 更新後的用戶數據:", {
-      image: updateResult?.image,
-      avatar: updateResult?.avatar
+      image: updateResult?.image
     });
 
     return NextResponse.json({ 

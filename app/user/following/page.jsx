@@ -94,8 +94,8 @@ export default function FollowingPage() {
             >
               <Image
                 src={
-                  user.avatar
-                    ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${user.avatar}/avatar`
+                  user.image
+                    ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${user.image}/avatar`
                     : "/default-avatar.png"
                 }
                 alt={user.username}

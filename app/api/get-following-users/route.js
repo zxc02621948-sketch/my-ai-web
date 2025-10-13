@@ -12,7 +12,7 @@ export async function POST(req) {
     }
 
     const users = await User.find({ _id: { $in: ids } }).select(
-      "_id username avatar"
+      "_id username image"
     );
 
     return Response.json({ users });

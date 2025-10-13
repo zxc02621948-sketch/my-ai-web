@@ -23,11 +23,15 @@ export default function TutorialMenu({ onGuideClick }) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex items-center gap-2 px-3 py-2 md:px-4 md:py-2 rounded bg-purple-600 text-white hover:bg-purple-700 font-medium"
+        className="group inline-flex items-center gap-1.5 md:gap-2 px-2 py-1.5 md:px-3 md:py-2 rounded-xl
+                   bg-gradient-to-r from-indigo-400 to-fuchsia-500 text-white font-semibold
+                   shadow-[0_6px_20px_-6px_rgba(99,102,241,0.55)]
+                   hover:shadow-[0_8px_28px_-6px_rgba(217,70,239,0.7)]
+                   transition-all active:translate-y-[1px] text-xs md:text-sm"
       >
-        <span aria-hidden>📚</span>
-        <span className="hidden md:inline">教學</span>
-        <span className="hidden md:inline" aria-hidden>▼</span>
+        <span className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" aria-hidden>📚</span>
+        <span className="hidden sm:inline">教學</span>
+        <span className="hidden sm:inline" aria-hidden>▼</span>
       </button>
 
       {open && (

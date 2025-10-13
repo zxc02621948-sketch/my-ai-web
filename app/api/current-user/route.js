@@ -45,8 +45,19 @@ export async function GET() {
     return NextResponse.json(null, { status: 200 });
   }
   
-      const user = userRaw;
+  const user = userRaw;
 
+
+      // 處理 pinnedPlayer，確保所有字段都正確返回
+      const pinnedPlayerData = user.pinnedPlayer ? {
+        userId: user.pinnedPlayer.userId,
+        username: user.pinnedPlayer.username,
+        playlist: user.pinnedPlayer.playlist || [],
+        pinnedAt: user.pinnedPlayer.pinnedAt,
+        expiresAt: user.pinnedPlayer.expiresAt,
+        currentIndex: user.pinnedPlayer.currentIndex || 0,
+        isPlaying: user.pinnedPlayer.isPlaying || false
+      } : null;
 
       return NextResponse.json({
     user: {
@@ -62,7 +73,7 @@ export async function GET() {
       defaultMusicUrl: user.defaultMusicUrl || "",
       ownedFrames: user.ownedFrames || ['default'],
       currentFrame: user.currentFrame || 'default',
-      pinnedPlayer: user.pinnedPlayer || null,
+      pinnedPlayer: pinnedPlayerData,
       pinnedPlayerSettings: user.pinnedPlayerSettings || { showReminder: true },
     },
     // 兼容舊代碼（直接在根層級）
@@ -78,7 +89,7 @@ export async function GET() {
     defaultMusicUrl: user.defaultMusicUrl || "",
     ownedFrames: user.ownedFrames || ['default'],
     currentFrame: user.currentFrame || 'default',
-    pinnedPlayer: user.pinnedPlayer || null,
+    pinnedPlayer: pinnedPlayerData,
     pinnedPlayerSettings: user.pinnedPlayerSettings || { showReminder: true },
   });
 }

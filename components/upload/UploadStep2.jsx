@@ -19,6 +19,8 @@ export default function UploadStep2({
   setPreview,
   compressionInfo,
   setCompressionInfo,
+  useOriginal,
+  setUseOriginal,
   title,
   setTitle,
   platform,
@@ -57,6 +59,7 @@ export default function UploadStep2({
   // UI 提示：剛剛已自動帶入
   const [autoFilledModelLink, setAutoFilledModelLink] = useState(false);
   const [autoFilledLoraLink, setAutoFilledLoraLink] = useState(false);
+  const [detectedLorasWithoutLinks, setDetectedLorasWithoutLinks] = useState([]);
 
   // advanced
   const [steps, setSteps] = useState("");
@@ -68,6 +71,17 @@ export default function UploadStep2({
   const [height, setHeight] = useState("");
   const [modelHash, setModelHash] = useState("");
   const [loraHashes, setLoraHashes] = useState([]);
+  
+  // 字段来源追踪（auto = 自动读取，manual = 手动输入）
+  const [stepsSource, setStepsSource] = useState(null);
+  const [samplerSource, setSamplerSource] = useState(null);
+  const [cfgScaleSource, setCfgScaleSource] = useState(null);
+  const [seedSource, setSeedSource] = useState(null);
+  const [clipSkipSource, setClipSkipSource] = useState(null);
+  const [modelHashSource, setModelHashSource] = useState(null);
+  
+  // 验证错误状态
+  const [validationErrors, setValidationErrors] = useState({});
 
   // ui
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -96,6 +110,86 @@ export default function UploadStep2({
         return "bg-red-600";
       default:
         return "bg-zinc-600";
+    }
+  };
+  
+  // ====== 验证函数 ======
+  const validateField = (fieldName, value, source) => {
+    // 如果是自动读取，跳过验证（信任元数据）
+    if (source === 'auto') {
+      return { valid: true };
+    }
+    
+    // 空值允许（不填不加分而已）
+    if (!value || value.trim() === '') {
+      return { valid: true };
+    }
+    
+    const val = value.trim();
+    
+    switch (fieldName) {
+      case 'steps': {
+        const num = Number(val);
+        if (!Number.isInteger(num) || num < 1 || num > 150) {
+          return { valid: false, error: 'Steps 必须是 1-150 之间的整数' };
+        }
+        return { valid: true };
+      }
+      
+      case 'cfgScale': {
+        const num = Number(val);
+        if (isNaN(num) || num < 1 || num > 30) {
+          return { valid: false, error: 'CFG Scale 必须是 1-30 之间的数字' };
+        }
+        // 检查小数位数（最多1位）
+        if (val.includes('.') && val.split('.')[1]?.length > 1) {
+          return { valid: false, error: 'CFG Scale 最多1位小数' };
+        }
+        return { valid: true };
+      }
+      
+      case 'clipSkip': {
+        const num = Number(val);
+        if (!Number.isInteger(num) || num < 1 || num > 12) {
+          return { valid: false, error: 'Clip Skip 必须是 1-12 之间的整数' };
+        }
+        return { valid: true };
+      }
+      
+      case 'seed': {
+        const num = Number(val);
+        if (!Number.isInteger(num) || (num < -1 || num > 4294967295)) {
+          return { valid: false, error: 'Seed 必须是整数（-1 表示随机，最大 4294967295）' };
+        }
+        return { valid: true };
+      }
+      
+      case 'sampler': {
+        // 允许：英文、数字、空格、下划线、加号、减号、括号
+        const regex = /^[a-zA-Z0-9\s_+\-()]+$/;
+        if (!regex.test(val)) {
+          return { valid: false, error: 'Sampler 只能包含英文、数字和常用符号 (_+-())' };
+        }
+        if (val.length > 50) {
+          return { valid: false, error: 'Sampler 名称最多 50 字符' };
+        }
+        return { valid: true };
+      }
+      
+      case 'modelHash': {
+        // 允许：十六进制字符
+        const regex = /^[a-fA-F0-9]+$/;
+        if (!regex.test(val)) {
+          return { valid: false, error: 'Model Hash 必须是十六进制字符（0-9, a-f）' };
+        }
+        if (val.length < 4 || val.length > 20) {
+          return { valid: false, error: 'Model Hash 长度必须是 4-20 位' };
+        }
+        return { valid: true };
+      }
+      
+      default:
+        return { valid: true };
     }
   };
 
@@ -299,17 +393,49 @@ export default function UploadStep2({
     if (!parsed) return;
     if (typeof parsed.prompt === "string") setPositivePrompt(parsed.prompt);
     if (typeof parsed.negative === "string") setNegativePrompt(parsed.negative);
-    setSteps(parsed.steps || "");
-    setSampler(parsed.sampler || "");
-    setCfgScale(parsed.cfgScale || "");
-    setSeed(parsed.seed || "");
-    setClipSkip(parsed.clipSkip || "");
+    
+    // 自动读取的字段标记来源为 'auto'
+    if (parsed.steps) {
+      setSteps(parsed.steps);
+      setStepsSource('auto');
+    }
+    if (parsed.sampler) {
+      setSampler(parsed.sampler);
+      setSamplerSource('auto');
+    }
+    if (parsed.cfgScale) {
+      setCfgScale(parsed.cfgScale);
+      setCfgScaleSource('auto');
+    }
+    if (parsed.seed) {
+      setSeed(parsed.seed);
+      setSeedSource('auto');
+    }
+    if (parsed.clipSkip) {
+      setClipSkip(parsed.clipSkip);
+      setClipSkipSource('auto');
+    }
+    if (parsed.modelHash) {
+      setModelHash(parsed.modelHash);
+      setModelHashSource('auto');
+    }
+    
     setWidth(parsed.width || "");
     setHeight(parsed.height || "");
     setModelName(parsed.model || "");
-    setModelHash(parsed.modelHash || "");
-    if (Array.isArray(parsed.loras) && parsed.loras.length) setLoraName(parsed.loras.join(", "));
-    if (Array.isArray(parsed.loraHashes) && parsed.loraHashes.length) setLoraHashes(parsed.loraHashes);
+    
+    // 只有当有 LoRA hashes（链接）时，才自动填入 LoRA 名称
+    if (Array.isArray(parsed.loraHashes) && parsed.loraHashes.length) {
+      setLoraHashes(parsed.loraHashes);
+      // 如果有 hashes，说明有链接，可以安全填入名称
+      if (Array.isArray(parsed.loras) && parsed.loras.length) {
+        setLoraName(parsed.loras.join(", "));
+      }
+    } else if (Array.isArray(parsed.loras) && parsed.loras.length) {
+      // 如果只有名称没有链接，不自动填入，让用户手动选择
+      console.log("检测到 LoRA 名称但没有链接，不自动填入:", parsed.loras);
+      setDetectedLorasWithoutLinks(parsed.loras);
+    }
   }
 
   // 當選檔時：讀 PNG Info + 偵測平台 + 壓縮
@@ -504,11 +630,7 @@ export default function UploadStep2({
     const img = new Image();
     img.src = URL.createObjectURL(originalFile);
     img.onload = async () => {
-      const originalW = img.naturalWidth || img.width;
-      const originalH = img.naturalHeight || img.height;
-      setWidth((w) => w || String(originalW));
-      setHeight((h) => h || String(originalH));
-
+      // 尺寸已在选择文件时读取，这里不再重复设置
       const canvas = document.createElement("canvas");
       const MAX_WIDTH = 1280;
       const scaleSize = Math.min(1, MAX_WIDTH / img.width);
@@ -579,6 +701,13 @@ export default function UploadStep2({
       alert("請先選擇圖片檔");
       return;
     }
+    
+    // 验证是否有可上传的文件（原图或压缩图）
+    if (!useOriginal && !compressedImage) {
+      alert("圖片正在壓縮中，請稍候...");
+      return;
+    }
+    
     if (!title || !title.trim()) {
       alert("請輸入圖片標題！");
       return;
@@ -621,13 +750,29 @@ export default function UploadStep2({
     let imageId = null;
 
     try {
-      const urlRes = await fetch("/api/cloudflare-upload-url", { method: "POST" });
-      if (!urlRes.ok) throw new Error("Cloudflare upload URL API error");
+      // 获取要上传的文件信息（用于后端验证）
+      const fileToUpload = useOriginal ? imageFile : compressedImage;
+      
+      const urlRes = await fetch("/api/cloudflare-upload-url", { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileType: fileToUpload?.type,
+          fileSize: fileToUpload?.size
+        })
+      });
+      
+      if (!urlRes.ok) {
+        const errorData = await urlRes.json();
+        throw new Error(errorData.error || "Cloudflare upload URL API error");
+      }
+      
       const urlData = await urlRes.json();
       if (!urlData.success || !urlData.uploadURL) throw new Error("No uploadURL received");
 
       const formData = new FormData();
-      formData.append("file", compressedImage);
+      // 使用之前定义的 fileToUpload（已根据 useOriginal 选择）
+      formData.append("file", fileToUpload);
       const cloudflareRes = await fetch(urlData.uploadURL, { method: "POST", body: formData });
       const cloudflareData = await cloudflareRes.json();
       imageId = cloudflareData?.result?.id;
@@ -813,11 +958,39 @@ export default function UploadStep2({
           <input
             type="file"
             className="w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
-            accept="image/*"
-            onChange={(e) => {
+            accept="image/png,image/jpeg,image/jpg,image/webp"
+            onChange={async (e) => {
               const f = e.target.files?.[0];
               if (!f) return;
+              
+              // 验证文件类型
+              const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+              if (!validTypes.includes(f.type.toLowerCase())) {
+                alert('❌ 只支持 PNG、JPG、JPEG、WebP 格式的图片！');
+                e.target.value = ''; // 清空选择
+                return;
+              }
+              
+              // 验证文件大小（最大 20MB）
+              const maxSize = 20 * 1024 * 1024; // 20MB
+              if (f.size > maxSize) {
+                alert(`❌ 文件太大！最大支持 20MB，当前文件: ${(f.size / 1024 / 1024).toFixed(2)}MB`);
+                e.target.value = ''; // 清空选择
+                return;
+              }
+              
               setImageFile(f);
+              setOriginalSize(f.size);
+              
+              // 立即读取真实尺寸（优先于压缩）
+              try {
+                const dimensions = await getImageSizeFromFile(f);
+                setWidth(String(dimensions.width));
+                setHeight(String(dimensions.height));
+              } catch (error) {
+                console.warn('读取图片尺寸失败:', error);
+              }
+              
               // 建立預覽，並釋放舊的 blob URL
               const url = URL.createObjectURL(f);
               setPreview((old) => {
@@ -847,8 +1020,36 @@ export default function UploadStep2({
 
         {/* 預覽 */}
         {preview && (
-          <div className="rounded-lg overflow-hidden border border-white/10">
-            <img src={preview} alt="preview" className="w-full max-h-[50vh] object-contain" />
+          <div className="space-y-2">
+            <div className="rounded-lg overflow-hidden border border-white/10">
+              <img src={preview} alt="preview" className="w-full max-h-[50vh] object-contain" />
+            </div>
+            
+            {/* 文件信息和压缩选项 */}
+            {imageFile && (
+              <div className="text-xs text-zinc-400 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span>原始文件: {(imageFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                  {compressedImage && !useOriginal && (
+                    <span className="text-emerald-400">
+                      压缩后: {(compressedImage.size / 1024 / 1024).toFixed(2)} MB 
+                      (节省 {(((imageFile.size - compressedImage.size) / imageFile.size) * 100).toFixed(0)}%)
+                    </span>
+                  )}
+                </div>
+                
+                {/* 使用原图选项 */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useOriginal}
+                    onChange={(e) => setUseOriginal(e.target.checked)}
+                    className="rounded"
+                  />
+                  <span>上传原图（不压缩，文件会更大但质量更高）</span>
+                </label>
+              </div>
+            )}
           </div>
         )}
 
@@ -1044,6 +1245,12 @@ export default function UploadStep2({
           value={loraName}
           onChange={(e) => setLoraName(e.target.value)}
         />
+        {detectedLorasWithoutLinks.length > 0 && (
+          <div className="text-xs text-yellow-400 mt-1">
+            ⚠️ 检测到 LoRA 名称但无链接：{detectedLorasWithoutLinks.join(", ")}<br/>
+            如需填入，请手动复制粘贴到上方字段
+          </div>
+        )}
         {autoFilledLoraLink && (
           <div className="text-xs text-emerald-400 mt-1">
             已自動偵測並填入 LoRA civitai 連結
@@ -1091,54 +1298,211 @@ export default function UploadStep2({
           {showAdvanced && (
             <div className="p-4 space-y-3 bg-zinc-900/60">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <input
-                  className="p-2 rounded bg-zinc-700"
-                  placeholder="Steps"
-                  value={steps}
-                  onChange={(e) => setSteps(e.target.value)}
-                />
-                <input
-                  className="p-2 rounded bg-zinc-700"
-                  placeholder="Sampler"
-                  value={sampler}
-                  onChange={(e) => setSampler(e.target.value)}
-                />
-                <input
-                  className="p-2 rounded bg-zinc-700"
-                  placeholder="CFG Scale"
-                  value={cfgScale}
-                  onChange={(e) => setCfgScale(e.target.value)}
-                />
-                <input
-                  className="p-2 rounded bg-zinc-700"
-                  placeholder="Seed"
-                  value={seed}
-                  onChange={(e) => setSeed(e.target.value)}
-                />
-                <input
-                  className="p-2 rounded bg-zinc-700"
-                  placeholder="Clip skip"
-                  value={clipSkip}
-                  onChange={(e) => setClipSkip(e.target.value)}
-                />
-                <input
-                  className="p-2 rounded bg-zinc-700"
-                  placeholder="寬度 (px)"
-                  value={width}
-                  onChange={(e) => setWidth(e.target.value)}
-                />
-                <input
-                  className="p-2 rounded bg-zinc-700"
-                  placeholder="高度 (px)"
-                  value={height}
-                  onChange={(e) => setHeight(e.target.value)}
-                />
-                <input
-                  className="p-2 rounded bg-zinc-700"
-                  placeholder="Model hash"
-                  value={modelHash}
-                  onChange={(e) => setModelHash(e.target.value)}
-                />
+                {/* Steps */}
+                <div className="space-y-1">
+                  <input
+                    className={`p-2 rounded w-full ${
+                      validationErrors.steps 
+                        ? 'bg-red-900/30 border-2 border-red-500' 
+                        : steps && stepsSource !== 'auto'
+                        ? 'bg-emerald-900/30 border-2 border-emerald-500'
+                        : 'bg-zinc-700'
+                    }`}
+                    placeholder="Steps"
+                    value={steps}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSteps(val);
+                      // 用户修改 → 强制改为 manual（即使之前是 auto）
+                      setStepsSource('manual');
+                      
+                      // 使用 manual 进行验证
+                      const validation = validateField('steps', val, 'manual');
+                      setValidationErrors(prev => ({
+                        ...prev,
+                        steps: validation.valid ? null : validation.error
+                      }));
+                    }}
+                  />
+                  {validationErrors.steps && (
+                    <p className="text-xs text-red-400">{validationErrors.steps}</p>
+                  )}
+                  {steps && !validationErrors.steps && stepsSource === 'auto' && (
+                    <p className="text-xs text-emerald-400">✓ 自动读取</p>
+                  )}
+                </div>
+                
+                {/* Sampler */}
+                <div className="space-y-1">
+                  <input
+                    className={`p-2 rounded w-full ${
+                      validationErrors.sampler 
+                        ? 'bg-red-900/30 border-2 border-red-500' 
+                        : sampler && samplerSource !== 'auto'
+                        ? 'bg-emerald-900/30 border-2 border-emerald-500'
+                        : 'bg-zinc-700'
+                    }`}
+                    placeholder="Sampler"
+                    value={sampler}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSampler(val);
+                      setSamplerSource('manual');
+                      
+                      const validation = validateField('sampler', val, 'manual');
+                      setValidationErrors(prev => ({
+                        ...prev,
+                        sampler: validation.valid ? null : validation.error
+                      }));
+                    }}
+                  />
+                  {validationErrors.sampler && (
+                    <p className="text-xs text-red-400">{validationErrors.sampler}</p>
+                  )}
+                  {sampler && !validationErrors.sampler && samplerSource === 'auto' && (
+                    <p className="text-xs text-emerald-400">✓ 自动读取</p>
+                  )}
+                </div>
+                
+                {/* CFG Scale */}
+                <div className="space-y-1">
+                  <input
+                    className={`p-2 rounded w-full ${
+                      validationErrors.cfgScale 
+                        ? 'bg-red-900/30 border-2 border-red-500' 
+                        : cfgScale && cfgScaleSource !== 'auto'
+                        ? 'bg-emerald-900/30 border-2 border-emerald-500'
+                        : 'bg-zinc-700'
+                    }`}
+                    placeholder="CFG Scale"
+                    value={cfgScale}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCfgScale(val);
+                      setCfgScaleSource('manual');
+                      
+                      const validation = validateField('cfgScale', val, 'manual');
+                      setValidationErrors(prev => ({
+                        ...prev,
+                        cfgScale: validation.valid ? null : validation.error
+                      }));
+                    }}
+                  />
+                  {validationErrors.cfgScale && (
+                    <p className="text-xs text-red-400">{validationErrors.cfgScale}</p>
+                  )}
+                  {cfgScale && !validationErrors.cfgScale && cfgScaleSource === 'auto' && (
+                    <p className="text-xs text-emerald-400">✓ 自动读取</p>
+                  )}
+                </div>
+                
+                {/* Seed */}
+                <div className="space-y-1">
+                  <input
+                    className={`p-2 rounded w-full ${
+                      validationErrors.seed 
+                        ? 'bg-red-900/30 border-2 border-red-500' 
+                        : seed && seedSource !== 'auto'
+                        ? 'bg-emerald-900/30 border-2 border-emerald-500'
+                        : 'bg-zinc-700'
+                    }`}
+                    placeholder="Seed"
+                    value={seed}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSeed(val);
+                      setSeedSource('manual');
+                      
+                      const validation = validateField('seed', val, 'manual');
+                      setValidationErrors(prev => ({
+                        ...prev,
+                        seed: validation.valid ? null : validation.error
+                      }));
+                    }}
+                  />
+                  {validationErrors.seed && (
+                    <p className="text-xs text-red-400">{validationErrors.seed}</p>
+                  )}
+                  {seed && !validationErrors.seed && seedSource === 'auto' && (
+                    <p className="text-xs text-emerald-400">✓ 自动读取</p>
+                  )}
+                </div>
+                
+                {/* Clip Skip */}
+                <div className="space-y-1">
+                  <input
+                    className={`p-2 rounded w-full ${
+                      validationErrors.clipSkip 
+                        ? 'bg-red-900/30 border-2 border-red-500' 
+                        : clipSkip && clipSkipSource !== 'auto'
+                        ? 'bg-emerald-900/30 border-2 border-emerald-500'
+                        : 'bg-zinc-700'
+                    }`}
+                    placeholder="Clip skip"
+                    value={clipSkip}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClipSkip(val);
+                      setClipSkipSource('manual');
+                      
+                      const validation = validateField('clipSkip', val, 'manual');
+                      setValidationErrors(prev => ({
+                        ...prev,
+                        clipSkip: validation.valid ? null : validation.error
+                      }));
+                    }}
+                  />
+                  {validationErrors.clipSkip && (
+                    <p className="text-xs text-red-400">{validationErrors.clipSkip}</p>
+                  )}
+                  {clipSkip && !validationErrors.clipSkip && clipSkipSource === 'auto' && (
+                    <p className="text-xs text-emerald-400">✓ 自动读取</p>
+                  )}
+                </div>
+                {/* 尺寸自动读取，只读显示 */}
+                <div className="p-2 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center gap-2">
+                  <span className="text-xs">宽度:</span>
+                  <span className="text-white font-mono">{width || '自动读取中...'}</span>
+                  <span className="text-xs">px</span>
+                  {width && <span className="text-xs text-emerald-400">✓ 自动读取</span>}
+                </div>
+                <div className="p-2 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center gap-2">
+                  <span className="text-xs">高度:</span>
+                  <span className="text-white font-mono">{height || '自动读取中...'}</span>
+                  <span className="text-xs">px</span>
+                  {height && <span className="text-xs text-emerald-400">✓ 自动读取</span>}
+                </div>
+                {/* Model Hash */}
+                <div className="space-y-1">
+                  <input
+                    className={`p-2 rounded w-full ${
+                      validationErrors.modelHash 
+                        ? 'bg-red-900/30 border-2 border-red-500' 
+                        : modelHash && modelHashSource !== 'auto'
+                        ? 'bg-emerald-900/30 border-2 border-emerald-500'
+                        : 'bg-zinc-700'
+                    }`}
+                    placeholder="Model hash"
+                    value={modelHash}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setModelHash(val);
+                      setModelHashSource('manual');
+                      
+                      const validation = validateField('modelHash', val, 'manual');
+                      setValidationErrors(prev => ({
+                        ...prev,
+                        modelHash: validation.valid ? null : validation.error
+                      }));
+                    }}
+                  />
+                  {validationErrors.modelHash && (
+                    <p className="text-xs text-red-400">{validationErrors.modelHash}</p>
+                  )}
+                  {modelHash && !validationErrors.modelHash && modelHashSource === 'auto' && (
+                    <p className="text-xs text-emerald-400">✓ 自动读取</p>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -1195,14 +1559,24 @@ Steps: 30, Sampler: Euler a, CFG scale: 7, Seed: 12345, Size: 768x1024, Clip ski
 
       {/* Sticky Footer */}
       <div className="sticky bottom-0 z-20 bg-[#121212]/90 backdrop-blur border-t border-white/10">
-        <div className="flex items-center justify-end px-4 py-3">
-          <div className="flex items-center justify-end px-4 py-3">
+        <div className="flex flex-col gap-2 px-4 py-3">
+          {/* 错误提示 */}
+          {Object.keys(validationErrors).filter(k => validationErrors[k]).length > 0 && (
+            <div className="text-sm text-red-400 text-right">
+              ⚠️ 请修正红框标记的错误字段
+            </div>
+          )}
+          
+          {/* 按钮区域 */}
+          <div className="flex items-center justify-end">
             <button
-              disabled={isUploading}
+              disabled={isUploading || Object.keys(validationErrors).some(k => validationErrors[k])}
               onClick={onUpload ? onUpload : handleUpload}
-              className={`px-4 py-2 rounded text-white ${
-                isUploading ? "bg-zinc-600" : "bg-blue-600 hover:bg-blue-700"
-              } transition`}
+              className={`px-4 py-2 rounded text-white transition ${
+                isUploading || Object.keys(validationErrors).some(k => validationErrors[k])
+                  ? "bg-zinc-600 cursor-not-allowed" 
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
             >
               {isUploading ? "上傳中..." : "上傳"}
             </button>

@@ -10,7 +10,6 @@ const userSchema = new mongoose.Schema(
     isVerified: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
     image: { type: String, default: '' },
-    avatar: { type: String, default: '' }, // ✅ 新增
 
     gender: {
       type: String,
@@ -96,7 +95,6 @@ const userSchema = new mongoose.Schema(
         pinnedAt: { type: Date },
         expiresAt: { type: Date },
         currentIndex: { type: Number, default: 0 },
-        currentTime: { type: Number, default: 0 },
         isPlaying: { type: Boolean, default: false }
       },
       default: undefined

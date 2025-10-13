@@ -23,7 +23,7 @@ export async function GET(req) {
         user: {
           id: currentUser._id,
           username: currentUser.username,
-          avatar: currentUser.avatar
+          image: currentUser.image
         }
       }
     });

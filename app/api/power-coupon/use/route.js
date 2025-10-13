@@ -33,7 +33,8 @@ export async function POST(req) {
     }
 
     // 檢查圖片是否屬於用戶
-    if (image.userId !== currentUser._id.toString()) {
+    const imageOwnerId = image.user?._id || image.user;
+    if (String(imageOwnerId) !== String(currentUser._id)) {
       return NextResponse.json({ success: false, message: "無權限操作此圖片" }, { status: 403 });
     }
 

@@ -10,8 +10,7 @@ import RegisterModal from "@/components/auth/RegisterModal";
 import { FilterProvider } from "@/components/context/FilterContext";
 import ClientToaster from "@/components/common/ClientToaster";
 import { PlayerProvider } from "@/components/context/PlayerContext";
-import MiniPlayer from "@/components/common/MiniPlayer";
-import GlobalYouTubeBridge from "@/components/player/GlobalYouTubeBridge";
+import ConditionalPlayer from "@/components/common/ConditionalPlayer";
 import AdFooterPlaceholder from "@/components/common/AdFooterPlaceholder";
 // 移除全域 MiniPlayer / YouTubeBridge 與字型變數，恢復到較乾淨的版型
 
@@ -49,9 +48,8 @@ export default async function RootLayout({ children }) {
               <ClientToaster />
               <AdFooterPlaceholder />
 
-                  {/* 全域迷你播放器與 YouTube 橋接 */}
-                  <MiniPlayer />
-                  <GlobalYouTubeBridge />
+                  {/* 條件性播放器組件 */}
+                  <ConditionalPlayer />
 
             </PlayerProvider>
           </FilterProvider>

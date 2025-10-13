@@ -46,8 +46,8 @@ export default function MiniPlayer() {
   
   const pct = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
   
-  // 即使 currentTime 是 0，也顯示進度條（顯示總時長）
-  const showProgressBar = duration > 0;
+  // 顯示進度條的條件：有 duration 或有歌單（釘選播放器）
+  const showProgressBar = duration > 0 || (isPinned && player?.playlist?.length > 0);
   
   // 確保進度條不會顯示 NaN 或無效值
   const safePercentage = (isNaN(pct) || !isFinite(pct)) ? 0 : pct;
@@ -79,14 +79,29 @@ export default function MiniPlayer() {
   useEffect(() => {
     if (!showMini || !player?.isPlaying) return;
     
+    let saveCounter = 0; // 用於控制保存頻率
+    
     const interval = setInterval(() => {
       if (player?.updateCurrentTime) {
         player.updateCurrentTime();
       }
+      
+      // ✅ 每 5 秒保存一次播放進度（釘選播放器）
+      saveCounter++;
+      if (saveCounter >= 5) {
+        saveCounter = 0;
+        
+        // 使用 ref 來獲取最新狀態，避免閉包問題
+        const currentPlayer = playerRef.current;
+        const currentIsPinned = isPinned;
+        const currentPinnedData = pinnedPlayerData;
+        
+        // 續播功能已移除（YouTube API 限制）
+      }
     }, 1000); // 每秒更新一次
     
     return () => clearInterval(interval);
-  }, [showMini, player?.isPlaying]); // 移除 player?.updateCurrentTime 依賴
+  }, [showMini, player?.isPlaying]); // 只依賴關鍵狀態，避免重複創建 interval
 
   // 移除調試日誌，避免無限循環
   // useEffect(() => {
@@ -324,16 +339,34 @@ export default function MiniPlayer() {
             setIsPinned(true);
             setPinnedPlayerData(pinned);
             
+            // 觸發全局事件，通知其他組件
+            window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
+              detail: { 
+                isPinned: true,
+                pinnedPlayer: pinned
+              } 
+            }));
+            
             // ✅ 刷新後恢復釘選播放器的播放清單
             if (playerRef.current && pinned.playlist && pinned.playlist.length > 0) {
               const currentIndex = pinned.currentIndex || 0;
               const track = pinned.playlist[currentIndex];
               if (track?.url) {
-                playerRef.current.setSrcWithAudio?.(track.url, pinned.playlist, currentIndex, track.title || '');
+                // 設置播放清單和當前索引
+                playerRef.current.setPlaylist?.(pinned.playlist);
+                playerRef.current.setActiveIndex?.(currentIndex);
+                
+                // 設置當前曲目
+                playerRef.current.setSrc?.(track.url);
+                playerRef.current.setOriginUrl?.(track.url);
+                playerRef.current.setTrackTitle?.(track.title || '');
+                
+                // 設置播放器擁有者
                 playerRef.current.setPlayerOwner?.({ 
                   userId: pinned.userId, 
                   username: pinned.username 
                 });
+                
               }
             }
           } else if (expiresAt && expiresAt <= now) {
@@ -362,6 +395,28 @@ export default function MiniPlayer() {
           expiresAt: e.detail.expiresAt
         };
         setPinnedPlayerData(pinnedData);
+        
+        // 當收到釘選事件時，也載入歌單
+        if (playerRef.current && pinnedData.playlist && pinnedData.playlist.length > 0) {
+          const currentIndex = pinnedData.currentIndex || 0;
+          const track = pinnedData.playlist[currentIndex];
+          if (track?.url) {
+            // 設置播放清單和當前索引
+            playerRef.current.setPlaylist?.(pinnedData.playlist);
+            playerRef.current.setActiveIndex?.(currentIndex);
+            
+            // 設置當前曲目
+            playerRef.current.setSrc?.(track.url);
+            playerRef.current.setOriginUrl?.(track.url);
+            playerRef.current.setTrackTitle?.(track.title || '');
+            
+            // 設置播放器擁有者
+            playerRef.current.setPlayerOwner?.({ 
+              userId: pinnedData.userId, 
+              username: pinnedData.username 
+            });
+          }
+        }
       } else {
         setIsPinned(false);
         setPinnedPlayerData(null);

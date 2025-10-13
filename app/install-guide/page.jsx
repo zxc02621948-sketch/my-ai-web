@@ -23,6 +23,8 @@ export default function InstallGuide() {
     }
   }, []);
 
+  // 釘選播放器邏輯已由 ConditionalPlayer 統一處理，這裡不需要重複調用
+
   const guides = [
     {
       id: "sdwebui",

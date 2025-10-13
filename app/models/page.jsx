@@ -30,6 +30,8 @@ export default function ModelInfoPage() {
     fetchCurrentUser();
   }, []);
 
+  // 釘選播放器邏輯已由 ConditionalPlayer 統一處理，這裡不需要重複調用
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <div className="max-w-4xl mx-auto px-4 py-8 mt-24">

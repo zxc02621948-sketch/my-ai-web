@@ -297,6 +297,7 @@ export default function GlobalYouTubeBridge() {
               // 在 window 標記 ready 狀態
               window.__YT_READY__ = true;
               
+              
               // 重置播放器狀態
               player?.setExternalPlaying?.(false);
             }
@@ -316,32 +317,13 @@ export default function GlobalYouTubeBridge() {
                     // 直接設置，捕獲可能的錯誤
                     try {
                       ytRef.current.setVolume(volume);
-                      console.log(`✅ 設置 YouTube 音量: ${volume}% (localStorage: ${currentVolume})`);
                     } catch (setError) {
-                      console.warn('⚠️ setVolume 調用失敗:', setError.message);
                       // 忽略錯誤，生產環境可能會成功
                     }
-                    
-                    // 驗證（僅用於調試，不影響功能）
-                    setTimeout(() => {
-                      try {
-                        if (ytRef.current && typeof ytRef.current.getVolume === 'function') {
-                          const actualVolume = ytRef.current.getVolume();
-                          console.log(`🔍 驗證音量: 預期 ${volume}%, 實際 ${actualVolume}%`);
-                          
-                          if (actualVolume !== volume) {
-                            console.log(`ℹ️ 音量不一致（可能被 YouTube 覆蓋，生產環境正常）`);
-                          }
-                        }
-                      } catch (e) {
-                        // 忽略驗證錯誤
-                      }
-                    }, 500);
                   }
                 }
               } catch (error) {
-                console.warn('⚠️ 音量設置過程錯誤:', error.message);
-                // 不影響播放器功能
+                // 忽略音量設置錯誤，不影響播放器功能
               }
             }, 200);
       

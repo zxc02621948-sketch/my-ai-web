@@ -98,7 +98,7 @@ export async function GET(req) {
   try {
     const user = await User.findById(currentUser._id).populate({
       path: "following.userId",
-      select: "username avatar image gender",
+      select: "username image gender",
     });
 
     const followingWithNote = user.following
@@ -106,7 +106,6 @@ export async function GET(req) {
       .map((entry) => ({
         _id: entry.userId._id,
         username: entry.userId.username,
-        avatar: entry.userId.avatar,
         image: entry.userId.image,
         gender: entry.userId.gender,
         note: entry.note || "",

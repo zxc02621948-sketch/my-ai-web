@@ -12,8 +12,9 @@ import { usePortalContainer } from "@/components/common/usePortal";
 import { createPortal } from "react-dom";
 import { useFilterContext } from "@/components/context/FilterContext";
 import toast from "react-hot-toast";
-import { Package2, Wrench, CircleHelp } from "lucide-react";
+import { Package2, Wrench, CircleHelp, Upload, MessageSquare } from "lucide-react";
 import InboxButton from "@/components/common/InboxButton";
+import TutorialMenu from "@/components/common/TutorialMenu";
 
 export default function Header({
   currentUser,
@@ -22,6 +23,7 @@ export default function Header({
   onRegisterOpen,
   suggestions = [],
   onUploadClick,
+  onGuideClick,
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -404,50 +406,30 @@ export default function Header({
                 }
                 onUploadClick?.();
               }}
-              className="hidden md:inline-flex items-center gap-2 px-4 py-2 rounded bg-green-600 text白 hover:bg-green-700 font-medium"
+              className="group hidden md:inline-flex items-center gap-2 px-4 py-2 rounded-xl
+                         bg-gradient-to-r from-green-500 to-green-600 text白 font-semibold
+                         shadow-[0_6px_20px_-6px_rgba(34,197,94,0.55)]
+                         hover:shadow-[0_8px_28px_-6px_rgba(34,197,94,0.7)]
+                         transition-all active:translate-y-[1px]"
               title="上傳圖片"
             >
-              <span aria-hidden>⬆️</span>
+              <Upload className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
               <span>上傳圖片</span>
             </button>
 
+            <TutorialMenu onGuideClick={onGuideClick} />
+
             <Link
-              href="/models"
+              href="/discussion"
               className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
-                         bg-gradient-to-r from-emerald-400 to-cyan-500 text白 font-semibold
-                         shadow-[0_6px_20px_-6px_rgba(16,185,129,0.55)]
+                         bg-gradient-to-r from-blue-400 to-cyan-500 text白 font-semibold
+                         shadow-[0_6px_20px_-6px_rgba(59,130,246,0.55)]
                          hover:shadow-[0_8px_28px_-6px_rgba(6,182,212,0.7)]
                          transition-all active:translate-y-[1px]"
-              title="獲取模型"
+              title="討論區"
             >
-              <Package2 className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
-              <span className="hidden xl:inline">獲取模型</span>
-            </Link>
-
-            <Link
-              href="/install-guide"
-              className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
-                         bg-gradient-to-r from-amber-400 to-orange-500 text白 font-semibold
-                         shadow-[0_6px_20px_-6px_rgba(245,158,11,0.55)]
-                         hover:shadow-[0_8px_28px_-6px_rgba(249,115,22,0.7)]
-                         transition-all active:translate-y-[1px]"
-              title="安裝教學"
-            >
-              <Wrench className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
-              <span className="hidden xl:inline">安裝教學</span>
-            </Link>
-
-            <Link
-              href="/qa"
-              className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
-                         bg-gradient-to-r from-indigo-400 to-fuchsia-500 text白 font-semibold
-                         shadow-[0_6px_20px_-6px_rgba(99,102,241,0.55)]
-                         hover:shadow-[0_8px_28px_-6px_rgba(217,70,239,0.7)]
-                         transition-all active:translate-y-[1px]"
-              title="新手生成 Q&A"
-            >
-              <CircleHelp className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
-              <span className="hidden xl:inline">新手生成 Q&A</span>
+              <MessageSquare className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
+              <span className="hidden xl:inline">討論區</span>
             </Link>
 
             {currentUser && <NotificationBell currentUser={currentUser} />}
@@ -574,34 +556,19 @@ export default function Header({
         {/* 第三列：📱 手機常用功能 */}
         <div className="md:hidden px-3 pb-2">
           <div className="flex gap-2 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-            <Link
-              href="/models"
-              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
-                         bg-gradient-to-r from-emerald-400 to-cyan-500 text白 shrink-0"
-              title="獲取模型"
-            >
-              <Package2 className="w-4 h-4" />
-              <span>獲取模型</span>
-            </Link>
+            <TutorialMenu onGuideClick={onGuideClick} />
 
             <Link
-              href="/install-guide"
+              href="/discussion"
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
-                         bg-gradient-to-r from-amber-400 to-orange-500 text白 shrink-0"
-              title="安裝教學"
+                         bg-gradient-to-r from-blue-400 to-cyan-500 text白
+                         shadow-[0_4px_12px_-4px_rgba(59,130,246,0.4)]
+                         hover:shadow-[0_6px_16px_-4px_rgba(6,182,212,0.6)]
+                         transition-all active:translate-y-[1px] shrink-0"
+              title="討論區"
             >
-              <Wrench className="w-4 h-4" />
-              <span>安裝教學</span>
-            </Link>
-
-            <Link
-              href="/qa"
-              className="flex items中心 gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
-                         bg-gradient-to-r from-indigo-400 to-fuchsia-500 text白 shrink-0"
-              title="新手 Q&A"
-            >
-              <CircleHelp className="w-4 h-4" />
-              <span>新手 Q&A</span>
+              <MessageSquare className="w-4 h-4" />
+              <span>討論</span>
             </Link>
 
             <button
@@ -613,10 +580,13 @@ export default function Header({
                 onUploadClick?.();
               }}
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
-                         bg-green-600 text白 hover:bg-green-700 shrink-0"
+                         bg-gradient-to-r from-green-500 to-green-600 text白
+                         shadow-[0_4px_12px_-4px_rgba(34,197,94,0.4)]
+                         hover:shadow-[0_6px_16px_-4px_rgba(34,197,94,0.6)]
+                         transition-all active:translate-y-[1px] shrink-0"
               title="上傳圖片"
             >
-              ⬆️ <span>上傳</span>
+              <Upload className="w-4 h-4" /> <span>上傳</span>
             </button>
           </div>
         </div>

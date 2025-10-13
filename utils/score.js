@@ -4,13 +4,13 @@
 export function computeCompleteness(img = {}) {
   let score = 0;
 
-  // 模型 & 連結
-  if (hasText(img.modelName)) score += 20;
-  if (isCivitaiUrl(img.modelLink)) score += 10;
+  // 模型 & 連結（只有可验证的连结才加分，名称不加分）
+  // if (hasText(img.modelName)) score += 20; // 移除：名称不加分
+  if (isCivitaiUrl(img.modelLink)) score += 30; // 提升：从 10 → 30（含原本名称的 20 分）
 
-  // LoRA
-  if (hasText(img.loraName)) score += 5;
-  if (isCivitaiUrl(img.loraLink)) score += 5;
+  // LoRA（同样只看连结）
+  // if (hasText(img.loraName)) score += 5; // 移除：名称不加分
+  if (isCivitaiUrl(img.loraLink)) score += 10; // 提升：从 5 → 10（含原本名称的 5 分）
 
   // 提示詞
   if (hasText(img.positivePrompt)) score += 5;

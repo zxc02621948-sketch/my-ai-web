@@ -23,7 +23,7 @@ export async function GET(req) {
           $project: {
             _id: 1,
             username: 1,
-            avatar: 1,
+            image: 1,
             pointsBalance: 1,
             createdAt: 1
           }

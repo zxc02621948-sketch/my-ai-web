@@ -1,6 +1,6 @@
 import { useRef, useState, useMemo, useEffect } from "react";
 import axios from "axios";
-import { X, Trash2, Download, Clipboard, Pencil, AlertTriangle } from "lucide-react";
+import { X, Trash2, Download, Clipboard, Pencil, AlertTriangle, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 // —— JSON 工具：最小化 & 精簡（去私密路徑、移除 base64 影像）——
@@ -279,6 +279,79 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPo
     }
   };
 
+  // 計算元數據質量
+  const getMetadataQuality = (image) => {
+    if (!image) return "普通图";
+    
+    // 檢查是否為AI生成圖（有模型或LoRA）
+    const hasModel = image.modelName && image.modelName.trim() !== "(未提供)";
+    const hasLora = image.loraName && image.loraName.trim() !== "(未提供)";
+    const hasPrompt = image.positivePrompt && image.positivePrompt.trim() !== "(無)";
+    
+    // 如果不是AI生成圖，返回普通图
+    if (!hasModel && !hasLora && !hasPrompt) return "普通图";
+    
+    // 檢查自動抓取的參數
+    let autoCount = 0;
+    let totalCount = 0;
+    
+    // 檢查各項參數（排除空值）
+    const params = [
+      'modelName', 'loraName', 'positivePrompt', 'negativePrompt',
+      'steps', 'sampler', 'cfgScale', 'seed', 'width', 'height'
+    ];
+    
+    params.forEach(param => {
+      const value = image[param];
+      // 確保 value 是字符串且不為空
+      if (value && typeof value === 'string' && value.trim() && value.trim() !== "(未提供)" && value.trim() !== "(無)") {
+        totalCount++;
+        // 這裡需要根據實際的來源標記來判斷是否為自動抓取
+        // 暫時用簡單的邏輯：如果有值就認為是自動抓取
+        autoCount++;
+      } else if (value && typeof value === 'number' && !isNaN(value) && isFinite(value)) {
+        // 處理數字類型（如 steps, cfgScale, width, height）
+        totalCount++;
+        autoCount++;
+      }
+    });
+    
+    if (totalCount === 0) return "普通图";
+    
+    const autoRatio = autoCount / totalCount;
+    
+    // 特殊情況：LoRA沒抓到（空值），其他都自動抓取 = 優質圖
+    const loraEmpty = !image.loraName || image.loraName.trim() === "" || image.loraName.trim() === "(未提供)";
+    const otherParamsCount = totalCount - (hasLora ? 1 : 0); // 排除LoRA的其他參數數量
+    const otherAutoCount = autoCount - (hasLora ? 1 : 0); // 排除LoRA的其他自動抓取數量
+    
+    if (loraEmpty && otherParamsCount > 0 && otherAutoCount === otherParamsCount) {
+      return "优质图";
+    }
+    
+    // 特殊情況：只有LoRA手動填寫，其他都自動抓取 = 標準圖
+    const loraManual = hasLora && !loraEmpty;
+    if (loraManual && otherParamsCount > 0 && otherAutoCount === otherParamsCount) {
+      return "标准图";
+    }
+    
+    if (autoRatio >= 0.8) return "优质图";
+    if (autoRatio >= 0.5) return "标准图";
+    return "普通图";
+  };
+
+  // 獲取質量標識圖標
+  const getQualityIcon = (quality) => {
+    switch (quality) {
+      case "优质图":
+        return <span className="text-yellow-400">⭐</span>;
+      case "标准图":
+        return <span className="text-green-400">✓</span>;
+      default:
+        return null;
+    }
+  };
+
   const downloadUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public?download=true`;
 
   // ======= 生成參數彙整 =======
@@ -360,16 +433,22 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPo
         </div>
 
         <div className="flex items-center gap-2">
-          {/* 檢舉（登入且不是作者才顯示） */}
-          {currentUser && String(currentUser._id) !== String(image.user?._id) && (
-            <button
-              onClick={() => setShowReport(true)}
-              className="flex items-center gap-1 px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white text-sm rounded shadow transition"
-              title="檢舉圖片"
-            >
-              <AlertTriangle size={16} />
-            </button>
-          )}
+          {/* 引用發帖 */}
+          <button
+            onClick={() => {
+              const imageId = image?._id || image?.id;
+              if (imageId) {
+                router.push(`/discussion/create?imageRef=${imageId}`);
+              }
+            }}
+            className="flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-blue-500 to-cyan-500 
+                       hover:from-blue-600 hover:to-cyan-600 text-white text-sm font-medium rounded
+                       shadow-lg hover:shadow-xl transition-all active:scale-95"
+            title="引用此圖片發帖討論"
+          >
+            <MessageSquare size={16} />
+            <span>引用發帖</span>
+          </button>
 
           {/* 編輯放在下載左邊；僅作者或管理員可見 */}
           {currentUser &&
@@ -413,11 +492,23 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPo
               </button>
             )}
 
+          {/* 檢舉（登入且不是作者才顯示） */}
+          {currentUser && String(currentUser._id) !== String(image.user?._id) && (
+            <button
+              onClick={() => setShowReport(true)}
+              className="flex items-center gap-1 px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white text-sm rounded shadow transition"
+              title="檢舉圖片"
+            >
+              <AlertTriangle size={16} />
+            </button>
+          )}
+
           {/* 關閉 */}
           <button onClick={onClose} className="text-white hover:text-red-400 transition" title="關閉視窗">
             <X size={20} />
           </button>
         </div>
+
       </div>
 
       {/* 檢舉彈窗 */}
@@ -464,7 +555,10 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPo
       )}
 
       {/* 分級 */}
-      <div className="mb-3">{getRatingLabel(image.rating)}</div>
+      <div className="mb-3 flex items-center gap-2">
+        {getRatingLabel(image.rating)}
+        {getQualityIcon(getMetadataQuality(image))}
+      </div>
 
       <div className="text-sm text-zinc-300 mb-3">
         來源作者： <span className="text-white">{image?.author?.trim() || "—"}</span>
