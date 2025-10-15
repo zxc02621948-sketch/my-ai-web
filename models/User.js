@@ -40,6 +40,9 @@ const userSchema = new mongoose.Schema(
     ,
     // ✅ 積分餘額（Phase A）
     pointsBalance: { type: Number, default: 0 },
+    
+    // ✅ 總獲得積分（用於等級計算，只增不減）
+    totalEarnedPoints: { type: Number, default: 0 },
 
     // ✅ 使用者預設音樂來源（播放頁讀取）
     defaultMusicUrl: { type: String, default: '' },
@@ -75,6 +78,14 @@ const userSchema = new mongoose.Schema(
     
     // ✅ 權力券系統
     powerCoupons: { type: Number, default: 0 },
+    
+    // ✅ 隱私偏好設定（用於「反對權」等隱私權利）
+    privacyPreferences: {
+      allowMarketingEmails: { type: Boolean, default: true },      // 允許接收行銷郵件
+      allowDataAnalytics: { type: Boolean, default: true },         // 允許數據分析
+      allowPersonalization: { type: Boolean, default: true },       // 允許個人化推薦
+      allowProfileIndexing: { type: Boolean, default: true },       // 允許搜尋引擎索引個人頁面
+    },
     activePowerImages: [{ type: mongoose.Schema.Types.ObjectId, ref: "Image" }],
     lastPowerUse: { type: Date, default: null },
     
@@ -101,13 +112,29 @@ const userSchema = new mongoose.Schema(
     },
     pinnedPlayerSettings: {
       showReminder: { type: Boolean, default: true }
-    }
+    },
+    
+    // ✅ 訂閱管理系統（月租功能 - 累積制）
+    subscriptions: [{
+      type: { type: String, enum: ['pinPlayer', 'pinPlayerTest', 'uploadQuota', 'premiumFeatures'] },
+      startDate: { type: Date },
+      expiresAt: { type: Date }, // 到期時間（累積制，續費時延長）
+      isActive: { type: Boolean, default: true },
+      monthlyCost: { type: Number },
+      lastRenewedAt: { type: Date }, // 最後續費時間
+      cancelledAt: { type: Date, default: null }
+    }]
   },
   {
     timestamps: true
   }
 );
 
-const User = mongoose.models.User || mongoose.model("User", userSchema);
+// 強制使用新的 schema（開發環境）
+if (mongoose.models.User) {
+  delete mongoose.models.User;
+}
+
+const User = mongoose.model("User", userSchema);
 
 export default User;

@@ -1,28 +1,26 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export default function InboxButton() {
-  const [unread, setUnread] = useState(0);
-
-  async function refreshUnread() {
-    try {
-      const r = await fetch("/api/messages/unread-count", { cache: "no-store" });
-      const j = await r.json();
-      setUnread(j?.unread || 0);
-    } catch {}
-  }
+  const { unreadCounts, fetchUnreadCounts, updateUnreadCount } = useCurrentUser();
 
   useEffect(() => {
+    const refreshMessages = () => {
+      fetchUnreadCounts(true); // 強制刷新消息計數
+    };
+
     // 1) 頁面載入先抓一次
-    refreshUnread();
+    fetchUnreadCounts();
+    
     // 2) 監聽聊天頁廣播的「inbox:refresh」事件 → 立刻刷新
-    const handler = () => refreshUnread();
-    window.addEventListener("inbox:refresh", handler);
-    // 3) 仍保留輕量輪詢，避免跨分頁不同步
-    const timer = setInterval(refreshUnread, 30000);
-    return () => { window.removeEventListener("inbox:refresh", handler); clearInterval(timer); };
-  }, []);
+    window.addEventListener("inbox:refresh", refreshMessages);
+    
+    return () => { 
+      window.removeEventListener("inbox:refresh", refreshMessages); 
+    };
+  }, [fetchUnreadCounts]);
 
   return (
     <Link
@@ -45,7 +43,7 @@ export default function InboxButton() {
       </svg>
 
       {/* 紅點（有未讀時顯示） */}
-      {unread > 0 && (
+      {unreadCounts.messages > 0 && (
         <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-zinc-900" />
       )}
     </Link>

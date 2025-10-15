@@ -10,6 +10,9 @@ const TYPE_LABEL = {
   comment_received: "獲得留言",
   daily_login: "每日登入",
   admin_gift: "管理員發送",
+  store_purchase: "商店購買",
+  subscription_purchase: "訂閱購買",
+  frame_color_edit: "頭像框調色",
 };
 
 const TYPE_COLOR = {
@@ -19,6 +22,9 @@ const TYPE_COLOR = {
   comment_received: "text-green-300",
   daily_login: "text-blue-300",
   admin_gift: "text-purple-300",
+  store_purchase: "text-orange-300",
+  subscription_purchase: "text-cyan-300",
+  frame_color_edit: "text-purple-400",
 };
 
 export default function PointsHistoryModal({ isOpen, onClose }) {
@@ -58,14 +64,17 @@ export default function PointsHistoryModal({ isOpen, onClose }) {
               const label = TYPE_LABEL[row.type] || row.type;
               const color = TYPE_COLOR[row.type] || "text-gray-300";
               const date = new Date(row.createdAt).toLocaleString();
-              const sign = row.points >= 0 ? "+" : "";
+              // 消費類型（負數或零）顯示負號，收入類型（正數）顯示正號
+              const isExpense = row.points <= 0;
+              const sign = isExpense ? "-" : "+";
+              const displayPoints = isExpense ? Math.abs(row.points) : row.points;
               return (
                 <li key={String(row._id)} className="py-2 flex items-center">
                   <div className="flex flex-col flex-1 pr-6">
                     <span className={`text-sm ${color}`}>{label}</span>
                     <span className="text-xs text-gray-500">{date}</span>
                   </div>
-                  <div className="text-sm font-semibold text-yellow-400 flex-shrink-0">{sign}{row.points}</div>
+                  <div className="text-sm font-semibold text-yellow-400 flex-shrink-0">{sign}{displayPoints}</div>
                 </li>
               );
             })}

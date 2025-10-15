@@ -1,27 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { jwtDecode } from "jwt-decode";
-import { getTokenFromCookie } from "@/lib/cookie";
+import React, { useState } from "react";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export default function InstallGuide() {
-  const [currentUser, setCurrentUser] = useState(undefined);
+  const { currentUser } = useCurrentUser(); // 使用 Context
   const [isLoginOpen, setLoginOpen] = useState(false);
   const [isRegisterOpen, setRegisterOpen] = useState(false);
-
-  useEffect(() => {
-    const token = getTokenFromCookie();
-    if (token) {
-      try {
-        const decoded = jwtDecode(token);
-        setCurrentUser(decoded);
-      } catch {
-        setCurrentUser(null);
-      }
-    } else {
-      setCurrentUser(null);
-    }
-  }, []);
 
   // 釘選播放器邏輯已由 ConditionalPlayer 統一處理，這裡不需要重複調用
 

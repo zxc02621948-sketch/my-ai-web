@@ -50,8 +50,8 @@ export async function GET(req) {
     
     // 执行查询
     const posts = await DiscussionPost.find(query)
-      .populate("author", "username avatar")
-      .populate("imageRef", "title imageId thumbnail")
+      .populate("author", "username image currentFrame")
+      .populate("imageRef", "title imageId")
       .sort(sortOption)
       .skip((page - 1) * limit)
       .limit(limit)
@@ -184,8 +184,8 @@ export async function POST(req) {
     
     // 返回创建的帖子
     const createdPost = await DiscussionPost.findById(post._id)
-      .populate("author", "username avatar")
-      .populate("imageRef", "title imageId thumbnail")
+      .populate("author", "username image currentFrame")
+      .populate("imageRef", "title imageId")
       .lean();
     
     console.log('✅ [討論區] 帖子創建成功，返回數據');

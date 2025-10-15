@@ -79,6 +79,8 @@ export default function UploadStep2({
   const [seedSource, setSeedSource] = useState(null);
   const [clipSkipSource, setClipSkipSource] = useState(null);
   const [modelHashSource, setModelHashSource] = useState(null);
+  const [widthSource, setWidthSource] = useState(null);
+  const [heightSource, setHeightSource] = useState(null);
   
   // 验证错误状态
   const [validationErrors, setValidationErrors] = useState({});
@@ -98,6 +100,57 @@ export default function UploadStep2({
   // AI自動分類相關
   const workflowInputRef = useRef(null);
   const scrollAreaRef = useRef(null);
+
+  // ✅ 即時判斷元數據質量（用於更智能的分類）
+  const getCurrentMetadataQuality = useMemo(() => {
+    // 模擬 getMetadataQuality 的邏輯
+    const hasModel = modelName?.trim() && modelName.trim() !== "(未提供)";
+    const hasLora = loraName?.trim() && loraName.trim() !== "(未提供)";
+    const hasPrompt = positivePrompt?.trim() && positivePrompt.trim() !== "(無)";
+    
+    // 如果不是AI生成圖，返回普通图
+    if (!hasModel && !hasLora && !hasPrompt) return "普通图";
+    
+    // 檢查各項參數
+    const params = [
+      { name: 'modelName', value: modelName },
+      { name: 'loraName', value: loraName },
+      { name: 'positivePrompt', value: positivePrompt },
+      { name: 'negativePrompt', value: negativePrompt },
+      { name: 'steps', value: steps },
+      { name: 'sampler', value: sampler },
+      { name: 'cfgScale', value: cfgScale },
+      { name: 'seed', value: seed },
+      { name: 'width', value: width },
+      { name: 'height', value: height }
+    ];
+    
+    let totalCount = 0;
+    let autoCount = 0;
+    
+    params.forEach(param => {
+      const value = param.value;
+      if (value && typeof value === 'string' && value.trim() && 
+          value.trim() !== "(未提供)" && value.trim() !== "(無)") {
+        totalCount++;
+        autoCount++; // 簡化：假設有值就是自動抓取
+      } else if (value && typeof value === 'number' && !isNaN(value) && isFinite(value)) {
+        totalCount++;
+        autoCount++;
+      }
+    });
+    
+    if (totalCount === 0) return "普通图";
+    
+    const autoRatio = autoCount / totalCount;
+    if (autoRatio >= 0.8) return "优质图";
+    if (autoRatio >= 0.5) return "标准图";
+    return "普通图";
+  }, [positivePrompt, negativePrompt, modelName, loraName, sampler, seed, steps, cfgScale, width, height]);
+
+  const willHaveMetadata = useMemo(() => {
+    return getCurrentMetadataQuality === "优质图" || getCurrentMetadataQuality === "标准图";
+  }, [getCurrentMetadataQuality]);
 
   // ====== Helpers ======
   const getRatingColor = () => {
@@ -420,8 +473,14 @@ export default function UploadStep2({
       setModelHashSource('auto');
     }
     
-    setWidth(parsed.width || "");
-    setHeight(parsed.height || "");
+    if (parsed.width) {
+      setWidth(parsed.width);
+      setWidthSource('auto');
+    }
+    if (parsed.height) {
+      setHeight(parsed.height);
+      setHeightSource('auto');
+    }
     setModelName(parsed.model || "");
     
     // 只有当有 LoRA hashes（链接）时，才自动填入 LoRA 名称
@@ -543,13 +602,21 @@ export default function UploadStep2({
             setMetaStatus("found");
             setShowAdvanced(true);
           } else {
-            if (detectedPlatform === "ComfyUI") setPlatform("ComfyUI");
+            if (detectedPlatform === "ComfyUI") {
+              setPlatform("ComfyUI");
+            } else {
+              // ✅ 沒有檢測到任何平台且無元數據 → 自動設置為「其他」
+              setPlatform("其他");
+            }
             setMetaStatus("none");
           }
         } else {
           // 非 PNG：沒有 metadata 可讀 → 以檔名保底（含 comfyui）
           if (/comfyui/i.test(imageFile.name || "")) {
             setPlatform("ComfyUI");
+          } else {
+            // ✅ 非 PNG 且檔名不包含 comfyui → 自動設置為「其他」
+            setPlatform("其他");
           }
         }
 
@@ -798,7 +865,7 @@ export default function UploadStep2({
         author: author?.trim() || "",
         category,
         rating,
-        platform: platform?.trim() || "Stable Diffusion WebUI",
+        platform: platform?.trim() || "其他",
         modelName: modelName?.trim() || "",
         loraName: loraName?.trim() || "",
         modelLink: modelLink?.trim() || "",
@@ -894,6 +961,17 @@ export default function UploadStep2({
       });
       if (!metaRes.ok) throw new Error("Metadata API failed");
 
+      // ✅ 上傳成功提示（根據元數據質量顯示結果）
+      const finalQuality = getCurrentMetadataQuality;
+      
+      if (finalQuality === "优质图") {
+        alert("✅ 上傳成功！\n\n⭐ 此圖片已標記為「優質圖」\n✨ 將出現在「作品展示」和「創作參考」中\n🎓 其他用戶可以學習您的高質量生成參數");
+      } else if (finalQuality === "标准图") {
+        alert("✅ 上傳成功！\n\n✓ 此圖片已標記為「標準圖」\n✨ 將出現在「作品展示」和「創作參考」中\n📚 其他用戶可以參考您的生成參數");
+      } else {
+        alert("✅ 上傳成功！\n\n🎨 此圖片已標記為「展示圖」\n📸 將出現在「作品展示」中供欣賞\n💡 建議填寫有意義的參數以進入「創作參考」");
+      }
+
       setStep(1);
       onClose?.();
       location.reload();
@@ -987,6 +1065,8 @@ export default function UploadStep2({
                 const dimensions = await getImageSizeFromFile(f);
                 setWidth(String(dimensions.width));
                 setHeight(String(dimensions.height));
+                setWidthSource('auto');
+                setHeightSource('auto');
               } catch (error) {
                 console.warn('读取图片尺寸失败:', error);
               }
@@ -1464,13 +1544,13 @@ export default function UploadStep2({
                   <span className="text-xs">宽度:</span>
                   <span className="text-white font-mono">{width || '自动读取中...'}</span>
                   <span className="text-xs">px</span>
-                  {width && <span className="text-xs text-emerald-400">✓ 自动读取</span>}
+                  {widthSource === 'auto' && <span className="text-xs text-emerald-400">✓ 自动读取</span>}
                 </div>
                 <div className="p-2 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center gap-2">
                   <span className="text-xs">高度:</span>
                   <span className="text-white font-mono">{height || '自动读取中...'}</span>
                   <span className="text-xs">px</span>
-                  {height && <span className="text-xs text-emerald-400">✓ 自动读取</span>}
+                  {heightSource === 'auto' && <span className="text-xs text-emerald-400">✓ 自动读取</span>}
                 </div>
                 {/* Model Hash */}
                 <div className="space-y-1">
@@ -1560,6 +1640,39 @@ Steps: 30, Sampler: Euler a, CFG scale: 7, Seed: 12345, Size: 768x1024, Clip ski
       {/* Sticky Footer */}
       <div className="sticky bottom-0 z-20 bg-[#121212]/90 backdrop-blur border-t border-white/10">
         <div className="flex flex-col gap-2 px-4 py-3">
+          {/* ✅ 即時預覽：根據元數據質量智能分類 */}
+          {getCurrentMetadataQuality === "优质图" ? (
+            <div className="bg-yellow-900/30 border border-yellow-500 rounded-lg p-2.5 mb-1">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-yellow-400 font-semibold">⭐ 優質圖</span>
+                <span className="text-gray-300 text-xs">
+                  高質量元數據，將出現在「作品展示」和「創作參考」中，其他用戶可學習
+                </span>
+              </div>
+            </div>
+          ) : getCurrentMetadataQuality === "标准图" ? (
+            <div className="bg-green-900/30 border border-green-500 rounded-lg p-2.5 mb-1">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-green-400 font-semibold">✓ 標準圖</span>
+                <span className="text-gray-300 text-xs">
+                  標準元數據，將出現在「作品展示」和「創作參考」中
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gray-900/30 border border-gray-600 rounded-lg p-2.5 mb-1">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-400 font-semibold">🎨 展示圖</span>
+                <span className="text-gray-300 text-xs">
+                  無有效元數據，僅出現在「作品展示」
+                  <span className="block mt-0.5 text-yellow-300">
+                    💡 建議填寫有意義的 Prompt 或模型資訊以進入「創作參考」
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* 错误提示 */}
           {Object.keys(validationErrors).filter(k => validationErrors[k]).length > 0 && (
             <div className="text-sm text-red-400 text-right">

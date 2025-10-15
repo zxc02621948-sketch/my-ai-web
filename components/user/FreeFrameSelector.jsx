@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import axios from "axios";
 import { getLevelInfo } from "@/utils/pointsLevels";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 // 免費頭像框（包含等級獎勵和成就獎勵）
 const FREE_FRAMES = [
@@ -35,29 +36,12 @@ export default function FreeFrameSelector({
   onFrameSelect,
   userAvatar = null
 }) {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { currentUser: contextUser } = useCurrentUser(); // 使用 Context
+  const [loading, setLoading] = useState(false);
   const [selectedFrame, setSelectedFrame] = useState(currentFrame || "default");
-
-  // 獲取當前用戶信息
-  useEffect(() => {
-    if (isOpen) {
-      fetchCurrentUser();
-    }
-  }, [isOpen]);
-
-  const fetchCurrentUser = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get("/api/current-user");
-      const user = response.data.user;
-      setCurrentUser(user);
-    } catch (error) {
-      console.error("獲取用戶信息失敗:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  
+  // 從 Context 獲取 currentUser
+  const currentUser = contextUser;
 
   // 檢查頭像框是否已解鎖
   const isFrameUnlocked = (frame) => {

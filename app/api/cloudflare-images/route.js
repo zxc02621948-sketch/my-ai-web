@@ -75,6 +75,7 @@ export async function GET(req) {
 
         // 其他
         completenessScore: img.completenessScore ?? null, // 顯示用
+        hasMetadata: img.hasMetadata ?? false, // ✅ 作品展示/創作參考篩選字段
         user: populatedUser
           ? {
               _id: populatedUser._id?.toString(),
@@ -174,6 +175,19 @@ export async function POST(req) {
 
     const imageUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageId}/public`;
 
+    // ✅ 判斷是否有元數據（用於「作品展示」vs「創作參考」篩選）
+    const hasMetadata = !!(
+      positivePrompt?.trim() ||
+      negativePrompt?.trim() ||
+      modelName?.trim() ||
+      sampler?.trim() ||
+      seed ||
+      steps ||
+      cfgScale ||
+      width ||
+      height
+    );
+
     // 先組資料（空值不塞）
     const doc = {
       title,
@@ -202,6 +216,7 @@ export async function POST(req) {
       userId,
       user: userId,
       username: username || "", // 若 schema 有支援就能存
+      hasMetadata, // ✅ 自動標記
 
       // 參考資訊
       ...(modelRef ? { modelRef } : {}),

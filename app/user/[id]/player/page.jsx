@@ -35,6 +35,14 @@ export default function UserPlayerPage() {
   useEffect(() => {
     const fetchPlaylist = async () => {
       try {
+        // ✅ 檢查是否有釘選的播放器
+        const hasPinnedPlayer = currentUser?.pinnedPlayer?.userId;
+        if (hasPinnedPlayer) {
+          console.log('📌 [UserPlayerPage] 檢測到釘選播放器，跳過加載本地播放清單');
+          setLoading(false);
+          return; // 不覆蓋釘選的播放器
+        }
+        
         // 啟用小播放器
         player.setMiniPlayerEnabled?.(true);
         
@@ -130,7 +138,7 @@ export default function UserPlayerPage() {
     };
     
     fetchPlaylist();
-  }, [id]); // 移除 player 依賴，避免無限循環
+  }, [id, currentUser?.pinnedPlayer]); // 依賴 currentUser 的釘選狀態
 
   // 監聽播放狀態變化事件
   useEffect(() => {

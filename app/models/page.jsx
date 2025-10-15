@@ -1,34 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Image from "next/image";
-import axios from "axios"; // ✅ 你有用 axios 卻沒 import
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export default function ModelInfoPage() {
-
+  const { currentUser } = useCurrentUser(); // 使用 Context
+  
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false); // ✅ 控制上傳圖片 modal
-  const [currentUser, setCurrentUser] = useState(undefined); // 🚨 初始為 undefined（載入中狀態）
-
-  // ✅ 載入登入使用者資訊
-  useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const res = await axios.get("/api/current-user", { withCredentials: true });
-        console.log("✅ 撈到 currentUser:", res.data); // <-- 加這行
-        setCurrentUser(res.data);
-      } catch (err) {
-        if (err.response?.status === 401) {
-          setCurrentUser(null); // 登出後預期會 401，設定 null 即可
-        } else {
-          console.error("❌ 撈 currentUser 失敗", err);
-          setCurrentUser(null);
-        }
-      }
-    };
-    fetchCurrentUser();
-  }, []);
 
   // 釘選播放器邏輯已由 ConditionalPlayer 統一處理，這裡不需要重複調用
 

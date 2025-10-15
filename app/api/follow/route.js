@@ -98,7 +98,7 @@ export async function GET(req) {
   try {
     const user = await User.findById(currentUser._id).populate({
       path: "following.userId",
-      select: "username image gender",
+      select: "username image gender currentFrame frameSettings",
     });
 
     const followingWithNote = user.following
@@ -108,6 +108,8 @@ export async function GET(req) {
         username: entry.userId.username,
         image: entry.userId.image,
         gender: entry.userId.gender,
+        currentFrame: entry.userId.currentFrame || "default",
+        frameSettings: entry.userId.frameSettings || {},
         note: entry.note || "",
       }));
 

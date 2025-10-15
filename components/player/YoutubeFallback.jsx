@@ -7,9 +7,6 @@ import { useMemo } from "react";
 const ReactYouTube = dynamic(() => import("react-youtube"), { ssr: false });
 
 export default function YoutubeFallback({ videoId, startSeconds = 0, onReady, onStateChange, onProgress }) {
-  const autoplayWithSound = typeof window !== "undefined"
-    ? (localStorage.getItem("player.autoplaySound") !== "false")
-    : true;
   
   // 動態獲取當前 origin，確保與應用 URL 一致
   const currentOrigin = typeof window !== "undefined" ? window.location.origin : undefined;

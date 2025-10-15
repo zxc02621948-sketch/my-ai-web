@@ -75,11 +75,16 @@ export async function creditPoints({ userId, type, sourceId = null, actorUserId 
   
   const oldPoints = user.pointsBalance || 0;
   const newPoints = oldPoints + add;
-  const oldLevel = getLevelIndex(oldPoints);
-  const newLevel = getLevelIndex(newPoints);
+  
+  // 使用總獲得積分計算等級（只對正數積分累積）
+  const oldTotalEarned = user.totalEarnedPoints || 0;
+  const newTotalEarned = oldTotalEarned + (add > 0 ? add : 0);
+  const oldLevel = getLevelIndex(oldTotalEarned);
+  const newLevel = getLevelIndex(newTotalEarned);
   
   // 更新積分
   user.pointsBalance = newPoints;
+  user.totalEarnedPoints = newTotalEarned;
   
   // 檢查是否升級
   let levelUpRewards = null;

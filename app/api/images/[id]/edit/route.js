@@ -83,7 +83,7 @@ export async function PATCH(req, ctx) {
     }
 
     // 取得圖片
-    const image = await Image.findById(id).populate({ path: "user", select: "_id isAdmin currentFrame" });
+    const image = await Image.findById(id).populate({ path: "user", select: "_id isAdmin currentFrame frameSettings" });
     if (!image) {
       return NextResponse.json({ ok: false, message: "找不到圖片" }, { status: 404 });
     }
@@ -164,7 +164,7 @@ export async function PATCH(req, ctx) {
 
     // 回傳最新資料（精簡版）
     const saved = await Image.findById(id)
-      .populate({ path: "user", select: "_id username image isAdmin currentFrame" })
+      .populate({ path: "user", select: "_id username image isAdmin currentFrame frameSettings" })
       .lean();
 
     return NextResponse.json({ ok: true, image: saved });

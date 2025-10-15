@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import User from "@/models/User";
+import PointsTransaction from "@/models/PointsTransaction";
 
 const FRAME_COSTS = {
   "default": 0,
@@ -55,14 +56,36 @@ export async function POST(req) {
       }, { status: 400 });
     }
 
-    // 所有頭像框都是免費的，直接添加
+    // 檢查積分是否足夠（即使價格為 0 也要檢查）
+    if (currentUser.pointsBalance < cost) {
+      return NextResponse.json({ 
+        error: `積分不足！需要 ${cost} 積分，你目前有 ${currentUser.pointsBalance} 積分` 
+      }, { status: 400 });
+    }
+
+    // 扣除積分並添加頭像框
     const updatedUser = await User.findByIdAndUpdate(
       currentUser._id,
       {
+        $inc: { pointsBalance: -cost },
         $addToSet: { ownedFrames: frameId }
       },
       { new: true }
     );
+
+    // 記錄積分交易（即使價格為 0 也要記錄，方便將來追蹤）
+    const dateKey = new Date().toISOString().split('T')[0];
+    await PointsTransaction.create({
+      userId: currentUser._id,
+      points: -cost,
+      type: 'store_purchase',
+      dateKey: dateKey,
+      meta: { 
+        productId: `frame-${frameId}`,
+        description: `頭像框購買 (${frameId})`,
+        cost
+      }
+    });
 
     return NextResponse.json({
       success: true,

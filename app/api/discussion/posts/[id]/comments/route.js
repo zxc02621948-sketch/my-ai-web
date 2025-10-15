@@ -12,7 +12,7 @@ export async function GET(req, { params }) {
     const { id } = await params;
     
     const comments = await DiscussionComment.find({ post: id, parentCommentId: null })
-      .populate("author", "username image currentFrame")
+      .populate("author", "username image currentFrame frameSettings")
       .populate({
         path: "replies",
         populate: { path: "author", select: "username image currentFrame" }
@@ -93,7 +93,7 @@ export async function POST(req, { params }) {
     
     // 返回創建的評論
     const createdComment = await DiscussionComment.findById(comment._id)
-      .populate("author", "username image currentFrame")
+      .populate("author", "username image currentFrame frameSettings")
       .lean();
     
     console.log(`💬 [討論區] 新評論: ${currentUser.username} -> 帖子 ${post.title}`);

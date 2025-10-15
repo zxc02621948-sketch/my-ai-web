@@ -16,7 +16,114 @@ export default function ChangelogPage() {
       <div className="max-w-2xl mx-auto py-10 px-4">
         <h1 className="text-2xl font-bold mb-6">📝 更新日誌</h1>
 
-      {/* v0.7.6 - 新增 */}
+      {/* v0.8.0 - 大版本更新 */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-2 text-yellow-400">v0.8.0（2025-10-15）🎉 大版本更新</h2>
+        
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-blue-400 mb-2">🎵 播放器系統</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>新增個人頁播放器功能（支援 YouTube 音樂）</li>
+            <li>迷你播放器「釘選」功能（LV3 解鎖）</li>
+            <li>可拖動迷你播放器，支援手機端安全邊界</li>
+            <li>播放器訂閱系統（積分制月訂閱）</li>
+            <li>播放進度、音量、循環狀態自動保存</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-purple-400 mb-2">🎨 頭像框與調色盤</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>新增多種頭像框（商店購買或等級解鎖）</li>
+            <li>頭像框調色盤功能（LV2 解鎖，50 積分/次）</li>
+            <li>自定義頭像框顏色（支援漸變色）</li>
+            <li>頭像框在各處正確顯示（評論、個人頁、追蹤列表等）</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-green-400 mb-2">🏆 等級與積分系統</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>新增 10 個等級（LV1 - LV10），每級解鎖不同獎勵</li>
+            <li>等級基於「累計獲得積分」而非當前餘額</li>
+            <li>新增積分紀錄頁面，完整追蹤收支</li>
+            <li>每日登入獎勵系統</li>
+            <li>上傳圖片、收到讚、評論等獲得積分</li>
+            <li>積分商店（頭像框、權力券、播放器訂閱等）</li>
+            <li>權力券系統（限時加倍獲得積分）</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-red-400 mb-2">🛡️ 檢舉與管理系統</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>完整的檢舉系統（分類錯誤、分級錯誤、違規內容等）</li>
+            <li>管理員可更改圖片分類/分級</li>
+            <li>檢舉處理自動發送站內信通知</li>
+            <li>檢舉人收到處理結果通知</li>
+            <li>統一的通知系統（全部使用站內信）</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-cyan-400 mb-2">📬 站內信系統</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>完整的站內信功能（管理員可發送，用戶可回覆）</li>
+            <li>會話式聊天介面</li>
+            <li>封存/恢復功能</li>
+            <li>未讀訊息提醒</li>
+            <li>系統通知自動發送</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-orange-400 mb-2">🖼️ 圖片展示優化</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>新增「作品展示」與「創作參考」分頁</li>
+            <li>元數據質量標準（⭐ 優質圖、✓ 標準圖、普通圖）</li>
+            <li>「揭開創作秘密」按鈕（畫廊模式臨時顯示元數據）</li>
+            <li>上傳時自動讀取寬高與元數據</li>
+            <li>圖片模態框佈局優化</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-pink-400 mb-2">📱 用戶體驗優化</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>個人頁按鈕權限優化（只有本人可見特定按鈕）</li>
+            <li>手機版教學按鈕優化</li>
+            <li>導航自動滾動到頂部</li>
+            <li>討論論壇載入優化</li>
+            <li>重複 API 呼叫優化（性能提升）</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-indigo-400 mb-2">📄 法律與隱私</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>新增隱私政策頁面</li>
+            <li>新增 404 錯誤頁面</li>
+            <li>新增 Sitemap（SEO 優化）</li>
+            <li>新增隱私設定功能</li>
+            <li>頁尾法律連結整合</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-gray-400 mb-2">🐛 錯誤修復</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>修復測試訂閱過期後按鈕仍顯示啟用</li>
+            <li>修復積分紀錄顯示錯誤（管理員發送、負數顯示）</li>
+            <li>修復舊用戶累計積分為 0 的問題</li>
+            <li>修復頭像框在追蹤列表不顯示</li>
+            <li>修復圖片模態框標題與按鈕排版</li>
+            <li>修復站內信封存內容殘留</li>
+            <li>清理冗餘代碼與測試檔案</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* v0.7.6 - 舊版本 */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-2">v0.7.6（2025-08-11）</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-300">

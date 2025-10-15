@@ -2,12 +2,16 @@
 
 import { usePlayer } from "@/components/context/PlayerContext";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import MiniPlayerArt from "@/components/common/MiniPlayerArt";
 import PinPlayerButton from "@/components/player/PinPlayerButton";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import axios from "axios";
 
 export default function MiniPlayer() {
   const player = usePlayer();
+  const { currentUser, hasValidSubscription } = useCurrentUser(); // 使用 Context
+  const pathname = usePathname(); // 獲取當前路徑
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState(null); // ✅ 初始為 null，等待從 localStorage 載入
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -37,8 +41,35 @@ export default function MiniPlayer() {
   // 依照 Hooks 規則：所有 hooks 必須在每次 render 都被呼叫，
   // 因此不在條件分支中提前 return；改用條件渲染控制輸出。
   
-  // 顯示邏輯：有釘選 OR (在個人頁面 AND 該用戶有播放器)
-  const showMini = isPinned || !!(player && player.miniPlayerEnabled);
+  // 檢查當前路徑是否是用戶頁面
+  const isUserPage = pathname.startsWith("/user/") && pathname !== "/user/following";
+  
+  // 檢查用戶是否有播放器功能（LV3 或體驗券 或 購買過 或 有訂閱）
+  const hasPlayerFeature = useMemo(() => {
+    if (!currentUser) return false;
+    
+    // 檢查等級（LV3 = totalEarnedPoints >= 500）
+    const userLevel = (currentUser.totalEarnedPoints || 0) >= 500;
+    
+    // 檢查體驗券是否有效
+    const hasCoupon = currentUser.playerCouponUsed && 
+                      currentUser.miniPlayerExpiry && 
+                      new Date(currentUser.miniPlayerExpiry) > new Date();
+    
+    // 檢查是否購買過播放器
+    const hasPurchased = currentUser.miniPlayerPurchased;
+    
+    // 檢查是否有有效的釘選播放器訂閱
+    const hasSubscription = hasValidSubscription('pinPlayer') || hasValidSubscription('pinPlayerTest');
+    
+    return userLevel || hasCoupon || hasPurchased || hasSubscription;
+  }, [currentUser, hasValidSubscription]);
+  
+  // 顯示邏輯：
+  // 1. currentUser 載入中 (undefined) → 不顯示（避免閃爍）
+  // 2. 如果釘選了 → 全站顯示（但仍需要有播放器功能）
+  // 3. 如果沒釘選 → 只在用戶頁面 AND player.miniPlayerEnabled AND 有播放器功能時顯示
+  const showMini = currentUser !== undefined && hasPlayerFeature && (isPinned || (isUserPage && player?.miniPlayerEnabled));
   
   // 確保所有值都是有效數字後才計算進度
   const currentTime = typeof player?.currentTime === 'number' && isFinite(player.currentTime) ? player.currentTime : 0;
@@ -80,28 +111,39 @@ export default function MiniPlayer() {
     if (!showMini || !player?.isPlaying) return;
     
     let saveCounter = 0; // 用於控制保存頻率
+    let lastLoggedTime = 0; // 避免重複日誌
     
     const interval = setInterval(() => {
       if (player?.updateCurrentTime) {
         player.updateCurrentTime();
       }
       
-      // ✅ 每 5 秒保存一次播放進度（釘選播放器）
+      // ✅ 每 10 秒輸出一次播放進度日誌
       saveCounter++;
-      if (saveCounter >= 5) {
+      if (saveCounter >= 10) {
         saveCounter = 0;
         
-        // 使用 ref 來獲取最新狀態，避免閉包問題
         const currentPlayer = playerRef.current;
-        const currentIsPinned = isPinned;
-        const currentPinnedData = pinnedPlayerData;
+        const currentTime = Math.floor(currentPlayer?.currentTime || 0);
         
-        // 續播功能已移除（YouTube API 限制）
+        // 避免重複輸出相同時間點
+        if (currentTime !== lastLoggedTime) {
+          console.log('⏱️ [播放監測]', {
+            當前進度: `${currentTime}秒`,
+            總時長: `${Math.floor(currentPlayer?.duration || 0)}秒`,
+            進度百分比: `${Math.floor(pct)}%`,
+            音量: `${Math.floor((currentPlayer?.volume || 1) * 100)}%`,
+            播放狀態: currentPlayer?.isPlaying ? '播放中' : '已暫停',
+            當前曲目: currentPlayer?.trackTitle || '未知',
+            是否釘選: isPinned
+          });
+          lastLoggedTime = currentTime;
+        }
       }
     }, 1000); // 每秒更新一次
     
     return () => clearInterval(interval);
-  }, [showMini, player?.isPlaying]); // 只依賴關鍵狀態，避免重複創建 interval
+  }, [showMini, player?.isPlaying, isPinned, pct]); // 只依賴關鍵狀態，避免重複創建 interval
 
   // 移除調試日誌，避免無限循環
   // useEffect(() => {
@@ -144,6 +186,7 @@ export default function MiniPlayer() {
   })();
 
   const handleMouseDown = (e) => {
+    // ✅ 移除手機板拖動限制，允許所有設備拖動
     e.preventDefault();
     setDragStartTime(Date.now());
     dragStartPosRef.current = { x: position.x, y: position.y };
@@ -182,10 +225,24 @@ export default function MiniPlayer() {
         justDraggedRef.current = true;
         setTimeout(() => { justDraggedRef.current = false; }, 250);
       }
-    } catch {}
-    // 儲存目前位置，供下次載入還原
-    try {
-      localStorage.setItem("miniPlayerPosition", JSON.stringify(position));
+      
+      // ✅ 拖動結束後，確保位置在安全範圍內
+      const margin = 16;
+      const width = 140;
+      const height = 200; // 考慮展開後的高度
+      const maxX = window.innerWidth - width - margin;
+      const maxY = window.innerHeight - height - margin;
+      
+      const safeX = Math.max(margin, Math.min(finalX, maxX));
+      const safeY = Math.max(margin, Math.min(finalY, maxY));
+      
+      // 如果位置被調整，更新狀態
+      if (safeX !== finalX || safeY !== finalY) {
+        setPosition({ x: safeX, y: safeY });
+      }
+      
+      // 儲存調整後的位置
+      localStorage.setItem("miniPlayerPosition", JSON.stringify({ x: safeX, y: safeY }));
     } catch {}
   };
 
@@ -201,25 +258,70 @@ export default function MiniPlayer() {
 
   // 預設位置：右上角；若有已儲存位置則優先使用
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("miniPlayerPosition");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed.x === "number" && typeof parsed.y === "number") {
-          setPosition(parsed);
-          return;
-        }
-      }
-    } catch {}
-
-    if (typeof window !== "undefined") {
+    const initializePosition = () => {
       const margin = 16;
       const width = 140; // 與元件寬度一致
-      const x = Math.max(margin, window.innerWidth - width - margin);
-      const y = margin;
-      setPosition({ x, y });
-    }
+      const height = 80; // 播放器高度
+      
+      try {
+        const saved = localStorage.getItem("miniPlayerPosition");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed.x === "number" && typeof parsed.y === "number") {
+            // 確保保存的位置在視窗範圍內
+            const maxX = window.innerWidth - width - margin;
+            const maxY = window.innerHeight - height - margin;
+            const safeX = Math.max(margin, Math.min(parsed.x, maxX));
+            const safeY = Math.max(margin, Math.min(parsed.y, maxY));
+            
+            setPosition({ x: safeX, y: safeY });
+            return;
+          }
+        }
+      } catch {}
+
+      // 預設位置：右上角
+      if (typeof window !== "undefined") {
+        const x = Math.max(margin, window.innerWidth - width - margin);
+        const y = margin;
+        setPosition({ x, y });
+      }
+    };
+    
+    initializePosition();
   }, []);
+  
+  // 監聽視窗大小變化，調整播放器位置
+  useEffect(() => {
+    if (!position) return;
+    
+    const handleResize = () => {
+      const margin = 16;
+      const width = 140;
+      const height = 200; // 考慮展開後的高度
+      
+      // 統一處理：確保在視窗範圍內（桌面和手機板都適用）
+      const maxX = window.innerWidth - width - margin;
+      const maxY = window.innerHeight - height - margin;
+      
+      // 如果當前位置超出視窗範圍，調整到安全位置
+      if (position.x > maxX || position.y > maxY || position.x < margin || position.y < margin) {
+        const safeX = Math.max(margin, Math.min(position.x, maxX));
+        const safeY = Math.max(margin, Math.min(position.y, maxY));
+        
+        setPosition({ x: safeX, y: safeY });
+        
+        // 更新 localStorage
+        try {
+          localStorage.setItem("miniPlayerPosition", JSON.stringify({ x: safeX, y: safeY }));
+        } catch {}
+      }
+    };
+    
+    // 只監聽 resize 事件，不在初始化時執行
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [position]);
 
   // 處理進度條點擊
   const handleButtonClick = (e) => {
@@ -233,15 +335,20 @@ export default function MiniPlayer() {
     
     if (player.duration > 0) {
       const newTime = percentage * player.duration;
-      // 移除調試日誌，避免無限循環
+      
+      console.log('🖱️ [進度條點擊]', {
+        點擊位置: `${Math.round(percentage * 100)}%`,
+        跳轉到: `${Math.floor(newTime)}秒`,
+        總時長: `${Math.floor(player.duration)}秒`
+      });
       
       // 優先使用外部播放器控制
       if (player.externalControls && typeof player.externalControls.seekTo === 'function') {
         try {
           player.externalControls.seekTo(newTime);
-          // console.log("🔧 外部播放器跳轉成功:", newTime);
+          console.log("✅ [進度條點擊] 外部播放器跳轉成功:", Math.floor(newTime));
         } catch (error) {
-          console.error("🔧 外部播放器跳轉失敗:", error);
+          console.error("❌ [進度條點擊] 外部播放器跳轉失敗:", error);
           // 如果外部播放器跳轉失敗，嘗試本地播放器
           if (player.seekTo) {
             try {
@@ -321,12 +428,23 @@ export default function MiniPlayer() {
     player.setVolume(percentage);
   };
 
-  // 檢查釘選狀態並載入釘選的播放清單
+  // 檢查釘選狀態並載入釘選的播放清單（使用 Context 中的 currentUser）
   useEffect(() => {
-    const fetchPinnedPlayer = async () => {
+    // 等待 currentUser 載入完成
+    if (currentUser === undefined) {
+      console.log('🔍 [MiniPlayer] currentUser 未載入，等待中...');
+      return;
+    }
+    
+    const loadPinnedPlayer = async () => {
       try {
-        const res = await axios.get('/api/current-user');
-        const userData = res.data.user || res.data;
+        const userData = currentUser;
+        console.log('🔍 [MiniPlayer] 檢查釘選狀態:', {
+          hasPinnedPlayer: !!userData?.pinnedPlayer?.userId,
+          pinnedUserId: userData?.pinnedPlayer?.userId,
+          pinnedUsername: userData?.pinnedPlayer?.username,
+          playlistLength: userData?.pinnedPlayer?.playlist?.length
+        });
         
         if (userData?.pinnedPlayer?.userId) {
           const pinned = userData.pinnedPlayer;
@@ -334,10 +452,18 @@ export default function MiniPlayer() {
           const now = new Date();
           const expiresAt = pinned.expiresAt ? new Date(pinned.expiresAt) : null;
           
+          console.log('🔍 [MiniPlayer] 釘選數據:', {
+            expiresAt,
+            now,
+            isExpired: expiresAt && expiresAt <= now,
+            playlistLength: pinned.playlist?.length
+          });
+          
           if (expiresAt && expiresAt > now) {
             // 未過期，設置釘選狀態
             setIsPinned(true);
             setPinnedPlayerData(pinned);
+            console.log('✅ [MiniPlayer] 設置釘選狀態為 true');
             
             // 觸發全局事件，通知其他組件
             window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
@@ -351,6 +477,13 @@ export default function MiniPlayer() {
             if (playerRef.current && pinned.playlist && pinned.playlist.length > 0) {
               const currentIndex = pinned.currentIndex || 0;
               const track = pinned.playlist[currentIndex];
+              console.log('🎵 [MiniPlayer] 載入釘選歌單:', {
+                playlistLength: pinned.playlist.length,
+                currentIndex,
+                currentTrack: track?.title,
+                trackUrl: track?.url
+              });
+              
               if (track?.url) {
                 // 設置播放清單和當前索引
                 playerRef.current.setPlaylist?.(pinned.playlist);
@@ -367,24 +500,38 @@ export default function MiniPlayer() {
                   username: pinned.username 
                 });
                 
+                console.log('✅ [MiniPlayer] 歌單載入完成');
               }
+            } else {
+              console.warn('⚠️ [MiniPlayer] playerRef 或 playlist 不可用');
             }
           } else if (expiresAt && expiresAt <= now) {
             // 已過期，自動解除釘選
+            console.log('⏰ [MiniPlayer] 釘選已過期，自動解除');
             await axios.delete('/api/player/pin');
             setIsPinned(false);
             setPinnedPlayerData(null);
           }
+        } else {
+          console.log('ℹ️ [MiniPlayer] 無釘選播放器');
         }
       } catch (error) {
-        console.error('獲取釘選播放器失敗:', error);
+        console.error('❌ [MiniPlayer] 載入釘選播放器失敗:', error);
       }
     };
     
-    fetchPinnedPlayer();
-    
-    // 監聽釘選變更事件（使用 playerRef 避免閉包問題）
+    loadPinnedPlayer();
+  }, [currentUser]); // 當 currentUser 變化時重新檢查
+  
+  // 監聽釘選變更事件（當用戶主動釘選/取消釘選時）
+  useEffect(() => {
     const handlePinnedChange = (e) => {
+      console.log('📡 [MiniPlayer] 收到釘選事件:', {
+        isPinned: e.detail.isPinned,
+        hasPlayerData: !!e.detail.pinnedPlayer,
+        playlistLength: e.detail.playlist?.length || e.detail.pinnedPlayer?.playlist?.length
+      });
+      
       if (e.detail.isPinned) {
         setIsPinned(true);
         const pinnedData = e.detail.pinnedPlayer || {
@@ -396,10 +543,22 @@ export default function MiniPlayer() {
         };
         setPinnedPlayerData(pinnedData);
         
+        console.log('📡 [MiniPlayer] 釘選數據:', {
+          userId: pinnedData.userId,
+          username: pinnedData.username,
+          playlistLength: pinnedData.playlist?.length,
+          currentIndex: pinnedData.currentIndex
+        });
+        
         // 當收到釘選事件時，也載入歌單
         if (playerRef.current && pinnedData.playlist && pinnedData.playlist.length > 0) {
           const currentIndex = pinnedData.currentIndex || 0;
           const track = pinnedData.playlist[currentIndex];
+          console.log('🎵 [MiniPlayer-Event] 載入歌單:', {
+            track: track?.title,
+            url: track?.url
+          });
+          
           if (track?.url) {
             // 設置播放清單和當前索引
             playerRef.current.setPlaylist?.(pinnedData.playlist);
@@ -415,9 +574,14 @@ export default function MiniPlayer() {
               userId: pinnedData.userId, 
               username: pinnedData.username 
             });
+            
+            console.log('✅ [MiniPlayer-Event] 歌單設置完成');
           }
+        } else {
+          console.warn('⚠️ [MiniPlayer-Event] playerRef 或 playlist 不可用');
         }
       } else {
+        console.log('📌 [MiniPlayer] 取消釘選');
         setIsPinned(false);
         setPinnedPlayerData(null);
       }
@@ -428,7 +592,7 @@ export default function MiniPlayer() {
     return () => {
       window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
     };
-  }, []); // 只在組件掛載時執行一次，避免重複獲取覆蓋釘選狀態
+  }, []);
 
   // 全域監聽滑鼠事件
   useEffect(() => {
@@ -448,6 +612,30 @@ export default function MiniPlayer() {
     };
   }, [isDragging, isVolumeSliding]);
 
+  // ✅ 當播放器隱藏時（未釘選且離開用戶頁面），停止播放
+  useEffect(() => {
+    if (!showMini && !isPinned && player?.isPlaying) {
+      // ✅ 先使用 postMessage 暫停 YouTube 播放器（在清空 originUrl 之前）
+      try {
+        const iframes = document.querySelectorAll('iframe[src*="youtube.com"]');
+        if (iframes.length > 0) {
+          const iframe = iframes[iframes.length - 1];
+          if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage(JSON.stringify({
+              event: 'command',
+              func: 'pauseVideo',
+              args: []
+            }), '*');
+          }
+        }
+      } catch (error) {
+        console.error('❌ [MiniPlayer] YouTube 暫停失敗:', error);
+      }
+      
+      // 然後設置 isPlaying 為 false
+      player?.setIsPlaying?.(false);
+    }
+  }, [showMini, isPinned, player?.isPlaying, player]);
 
   // 在所有 hooks 宣告之後再根據條件決定是否輸出 UI
   if (!showMini) return null;
@@ -704,6 +892,13 @@ export default function MiniPlayer() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                const action = player.isPlaying ? '暫停' : '播放';
+                console.log(`🎮 [播放控制] 用戶點擊${action}按鈕`, {
+                  當前狀態: player.isPlaying ? '播放中' : '已暫停',
+                  即將執行: action,
+                  當前曲目: player.trackTitle,
+                  當前進度: `${Math.floor(player.currentTime)}/${Math.floor(player.duration)}秒`
+                });
                 player.isPlaying ? player.pause() : player.play();
               }}
               onMouseDown={(e) => { e.stopPropagation(); }}

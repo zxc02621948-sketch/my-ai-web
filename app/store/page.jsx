@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { STORE_PRODUCTS } from "@/constants/store-products";
 import ProductCard from "@/components/store/ProductCard";
 import axios from "axios";
+import { getLevelInfo } from "@/utils/pointsLevels";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 const STORE_CATEGORIES = [
   {
@@ -19,10 +21,10 @@ const STORE_CATEGORIES = [
     description: "自訂您的個人風格"
   },
   {
-    id: "premium",
-    name: "特權服務",
-    icon: "👑",
-    description: "尊享會員專屬權益"
+    id: "special",
+    name: "特殊物品",
+    icon: "🎁",
+    description: "限時優惠的特殊道具"
   },
   {
     id: "limited",
@@ -33,6 +35,7 @@ const STORE_CATEGORIES = [
 ];
 
 export default function StorePage() {
+  const { subscriptions, updateSubscriptions } = useCurrentUser(); // 使用 Context
   const [activeCategory, setActiveCategory] = useState("features");
   const [loading, setLoading] = useState(false);
   const [purchaseStatus, setPurchaseStatus] = useState({});
@@ -40,21 +43,19 @@ export default function StorePage() {
   const [userOwnedFrames, setUserOwnedFrames] = useState([]);
   const [userInfo, setUserInfo] = useState(null);
   const [powerCouponLimits, setPowerCouponLimits] = useState({});
+  const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(true);
 
-  // 檢查權力券限購狀態
+
+  // 檢查權力券限購狀態（一次查詢所有類型）
   const checkPowerCouponLimits = async () => {
     try {
-      const limits = {};
+      const res = await axios.post("/api/power-coupon/check-limit", { 
+        types: ["7day", "30day"] 
+      });
       
-      // 檢查7天券限購
-      const res7day = await axios.post("/api/power-coupon/check-limit", { type: "7day" });
-      limits["7day"] = res7day.data;
-      
-      // 檢查30天券限購
-      const res30day = await axios.post("/api/power-coupon/check-limit", { type: "30day" });
-      limits["30day"] = res30day.data;
-      
-      setPowerCouponLimits(limits);
+      if (res.data.success && res.data.limits) {
+        setPowerCouponLimits(res.data.limits);
+      }
     } catch (error) {
       console.error("檢查權力券限購狀態失敗:", error);
     }
@@ -64,9 +65,9 @@ export default function StorePage() {
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
+        setIsLoadingUserInfo(true);
         // 獲取用戶基本信息
         const userResponse = await axios.get("/api/user-info");
-        console.log("🔧 用戶信息響應:", userResponse.data);
         if (userResponse.data) {
           setUserInfo(userResponse.data);
           
@@ -74,37 +75,77 @@ export default function StorePage() {
           const purchasedSet = new Set();
           if (userResponse.data.playerCouponUsed) {
             purchasedSet.add("player-1day-coupon");
-            console.log("🔧 播放器 1 日體驗券已使用");
-          }
-          if (userResponse.data.frameColorEditorUnlocked) {
-            purchasedSet.add("frame-color-editor");
-            console.log("🔧 調色盤功能已解鎖");
           }
           setPurchasedItems(purchasedSet);
-          console.log("🔧 設置已購買商品:", Array.from(purchasedSet));
-          console.log("🔧 調色盤解鎖狀態:", userResponse.data.frameColorEditorUnlocked);
         }
 
         // 獲取用戶已擁有的頭像框
         const framesResponse = await axios.get("/api/user/owned-frames");
-        console.log("🔧 已擁有頭像框:", framesResponse.data);
         if (framesResponse.data.success) {
           setUserOwnedFrames(framesResponse.data.data || []);
         }
+        
       } catch (error) {
         console.error("獲取用戶信息失敗:", error);
+      } finally {
+        setIsLoadingUserInfo(false);
       }
     };
     fetchUserInfo();
     checkPowerCouponLimits();
   }, []);
 
-  const handlePurchase = async (productId) => {
-    console.log("🔧 開始購買流程，商品 ID:", productId);
+  const handlePurchase = async (productId, options) => {
     setLoading(true);
     setPurchaseStatus(prev => ({ ...prev, [productId]: true }));
     
     try {
+      // 處理釘選播放器訂閱
+      if (productId === "pin-player-subscription") {
+        const subscriptionType = "pinPlayer";
+        
+        // 取消訂閱
+        if (options?.cancel) {
+          const res = await axios.post("/api/subscriptions/cancel", {
+            subscriptionType
+          });
+          
+          if (res.data.success) {
+            const expiresAt = res.data.expiresAt ? new Date(res.data.expiresAt).toLocaleDateString('zh-TW') : '';
+            alert(`已取消釘選播放器訂閱\n\n您可以繼續使用到 ${expiresAt}\n到期後將自動失效，不會再續費。`);
+            // 重新獲取訂閱狀態（確保前端狀態同步）
+            await updateSubscriptions();
+            // 重新加載用戶信息
+            const info = await axios.get("/api/user-info");
+            setUserInfo(info.data);
+          } else {
+            alert(res.data.error || "取消訂閱失敗");
+          }
+        } 
+        // 開通/續費訂閱
+        else {
+          const res = await axios.post("/api/subscriptions/subscribe", {
+            subscriptionType
+          });
+          
+          if (res.data.success) {
+            const daysRemaining = res.data.daysRemaining || 0;
+            const expiresAt = new Date(res.data.expiresAt).toLocaleDateString('zh-TW');
+            alert(`✅ 訂閱成功！\n\n📅 到期時間：${expiresAt}\n⏳ 剩餘天數：${daysRemaining} 天\n\n💡 續費時剩餘時間會累積，不會浪費。`);
+            // 重新獲取訂閱狀態（確保前端狀態同步）
+            await updateSubscriptions();
+            // 重新加載用戶信息
+            const info = await axios.get("/api/user-info");
+            setUserInfo(info.data);
+          } else {
+            alert(res.data.error || "訂閱失敗，請檢查積分是否足夠");
+          }
+        }
+        setLoading(false);
+        setPurchaseStatus(prev => ({ ...prev, [productId]: false }));
+        return;
+      }
+      
       // 根據商品 ID 調用對應的購買 API
       if (productId === "player-1day-coupon") {
         const res = await axios.post("/api/points/purchase-feature", { 
@@ -128,7 +169,7 @@ export default function StorePage() {
       } else if (productId === "ai-generated-frame") {
         const res = await axios.post("/api/user/purchase-frame", { 
           frameId: "ai-generated", 
-          cost: 0 
+          cost: 300 
         });
         if (res?.data?.success) {
           alert("已獲得 AI 生成頭像框！");
@@ -145,7 +186,7 @@ export default function StorePage() {
       } else if (productId === "animals-frame") {
         const res = await axios.post("/api/user/purchase-frame", { 
           frameId: "animals", 
-          cost: 0 
+          cost: 200 
         });
         if (res?.data?.success) {
           alert("已獲得動物頭像框！");
@@ -159,39 +200,10 @@ export default function StorePage() {
         } else {
           alert(res?.data?.error || "購買失敗，請稍後再試。");
         }
-      } else if (productId === "frame-color-editor") {
-        console.log("🔧 開始購買調色盤功能...");
-        const res = await axios.post("/api/points/purchase-feature", { 
-          productId: "frame-color-editor", 
-          cost: 0 
-        });
-        console.log("🔧 購買 API 響應:", res.data);
-        
-        if (res?.data?.success) {
-          alert("頭像框調色盤功能解鎖成功！");
-          // 更新用戶資訊狀態
-          const info = await axios.get(`/api/user-info`);
-          console.log("🔧 購買後用戶信息:", info.data);
-          setUserInfo(info.data);
-          // 更新購買狀態
-          setPurchasedItems(prev => new Set([...prev, productId]));
-          
-          // 廣播用戶數據更新事件
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("user-data-updated", { 
-                detail: { userData: info.data } 
-              })
-            );
-          }
-        } else {
-          console.error("🔧 購買失敗:", res?.data?.error);
-          alert(res?.data?.error || "購買失敗，請稍後再試。");
-        }
       } else if (productId === "magic-circle-frame") {
         const res = await axios.post("/api/user/purchase-frame", { 
           frameId: "magic-circle", 
-          cost: 0 
+          cost: 300 
         });
         if (res?.data?.success) {
           alert("已獲得魔法陣頭像框！");
@@ -205,7 +217,7 @@ export default function StorePage() {
       } else if (productId === "magic-circle-2-frame") {
         const res = await axios.post("/api/user/purchase-frame", { 
           frameId: "magic-circle-2", 
-          cost: 0 
+          cost: 300 
         });
         if (res?.data?.success) {
           alert("已獲得魔法陣2頭像框！");
@@ -218,9 +230,7 @@ export default function StorePage() {
         }
       } else if (productId.startsWith("power-coupon-")) {
         // 處理權力券購買
-        console.log("權力券購買 productId:", productId);
         const [_, __, duration] = productId.split("-");
-        console.log("解析後的 duration:", duration);
         const res = await axios.post("/api/power-coupon/purchase", {
           type: duration, // 直接使用 duration，不需要再加 "day"
           quantity: 1
@@ -279,7 +289,22 @@ export default function StorePage() {
 
         {/* 商品列表 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {products.map(product => {
+          {isLoadingUserInfo ? (
+            <div className="col-span-full text-center py-12 text-gray-400">
+              載入中...
+            </div>
+          ) : (
+            products.map(product => {
+            // 檢查用戶等級是否已經解鎖播放器（LV3 = 500積分）
+            const userLevel = getLevelInfo(userInfo?.totalEarnedPoints || 0);
+            const hasPlayerByLevel = userLevel.index >= 2; // LV3 的索引是 2 (0-based)
+            const hasPlayerByCoupon = userInfo?.playerCouponUsed;
+            
+            // 如果用戶已經有播放器功能（等級解鎖或體驗券），且當前商品是播放器體驗券，則跳過不顯示
+            if ((hasPlayerByLevel || hasPlayerByCoupon) && product.id === "player-1day-coupon") {
+              return null;
+            }
+            
             // 檢查商品是否已購買
             let isPurchased = purchasedItems.has(product.id);
             let isLimited = false;
@@ -315,18 +340,50 @@ export default function StorePage() {
               const frameOwned = userOwnedFrames.includes("animals");
               isPurchased = isPurchased || frameOwned;
               // console.log("🔧 動物頭像框狀態:", { productId: product.id, isPurchased, frameOwned });
-            } else if (product.id === "frame-color-editor") {
-              const colorEditorUnlocked = userInfo?.frameColorEditorUnlocked === true;
-              isPurchased = isPurchased || colorEditorUnlocked;
-              console.log("🔧 調色盤解鎖狀態:", { productId: product.id, isPurchased, colorEditorUnlocked, userInfo: userInfo?.frameColorEditorUnlocked });
             } else if (product.id === "magic-circle-frame") {
               const frameOwned = userOwnedFrames.includes("magic-circle");
               isPurchased = isPurchased || frameOwned;
-              console.log("🔧 魔法陣頭像框狀態:", { productId: product.id, isPurchased, frameOwned });
             } else if (product.id === "magic-circle-2-frame") {
               const frameOwned = userOwnedFrames.includes("magic-circle-2");
               isPurchased = isPurchased || frameOwned;
-              console.log("🔧 魔法陣2頭像框狀態:", { productId: product.id, isPurchased, frameOwned });
+            }
+            
+            // 檢查訂閱狀態（針對月租商品）
+            let isSubscribed = false;
+            let subscriptionInfo = null;
+            if (product.type === "subscription") {
+              const now = new Date();
+              let sub = null;
+              
+              if (product.id === "pin-player-subscription") {
+                sub = subscriptions.pinPlayer;
+              }
+              
+              if (sub) {
+                // 兼容舊數據：優先使用 expiresAt，否則使用 nextBillingDate
+                const expiresAtValue = sub.expiresAt || sub.nextBillingDate;
+                const expiresAt = expiresAtValue ? new Date(expiresAtValue) : null;
+                
+                if (expiresAt) {
+                  isSubscribed = sub.isActive && expiresAt > now;
+                  
+                  // 計算剩餘天數
+                  const daysRemaining = Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24));
+                  
+                  subscriptionInfo = {
+                    expiresAt: expiresAtValue,
+                    daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
+                    cancelledAt: sub.cancelledAt
+                  };
+                }
+              } else {
+                // 沒有訂閱時，也提供 subscriptionInfo 以便顯示狀態
+                subscriptionInfo = {
+                  expiresAt: null,
+                  daysRemaining: 0,
+                  cancelledAt: null
+                };
+              }
             }
             
             return (
@@ -337,10 +394,13 @@ export default function StorePage() {
                 isPurchased={isPurchased}
                 isLimitedPurchase={isLimited}
                 limitMessage={limitMessage}
-                onPurchase={() => handlePurchase(product.id)}
+                isSubscribed={isSubscribed}
+                subscriptionInfo={subscriptionInfo}
+                onPurchase={(options) => handlePurchase(product.id, options)}
               />
             );
-          })}
+          }))
+          }
         </div>
       </div>
     </div>

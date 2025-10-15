@@ -144,6 +144,32 @@ export async function GET(req) {
     const match = {};
     if (categoriesParam.length) match.category = { $in: categoriesParam };
 
+    // ✅ 支持 hasMetadata 篩選（用於「作品展示」vs「創作參考」）
+    const hasMetadataParam = url.searchParams.get("hasMetadata");
+    if (hasMetadataParam === "true") {
+      // 使用更智能的質量篩選：只顯示優質圖和標準圖
+      match.$or = [
+        // 優質圖條件：有模型/LoRA/Prompt 且自動抓取比例高
+        {
+          $and: [
+            { $or: [
+              { modelName: { $exists: true, $ne: "", $ne: "(未提供)" } },
+              { loraName: { $exists: true, $ne: "", $ne: "(未提供)" } },
+              { positivePrompt: { $exists: true, $ne: "", $ne: "(無)" } }
+            ]},
+            { $or: [
+              { steps: { $exists: true, $ne: null } },
+              { sampler: { $exists: true, $ne: "" } },
+              { cfgScale: { $exists: true, $ne: null } },
+              { seed: { $exists: true, $ne: "" } },
+              { width: { $exists: true, $ne: null } },
+              { height: { $exists: true, $ne: null } }
+            ]}
+          ]
+        }
+      ];
+    }
+
     const hasSfw = selected.has("sfw");
     const has15 = selected.has("15");
     const has18 = selected.has("18");
@@ -181,6 +207,8 @@ export async function GET(req) {
       powerUsed: 1, powerExpiry: 1, powerType: 1, powerUsedAt: 1,
       // ⭐ 會帶出 comfy 與 raw.comfyWorkflowJson，但回傳前會經 stripComfyIfNotAllowed 清掉不該看的
       comfy: 1, "raw.comfyWorkflowJson": 1,
+      // ✅ 作品展示/創作參考篩選字段
+      hasMetadata: 1,
     }; // ← 這裡原本就有把 comfy 帶出去，需在回傳前清理掉不該看的:contentReference[oaicite:1]{index=1}
 
     const addUserRef = {
@@ -206,7 +234,7 @@ export async function GET(req) {
           localField: "userRef",
           foreignField: "_id",
           as: "user",
-          pipeline: [{ $project: { _id: 1, username: 1, image: 1, currentFrame: 1 } }],
+          pipeline: [{ $project: { _id: 1, username: 1, image: 1, currentFrame: 1, frameSettings: 1 } }],
         },
       },
       { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },

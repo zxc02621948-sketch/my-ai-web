@@ -4,7 +4,8 @@
 export const LEVEL_REWARDS = {
   lv2: {
     frames: ['leaves'], // 葉子頭像框
-    description: '恭喜達到 LV2！獲得葉子頭像框'
+    features: ['frame-color-editor'], // 調色盤功能（使用需付費 50 積分/次）
+    description: '恭喜達到 LV2！獲得葉子頭像框 + 解鎖頭像框調色盤功能（使用需 50 積分/次）'
   },
   lv3: {
     features: ['music-player'], // 播放器功能
@@ -12,8 +13,8 @@ export const LEVEL_REWARDS = {
   },
   // LV4-10 獎勵設計
   lv4: {
-    features: ['advanced-frames'], // 高級頭像框編輯功能
-    description: '恭喜達到 LV4！解鎖高級頭像框編輯功能'
+    points: 200, // 一次性積分獎勵
+    description: '恭喜達到 LV4！獲得 200 積分獎勵'
   },
   lv5: {
     features: ['priority-support'], // 優先客服支持

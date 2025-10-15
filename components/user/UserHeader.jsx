@@ -15,7 +15,9 @@ import PointsStoreModal from "./PointsStoreModal";
 import LevelDisplay from "./LevelDisplay";
 import UnifiedAvatarModal from "./UnifiedAvatarModal";
 import LevelRewardsModal from "./LevelRewardsModal";
+import PowerCouponGuideModal from "./PowerCouponGuideModal";
 import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 const cloudflarePrefix = "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/";
 
@@ -32,6 +34,8 @@ const getTokenFromCookie = () => {
 };
 
 export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen, onPointsOpen, onPowerCouponOpen, onUserDataUpdate }) {
+  // 使用 Context 獲取訂閱狀態
+  const { hasValidSubscription } = useCurrentUser();
   const router = useRouter();
   const isOwnProfile =
     !!currentUser && !!userData && String(currentUser._id) === String(userData._id);
@@ -39,6 +43,10 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
   // ====== 頭像 / 追蹤狀態 ======
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+
+  // ====== 權力券數量 ======
+  const [couponCount, setCouponCount] = useState(0);
+  const [isCouponGuideOpen, setIsCouponGuideOpen] = useState(false);
 
   // ====== 統計數據狀態 ======
   const [userStats, setUserStats] = useState({
@@ -54,6 +62,9 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
   const [currentFrame, setCurrentFrame] = useState(userData?.currentFrame || "default");
   const [isAvatarModalOpen, setAvatarModalOpen] = useState(false);
   const [isLevelRewardsModalOpen, setLevelRewardsModalOpen] = useState(false);
+  const [isMobileStatsExpanded, setMobileStatsExpanded] = useState(false);
+  const [isMobilePointsExpanded, setMobilePointsExpanded] = useState(false);
+  const [isMobileEarningExpanded, setMobileEarningExpanded] = useState(false);
 
   // 同步 userData 的 currentFrame 到本地狀態
   useEffect(() => {
@@ -121,6 +132,27 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
     return () => window.removeEventListener("user-data-updated", onUserDataUpdated);
   }, [onUserDataUpdate]);
 
+  // E) 監聽頭像框設定更新事件
+  useEffect(() => {
+    const onFrameSettingsUpdated = (e) => {
+      const { frameId, settings } = e.detail || {};
+      if (frameId && settings && onUserDataUpdate) {
+        console.log("🎨 收到頭像框設定更新事件:", { frameId, settings });
+        // 更新 userData 中的 frameSettings
+        const updatedUserData = {
+          ...userData,
+          frameSettings: {
+            ...userData?.frameSettings,
+            [frameId]: settings
+          }
+        };
+        onUserDataUpdate(updatedUserData);
+      }
+    };
+    window.addEventListener("frame-settings-updated", onFrameSettingsUpdated);
+    return () => window.removeEventListener("frame-settings-updated", onFrameSettingsUpdated);
+  }, [userData, onUserDataUpdate]);
+
   // ====== 獲取統計數據 ======
   useEffect(() => {
     const fetchUserStats = async () => {
@@ -144,6 +176,27 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
 
     fetchUserStats();
   }, [userData?._id]);
+
+  // ====== 獲取權力券數量（僅自己的個人頁） ======
+  useEffect(() => {
+    const fetchCouponCount = async () => {
+      if (!isOwnProfile) return;
+      
+      try {
+        const res = await axios.get('/api/power-coupon/user-coupons', {
+          withCredentials: true
+        });
+        if (res?.data?.success) {
+          const activeCoupons = (res.data.coupons || []).filter(c => !c.used);
+          setCouponCount(activeCoupons.length);
+        }
+      } catch (error) {
+        console.error('獲取權力券數量失敗:', error);
+      }
+    };
+
+    fetchCouponCount();
+  }, [isOwnProfile]);
 
 
 
@@ -329,43 +382,94 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                 {/* 用戶名 */}
                 <h1 className="text-2xl sm:text-3xl font-light mb-3">{userData.username}</h1>
                 
-                {/* 統計數據 */}
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4 mb-4">
-                  <div className="text-center">
-                    <div className="text-xl sm:text-2xl font-bold text-white">
-                      {statsLoading ? "..." : userStats.worksCount}
+                {/* 統計數據 - 手機版可展開設計 */}
+                <div className="mb-4">
+                  {/* 主要統計數據 - 始終顯示 */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+                    <div className="text-center">
+                      <div className="text-xl sm:text-2xl font-bold text-white">
+                        {statsLoading ? "..." : userStats.worksCount}
+                      </div>
+                      <div className="text-gray-400 text-xs sm:text-sm">作品</div>
                     </div>
-                    <div className="text-gray-400 text-xs sm:text-sm">作品</div>
+                    <div className="text-center">
+                      <div className="text-xl sm:text-2xl font-bold text-white">
+                        {statsLoading ? "..." : userStats.followersCount}
+                      </div>
+                      <div className="text-gray-400 text-xs sm:text-sm">追蹤者</div>
+                    </div>
+                    <div className="hidden md:block text-center">
+                      <div className="text-xl sm:text-2xl font-bold text-white">
+                        {statsLoading ? "..." : userStats.followingCount}
+                      </div>
+                      <div className="text-gray-400 text-xs sm:text-sm">追蹤中</div>
+                    </div>
+                    <div className="hidden lg:block text-center">
+                      <div className="text-xl sm:text-2xl font-bold text-yellow-400">
+                        {statsLoading ? "..." : userStats.favoritesCount}
+                      </div>
+                      <div className="text-gray-400 text-xs sm:text-sm">收藏</div>
+                    </div>
+                    <div className="hidden lg:block text-center">
+                      <div className="text-xl sm:text-2xl font-bold text-red-400">
+                        {statsLoading ? "..." : userStats.likesCount}
+                      </div>
+                      <div className="text-gray-400 text-xs sm:text-sm">點讚</div>
+                    </div>
+                    <div className="hidden lg:block text-center">
+                      <div className="text-xl sm:text-2xl font-bold text-blue-400">
+                        {statsLoading ? "..." : userStats.commentsCount}
+                      </div>
+                      <div className="text-gray-400 text-xs sm:text-sm">評論</div>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <div className="text-xl sm:text-2xl font-bold text-white">
-                      {statsLoading ? "..." : userStats.followersCount}
-                    </div>
-                    <div className="text-gray-400 text-xs sm:text-sm">追蹤者</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-xl sm:text-2xl font-bold text-white">
-                      {statsLoading ? "..." : userStats.followingCount}
-                    </div>
-                    <div className="text-gray-400 text-xs sm:text-sm">追蹤中</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-xl sm:text-2xl font-bold text-yellow-400">
-                      {statsLoading ? "..." : userStats.favoritesCount}
-                    </div>
-                    <div className="text-gray-400 text-xs sm:text-sm">收藏</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-xl sm:text-2xl font-bold text-red-400">
-                      {statsLoading ? "..." : userStats.likesCount}
-                    </div>
-                    <div className="text-gray-400 text-xs sm:text-sm">點讚</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-xl sm:text-2xl font-bold text-blue-400">
-                      {statsLoading ? "..." : userStats.commentsCount}
-                    </div>
-                    <div className="text-gray-400 text-xs sm:text-sm">評論</div>
+
+                  {/* 手機版展開按鈕和詳細統計 */}
+                  <div className="md:hidden">
+                    <button
+                      onClick={() => setMobileStatsExpanded(!isMobileStatsExpanded)}
+                      className="w-full mt-3 py-2 px-3 bg-zinc-800/50 hover:bg-zinc-700/50 rounded-lg text-gray-300 text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      <span>更多統計</span>
+                      <svg 
+                        className={`w-4 h-4 transition-transform ${isMobileStatsExpanded ? 'rotate-180' : ''}`}
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    
+                    {/* 展開的詳細統計 */}
+                    {isMobileStatsExpanded && (
+                      <div className="mt-3 grid grid-cols-2 gap-3 animate-in slide-in-from-top-2 duration-200">
+                        <div className="text-center bg-zinc-800/30 rounded-lg p-2">
+                          <div className="text-lg font-bold text-white">
+                            {statsLoading ? "..." : userStats.followingCount}
+                          </div>
+                          <div className="text-gray-400 text-xs">追蹤中</div>
+                        </div>
+                        <div className="text-center bg-zinc-800/30 rounded-lg p-2">
+                          <div className="text-lg font-bold text-yellow-400">
+                            {statsLoading ? "..." : userStats.favoritesCount}
+                          </div>
+                          <div className="text-gray-400 text-xs">收藏</div>
+                        </div>
+                        <div className="text-center bg-zinc-800/30 rounded-lg p-2">
+                          <div className="text-lg font-bold text-red-400">
+                            {statsLoading ? "..." : userStats.likesCount}
+                          </div>
+                          <div className="text-gray-400 text-xs">點讚</div>
+                        </div>
+                        <div className="text-center bg-zinc-800/30 rounded-lg p-2">
+                          <div className="text-lg font-bold text-blue-400">
+                            {statsLoading ? "..." : userStats.commentsCount}
+                          </div>
+                          <div className="text-gray-400 text-xs">評論</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -385,25 +489,29 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                   </div>
                 </div>
                 
-                {/* 操作按鈕 */}
-                <div className="flex justify-center sm:justify-start items-center gap-3 mb-4">
+                {/* 操作按鈕 - 手機版優化 */}
+                <div className="flex flex-wrap justify-center sm:justify-start items-center gap-2 sm:gap-3 mb-4">
                   {isOwnProfile ? (
                     <>
                       <button
                         onClick={() => onEditOpen?.()}
-                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-medium border border-zinc-600 flex items-center gap-2"
+                        className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs sm:text-sm font-medium border border-zinc-600 flex items-center gap-1 sm:gap-2"
                       >
-                        <Pencil size={16} />
-                        編輯個人檔案
+                        <Pencil size={14} className="sm:w-4 sm:h-4" />
+                        <span className="hidden sm:inline">編輯個人檔案</span>
+                        <span className="sm:hidden">編輯</span>
                       </button>
-                      <FollowListButton currentUser={currentUser} userId={userData._id} />
-                      {/* 播放器入口（僅購買後顯示） */}
-                      {userData?.miniPlayerPurchased ? (
+                      <div className="hidden md:block">
+                        <FollowListButton currentUser={currentUser} userId={userData._id} />
+                      </div>
+                      {/* 播放器入口（僅有效訂閱後顯示） */}
+                      {hasValidSubscription('pinPlayerTest') || hasValidSubscription('pinPlayer') ? (
                         <Link
                           href={`/user/${userData._id}/player`}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-semibold text-white border border-blue-500"
+                          className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs sm:text-sm font-semibold text-white border border-blue-500"
                         >
-                          🎧 播放器
+                          <span className="hidden sm:inline">🎧 播放器</span>
+                          <span className="sm:hidden">🎧</span>
                         </Link>
                       ) : null}
                     </>
@@ -411,7 +519,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                     <>
                       <button
                         onClick={handleFollowToggle}
-                        className={`px-6 py-2 text-sm font-semibold rounded-lg ${
+                        className={`px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg ${
                           isFollowing 
                             ? "bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600" 
                             : "bg-blue-600 hover:bg-blue-700 text-white"
@@ -420,15 +528,6 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                       >
                         {isFollowing ? "追蹤中" : "追蹤"}
                       </button>
-                      {/* 播放器入口（僅作者已購買時顯示給訪客） */}
-                      {userData?.miniPlayerPurchased ? (
-                        <Link
-                          href={`/user/${userData._id}/player`}
-                          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-medium text-white border border-zinc-600"
-                        >
-                          🎧 播放器
-                        </Link>
-                      ) : null}
                     </>
                   ) : null}
                 </div>
@@ -439,19 +538,19 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
           </div>
         </div>
 
-        {/* 積分系統區域 - 右半邊 */}
+        {/* 積分系統區域 - 右半邊，手機版簡化 */}
         <div className="w-full xl:w-1/2">
-          <div className="bg-zinc-900/50 rounded-r-xl p-4 border-t border-r border-b border-zinc-700/50 h-full">
-            {/* 積分總覽 - 橫式排列 */}
+          <div className="bg-zinc-900/50 rounded-r-xl p-3 sm:p-4 border-t border-r border-b border-zinc-700/50 h-full">
+            {/* 積分總覽 - 手機版簡化 */}
             <div className="mb-4">
-              <div className="flex items-center gap-3 mb-3">
-                <h3 className="text-lg font-semibold text-gray-200">積分總覽</h3>
+              <div className="flex items-center gap-2 sm:gap-3 mb-3">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-200">積分總覽</h3>
                 
-                {/* 等級獎勵按鈕 */}
+                {/* 等級獎勵按鈕 - 手機版隱藏 */}
                 {isOwnProfile && (
                   <button
                     onClick={() => setLevelRewardsModalOpen(true)}
-                    className="px-3 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-2 whitespace-nowrap"
+                    className="hidden sm:flex px-3 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 items-center gap-2 whitespace-nowrap"
                     title="查看等級獎勵"
                   >
                     <span className="text-lg">🏆</span>
@@ -460,8 +559,8 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                 )}
               </div>
               
-              {/* 等級顯示 */}
-              <div className="mb-4">
+              {/* 等級顯示 - 手機版簡化 */}
+              <div className="mb-3 sm:mb-4">
                 <LevelDisplay 
                   points={statsLoading ? 0 : Number(userStats?.totalEarned ?? 0)} 
                   showProgress={true}
@@ -469,53 +568,111 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* 積分信息 - 手機版可展開 */}
+              <div>
+                {/* 主要積分信息 */}
                 <div className="text-center sm:text-left">
-                  <div className="text-gray-400 text-sm mb-1">當前積分</div>
-                  <div className="text-2xl font-bold text-yellow-400">{statsLoading ? "—" : Number(userStats?.totalEarned ?? 0)}</div>
+                  <div className="text-gray-400 text-xs sm:text-sm mb-1">當前積分</div>
+                  <div className="text-xl sm:text-2xl font-bold text-yellow-400">{statsLoading ? "—" : Number(userStats?.totalEarned ?? 0)}</div>
                 </div>
-                <div className="text-center sm:text-left">
-                  <div className="text-gray-500 text-sm mb-1">本月獲得</div>
-                  <div className="text-xl font-semibold text-green-400">{statsLoading ? "—" : Number(userStats?.monthlyEarned ?? 0)}</div>
+
+                {/* 桌面版詳細積分信息 */}
+                <div className="hidden sm:grid sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
+                  <div className="text-center sm:text-left">
+                    <div className="text-gray-500 text-sm mb-1">本月獲得</div>
+                    <div className="text-xl font-semibold text-green-400">{statsLoading ? "—" : Number(userStats?.monthlyEarned ?? 0)}</div>
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <div className="text-gray-500 text-sm mb-1">總計獲得</div>
+                    <div className="text-xl font-semibold text-gray-300">{statsLoading ? "—" : Number(userStats?.totalEarned ?? 0)}</div>
+                  </div>
                 </div>
-                <div className="text-center sm:text-left">
-                  <div className="text-gray-500 text-sm mb-1">總計獲得</div>
-                  <div className="text-xl font-semibold text-gray-300">{statsLoading ? "—" : Number(userStats?.totalEarned ?? 0)}</div>
+
+                {/* 手機版展開按鈕和詳細積分 */}
+                <div className="sm:hidden">
+                  <button
+                    onClick={() => setMobilePointsExpanded(!isMobilePointsExpanded)}
+                    className="w-full mt-3 py-2 px-3 bg-zinc-800/50 hover:bg-zinc-700/50 rounded-lg text-gray-300 text-sm transition-colors flex items-center justify-center gap-2"
+                  >
+                    <span>詳細積分</span>
+                    <svg 
+                      className={`w-4 h-4 transition-transform ${isMobilePointsExpanded ? 'rotate-180' : ''}`}
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {/* 展開的詳細積分 */}
+                  {isMobilePointsExpanded && (
+                    <div className="mt-3 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                      <div className="bg-zinc-800/30 rounded-lg p-3">
+                        <div className="text-gray-500 text-sm mb-1">本月獲得</div>
+                        <div className="text-lg font-semibold text-green-400">{statsLoading ? "—" : Number(userStats?.monthlyEarned ?? 0)}</div>
+                      </div>
+                      <div className="bg-zinc-800/30 rounded-lg p-3">
+                        <div className="text-gray-500 text-sm mb-1">總計獲得</div>
+                        <div className="text-lg font-semibold text-gray-300">{statsLoading ? "—" : Number(userStats?.totalEarned ?? 0)}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* 快速操作和積分獲得方式 - 橫式排列 */}
+            {/* 快速操作和積分獲得方式 - 手機版簡化 */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {/* 快速操作 */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-2">快速操作</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button 
-                    onClick={() => router.push('/store')} 
-                    className="bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-white py-2 px-3 rounded-lg font-medium transition-all duration-200 text-sm"
-                  >
-                    🛍️ 積分商店
-                  </button>
-                  <button
-                    onClick={() => onPointsOpen?.()}
-                    className="bg-zinc-800 hover:bg-zinc-700 text-gray-200 py-2 px-3 rounded-lg font-medium border border-zinc-600 transition-all duration-200 text-sm"
-                  >
-                    📊 積分記錄
-                  </button>
-                  <button
-                    onClick={() => onPowerCouponOpen?.()}
-                    className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-3 rounded-lg font-medium transition-all duration-200 text-sm"
-                  >
-                    🎫 權力券
-                  </button>
+              {/* 快速操作（僅自己可見）- 手機版隱藏次要功能 */}
+              {isOwnProfile && (
+                <div>
+                  <h4 className="text-xs sm:text-sm font-medium text-gray-300 mb-2">快速操作</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => router.push('/store')} 
+                      className="bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-white py-2 px-3 rounded-lg font-medium transition-all duration-200 text-xs sm:text-sm"
+                    >
+                      <span className="hidden sm:inline">🛍️ 積分商店</span>
+                      <span className="sm:hidden">🛍️ 商店</span>
+                    </button>
+                    <button
+                      onClick={() => onPointsOpen?.()}
+                      className="bg-zinc-800 hover:bg-zinc-700 text-gray-200 py-2 px-3 rounded-lg font-medium border border-zinc-600 transition-all duration-200 text-xs sm:text-sm"
+                    >
+                      <span className="hidden sm:inline">📊 積分記錄</span>
+                      <span className="sm:hidden">📊 記錄</span>
+                    </button>
+                    <button
+                      onClick={() => setIsCouponGuideOpen(true)}
+                      className={`py-2 px-3 rounded-lg font-medium transition-all duration-200 text-xs sm:text-sm relative ${
+                        couponCount === 0 
+                          ? 'bg-gray-600 hover:bg-gray-500 text-gray-300 border border-gray-500' 
+                          : 'bg-purple-600 hover:bg-purple-700 text-white'
+                      }`}
+                      title={couponCount === 0 ? '點擊查看說明並購買' : `你有 ${couponCount} 張可用券，點擊查看使用方法`}
+                    >
+                      <span className="hidden sm:inline">🎫 新圖加乘券</span>
+                      <span className="sm:hidden">🎫 加乘券</span>
+                      {couponCount > 0 && (
+                        <span className="ml-1 bg-yellow-500 text-black text-xs px-1.5 py-0.5 rounded-full font-bold">
+                          {couponCount}
+                        </span>
+                      )}
+                      {couponCount === 0 && (
+                        <span className="ml-1 text-xs opacity-75 hidden sm:inline">(無券)</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* 積分獲得方式 */}
+              {/* 積分獲得方式 - 手機版可展開 */}
               <div>
                 <h4 className="text-sm font-medium text-gray-300 mb-2">獲得積分</h4>
-                <div className="space-y-1.5 text-xs text-gray-400">
+                
+                {/* 桌面版完整顯示 */}
+                <div className="hidden md:block space-y-1.5 text-xs text-gray-400">
                   <div className="flex justify-between">
                     <span>上傳作品</span>
                     <span className="text-yellow-400">+5／每日上限 20</span>
@@ -524,19 +681,65 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                     <span>獲得愛心</span>
                     <span className="text-yellow-400">+1／每日上限 10</span>
                   </div>
-                  {/* 新增：給予愛心也能獲得積分 */}
                   <div className="flex justify-between">
                     <span>給予愛心</span>
-                    <span className="text-yellow-400">+1／每日上限 5（同一使用者對同一作品終身僅計一次）</span>
+                    <span className="text-yellow-400">+1／每日上限 5</span>
                   </div>
                   <div className="flex justify-between">
                     <span>獲得留言</span>
-                    <span className="text-yellow-400">+1／每日上限 5（同用戶同作品同日僅計一次）</span>
+                    <span className="text-yellow-400">+1／每日上限 5</span>
                   </div>
                   <div className="flex justify-between">
                     <span>每日登入</span>
                     <span className="text-yellow-400">+5／每日一次</span>
                   </div>
+                </div>
+
+                {/* 手機版簡化顯示和展開按鈕 */}
+                <div className="md:hidden">
+                  <div className="space-y-1.5 text-xs text-gray-400">
+                    <div className="flex justify-between">
+                      <span>上傳作品</span>
+                      <span className="text-yellow-400">+5／日</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>每日登入</span>
+                      <span className="text-yellow-400">+5／日</span>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={() => setMobileEarningExpanded(!isMobileEarningExpanded)}
+                    className="w-full mt-2 py-1.5 px-2 bg-zinc-800/30 hover:bg-zinc-700/30 rounded text-gray-400 text-xs transition-colors flex items-center justify-center gap-1"
+                  >
+                    <span>查看全部</span>
+                    <svg 
+                      className={`w-3 h-3 transition-transform ${isMobileEarningExpanded ? 'rotate-180' : ''}`}
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {/* 展開的詳細積分獲得方式 */}
+                  {isMobileEarningExpanded && (
+                    <div className="mt-2 space-y-1.5 text-xs text-gray-400 animate-in slide-in-from-top-2 duration-200">
+                      <div className="flex justify-between">
+                        <span>獲得愛心</span>
+                        <span className="text-yellow-400">+1／每日上限 10</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>給予愛心</span>
+                        <span className="text-yellow-400">+1／每日上限 5</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>獲得留言</span>
+                        <span className="text-yellow-400">+1／每日上限 5</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -545,6 +748,14 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       </div>
       {/* 積分商店彈窗 */}
       <PointsStoreModal isOpen={isStoreOpen} onClose={() => setStoreOpen(false)} userData={userData} />
+      
+      {/* 權力券說明彈窗 */}
+      <PowerCouponGuideModal 
+        isOpen={isCouponGuideOpen} 
+        onClose={() => setIsCouponGuideOpen(false)} 
+        hasNoCoupon={couponCount === 0}
+        couponCount={couponCount}
+      />
       
       {/* 統一頭像模態框 */}
       <UnifiedAvatarModal 

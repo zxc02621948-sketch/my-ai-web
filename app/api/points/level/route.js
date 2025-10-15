@@ -29,7 +29,7 @@ export async function GET(request) {
       return NextResponse.json({ ok: false, error: "用戶不存在" }, { status: 404 });
     }
 
-    const points = Number(userDoc.pointsBalance || 0);
+    const points = Number(userDoc.totalEarnedPoints || 0);
     const info = getLevelInfo(points);
 
     return NextResponse.json({
@@ -37,6 +37,7 @@ export async function GET(request) {
       data: {
         userId: String(userDoc._id),
         points,
+        currentBalance: Number(userDoc.pointsBalance || 0),
         levelName: info.name,
         rank: info.rank,
         title: info.title,

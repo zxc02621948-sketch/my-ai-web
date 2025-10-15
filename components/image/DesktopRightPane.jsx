@@ -14,6 +14,7 @@ const fileUrlOf = (image) =>
 export default function DesktopRightPane({
   image,
   currentUser,
+  displayMode = "gallery", // ✅ 新增：顯示模式
   isFollowing,        // 仍支援父層傳入
   onFollowToggle,     // 仍支援回呼（選用）
   onUserClick,
@@ -152,6 +153,10 @@ export default function DesktopRightPane({
                   frameId={image?.user?.currentFrame || "default"}
                   showFrame={true}
                   onClick={onUserClick}
+                  frameColor={image?.user?.frameSettings?.[image?.user?.currentFrame || "default"]?.color || "#ffffff"}
+                  frameOpacity={image?.user?.frameSettings?.[image?.user?.currentFrame || "default"]?.opacity || 1}
+                  layerOrder={image?.user?.frameSettings?.[image?.user?.currentFrame || "default"]?.layerOrder || "frame-on-top"}
+                  frameTransparency={image?.user?.frameSettings?.[image?.user?.currentFrame || "default"]?.frameOpacity || 1}
                 />
                 <button
                   type="button"
@@ -180,6 +185,7 @@ export default function DesktopRightPane({
             <ImageInfoBox
               image={image}
               currentUser={currentUser}
+              displayMode={displayMode} // ✅ 傳遞顯示模式
               onClose={onClose}
               onDelete={onDelete}
               fileUrl={fileUrlOf(image)}

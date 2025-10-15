@@ -3,27 +3,31 @@
 import { formatDistanceToNow } from "date-fns";
 import axios from "axios";
 import { Trash2 } from "lucide-react";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export default function NotificationList({
   notifications,
   setNotifications,
-  setUnread,
   onNotificationClick,
 }) {
+  const { updateUnreadCount } = useCurrentUser();
+
   const handleMarkRead = async (id) => {
     await axios.patch(`/api/notifications/mark-read/${id}`);
     const updated = notifications.map((n) =>
       n._id === id ? { ...n, isRead: true } : n
     );
     setNotifications(updated);
-    setUnread(updated.some((n) => !n.isRead));
+    const hasUnread = updated.some((n) => !n.isRead);
+    updateUnreadCount('notifications', hasUnread ? 1 : 0);
   };
 
   const handleDelete = async (id) => {
     await axios.delete(`/api/notifications/${id}`);
     const updated = notifications.filter((n) => n._id !== id);
     setNotifications(updated);
-    setUnread(updated.some((n) => !n.isRead));
+    const hasUnread = updated.some((n) => !n.isRead);
+    updateUnreadCount('notifications', hasUnread ? 1 : 0);
   };
 
   const handleDeleteRead = async () => {
@@ -31,7 +35,8 @@ export default function NotificationList({
     await axios.delete("/api/notifications/delete-read");
     const updated = notifications.filter((n) => !n.isRead);
     setNotifications(updated);
-    setUnread(updated.some((n) => !n.isRead));
+    const hasUnread = updated.some((n) => !n.isRead);
+    updateUnreadCount('notifications', hasUnread ? 1 : 0);
   };
 
   if (notifications.length === 0) {
@@ -57,21 +62,36 @@ export default function NotificationList({
           }`}
           onClick={() => {
             handleMarkRead(n._id);
-            onNotificationClick?.(n.imageId);
+            // 系統通知跳轉到指定鏈接
+            if (!n.fromUserId && n.link) {
+              window.location.href = n.link;
+            } else if (n.imageId) {
+              onNotificationClick?.(n.imageId);
+            }
           }}
         >
           <div className="flex-1">
             <div className="text-sm">
-              <strong className="text-yellow-400">{n.fromUserId?.username || "某位用戶"}</strong>{" "}
-              {n.type === "new_image"
-                ? "發布了新圖片"
-                : n.type === "comment"
-                ? "留言了你的圖片"
-                : n.type === "reply"
-                ? "回覆了你的留言"
-                : "發送了通知"}
+              {/* 系統通知（無 fromUserId）*/}
+              {!n.fromUserId ? (
+                <>
+                  <strong className="text-blue-400">🔔 系統通知</strong>
+                  <div className="text-xs text-gray-300 mt-1">{n.message || n.text}</div>
+                </>
+              ) : (
+                <>
+                  <strong className="text-yellow-400">{n.fromUserId.username}</strong>{" "}
+                  {n.type === "new_image"
+                    ? "發布了新圖片"
+                    : n.type === "comment"
+                    ? "留言了你的圖片"
+                    : n.type === "reply"
+                    ? "回覆了你的留言"
+                    : "發送了通知"}
+                  {n.text && <div className="text-xs text-zinc-400 line-clamp-1 mt-1">{n.text}</div>}
+                </>
+              )}
             </div>
-            <div className="text-xs text-zinc-400 line-clamp-1">{n.text}</div>
             <div className="text-xs text-zinc-500 mt-1">
               {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
             </div>

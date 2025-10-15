@@ -95,24 +95,26 @@ export async function GET(req) {
         }
       }
     } else {
-      // 非 pair：相容第一封即 _id
+      // 非 pair：嘗試作為舊格式處理，但建議使用 pair 格式
       items = await Message.find({
         $and: [{ $or: [{ conversationId: id }, { _id: id }] }, notArchivedFilter],
       })
         .sort({ createdAt: 1 })
         .lean();
 
-      // 舊資料補 pairCid（若 first 無 conversationId）
-      if (items.length && !items[0].conversationId) {
+      // 如果找到舊格式的消息，自動轉換為 pair 格式
+      if (items.length) {
         const first = items[0];
-        const otherId =
-          String(first.fromId) === meIdStr ? String(first.toId) : String(first.fromId || "");
-        const cid = pairCid(meIdStr, otherId || "system");
-        await Message.updateMany(
-          { $or: [{ _id: first._id }, { conversationId: String(first._id) }] },
-          { $set: { conversationId: cid } }
-        );
-        items.forEach((m) => (m.conversationId = cid));
+        if (!first.conversationId || !first.conversationId.startsWith('pair:')) {
+          const otherId =
+            String(first.fromId) === meIdStr ? String(first.toId) : String(first.fromId || "system");
+          const cid = pairCid(meIdStr, otherId);
+          await Message.updateMany(
+            { $or: [{ _id: first._id }, { conversationId: String(first._id) }] },
+            { $set: { conversationId: cid } }
+          );
+          items.forEach((m) => (m.conversationId = cid));
+        }
       }
     }
 

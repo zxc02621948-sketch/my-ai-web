@@ -13,9 +13,14 @@ export async function GET(req) {
       return NextResponse.json({ success: false, message: "未登入" }, { status: 401 });
     }
 
+    const now = new Date();
     const coupons = await PowerCoupon.find({
       userId: currentUser._id,
-      used: false
+      used: false,
+      $or: [
+        { expiry: null }, // 沒有過期時間的券（如稀有券）
+        { expiry: { $gt: now } } // 還沒過期的券
+      ]
     }).sort({ createdAt: -1 });
 
     return NextResponse.json({

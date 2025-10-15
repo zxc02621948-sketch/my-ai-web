@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { dbConnect } from '@/lib/db';
 import User from '@/models/User';
+import PointsTransaction from '@/models/PointsTransaction';
 import mongoose from 'mongoose';
 
 export async function POST(request) {
@@ -19,9 +20,42 @@ export async function POST(request) {
       return NextResponse.json({ error: '參數錯誤' }, { status: 400 });
     }
 
-    // 設置釘選播放器（暫時不檢查積分，直接使用）
+    // ✅ 檢查用戶是否有釘選播放器訂閱
+    const user = await User.findById(currentUser._id);
+    if (!user) {
+      return NextResponse.json({ error: '用戶不存在' }, { status: 404 });
+    }
+
+           // 檢查是否有釘選訂閱
+           const pinSubscription = user.subscriptions?.find(
+             s => s.type === 'pinPlayer' && s.isActive
+           );
+
+    if (!pinSubscription) {
+      return NextResponse.json({ 
+        error: '請先在積分商店開通「釘選播放器」訂閱功能',
+        needSubscription: true
+      }, { status: 403 });
+    }
+
+    // 檢查訂閱是否過期
+    const now = new Date();
+    // 兼容舊數據
+    const subscriptionExpiresAt = pinSubscription.expiresAt 
+      ? new Date(pinSubscription.expiresAt) 
+      : (pinSubscription.nextBillingDate ? new Date(pinSubscription.nextBillingDate) : null);
+    
+    if (!subscriptionExpiresAt || subscriptionExpiresAt < now) {
+      // 訂閱已過期，拒絕釘選
+      return NextResponse.json({ 
+        error: '訂閱已過期，請前往積分商店續費',
+        needRenew: true
+      }, { status: 403 });
+    }
+
+    // 設置釘選播放器
     const pinnedAt = new Date();
-    const expiresAt = new Date(pinnedAt.getTime() + 30 * 24 * 60 * 60 * 1000); // 30天後過期
+    const expiresAt = subscriptionExpiresAt; // 使用訂閱的到期時間
 
     const pinnedPlayerData = {
       userId: targetUserId,

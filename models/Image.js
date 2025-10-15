@@ -85,6 +85,9 @@ const ImageSchema = new mongoose.Schema(
     height: { type: Number, default: null },
     modelHash: { type: String, default: "" },
 
+    // ✅ 是否包含元數據（用於「作品展示」vs「創作參考」篩選）
+    hasMetadata: { type: Boolean, default: false, index: true },
+
     createdAt: { type: Date, default: Date.now },
   },
   { collection: "images" }

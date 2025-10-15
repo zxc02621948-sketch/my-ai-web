@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 
 export default function ProductCard({
@@ -15,7 +16,11 @@ export default function ProductCard({
   loading,
   features = [],
   isLimitedPurchase = false,
-  limitMessage = ""
+  limitMessage = "",
+  type = "normal", // "normal" | "subscription"
+  billingCycle = null,
+  isSubscribed = false, // 是否已訂閱
+  subscriptionInfo = null // 訂閱詳情（包含 expiresAt, daysRemaining 等）
 }) {
   return (
     <div className="bg-zinc-800/40 border border-zinc-700/60 rounded-lg p-6 relative">
@@ -79,12 +84,50 @@ export default function ProductCard({
         </div>
       )}
       
-      {/* 購買按鈕 */}
+      {/* 訂閱狀態顯示 */}
+      {type === "subscription" && subscriptionInfo && (
+        <div className={`mb-4 p-3 border rounded-lg ${
+          isSubscribed 
+            ? "bg-green-900/20 border-green-600/30" 
+            : "bg-gray-900/20 border-gray-600/30"
+        }`}>
+          <div className={`text-sm font-medium mb-1 ${
+            isSubscribed ? "text-green-300" : "text-gray-300"
+          }`}>
+            {isSubscribed ? "✅ 訂閱中" : "📋 訂閱狀態"}
+          </div>
+          <div className="text-xs text-gray-400 space-y-1">
+            {isSubscribed ? (
+              <>
+                <div>📅 到期：{new Date(subscriptionInfo.expiresAt).toLocaleDateString('zh-TW')}</div>
+                <div>⏳ 剩餘：{subscriptionInfo.daysRemaining} 天</div>
+                {subscriptionInfo.cancelledAt && (
+                  <div className="text-red-400 mt-2">⚠️ 已取消，到期後失效</div>
+                )}
+              </>
+            ) : (
+              <div>💡 未訂閱此方案</div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* 續費說明（未訂閱時顯示） */}
+      {type === "subscription" && !isSubscribed && (
+        <div className="mb-4 p-3 bg-blue-900/20 border border-blue-600/30 rounded-lg">
+          <div className="text-sm text-blue-300 font-medium mb-1">💡 累積制續費</div>
+          <div className="text-xs text-gray-400">
+            續費時剩餘時間會累積，不會浪費。例如：剩餘 3 天時續費，將變成 33 天。
+          </div>
+        </div>
+      )}
+      
+      {/* 購買/續費按鈕 */}
       <button
-        onClick={onPurchase}
+        onClick={() => onPurchase()}
         disabled={loading || isPurchased || isLimitedPurchase}
         className={`w-full py-2 px-4 rounded-lg font-medium transition-all ${
-          isPurchased
+          isPurchased || isSubscribed
             ? "bg-zinc-700 text-gray-400 cursor-not-allowed"
             : isLimitedPurchase
             ? "bg-gray-600 text-gray-400 cursor-not-allowed"
@@ -93,8 +136,27 @@ export default function ProductCard({
             : "bg-blue-600 hover:bg-blue-700 text-white"
         }`}
       >
-        {isPurchased ? "已購買" : isLimitedPurchase ? "限購中" : loading ? "處理中..." : "立即購買"}
+        {isPurchased 
+          ? "已購買" 
+          : isLimitedPurchase 
+          ? "限購中" 
+          : loading 
+          ? "處理中..." 
+          : type === "subscription"
+          ? (isSubscribed ? "續費延長" : "開通訂閱")
+          : "立即購買"}
       </button>
+      
+      {/* 取消訂閱按鈕（僅月租商品且已訂閱時顯示） */}
+      {type === "subscription" && isSubscribed && (
+        <button
+          onClick={() => onPurchase({ cancel: true })}
+          disabled={loading}
+          className="w-full mt-2 py-2 px-4 rounded-lg font-medium transition-all bg-red-600/20 border border-red-600/50 text-red-400 hover:bg-red-600/30"
+        >
+          取消訂閱
+        </button>
+      )}
     </div>
   );
 }

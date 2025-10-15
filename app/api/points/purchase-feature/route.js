@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import User from "@/models/User";
+import PointsTransaction from "@/models/PointsTransaction";
 
 export async function POST(req) {
   try {
@@ -81,6 +82,20 @@ export async function POST(req) {
       },
       { new: true }
     );
+
+    // 記錄積分交易
+    const dateKey = new Date().toISOString().split('T')[0];
+    await PointsTransaction.create({
+      userId: currentUser._id,
+      points: -cost,
+      type: 'store_purchase',
+      dateKey: dateKey,
+      meta: { 
+        productId,
+        description: successMessage,
+        cost
+      }
+    });
 
     console.log("🔧 購買後用戶狀態:", {
       _id: updatedUser._id,

@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState, useMemo } from "react";
 import Modal from "../common/Modal";
+import AvatarFrame from "../common/AvatarFrame";
 import { DEFAULT_AVATAR_IDS } from "@/lib/constants";
 
 // 產生 Cloudflare Images 變體 URL（統一用 avatar 變體，載入較快）
@@ -159,6 +160,7 @@ export default function FollowListModal({ isOpen, onClose, currentUser }) {
               const username = u?.username || raw?.username || "未命名用戶";
               const note = u?.note ?? raw?.note ?? "";
               const isEditing = String(editingId) === String(userId);
+              
 
               return (
                 <li key={String(userId)}>
@@ -168,8 +170,18 @@ export default function FollowListModal({ isOpen, onClose, currentUser }) {
                       className="flex items-center space-x-3"
                       onClick={onClose}
                     >
-                      {/* ✅ 預設灰底 + blur 佔位 + avatar 變體 + 回退 */}
-                      <AvatarImg userLike={raw} size={40} />
+                      {/* ✅ 使用 AvatarFrame 顯示頭像框 */}
+                      <AvatarFrame
+                        src={cf(u.image || pickDefaultAvatarId(u))}
+                        size={48}
+                        frameId={u.currentFrame || "default"}
+                        showFrame={!!u.currentFrame && u.currentFrame !== "default"}
+                        frameColor={u.frameSettings?.color || undefined}
+                        frameOpacity={u.frameSettings?.opacity !== undefined ? u.frameSettings.opacity : 1}
+                        layerOrder={u.frameSettings?.layerOrder || "frame-on-top"}
+                        frameTransparency={u.frameSettings?.transparency !== undefined ? u.frameSettings.transparency : 1}
+                        ring={true}
+                      />
 
                       <div className="flex flex-col">
                         <span className="text-lg">{username}</span>

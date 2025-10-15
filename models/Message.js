@@ -14,6 +14,7 @@ const MessageSchema = new Schema({
   },
   isRead: { type: Boolean, default: false, index: true },
   readAt: { type: Date },
+  deletedFor: [{ type: Schema.Types.ObjectId, ref: "User" }], // 對哪些用戶隱藏此消息
 }, { timestamps: true });
 
 export default mongoose.models.Message || mongoose.model("Message", MessageSchema);

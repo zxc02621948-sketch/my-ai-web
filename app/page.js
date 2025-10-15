@@ -10,6 +10,7 @@ import SortSelect from "@/components/common/SortSelect";
 import { useFilterContext, labelToRating } from "@/components/context/FilterContext";
 import useLikeHandler from "@/hooks/useLikeHandler";
 import { usePlayer } from "@/components/context/PlayerContext";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 
 /** ====== 超精簡資料流：去掉預覽/快取/一次性旗標，只保留 inFlightId ====== */
@@ -19,6 +20,7 @@ const PAGE_SIZE = 20;
 export default function HomePage() {
   const player = usePlayer();
   const searchParams = useSearchParams();
+  const { currentUser, setCurrentUser } = useCurrentUser(); // 使用 Context
   
   // 從 FilterContext 獲取狀態
   const {
@@ -29,6 +31,36 @@ export default function HomePage() {
 
   // 本地狀態
   const [sort, setSort] = useState("popular");
+  
+  // ✅ 記住用戶偏好（避免 hydration 錯誤）
+  const [displayMode, setDisplayMode] = useState('gallery');
+  
+  // ✅ 首次訪問引導（避免 hydration 錯誤）
+  const [showGuide, setShowGuide] = useState(false);
+  
+  // ✅ 客戶端初始化
+  const [isClient, setIsClient] = useState(false);
+  
+  useEffect(() => {
+    setIsClient(true);
+    // 從 localStorage 讀取偏好
+    const savedMode = localStorage.getItem('galleryMode');
+    if (savedMode) {
+      setDisplayMode(savedMode);
+    }
+    // 檢查是否顯示引導
+    const guideShown = localStorage.getItem('galleryGuideShown');
+    if (!guideShown) {
+      setShowGuide(true);
+    }
+  }, []);
+
+  // 保存模式偏好
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('galleryMode', displayMode);
+    }
+  }, [displayMode]);
 
   // 計算衍生狀態（使用 useMemo 避免無限循環）
   const selectedCategories = useMemo(() => categoryFilters, [categoryFilters]);
@@ -37,12 +69,29 @@ export default function HomePage() {
     [levelFilters]
   );
   
+  // ✅ 雙緩存：畫廊和作品集分別緩存
+  const [galleryCache, setGalleryCache] = useState({
+    images: [],
+    page: 1,
+    hasMore: true,
+    fetchedOnce: false,
+  });
+  const [collectionCache, setCollectionCache] = useState({
+    images: [],
+    page: 1,
+    hasMore: true,
+    fetchedOnce: false,
+  });
+
+  // 當前顯示的數據（根據 displayMode）
+  const currentCache = displayMode === "gallery" ? galleryCache : collectionCache;
+  const setCurrentCache = displayMode === "gallery" ? setGalleryCache : setCollectionCache;
+  
   const [images, setImages] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [currentUser, setCurrentUser] = useState(undefined);
   const [fetchedOnce, setFetchedOnce] = useState(false);
 
   // —— 追蹤狀態同步（父層處理器，提供給 ImageModal） ——
@@ -98,6 +147,7 @@ export default function HomePage() {
   // ===== Refs（用於避免 IntersectionObserver 的閉包舊值問題） =====
   const inFlightId = useRef(0);
   const loadMoreRef = useRef(null);
+  const lastFetchParamsRef = useRef(null); // 追踪上次的請求參數，避免重複調用
   const isFetchingRef = useRef(false); // 並發鎖
 
   const pageRef = useRef(1);
@@ -105,53 +155,57 @@ export default function HomePage() {
   const catsRef = useRef([]);
   const ratsRef = useRef([]);
   const sortRef = useRef("popular");
+  const hasReceivedPinEventRef = useRef(false); // ✅ 追踪是否已收到釘選事件
 
 
-  // 回到首頁：關閉並隱藏全域迷你播放器，避免佔位與殘留播放
+  // 檢查釘選播放器（使用 Context 中的 currentUser，無需額外 API 調用）
+  // ✅ 首頁邏輯簡化：只監聽釘選事件，不在 mount 時主動清空
   useEffect(() => {
-    // ✅ 立即禁用播放器，避免閃現
-    player?.setMiniPlayerEnabled?.(false);
+    // ✅ 等待 currentUser 載入完成
+    if (currentUser === undefined) {
+      console.log('🔍 [首頁] currentUser 未載入，等待中...');
+      return;
+    }
     
-    const checkPinnedPlayer = async () => {
-      try {
-        // 檢查是否有釘選播放器
-        const res = await fetch('/api/current-user');
-        const userData = await res.json();
-        const pinnedPlayer = userData?.user?.pinnedPlayer || userData?.pinnedPlayer;
+    // 監聽釘選事件
+    const handlePinnedChange = (e) => {
+      console.log('📡 [首頁] 收到釘選事件:', {
+        isPinned: e.detail.isPinned,
+        hasPlayerData: !!e.detail.pinnedPlayer,
+        playlistLength: e.detail.pinnedPlayer?.playlist?.length
+      });
+      
+      if (e.detail.isPinned) {
+        // 用戶剛釘選播放器，使用事件中的數據
+        const pinnedPlayer = e.detail.pinnedPlayer;
+        const playlist = pinnedPlayer?.playlist || [];
         
-        const hasPinnedPlayer = pinnedPlayer?.userId && 
-          pinnedPlayer?.expiresAt && 
-          new Date(pinnedPlayer.expiresAt) > new Date();
+        console.log('✅ [首頁-event] 載入釘選歌單:', {
+          playlistLength: playlist.length,
+          currentIndex: pinnedPlayer?.currentIndex
+        });
         
-        // ✅ 首頁必須禁用 MiniPlayer（除非有釘選且未過期）
-        if (!hasPinnedPlayer) {
-          player?.pause?.();
-          player?.setExternalControls?.(null);
-          player?.setExternalPlaying?.(false);
-          // ✅ 清空播放器狀態，確保 GlobalYouTubeBridge 不會渲染
-          player?.setSrc?.('');
-          player?.setOriginUrl?.('');
-          player?.setTrackTitle?.('');
-          player?.setPlaylist?.([]);
-        } else {
-          // ✅ 載入釘選的播放清單
-          const playlist = pinnedPlayer.playlist || [];
-          if (playlist.length > 0) {
-            const currentIndex = pinnedPlayer.currentIndex || 0;
-            const currentTrack = playlist[currentIndex];
-            
-            player?.setPlaylist?.(playlist);
-            player?.setActiveIndex?.(currentIndex);
-            player?.setPlayerOwner?.({ 
-              userId: pinnedPlayer.userId, 
-              username: pinnedPlayer.username 
-            });
-            
-            if (currentTrack) {
-              player?.setSrc?.(currentTrack.url);
-              player?.setOriginUrl?.(currentTrack.url);
-              player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
-            }
+        if (playlist.length > 0) {
+          const currentIndex = pinnedPlayer.currentIndex || 0;
+          const currentTrack = playlist[currentIndex];
+          
+          console.log('🎵 [首頁-event] 當前曲目:', {
+            title: currentTrack?.title,
+            url: currentTrack?.url
+          });
+          
+          player?.setPlaylist?.(playlist);
+          player?.setActiveIndex?.(currentIndex);
+          player?.setPlayerOwner?.({ 
+            userId: pinnedPlayer.userId, 
+            username: pinnedPlayer.username 
+          });
+          
+          if (currentTrack) {
+            player?.setSrc?.(currentTrack.url);
+            player?.setOriginUrl?.(currentTrack.url);
+            player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
+            console.log('✅ [首頁-event] 播放器設置完成');
           }
           
           // 確保 MiniPlayer 是啟用的
@@ -159,27 +213,70 @@ export default function HomePage() {
         }
         
         player?.setShareMode?.("global");
-      } catch (error) {
-        console.error('🏠 首頁檢查釘選播放器失敗:', error);
-        // ✅ 如果檢查失敗，預設禁用 MiniPlayer（安全起見）
+      } else {
+        // 用戶取消釘選，清空播放器
+        console.log('📌 [首頁-unpin] 取消釘選，清空播放器');
         player?.setMiniPlayerEnabled?.(false);
+        player?.pause?.();
+        player?.setExternalControls?.(null);
+        player?.setExternalPlaying?.(false);
+        player?.setSrc?.('');
+        player?.setOriginUrl?.('');
+        player?.setTrackTitle?.('');
+        player?.setPlaylist?.([]);
         player?.setShareMode?.("global");
       }
     };
     
-    checkPinnedPlayer();
-    
-    // 監聽釘選變更事件，重新檢查並載入播放清單
-    const handlePinnedChange = () => {
-      checkPinnedPlayer();
-    };
-    
+    // ✅ 註冊事件監聽器
     window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
+    
+    // ✅ 首頁載入時，檢查 currentUser 中是否已有釘選數據（刷新頁面的情況）
+    const pinnedPlayer = currentUser?.user?.pinnedPlayer || currentUser?.pinnedPlayer;
+    const hasPinnedPlayer = pinnedPlayer?.userId && 
+      pinnedPlayer?.expiresAt && 
+      new Date(pinnedPlayer.expiresAt) > new Date();
+    
+    console.log('🔍 [首頁-mount] 檢查 currentUser 中的釘選:', {
+      hasPinnedPlayer,
+      playlistLength: pinnedPlayer?.playlist?.length
+    });
+    
+    if (hasPinnedPlayer) {
+      // 刷新頁面時恢復釘選播放器
+      console.log('✅ [首頁-mount] 發現釘選數據，載入播放器');
+      const playlist = pinnedPlayer.playlist || [];
+      if (playlist.length > 0) {
+        const currentIndex = pinnedPlayer.currentIndex || 0;
+        const currentTrack = playlist[currentIndex];
+        
+        player?.setPlaylist?.(playlist);
+        player?.setActiveIndex?.(currentIndex);
+        player?.setPlayerOwner?.({ 
+          userId: pinnedPlayer.userId, 
+          username: pinnedPlayer.username 
+        });
+        
+        if (currentTrack) {
+          player?.setSrc?.(currentTrack.url);
+          player?.setOriginUrl?.(currentTrack.url);
+          player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
+          console.log('✅ [首頁-mount] 播放器設置完成');
+        }
+        
+        player?.setMiniPlayerEnabled?.(true);
+      }
+    } else {
+      // 沒有釘選數據，但不主動清空（讓 MiniPlayer 自己決定是否顯示）
+      console.log('ℹ️ [首頁-mount] 無釘選數據，設置為全局模式');
+      player?.setShareMode?.("global");
+      player?.setMiniPlayerEnabled?.(false);
+    }
     
     return () => {
       window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
     };
-  }, []); // 只在組件掛載時執行一次，避免重複禁用播放器
+  }, [currentUser]); // 當 currentUser 變化時重新檢查
 
   // 雙軌制訪問追蹤 - 同時記錄防刷量統計和廣告收益統計
   useEffect(() => {
@@ -305,21 +402,6 @@ export default function HomePage() {
     };
   }, []); // 只在組件掛載時執行一次
 
-  // 取得目前登入者
-  useEffect(() => {
-    const getMe = async () => {
-      try {
-        const r = await fetch(`/api/current-user?ts=${Date.now()}`, { cache: "no-store" });
-        if (!r.ok) throw 0;
-        const u = await r.json();
-        setCurrentUser(u);
-      } catch {
-        setCurrentUser(null);
-      }
-    };
-    getMe();
-  }, []);
-
   // 調試信息已移除
 
   // 排序參數對應後端
@@ -408,6 +490,11 @@ export default function HomePage() {
       if (Array.isArray(cats) && cats.length) params.set("categories", cats.join(","));
       if (Array.isArray(rats) && rats.length) params.set("ratings", rats.join(","));
       if (q) params.set("search", q);
+      
+      // ✅ 如果是作品集模式，添加 hasMetadata 篩選
+      if (displayMode === "collection") {
+        params.set("hasMetadata", "true");
+      }
 
       const url = `/api/images?${params.toString()}`;
       // 調試信息已移除
@@ -477,25 +564,48 @@ export default function HomePage() {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [displayMode]); // ✅ 添加 displayMode 依賴
 
-  // —— 初始載入圖片 ——
+  // ✅ 當切換「畫廊」/「作品集」模式時，重新載入圖片
   useEffect(() => {
-    if (selectedRatings.length > 0 && !fetchedOnce) {
-      console.log('🔥 [INITIAL LOAD] Loading images on mount');
-      fetchImages(1, qRef.current, selectedCategories, selectedRatings);
-    }
-  }, [selectedRatings, fetchedOnce, selectedCategories, fetchImages]);
-
-  // —— 首頁的第 1 頁載入（搜尋/排序/篩選變更時） ——
-  useEffect(() => {
+    if (selectedRatings.length === 0) return;
+    
     const q = (searchParams.get("search") || "").trim();
+    
     setFetchedOnce(false);
     setImages([]);
     setPage(1);
     setHasMore(true);
     fetchImages(1, q, selectedCategories, selectedRatings);
-  }, [fetchImages, selectedCategories, selectedRatings, searchParams]);
+  }, [displayMode, fetchImages]); // ✅ 監聽 displayMode 變化
+
+  // —— 載入圖片（搜尋/排序/篩選變更時，包括初始載入） ——
+  useEffect(() => {
+    // 等待 selectedRatings 初始化完成
+    if (selectedRatings.length === 0) return;
+    
+    const q = (searchParams.get("search") || "").trim();
+    
+    // 檢查參數是否與上次相同，避免重複調用
+    const currentParams = JSON.stringify({
+      q,
+      cats: selectedCategories,
+      rats: selectedRatings,
+      sort: sort
+    });
+    
+    if (lastFetchParamsRef.current === currentParams) {
+      return; // 參數相同，跳過
+    }
+    
+    lastFetchParamsRef.current = currentParams;
+    
+    setFetchedOnce(false);
+    setImages([]);
+    setPage(1);
+    setHasMore(true);
+    fetchImages(1, q, selectedCategories, selectedRatings);
+  }, [selectedCategories, selectedRatings, searchParams, sort, fetchImages]);
 
 
 
@@ -580,17 +690,104 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="max-w-6xl mx-auto mb-3 flex items-center justify-between">
-        {/* 左邊：版本資訊 */}
-        <div className="flex items-center gap-2 text-sm text-gray-400">
-          <span>版本 v0.7.6（2025-08-11）</span>
-          <a href="/changelog" className="underline hover:text-white">
-            查看更新內容
-          </a>
+      {/* ✅ 畫廊/作品集標籤切換 */}
+      <div className="max-w-6xl mx-auto mb-4">
+        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-6">
+          {/* 左側：模式切換標籤 */}
+          <div className="flex gap-3">
+                   <button
+                     onClick={() => setDisplayMode("gallery")}
+                     className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                       displayMode === "gallery"
+                         ? "bg-white text-black shadow-md"
+                         : "bg-zinc-800 text-gray-300 hover:bg-zinc-700"
+                     }`}
+                   >
+                     🎨 作品展示
+                     <span className="text-xs ml-1.5 opacity-60">全部作品</span>
+                   </button>
+                   <button
+                     onClick={() => setDisplayMode("collection")}
+                     className={`relative px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                       displayMode === "collection"
+                         ? "bg-white text-black shadow-md"
+                         : "bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg"
+                     }`}
+                   >
+                     <span className="flex items-center gap-1.5">
+                       🔧 創作參考
+                       <span className="text-xs opacity-75">可學習參數</span>
+                     </span>
+              {/* 閃爍提示徽章 */}
+              {displayMode !== "collection" && (
+                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* 中間：版本資訊和法律連結（手機版隱藏） */}
+          <div className="hidden md:flex items-center gap-4 text-xs text-gray-400 flex-1 justify-center flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-yellow-400">版本 v0.8.0（2025-10-15）🎉</span>
+              <a href="/changelog" className="text-sm underline hover:text-white">
+                查看更新內容
+              </a>
+            </div>
+            <div className="flex items-center gap-2">
+              <a href="/privacy" className="hover:text-white transition">隱私政策</a>
+              <span className="text-gray-600">•</span>
+              <a href="/terms" className="hover:text-white transition">服務條款</a>
+            </div>
+          </div>
+
+          {/* 右側：排序下拉 */}
+          <div className="flex-shrink-0">
+            <SortSelect value={sort} onChange={setSort} />
+          </div>
         </div>
 
-        {/* 右邊：排序下拉 */}
-        <SortSelect value={sort} onChange={setSort} />
+               {/* ✅ 首次訪問引導橫幅 */}
+               {showGuide && displayMode === "gallery" && (
+                 <div className="mt-3 bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/50 rounded-lg p-4 relative">
+                   <button
+                     onClick={() => {
+                       setShowGuide(false);
+                       if (typeof window !== 'undefined') {
+                         localStorage.setItem('galleryGuideShown', 'true');
+                       }
+                     }}
+                     className="absolute top-2 right-2 text-gray-400 hover:text-white transition"
+                     title="關閉提示"
+                   >
+                     ✕
+                   </button>
+                   <div className="flex items-start gap-3">
+                     <div className="text-3xl">💡</div>
+                     <div className="flex-1">
+                       <h3 className="text-white font-semibold mb-1">探索 AI 創作技巧</h3>
+                       <p className="text-gray-300 text-sm mb-3">
+                         這裡有 <span className="text-yellow-400 font-bold">98 個</span> 包含完整生成參數的優質作品！
+                         查看 Prompt、模型、採樣器等設置，快速提升你的 AI 繪圖技巧。
+                       </p>
+                       <button
+                         onClick={() => {
+                           setDisplayMode('collection');
+                           setShowGuide(false);
+                           if (typeof window !== 'undefined') {
+                             localStorage.setItem('galleryGuideShown', 'true');
+                           }
+                         }}
+                         className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                       >
+                         🔧 立即探索創作參考
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+               )}
       </div>
 
 
@@ -624,6 +821,7 @@ export default function HomePage() {
           nextImage={nextImage}
           onClose={() => setSelectedImage(null)}
           currentUser={currentUser}
+          displayMode={displayMode} // ✅ 傳遞顯示模式
           onLikeUpdate={(updated) => onLikeUpdateHook(updated)}
           onNavigate={(dir) => navigateFromSelected(dir)}
           onFollowChange={handleFollowChange}

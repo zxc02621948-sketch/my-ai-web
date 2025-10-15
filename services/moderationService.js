@@ -1,4 +1,5 @@
 import Notification from "@/models/Notification";
+import Message from "@/models/Message";
 import ModerationAction from "@/models/ModerationAction";
 import User from "@/models/User";
 import Image from "@/models/Image";
@@ -21,22 +22,39 @@ export async function modRecategory({ operatorId, imageId, targetUserId, oldRati
   const action = await ModerationAction.create({
     operatorId, targetUserId, imageId, action: "RECAT",
     reasonCode, reasonText, oldRating, newRating,
-    templateKey: "recat.nsfw_to_sfw",
+    templateKey: "rerate.fix_label",
     snapshot: { imageTitle: image?.title, username: user?.username }
   });
 
   if (NOTIF_ENABLED) {
     const ctx = {
-      user, image,
-      oldRating, newRating,
+      user: { username: user?.username || "" },
+      image: {
+        _id: String(imageId),
+        title: image?.title || "",
+        imageId: image?.imageId || ""
+      },
+      oldRating, 
+      newRating,
       reason: reasonText || reasonCode,
       reasonCode,
       appealUrl: `${process.env.SITE_URL || ""}/appeal?ref=${action._id}`
     };
-    const { title, body } = renderTemplate("recat.nsfw_to_sfw", ctx);
-    await Notification.create({
-      userId: targetUserId, type: "recategory", title, body,
-      meta: { imageId, oldRating, newRating, reasonCode, actionId: action._id }
+    const { title, body } = renderTemplate("rerate.fix_label", ctx);
+    
+    // 改用站內信 Message 而非 Notification
+    await Message.create({
+      conversationId: `pair:${String(targetUserId)}:system`,
+      fromId: null,
+      toId: targetUserId,
+      subject: title || "您的作品分級已調整",
+      body: body || "",
+      kind: "system",
+      ref: {
+        type: "image",
+        id: imageId,
+        extra: { oldRating, newRating, reasonCode, actionId: action._id }
+      }
     });
   }
 
@@ -56,15 +74,32 @@ export async function modTakedown({ operatorId, imageId, targetUserId, reasonCod
   if (NOTIF_ENABLED) {
     const count = await getWarningCount(targetUserId);
     const ctx = {
-      user, image,
-      reason: reasonText || reasonCode, reasonCode,
+      user: { username: user?.username || "" },
+      image: {
+        _id: String(imageId),
+        title: image?.title || "",
+        imageId: image?.imageId || ""
+      },
+      reason: reasonText || reasonCode, 
+      reasonCode,
       warning: { level: warningLevel, count },
       appealUrl: `${process.env.SITE_URL || ""}/appeal?ref=${action._id}`
     };
     const { title, body } = renderTemplate("takedown.nsfw_in_sfw", ctx);
-    await Notification.create({
-      userId: targetUserId, type: "takedown", title, body,
-      meta: { imageId, warningLevel, reasonCode, actionId: action._id }
+    
+    // 改用站內信 Message 而非 Notification
+    await Message.create({
+      conversationId: `pair:${String(targetUserId)}:system`,
+      fromId: null,
+      toId: targetUserId,
+      subject: title || "作品因違規已下架",
+      body: body || "",
+      kind: "system",
+      ref: {
+        type: "image",
+        id: imageId,
+        extra: { warningLevel, reasonCode, actionId: action._id }
+      }
     });
   }
 
@@ -87,11 +122,26 @@ export async function modWarn({ operatorId, targetUserId, reasonCode, reasonText
   if (NOTIF_ENABLED) {
     const count = await getWarningCount(targetUserId);
     const key = `warn.level${level}`;
-    const ctx = { user, reason: reasonText || reasonCode, reasonCode, warning: { level, count } };
+    const ctx = { 
+      user: { username: user?.username || "" },
+      reason: reasonText || reasonCode, 
+      reasonCode, 
+      warning: { level, count } 
+    };
     const { title, body } = renderTemplate(key, ctx);
-    await Notification.create({
-      userId: targetUserId, type: "warning", title, body,
-      meta: { warningLevel: level, reasonCode, actionId: action._id }
+    
+    // 改用站內信 Message 而非 Notification
+    await Message.create({
+      conversationId: `pair:${String(targetUserId)}:system`,
+      fromId: null,
+      toId: targetUserId,
+      subject: title || `帳號警告（Level ${level}）`,
+      body: body || "",
+      kind: "system",
+      ref: {
+        type: "other",
+        extra: { warningLevel: level, reasonCode, actionId: action._id }
+      }
     });
   }
   return action;

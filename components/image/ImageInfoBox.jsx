@@ -41,13 +41,14 @@ function sanitizeComfyWorkflow(text) {
   }
 }
 
-export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPowerCouponUse }) {
+export default function ImageInfoBox({ image, currentUser, displayMode = "gallery", onClose, onEdit, onPowerCouponUse }) {
   const positiveRef = useRef();
   const negativeRef = useRef();
   const paramsRef = useRef();
   const [copiedField, setCopiedField] = useState(null);
   const [copyTip, setCopyTip] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showSecrets, setShowSecrets] = useState(false); // ✅ 畫廊模式下控制秘密展開
   const router = useRouter();
   
   // —— 1 秒冷卻（前端）——
@@ -427,12 +428,9 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPo
   return (
     <div className="relative w-full overflow-x-hidden break-words space-y-4">
       {/* 標題與工具列 */}
-      <div className="flex justify-between items-start mb-3">
-        <div className="text-xl font-bold leading-tight text-white">
-          {image.title || "（無標題）"}
-        </div>
-
-        <div className="flex items-center gap-2">
+      <div className="space-y-3 mb-3">
+        {/* 按鈕工具列 */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {/* 引用發帖 */}
           <button
             onClick={() => {
@@ -509,6 +507,10 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPo
           </button>
         </div>
 
+        {/* 標題 */}
+        <div className="text-xl font-bold leading-tight text-white">
+          {image.title || "（無標題）"}
+        </div>
       </div>
 
       {/* 檢舉彈窗 */}
@@ -560,13 +562,54 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPo
         {getQualityIcon(getMetadataQuality(image))}
       </div>
 
-      <div className="text-sm text-zinc-300 mb-3">
-        來源作者： <span className="text-white">{image?.author?.trim() || "—"}</span>
-      </div>
-      <div className="text-sm text-gray-300 mb-3">平台：{image.platform?.trim() ? image.platform : "未指定"}</div>
+      {/* ✅ 作品展示模式：如果圖片有學習價值的元數據，顯示「揭開秘密」按鈕 */}
+      {displayMode === "gallery" && (getMetadataQuality(image) === "优质图" || getMetadataQuality(image) === "标准图") && (
+        <button
+          onClick={() => setShowSecrets(!showSecrets)}
+          className="relative w-full mb-4 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-100"
+        >
+          <span className="flex items-center justify-center gap-2">
+            {showSecrets ? (
+              <>🔒 隱藏創作秘密</>
+            ) : (
+              <>
+                🔓 揭開創作秘密
+                <span className="text-xs font-normal opacity-75">（查看完整生成參數）</span>
+              </>
+            )}
+          </span>
+          {/* 閃爍提示 */}
+          {!showSecrets && (
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
+            </span>
+          )}
+        </button>
+      )}
 
-      {/* ComfyUI：原始 JSON 下載（顯示在資訊欄） */}
-      {canSeeComfyJson && (
+      {/* ✅ 秘密揭開提示（作品展示模式） */}
+      {displayMode === "gallery" && showSecrets && (
+        <div className="mb-4 p-3 bg-gradient-to-r from-purple-900/40 to-pink-900/40 border-2 border-purple-500 rounded-lg animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2 text-purple-300 text-sm font-semibold mb-1">
+            ✨ 創作秘密已解鎖 ✨
+          </div>
+          <p className="text-xs text-gray-400">
+            以下參數可以幫助你重現類似的作品效果
+          </p>
+        </div>
+      )}
+
+      {/* ✅ 技術參數區塊：創作參考模式直接顯示，作品展示模式需要點「揭開秘密」 */}
+      {(displayMode === "collection" || (displayMode === "gallery" && showSecrets)) && (
+        <>
+          <div className="text-sm text-zinc-300 mb-3">
+            來源作者： <span className="text-white">{image?.author?.trim() || "—"}</span>
+          </div>
+          <div className="text-sm text-gray-300 mb-3">平台：{image.platform?.trim() ? image.platform : "未指定"}</div>
+
+          {/* ComfyUI：原始 JSON 下載（顯示在資訊欄） */}
+          {canSeeComfyJson && (
         <div className="rounded-lg border border-white/10 bg-zinc-900/50 p-3 mb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -756,10 +799,103 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPo
         })()}
       </div>
 
-      {/* 分類 */}
+          {/* 正面 / 負面提示詞 */}
+          <div className="mb-3">
+            <div className="flex justify-between items-center mb-1">
+              <strong className="text-sm text-white">正面提示詞：</strong>
+              <button
+                onClick={() => copyFromRef(positiveRef, "positive")}
+                className="text-xs px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded"
+              >
+                {copiedField === "positive" ? "✔ 已複製" : "複製"}
+              </button>
+            </div>
+            <div
+              ref={positiveRef}
+              className="bg-neutral-900 border border-white/20 text-gray-200 text-xs p-2 rounded-lg max-h-[80px] overflow-y-auto whitespace-pre-wrap break-words"
+            >
+              {image.positivePrompt || "（無）"}
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-1">
+              <strong className="text-sm text-white">負面提示詞：</strong>
+              <button
+                onClick={() => copyFromRef(negativeRef, "negative")}
+                className="text-xs px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded"
+              >
+                {copiedField === "negative" ? "✔ 已複製" : "複製"}
+              </button>
+            </div>
+            <div
+              ref={negativeRef}
+              className="bg-neutral-900 border border-white/20 text-gray-200 text-xs p-2 rounded-lg max-h-[80px] overflow-y-auto whitespace-pre-wrap break-words"
+            >
+              {image.negativePrompt || "（無）"}
+            </div>
+          </div>
+
+          {/* 進階參數 */}
+          <div className="rounded-lg border border-white/10">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="w-full text-left px-4 py-2 font-semibold bg-zinc-800 hover:bg-zinc-700 transition"
+            >
+              {showAdvanced ? "▼" : "►"} 生成參數（可展開）
+            </button>
+            {showAdvanced && (
+              <div className="p-4 space-y-3 bg-zinc-900/60">
+                {hasAdvanced ? (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                      <Field label="Steps" value={adv.steps} />
+                      <Field label="Sampler" value={adv.sampler} />
+                      <Field label="CFG scale" value={adv.cfgScale} />
+                      <Field label="Seed" value={adv.seed} />
+                      <Field label="Clip skip" value={adv.clipSkip} />
+                      <Field label="寬度" value={adv.width} />
+                      <Field label="高度" value={adv.height} />
+                      <Field label="Model hash" value={adv.modelHash} />
+                      <Field
+                        label="LoRA hashes"
+                        value={
+                          Array.isArray(image?.loraRefs) && image.loraRefs.length > 0
+                            ? image.loraRefs.map((x) => x?.hash).filter(Boolean).join(", ")
+                            : Array.isArray(image?.loraHashes) && image.loraHashes.length > 0
+                            ? image.loraHashes.join(", ")
+                            : "—"
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <div ref={paramsRef} className="sr-only">
+                        {paramsString}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyText(paramsString, "params")}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <Clipboard size={14} />
+                        {copiedField === "params" ? "✔ 已複製參數" : "複製成 A1111 格式"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs text-zinc-400">（沒有儲存到生成參數）</div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* 分類 - 兩種模式都顯示 */}
       <div className="text-sm text-gray-300 mb-3">分類：{image.category || "未分類"}</div>
 
-      {/* 標籤 */}
+      {/* 標籤 - 兩種模式都顯示 */}
       <div className="text-sm text-gray-300 mb-3">
         標籤：
         {Array.isArray(image.tags) && image.tags.length > 0
@@ -777,97 +913,6 @@ export default function ImageInfoBox({ image, currentUser, onClose, onEdit, onPo
               </button>
             ))
           : "（無標籤）"}
-      </div>
-
-      {/* 正面 / 負面提示詞 */}
-      <div className="mb-3">
-        <div className="flex justify-between items-center mb-1">
-          <strong className="text-sm text-white">正面提示詞：</strong>
-          <button
-            onClick={() => copyFromRef(positiveRef, "positive")}
-            className="text-xs px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded"
-          >
-            {copiedField === "positive" ? "✔ 已複製" : "複製"}
-          </button>
-        </div>
-        <div
-          ref={positiveRef}
-          className="bg-neutral-900 border border-white/20 text-gray-200 text-xs p-2 rounded-lg max-h-[80px] overflow-y-auto whitespace-pre-wrap break-words"
-        >
-          {image.positivePrompt || "（無）"}
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <div className="flex justify-between items-center mb-1">
-          <strong className="text-sm text-white">負面提示詞：</strong>
-          <button
-            onClick={() => copyFromRef(negativeRef, "negative")}
-            className="text-xs px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded"
-          >
-            {copiedField === "negative" ? "✔ 已複製" : "複製"}
-          </button>
-        </div>
-        <div
-          ref={negativeRef}
-          className="bg-neutral-900 border border-white/20 text-gray-200 text-xs p-2 rounded-lg max-h-[80px] overflow-y-auto whitespace-pre-wrap break-words"
-        >
-          {image.negativePrompt || "（無）"}
-        </div>
-      </div>
-
-      {/* 進階參數 */}
-      <div className="rounded-lg border border-white/10">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          className="w-full text-left px-4 py-2 font-semibold bg-zinc-800 hover:bg-zinc-700 transition"
-        >
-          {showAdvanced ? "▼" : "►"} 生成參數（可展開）
-        </button>
-        {showAdvanced && (
-          <div className="p-4 space-y-3 bg-zinc-900/60">
-            {hasAdvanced ? (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                  <Field label="Steps" value={adv.steps} />
-                  <Field label="Sampler" value={adv.sampler} />
-                  <Field label="CFG scale" value={adv.cfgScale} />
-                  <Field label="Seed" value={adv.seed} />
-                  <Field label="Clip skip" value={adv.clipSkip} />
-                  <Field label="寬度" value={adv.width} />
-                  <Field label="高度" value={adv.height} />
-                  <Field label="Model hash" value={adv.modelHash} />
-                  <Field
-                    label="LoRA hashes"
-                    value={
-                      Array.isArray(image?.loraRefs) && image.loraRefs.length > 0
-                        ? image.loraRefs.map((x) => x?.hash).filter(Boolean).join(", ")
-                        : Array.isArray(image?.loraHashes) && image.loraHashes.length > 0
-                        ? image.loraHashes.join(", ")
-                        : "—"
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <div ref={paramsRef} className="sr-only">
-                    {paramsString}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => copyText(paramsString, "params")}
-                    className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white"
-                  >
-                    <Clipboard size={14} />
-                    {copiedField === "params" ? "✔ 已複製參數" : "複製成 A1111 格式"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="text-xs text-zinc-400">（沒有儲存到生成參數）</div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* 描述 */}

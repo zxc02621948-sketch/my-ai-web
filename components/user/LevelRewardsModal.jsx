@@ -153,6 +153,7 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
                                     className="px-2 py-1 rounded text-xs bg-purple-600 text-white"
                                   >
                                     {feature === 'music-player' ? '🎵 播放器' : 
+                                     feature === 'frame-color-editor' ? '🎨 頭像框調色盤' :
                                      feature === 'advanced-frames' ? '🎨 高級編輯' :
                                      feature === 'priority-support' ? '⚡ 優先客服' :
                                      feature === 'exclusive-frames' ? '💎 獨家框' :
@@ -211,7 +212,7 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       {/* 等級標識 */}
-                      <div className="px-3 py-2 rounded-full text-white font-bold bg-zinc-600 opacity-75">
+                      <div className={`px-3 py-2 rounded-full text-white font-bold ${level.color}`}>
                         {level.rank}
                       </div>
                       

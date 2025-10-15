@@ -87,10 +87,12 @@ export default function AvatarFrame({
 
   // 計算實際容器大小 - 如果有頭像框，容器需要更大
   const hasFrame = showFrame && frameId !== "default" && framePath;
+  
   const frameScale = 1.2; // 頭像框擴展比例，減少到1.2
   const containerSize = hasFrame ? size * frameScale : size;
   const avatarSize = size; // 頭像本身保持原始大小
   const frameOffset = hasFrame ? ((containerSize - avatarSize) / 2) : 0;
+
 
   const avatar = (
     <div
@@ -119,6 +121,8 @@ export default function AvatarFrame({
             alt="Avatar frame"
             className="w-full h-full object-contain"
             draggable={false}
+            onLoad={() => {}}
+            onError={() => {}}
           />
           {/* 顏色疊加層 - 只影響頭像框區域 */}
           {frameColor && frameColor !== "#ffffff" && (

@@ -1,28 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { getLevelInfo, LEVELS } from "@/utils/pointsLevels";
 import LevelLeaderboard from "@/components/user/LevelLeaderboard";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export default function LevelsPage() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const response = await fetch("/api/current-user");
-        const data = await response.json();
-        setCurrentUser(data.user);
-      } catch (error) {
-        console.error("獲取用戶信息失敗:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCurrentUser();
-  }, []);
+  const { currentUser } = useCurrentUser(); // 使用 Context
 
   const currentPoints = currentUser?.pointsBalance || 0;
   const currentLevel = getLevelInfo(currentPoints);

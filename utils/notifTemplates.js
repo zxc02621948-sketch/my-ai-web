@@ -156,6 +156,72 @@ export const TEMPLATES = {
       "{{#if appealUrl}}若您對判定有疑義，可於 7 天內提出申訴：{{appealUrl}}{{/if}}",
     ].join("\n"),
   },
+
+  // --- 新增：更改分類 ---
+  "recat.category_fixed": {
+    title: "您的作品分類已調整",
+    body: [
+      "您好 {{user.username}}，",
+      "",
+      "我們在審查「{{image.title}}」（ID: {{image._id}}）時發現分類與內容不符，已將分類由「{{oldCategory}}」調整為「{{newCategory}}」。",
+      "{{#if reason}}原因：{{reason}}{{/if}}",
+      "",
+      "注意：請確保未來上傳時選擇正確的分類，避免影響曝光或造成用戶困擾。",
+      "{{#if appealUrl}}若您認為有誤，可於 7 天內提出申訴：{{appealUrl}}{{/if}}",
+    ].join("\n"),
+  },
+
+  // --- 更新：更改分級模板（原本就有 recat.nsfw_to_sfw，現在統一使用 rerate.fix_label） ---
+  "rerate.fix_label": {
+    title: "您的作品分級已調整",
+    body: [
+      "您好 {{user.username}}，",
+      "",
+      "我們在審查「{{image.title}}」（ID: {{image._id}}）時發現分級與內容不符，已將分級由「{{oldRating}}」調整為「{{newRating}}」。",
+      "{{#if reason}}原因：{{reason}}{{/if}}",
+      "",
+      "注意：若再次發生，可能導致帳號警告或限制曝光。請確保未來上傳時選擇正確的分級。",
+      "{{#if appealUrl}}若您認為有誤，可於 7 天內提出申訴：{{appealUrl}}{{/if}}",
+    ].join("\n"),
+  },
+
+  // --- 新增：檢舉處理結果通知 ---
+  "report.rejected": {
+    title: "檢舉處理結果通知",
+    body: [
+      "您好，",
+      "",
+      "您針對圖片「{{image.title}}」（ID: {{image._id}}）的檢舉經審核後不成立。",
+      "{{#if note}}管理員備註：{{note}}{{/if}}",
+      "",
+      "感謝您協助維護社群品質。若未來發現違規內容，歡迎繼續回報。",
+    ].join("\n"),
+  },
+
+  "report.action_taken": {
+    title: "檢舉處理結果通知",
+    body: [
+      "您好，",
+      "",
+      "您針對圖片「{{image.title}}」（ID: {{image._id}}）的檢舉已處理完成。",
+      "{{#if action}}處理結果：{{action}}{{/if}}",
+      "{{#if note}}管理員備註：{{note}}{{/if}}",
+      "",
+      "感謝您協助維護社群品質！",
+    ].join("\n"),
+  },
+
+  "report.closed": {
+    title: "檢舉已結案",
+    body: [
+      "您好，",
+      "",
+      "您針對圖片「{{image.title}}」（ID: {{image._id}}）的檢舉已結案。",
+      "{{#if note}}備註：{{note}}{{/if}}",
+      "",
+      "感謝您的回報。",
+    ].join("\n"),
+  },
 };
 
 // 放在檔案底部，覆蓋原本的 renderTemplate

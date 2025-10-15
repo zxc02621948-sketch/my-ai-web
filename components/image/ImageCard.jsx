@@ -24,8 +24,9 @@ export default function ImageCard({
   onToggleLike,
   onLocalLikeChange,
   onLikeUpdate,
-  onImageLoad,         // 新增：圖片載入完成回調
+  onImageLoad,         // 圖片載入完成回調
 }) {
+  const [imageLoaded, setImageLoaded] = useState(false);
   const canLike = !!currentUser;
   const [isLikedLocal, setIsLikedLocal] = useState(isLiked);
   const [likeCountLocal, setLikeCountLocal] = useState(
@@ -179,19 +180,31 @@ export default function ImageCard({
       </div>
 
       {/* 縮圖容器 */}
-      <div className="overflow-hidden rounded-lg relative">
+      <div className="overflow-hidden rounded-lg relative bg-zinc-900">
+        {/* ✅ 載入佔位符 */}
+        {!imageLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-8 h-8 border-4 border-zinc-700 border-t-purple-500 rounded-full animate-spin"></div>
+          </div>
+        )}
+        
+        {/* ✅ 懶加載圖片 */}
         <img
           src={imageUrl}
           alt={img?.title || "圖片"}
-          className="w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg"
+          loading="lazy"
+          decoding="async"
+          className={`w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg ${
+            imageLoaded ? "opacity-100" : "opacity-0"
+          }`}
           onLoad={() => {
-            if (onImageLoad) {
-              onImageLoad();
-            }
+            setImageLoaded(true);
+            onImageLoad?.();
           }}
           onError={(e) => {
             e.currentTarget.onerror = null;
             e.currentTarget.src = "/default-image.svg";
+            setImageLoaded(true);
           }}
         />
 

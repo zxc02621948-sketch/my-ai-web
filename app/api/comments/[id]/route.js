@@ -24,7 +24,7 @@ export async function GET(req, context) {
       })
       .populate({
         path: "userId",
-        select: "username image currentFrame",
+        select: "username image currentFrame frameSettings",
       });
 
     const comments = rawComments.map((c) => {

@@ -4,6 +4,9 @@ import { dbConnect } from "@/lib/db";
 import Report from "@/models/Report";
 import { getCurrentUser } from "@/lib/serverAuth";
 import mongoose from "mongoose";
+import Message from "@/models/Message";
+import Image from "@/models/Image";
+import { renderTemplate } from "@/utils/notifTemplates";
 
 const ALLOWED = ["open", "action_taken", "rejected", "closed"];
 
@@ -129,12 +132,66 @@ export async function PATCH(req, context) {
     const update = { status: normalized };
     if (typeof payload.note === "string") update.note = payload.note.slice(0, 2000);
 
+    // 先取得原始檢舉資料（用於發送通知）
+    const originalReport = await Report.findById(id).lean();
+    if (!originalReport) {
+      return new NextResponse(JSON.stringify({ ok: false, message: "找不到報告" }), { status: 404, headers });
+    }
+
     const updated = await Report.findByIdAndUpdate(id, update, { new: true }).lean();
     if (!updated) {
       return new NextResponse(JSON.stringify({ ok: false, message: "找不到報告" }), { status: 404, headers });
     }
 
-    return new NextResponse(JSON.stringify({ ok: true, item: updated }), { status: 200, headers });
+    // 發送站內信通知檢舉人
+    let notifyResult = { sent: false };
+    if (originalReport.reporterId && (normalized === "rejected" || normalized === "action_taken" || normalized === "closed")) {
+      try {
+        // 取得圖片資訊
+        let imageInfo = { title: "未知圖片", _id: originalReport.imageId };
+        if (originalReport.imageId) {
+          const img = await Image.findById(originalReport.imageId).select("title _id imageId").lean();
+          if (img) imageInfo = { title: img.title || "無標題", _id: img._id, imageId: img.imageId };
+        }
+
+        // 選擇模板
+        let templateKey = "report.closed";
+        if (normalized === "rejected") templateKey = "report.rejected";
+        else if (normalized === "action_taken") templateKey = "report.action_taken";
+
+        const ctx = {
+          image: imageInfo,
+          note: update.note || "",
+          action: normalized === "action_taken" ? "已處理" : normalized === "rejected" ? "不成立" : "已結案",
+        };
+
+        const tpl = renderTemplate(templateKey, ctx);
+
+        await Message.create({
+          conversationId: `pair:${String(originalReport.reporterId)}:system`,
+          fromId: null,
+          toId: originalReport.reporterId,
+          subject: tpl.subject || tpl.title || "檢舉處理結果通知",
+          body: tpl.body || "",
+          kind: "system",
+          ref: {
+            type: "other",
+            id: originalReport._id,
+            extra: { reportStatus: normalized, imageId: originalReport.imageId }
+          },
+        });
+
+        notifyResult = { sent: true, to: String(originalReport.reporterId), template: templateKey };
+      } catch (e) {
+        console.error("發送檢舉通知失敗：", e);
+        notifyResult = { sent: false, error: e?.message || String(e) };
+      }
+    }
+
+    return new NextResponse(
+      JSON.stringify({ ok: true, item: updated, notify: notifyResult }), 
+      { status: 200, headers }
+    );
   } catch (err) {
     console.error("PATCH /api/reports/[id] error:", err);
     return NextResponse.json({ ok: false, message: "伺服器錯誤" }, { status: 500 });

@@ -35,8 +35,8 @@ export async function POST(req, { params }) {
     }
     
     const updatedPost = await DiscussionPost.findById(id)
-      .populate("author", "username avatar")
-      .populate("imageRef", "title imageId thumbnail")
+      .populate("author", "username image currentFrame")
+      .populate("imageRef", "title imageId")
       .lean();
     
     return NextResponse.json({

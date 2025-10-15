@@ -141,7 +141,7 @@ export default function RegisterModal({ isOpen, onClose }) {
       return;
     }
     if (!agreePolicies) {
-      setError('請勾選「我已閱讀並同意平台條款/規範/免責」。');
+      setError('請勾選「我已閱讀並同意平台服務條款與隱私政策」。');
       setIsLoading(false);
       return;
     }
@@ -337,9 +337,8 @@ export default function RegisterModal({ isOpen, onClose }) {
               />
               <span>
                 我已閱讀並同意
-                <a href="/terms" className="text-blue-400 hover:underline mx-1" target="_blank" rel="noreferrer">服務條款</a>、
-                <a href="/guidelines" className="text-blue-400 hover:underline mx-1" target="_blank" rel="noreferrer">社群規範</a>與
-                <a href="/disclaimer" className="text-blue-400 hover:underline mx-1" target="_blank" rel="noreferrer">免責聲明</a>。
+                <a href="/terms" className="text-blue-400 hover:underline mx-1" target="_blank" rel="noreferrer">服務條款</a>與
+                <a href="/privacy" className="text-blue-400 hover:underline mx-1" target="_blank" rel="noreferrer">隱私政策</a>。
               </span>
             </label>
           </div>

@@ -174,19 +174,28 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
 
   // 完全重寫的播放函數
   const play = async () => {
+    console.log('▶️ [PlayerContext.play] 播放請求', {
+      有音源: !!(src || originUrl),
+      是否轉換中: isTransitioningRef.current,
+      有外部控制器: !!externalControlsRef.current,
+      當前曲目: trackTitle
+    });
+    
     if (!src && !originUrl) {
+      console.warn('⚠️ [PlayerContext.play] 無音源，跳過');
       return false;
     }
     
     // 如果正在轉換，等待轉換完成
     if (isTransitioningRef.current) {
+      console.warn('⚠️ [PlayerContext.play] 正在轉換中，跳過');
       return false;
     }
     
     // 優先使用外部播放器（YouTube）
     if (externalControlsRef.current && typeof externalControlsRef.current.play === 'function') {
       try {
-        // console.log("🔧 使用外部播放器播放");
+        console.log('🎵 [PlayerContext.play] 使用外部播放器');
         externalControlsRef.current.play();
         // 等待一下檢查播放是否真的成功
         setTimeout(() => {
@@ -239,12 +248,16 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
 
   // 完全重寫的暫停函數
   const pause = () => {
-    // console.log("🔧 開始暫停所有播放器...");
+    console.log('⏸️ [PlayerContext.pause] 暫停請求', {
+      有外部控制器: !!externalControlsRef.current,
+      當前曲目: trackTitle,
+      當前狀態: isPlaying ? '播放中' : '已暫停'
+    });
     
     // 優先使用外部播放器（YouTube）
     if (externalControlsRef.current && typeof externalControlsRef.current.pause === 'function') {
       try {
-        // console.log("🔧 使用外部播放器暫停");
+        console.log('🎵 [PlayerContext.pause] 使用外部播放器暫停');
         externalControlsRef.current.pause();
         // 等待一下檢查暫停是否真的成功
         setTimeout(() => {
@@ -385,10 +398,20 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           // 開始計時
           const startTime = performance.now();
           window.__NEXT_START_TIME__ = startTime;
-          // console.log("🔧 下一首開始計時:", new Date().toLocaleTimeString());
           
           const nextIndex = (activeIndex + 1) % playlist.length;
           const nextItem = playlist[nextIndex];
+          
+          // ✅ 監測循環播放
+          const isLooping = nextIndex === 0 && activeIndex === playlist.length - 1;
+          console.log('⏭️ [下一首監測]', {
+            當前索引: activeIndex,
+            下一首索引: nextIndex,
+            歌單長度: playlist.length,
+            是否循環: isLooping ? '✅ 是（回到第一首）' : '否',
+            下一首曲目: nextItem?.title,
+            當前時間: new Date().toLocaleTimeString()
+          });
           
           // console.log("🔧 PlayerContext 下一首:", { nextIndex, nextItem });
           

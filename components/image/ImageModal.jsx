@@ -30,6 +30,7 @@ export default function ImageModal({
   nextImage,
   onClose,
   currentUser,
+  displayMode = "gallery", // ✅ 新增：顯示模式（'gallery' 或 'collection'）
   onLikeUpdate,
   onNavigate,
   onFollowChange,     // 父層回寫 currentUser.following
@@ -489,6 +490,7 @@ export default function ImageModal({
             loading={loading}
             error={error}
             currentUser={currentUser}
+            displayMode={displayMode} // ✅ 傳遞顯示模式
             isFollowing={isFollowing}
             onFollowToggle={handleFollowToggle}
             onUserClick={handleUserClick}
@@ -556,6 +558,7 @@ export default function ImageModal({
             <DesktopRightPane
               image={image}
               currentUser={currentUser}
+              displayMode={displayMode} // ✅ 傳遞顯示模式
               isFollowing={isFollowing}
               onFollowToggle={handleFollowToggle}
               onUserClick={handleUserClick}

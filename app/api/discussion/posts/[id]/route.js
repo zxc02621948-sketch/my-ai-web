@@ -12,8 +12,8 @@ export async function GET(req, { params }) {
     const { id } = await params;
     
     const post = await DiscussionPost.findById(id)
-      .populate("author", "username avatar")
-      .populate("imageRef", "title imageId thumbnail")
+      .populate("author", "username image currentFrame")
+      .populate("imageRef", "title imageId")
       .lean();
     
     if (!post) {
@@ -80,8 +80,8 @@ export async function PUT(req, { params }) {
     await post.save();
     
     const updatedPost = await DiscussionPost.findById(id)
-      .populate("author", "username avatar")
-      .populate("imageRef", "title imageId thumbnail")
+      .populate("author", "username image currentFrame")
+      .populate("imageRef", "title imageId")
       .lean();
     
     return NextResponse.json({

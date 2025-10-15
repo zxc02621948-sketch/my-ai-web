@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useCurrentUser } from '@/contexts/CurrentUserContext';
 
 export default function UnpinReminderModal({ 
   pageUserId, 
@@ -11,24 +12,21 @@ export default function UnpinReminderModal({
   currentPinnedUsername,
   onUnpin 
 }) {
+  const { currentUser } = useCurrentUser(); // 使用 Context
   const [isOpen, setIsOpen] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [showReminder, setShowReminder] = useState(true);
 
   useEffect(() => {
-    // 獲取用戶的提醒設置
-    const fetchSettings = async () => {
-      try {
-        const res = await axios.get('/api/current-user');
-        const userData = res.data.user || res.data;
-        setShowReminder(userData.pinnedPlayerSettings?.showReminder !== false);
-      } catch (error) {
-        console.error('獲取設置失敗:', error);
-      }
-    };
-
-    fetchSettings();
-  }, []);
+    // 從 Context 獲取用戶的提醒設置
+    if (!currentUser) return;
+    
+    try {
+      setShowReminder(currentUser.pinnedPlayerSettings?.showReminder !== false);
+    } catch (error) {
+      console.error('獲取設置失敗:', error);
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     // 檢查是否需要顯示提示

@@ -6,12 +6,13 @@ import { ArrowLeft, Heart, MessageCircle, Bookmark, Share2, Trash2 } from "lucid
 import Link from "next/link";
 import ImageModal from "@/components/image/ImageModal";
 import DiscussionCommentBox from "@/components/discussion/DiscussionCommentBox";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export default function PostDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { currentUser } = useCurrentUser(); // 使用 Context
   const [post, setPost] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
 
@@ -23,17 +24,7 @@ export default function PostDetailPage() {
     { id: "general", name: "閒聊", icon: "💬" }
   ];
 
-  // 獲取當前用戶
-  useEffect(() => {
-    fetch('/api/current-user')
-      .then(res => res.json())
-      .then(data => {
-        if (data.user) {
-          setCurrentUser(data.user);
-        }
-      })
-      .catch(err => console.error('獲取用戶信息失敗:', err));
-  }, []);
+  // currentUser 由 CurrentUserContext 提供，無需額外獲取
 
   // 獲取帖子詳情
   useEffect(() => {

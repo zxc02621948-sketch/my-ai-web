@@ -48,6 +48,7 @@ export default function GlobalYouTubeBridge() {
   const [playerKey, setPlayerKey] = useState(0);
   const shouldResumeOnVisibleRef = useRef(false); // 記錄是否需要在分頁可見時繼續播放
   const reinitTimeoutRef = useRef(null); // 防抖重新初始化
+  const lastIsPlayingRef = useRef(null); // 追踪上次的播放狀態
 
   // 提取 videoId，只在視頻真正變化時重新創建播放器
   const videoId = useMemo(() => {
@@ -120,8 +121,16 @@ export default function GlobalYouTubeBridge() {
   // 監聽分頁可見性變化，在分頁切換回前台時繼續播放
   useEffect(() => {
     const handleVisibilityChange = () => {
+      console.log('👁️ [分頁切換]', {
+        分頁狀態: document.hidden ? '切到後台' : '切回前台',
+        需要恢復播放: shouldResumeOnVisibleRef.current,
+        當前曲目: player?.trackTitle,
+        播放狀態: player?.isPlaying
+      });
+      
       if (!document.hidden && shouldResumeOnVisibleRef.current) {
         // 分頁切換回前台，且需要繼續播放
+        console.log('▶️ [分頁切換] 準備恢復播放');
         shouldResumeOnVisibleRef.current = false;
         
         // 檢查播放器是否仍然有效
@@ -129,8 +138,9 @@ export default function GlobalYouTubeBridge() {
           try {
             // 直接使用 YouTube API 播放
             ytRef.current.playVideo();
+            console.log('✅ [分頁切換] 播放恢復成功');
           } catch (error) {
-            console.warn("🔧 分頁切換後播放失敗:", error.message);
+            console.warn("⚠️ [分頁切換] 播放失敗:", error.message);
             // 回退到 player.play()
             setTimeout(() => {
               player?.play?.();
@@ -138,6 +148,7 @@ export default function GlobalYouTubeBridge() {
           }
         } else {
           // 播放器無效，使用 player.play()
+          console.log('⚠️ [分頁切換] 播放器無效，使用 player.play()');
           setTimeout(() => {
             player?.play?.();
           }, 500);
@@ -304,28 +315,54 @@ export default function GlobalYouTubeBridge() {
             
             // console.log("🔧 播放器就緒，準備自動播放檢查");
             
-            // 音量設置：簡單直接的方式（生產環境下 YouTube 不會記住用戶設置）
-            // 直接設置，不過度檢查（避免因為檢查太嚴格而失敗）
+            // 音量設置：使用 postMessage 方式（更可靠）
             setTimeout(() => {
               try {
-                if (ytRef.current && typeof ytRef.current.setVolume === 'function') {
-                  const currentVolume = player?.volume;
+                const currentVolume = player?.volume;
+                
+                console.log('🔊 [onReady音量同步]', {
+                  PlayerContext音量: currentVolume,
+                  轉換後: currentVolume ? Math.round(currentVolume * 100) : 'undefined',
+                  視頻ID: videoId
+                });
+                
+                if (typeof currentVolume === 'number' && !isNaN(currentVolume) && isFinite(currentVolume)) {
+                  const volume = Math.round(currentVolume * 100);
                   
-                  if (typeof currentVolume === 'number' && !isNaN(currentVolume) && isFinite(currentVolume)) {
-                    const volume = Math.round(currentVolume * 100);
-                    
-                    // 直接設置，捕獲可能的錯誤
-                    try {
-                      ytRef.current.setVolume(volume);
-                    } catch (setError) {
-                      // 忽略錯誤，生產環境可能會成功
+                  // ✅ 優先使用 postMessage（避免 null.src 錯誤）
+                  const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
+                  if (youtubeIframes.length > 0) {
+                    const iframe = youtubeIframes[youtubeIframes.length - 1];
+                    if (iframe && iframe.contentWindow) {
+                      try {
+                        iframe.contentWindow.postMessage(JSON.stringify({
+                          event: 'command',
+                          func: 'setVolume',
+                          args: [volume]
+                        }), '*');
+                        console.log('✅ [onReady音量同步] postMessage 設置成功:', volume);
+                      } catch (postError) {
+                        console.warn('⚠️ [onReady音量同步] postMessage 失敗:', postError.message);
+                      }
                     }
                   }
+                  
+                  // 備用：嘗試直接 API（可能失敗但不影響）
+                  if (ytRef.current && typeof ytRef.current.setVolume === 'function') {
+                    try {
+                      ytRef.current.setVolume(volume);
+                      console.log('✅ [onReady音量同步] API 設置成功:', volume);
+                    } catch (setError) {
+                      // 靜默處理，postMessage 已經設置過了
+                    }
+                  }
+                } else {
+                  console.warn('⚠️ [onReady音量同步] 音量值無效:', currentVolume);
                 }
               } catch (error) {
-                // 忽略音量設置錯誤，不影響播放器功能
+                console.error('❌ [onReady音量同步] 錯誤:', error.message);
               }
-            }, 200);
+            }, 500); // ✅ 增加延遲到 500ms，確保播放器完全初始化
       
       // 設置外部播放器控制（移到條件檢查之前，確保總是執行）
       // console.log("🔧 設置外部播放器控制器");
@@ -443,6 +480,13 @@ export default function GlobalYouTubeBridge() {
           // 確保音量值在有效範圍內 (0-1)
           const validVolume = Math.max(0, Math.min(1, vol0to1));
           
+          // ✅ 監測音量變化
+          console.log('🔊 [音量監測]', {
+            設置音量: `${Math.floor(validVolume * 100)}%`,
+            原始值: vol0to1,
+            視頻ID: videoId
+          });
+          
           // 使用 postMessage 控制 YouTube iframe 音量
           try {
             const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
@@ -494,8 +538,13 @@ export default function GlobalYouTubeBridge() {
             if (youtubeIframes.length > 0) {
               const iframe = youtubeIframes[youtubeIframes.length - 1]; // 使用最後一個 iframe
               if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage(`{"event":"command","func":"seekTo","args":"${time}"}`, '*');
-                // console.log("🔧 使用 postMessage 跳轉成功");
+                // ✅ 修正：args 應該是數組格式
+                iframe.contentWindow.postMessage(JSON.stringify({
+                  event: 'command',
+                  func: 'seekTo',
+                  args: [time, true] // true = 允許在未緩衝區域跳轉
+                }), '*');
+                console.log("🎯 [seekTo] 使用 postMessage 跳轉:", time);
                 return;
               }
             }
@@ -505,10 +554,10 @@ export default function GlobalYouTubeBridge() {
               // 先檢查播放器是否真的有效
               const playerState = ytRef.current.getPlayerState();
               if (playerState !== null && playerState !== undefined) {
-                ytRef.current.seekTo(time);
-                // console.log("🔧 YouTube 直接跳轉成功");
+                ytRef.current.seekTo(time, true);
+                console.log("✅ [seekTo] YouTube 直接跳轉成功:", time);
               } else {
-                console.warn("🔧 播放器狀態無效，跳過跳轉");
+                console.warn("⚠️ [seekTo] 播放器狀態無效，跳過跳轉");
               }
             } catch (directError) {
               console.warn("🔧 直接跳轉失敗:", directError.message);
@@ -618,9 +667,48 @@ export default function GlobalYouTubeBridge() {
         return;
       }
       
+      // ✅ 監測狀態變化
+      const stateNames = {
+        '-1': 'UNSTARTED',
+        0: 'ENDED',
+        1: 'PLAYING',
+        2: 'PAUSED',
+        3: 'BUFFERING',
+        5: 'CUED'
+      };
+      console.log(`🎬 [YouTube狀態]`, {
+        狀態: stateNames[code] || `未知(${code})`,
+        視頻ID: videoId,
+        當前音量: Math.floor((ytRef.current.getVolume?.() || 0)),
+        播放時間: Math.floor(ytRef.current.getCurrentTime?.() || 0)
+      });
+      
       if (code === 1) {
         // 播放中
         player?.setExternalPlaying?.(true);
+        
+        // ✅ 確保音量正確（在 PLAYING 狀態時再次設置）
+        if (ytRef.current && player?.volume) {
+          const volume = Math.round(player.volume * 100);
+          try {
+            ytRef.current.setVolume(volume);
+            console.log('🔊 [PLAYING狀態] 同步音量:', volume);
+          } catch (volError) {
+            // 嘗試 postMessage
+            const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
+            if (youtubeIframes.length > 0) {
+              const iframe = youtubeIframes[youtubeIframes.length - 1];
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage(JSON.stringify({
+                  event: 'command',
+                  func: 'setVolume',
+                  args: [volume]
+                }), '*');
+                console.log('🔊 [PLAYING狀態] postMessage 同步音量:', volume);
+              }
+            }
+          }
+        }
         
         // 記錄播放開始時間（從暫停位置繼續）
         if (progressStateRef.current) {
@@ -629,6 +717,15 @@ export default function GlobalYouTubeBridge() {
         }
       } else if (code === 2) {
         // 暫停
+        console.log('⏸️ [YouTube暫停]', {
+          視頻ID: videoId,
+          當前曲目: player?.trackTitle,
+          當前時間: ytRef.current?.getCurrentTime?.() || 0,
+          總時長: ytRef.current?.getDuration?.() || 0,
+          當前索引: player?.activeIndex,
+          歌單長度: player?.playlist?.length
+        });
+        
         player?.setExternalPlaying?.(false);
         
         // 保存暫停位置
@@ -639,6 +736,14 @@ export default function GlobalYouTubeBridge() {
         }
       } else if (code === 0) {
         // 播放結束
+        console.log('🎵 [播放結束]', {
+          視頻ID: videoId,
+          當前曲目: player?.trackTitle,
+          歌單長度: player?.playlist?.length,
+          當前索引: player?.activeIndex,
+          是否循環: player?.isLooping
+        });
+        
         player?.setExternalPlaying?.(false);
         
         // 重置進度狀態
@@ -648,13 +753,20 @@ export default function GlobalYouTubeBridge() {
           progressStateRef.current.pausedAt = 0;
         }
         
-        // 如果在後台分頁，標記需要在前台時繼續播放
+        // 播放結束，觸發下一首
+        console.log('⏭️ [自動下一首] 準備播放下一首', {
+          當前分頁: document.hidden ? '後台' : '前台'
+        });
+        
+        // 直接觸發下一首，不管是否在後台
+        // YouTube 允許用戶已互動過的頁面在後台自動播放下一首
+        player?.next?.();
+        
+        // 如果在後台分頁，標記需要在前台時確保播放
         if (document.hidden) {
+          console.log('🌙 [後台播放] 標記前台恢復播放');
           shouldResumeOnVisibleRef.current = true;
         }
-        
-        // 播放結束，觸發下一首
-        player?.next?.();
       } else if (code === 3) {
         // 緩衝中
         // console.log("🔧 YouTube 緩衝中");
@@ -668,27 +780,91 @@ export default function GlobalYouTubeBridge() {
   }, [player?.setExternalPlaying, player?.next, videoId, player?.setExternalProgress]);
 
 
+  // ✅ 監聽 player.isPlaying 變化，同步控制 YouTube 播放器
+  useEffect(() => {
+    const currentIsPlaying = player?.isPlaying;
+    
+    // 如果播放狀態沒有變化，跳過
+    if (currentIsPlaying === lastIsPlayingRef.current) {
+      return;
+    }
+    
+    // 更新上次的狀態
+    lastIsPlayingRef.current = currentIsPlaying;
+    
+    if (!videoId) {
+      return;
+    }
+    
+    // 使用 postMessage 方式更安全，不會直接調用可能有問題的 YouTube API
+    const controlPlayer = () => {
+      try {
+        const iframes = document.querySelectorAll('iframe[src*="youtube.com"]');
+        if (iframes.length === 0) return;
+        
+        const iframe = iframes[iframes.length - 1];
+        if (!iframe || !iframe.contentWindow) return;
+        
+        if (currentIsPlaying) {
+          iframe.contentWindow.postMessage(JSON.stringify({
+            event: 'command',
+            func: 'playVideo',
+            args: []
+          }), '*');
+        } else {
+          iframe.contentWindow.postMessage(JSON.stringify({
+            event: 'command',
+            func: 'pauseVideo',
+            args: []
+          }), '*');
+        }
+      } catch (error) {
+        console.error('❌ [YouTube同步] 失敗:', error.message);
+      }
+    };
+    
+    controlPlayer();
+  }, [player?.isPlaying, videoId]);
+
   // 播放器健康檢查
   useEffect(() => {
     const healthCheck = () => {
+      // 如果在後台分頁，跳過健康檢查
+      if (document.hidden) {
+        console.log('🌙 [健康檢查] 後台分頁，跳過檢查');
+        return;
+      }
+      
       if (ytRef.current && typeof ytRef.current.getPlayerState === 'function') {
         try {
           const state = ytRef.current.getPlayerState();
+          // state 可能是 -1 (UNSTARTED), 0 (ENDED), 1 (PLAYING), 2 (PAUSED), 3 (BUFFERING), 5 (CUED)
+          // 只有當 state 真正無效（null/undefined）且播放器應該存在時才重置
           if (state === null || state === undefined) {
-            console.warn("🔧 播放器健康檢查失敗，重新初始化");
-            // 重新設置播放器引用
-            ytRef.current = null;
+            // 再次確認：如果有 videoId，說明應該有播放器，但狀態無效
+            if (videoId) {
+              console.warn("🔧 播放器健康檢查失敗，重新初始化", {
+                state,
+                videoId,
+                hasYtRef: !!ytRef.current
+              });
+              // 重新設置播放器引用
+              ytRef.current = null;
+            }
+          } else {
+            console.log('✅ [健康檢查] 播放器正常，狀態:', state, 'videoId:', videoId);
           }
         } catch (error) {
           console.warn("🔧 播放器健康檢查錯誤:", error.message);
-          ytRef.current = null;
+          // 不要立即重置，給播放器一次機會
+          // ytRef.current = null;
         }
       }
     };
     
-    const healthCheckInterval = setInterval(healthCheck, 30000); // 每30秒檢查一次
+    const healthCheckInterval = setInterval(healthCheck, 60000); // 改為每60秒檢查一次，減少干擾
     return () => clearInterval(healthCheckInterval);
-  }, []);
+  }, [videoId]);
 
   // 使用定時器來定期更新進度
   useEffect(() => {
@@ -753,7 +929,22 @@ export default function GlobalYouTubeBridge() {
           player.setExternalProgress(currentTime, state.duration);
           
           // 檢查是否播放到最後（防止後台分頁時 onStateChange 不觸發）
-          if (state.isPlaying && currentTime >= state.duration - 0.5) {
+          // ✅ 加入防抖：避免進度條跳轉時誤觸發
+          const isNearEnd = currentTime >= state.duration - 0.5;
+          const shouldTriggerNext = state.isPlaying && isNearEnd && !isTransitioningRef.current;
+          
+          if (shouldTriggerNext) {
+            console.log('🎵 [備用播放結束檢測] 檢測到播放結束', {
+              currentTime,
+              duration: state.duration,
+              當前索引: player?.activeIndex,
+              歌單長度: player?.playlist?.length,
+              是否轉換中: isTransitioningRef.current
+            });
+            
+            // 設置轉換標記，防止重複觸發
+            isTransitioningRef.current = true;
+            
             // 播放結束，觸發下一首
             player?.setExternalPlaying?.(false);
             
@@ -768,7 +959,13 @@ export default function GlobalYouTubeBridge() {
             }
             
             // 觸發下一首
+            console.log('⏭️ [備用播放結束檢測] 準備觸發下一首');
             player?.next?.();
+            
+            // 1秒後重置轉換標記
+            setTimeout(() => {
+              isTransitioningRef.current = false;
+            }, 1000);
           }
         }
       } catch (error) {

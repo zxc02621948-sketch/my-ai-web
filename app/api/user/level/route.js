@@ -12,13 +12,14 @@ export async function GET(req) {
       return NextResponse.json({ error: "未登入" }, { status: 401 });
     }
 
-    const points = currentUser.pointsBalance || 0;
+    const points = currentUser.totalEarnedPoints || 0;
     const levelInfo = getLevelInfo(points);
 
     return NextResponse.json({
       success: true,
       data: {
         points,
+        currentBalance: currentUser.pointsBalance || 0,
         level: levelInfo,
         user: {
           id: currentUser._id,

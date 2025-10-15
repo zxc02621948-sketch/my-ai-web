@@ -22,24 +22,26 @@ export const STORE_PRODUCTS = {
       ]
     },
     {
-      id: "frame-color-editor",
-      title: "頭像框調色盤",
-      description: "解鎖頭像框顏色編輯功能，讓你的頭像框更加個性化！",
-      icon: "/store/color-palette.svg",
-      price: 0,
-      originalPrice: 200,
+      id: "pin-player-subscription",
+      title: "釘選播放器（月租）",
+      description: "全站播放你喜歡的音樂！釘選後在任何頁面都能持續播放，讓音樂陪你瀏覽整個網站。",
+      icon: "📌",
+      price: 200,
+      originalPrice: 300,
       isLimited: false,
       expiry: null,
       category: "features",
+      type: "subscription", // 月租類型
+      billingCycle: "monthly", // 每月
       features: [
-        "12 種預設顏色快速選擇",
-        "自訂顏色選擇器",
-        "濾鏡強度控制",
-        "即時預覽效果",
-        "永久解鎖使用"
+        "全站跨頁面播放",
+        "30 天有效期",
+        "累積制續費",
+        "到期前 3 天提醒",
+        "每月 200 積分"
       ]
     }
-    // 其他功能解鎖商品...
+    // 調色盤功能已改為 LV2 等級獎勵，不再於商店販售
   ],
   personalization: [
     {
@@ -47,8 +49,8 @@ export const STORE_PRODUCTS = {
       title: "AI 生成頭像框",
       description: "AI 生成的藝術頭像框，展現科技與藝術的完美結合",
       icon: "/frames/ai-generated-7899315_1280.png",
-      price: 0,
-      originalPrice: 50,
+      price: 300,
+      originalPrice: 500,
       isLimited: false,
       expiry: null,
       category: "personalization",
@@ -63,8 +65,8 @@ export const STORE_PRODUCTS = {
       title: "動物頭像框",
       description: "可愛的動物主題頭像框，展現你的個性與喜好",
       icon: "/frames/animals-5985896_1280.png",
-      price: 0,
-      originalPrice: 30,
+      price: 200,
+      originalPrice: 350,
       isLimited: false,
       expiry: null,
       category: "personalization",
@@ -79,8 +81,8 @@ export const STORE_PRODUCTS = {
       title: "魔法陣頭像框",
       description: "神秘的魔法陣設計頭像框，展現你的魔法師身份",
       icon: "/frames/魔法陣1.png",
-      price: 0,
-      originalPrice: 40,
+      price: 300,
+      originalPrice: 450,
       isLimited: false,
       expiry: null,
       category: "personalization",
@@ -92,62 +94,65 @@ export const STORE_PRODUCTS = {
     },
     {
       id: "magic-circle-2-frame",
-      title: "魔法陣2頭像框",
-      description: "進階版魔法陣設計頭像框，更華麗的魔法效果",
+      title: "魔法陣2頭像框（測試版）",
+      description: "測試版魔法陣設計，未來將升級為高級版本！早鳥價限時優惠，升級後不再以此價格販售。",
       icon: "/frames/魔法陣2.png",
-      price: 0,
-      originalPrice: 50,
+      price: 300,
+      originalPrice: 600,
       isLimited: false,
       expiry: null,
       category: "personalization",
       features: [
-        "進階魔法陣設計",
-        "華麗魔法效果",
+        "測試版設計",
+        "未來將升級為高級版",
+        "早鳥投資機會",
         "永久使用權"
       ]
     }
   ],
-  premium: [
-    // 曝光分數是訂閱專屬，不在商店販售
-  ],
-  limited: [
+  special: [
     {
       id: "power-coupon-7day",
       title: "新圖加乘權力券 (7天)",
-      description: "讓指定圖片重新獲得新圖加乘效果，持續7天",
+      description: "讓指定圖片重新獲得新圖加乘效果，券有效期7天，使用後效果持續10小時",
       icon: "🎫",
       price: 30,
       originalPrice: 50,
       isLimited: true,
       expiry: null,
-      category: "limited",
+      category: "special",
       type: "power-coupon",
       duration: 7,
       features: [
         "重新獲得新圖加乘",
-        "持續7天",
+        "券有效期7天",
+        "效果持續10小時",
         "針對特定圖片",
-        "3天限購1張"
+        "限時優惠價格"
       ]
     },
     {
       id: "power-coupon-30day",
       title: "新圖加乘權力券 (30天)",
-      description: "讓指定圖片重新獲得新圖加乘效果，持續30天",
+      description: "讓指定圖片重新獲得新圖加乘效果，券有效期30天，使用後效果持續10小時",
       icon: "🎫",
       price: 100,
       originalPrice: 150,
       isLimited: true,
       expiry: null,
-      category: "limited",
+      category: "special",
       type: "power-coupon",
       duration: 30,
       features: [
         "重新獲得新圖加乘",
-        "持續30天",
+        "券有效期30天",
+        "效果持續10小時",
         "針對特定圖片",
-        "7天限購1張"
+        "長期投資優惠"
       ]
     }
+  ],
+  limited: [
+    // 限時商品分類（目前暫無商品）
   ]
 };

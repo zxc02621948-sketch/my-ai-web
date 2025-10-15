@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/serverAuth.js";
 import User from "@/models/User.js";
 import PowerCoupon from "@/models/PowerCoupon.js";
+import PointsTransaction from "@/models/PointsTransaction.js";
 import { dbConnect } from "@/lib/db.js";
 
 export async function POST(req) {
@@ -109,6 +110,21 @@ export async function POST(req) {
     // 更新用戶積分
     user.pointsBalance -= price;
     await user.save();
+
+    // 記錄積分交易
+    const dateKey = new Date().toISOString().split('T')[0];
+    await PointsTransaction.create({
+      userId: user._id,
+      points: -price,
+      type: 'store_purchase',
+      dateKey: dateKey,
+      meta: { 
+        productId: `power-coupon-${type}`,
+        description: `權力券購買 (${type === '7day' ? '7天券' : '30天券'})`,
+        quantity,
+        couponId: powerCoupon._id
+      }
+    });
 
     return NextResponse.json({
       success: true,

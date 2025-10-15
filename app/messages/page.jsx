@@ -195,8 +195,14 @@ export default function MessagesPage() {
       if (!r.ok || !j?.ok) return;
       const items = (j.items || []).map(x => ({ ...x, subject: x.subject || x.last?.subject }));
       setList(items);
-      // 若沒有選取中，且列表有資料，預設選第一筆
-      setActiveId(prev => prev || (items[0]?.cid || ""));
+      
+      // 檢查當前選中的會話是否還存在於新列表中
+      const currentExists = items.some(item => item.cid === activeId);
+      
+      // 如果當前選中的會話不存在，或者沒有選中，則選擇第一個
+      if (!currentExists || !activeId) {
+        setActiveId(items[0]?.cid || "");
+      }
     } catch {}
   }
 
@@ -250,7 +256,21 @@ export default function MessagesPage() {
 
   useEffect(() => { loadMe(); loadList(); }, []);
   useEffect(() => { loadThread(activeId); }, [activeId, showArchived]);
-  useEffect(() => { loadList(); }, [showArchived]);
+  useEffect(() => { 
+    loadList(); 
+    // 當取消顯示封存時，強制清空當前內容
+    if (!showArchived) {
+      setThread([]);
+      setThreadArchived(false);
+      // 如果當前沒有選中會話，選擇第一個
+      if (!activeId) {
+        setTimeout(() => {
+          const firstItem = list.find(item => !item.archivedForMe);
+          if (firstItem) setActiveId(firstItem.cid);
+        }, 100);
+      }
+    }
+  }, [showArchived]);
 
   /** 封存（軟刪除）當前會話：只對自己隱藏 */
   async function archiveActive() {

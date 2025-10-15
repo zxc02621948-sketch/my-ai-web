@@ -17,7 +17,7 @@ export const GET = withErrorHandling(async (_req, ctx) => {
   const currentUser = await getCurrentUser().catch(() => null);
 
   const doc = await Image.findById(id)
-    .populate({ path: "user", select: "_id username image isAdmin level currentFrame" })
+    .populate({ path: "user", select: "_id username image isAdmin level currentFrame frameSettings" })
     .lean();
 
   if (!doc) {

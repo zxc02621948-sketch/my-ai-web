@@ -1,0 +1,43 @@
+# robots.txt for AI 創界
+# 允許搜尋引擎索引公開內容，保護私密內容
+
+User-agent: *
+Allow: /
+Allow: /discussion
+Allow: /models
+Allow: /levels
+Allow: /qa
+Allow: /install-guide
+Allow: /terms
+Allow: /privacy
+Allow: /changelog
+
+# 禁止索引私密和管理頁面
+Disallow: /admin/
+Disallow: /api/
+Disallow: /settings
+Disallow: /messages
+Disallow: /login
+Disallow: /auth/
+Disallow: /reset-password
+Disallow: /verify
+Disallow: /store
+Disallow: /user/*/player
+
+# 禁止索引測試和開發相關
+Disallow: /test-exposure
+Disallow: /dev/
+
+# Sitemap 位置
+Sitemap: https://www.aicreateaworld.com/sitemap.xml
+
+# 針對特定爬蟲的規則
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+# 防止過度爬取
+Crawl-delay: 1
+

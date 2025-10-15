@@ -18,6 +18,7 @@ export default function MobileImageSheet({
   loading,
   error,
   currentUser,
+  displayMode = "gallery", // ✅ 新增：顯示模式
   isFollowing,
   onFollowToggle,
   onUserClick,
@@ -365,7 +366,11 @@ export default function MobileImageSheet({
                   size={48} 
                   frameId={image?.user?.currentFrame || "default"}
                   showFrame={true}
-                  onClick={onUserClick} 
+                  onClick={onUserClick}
+                  frameColor={image?.user?.frameSettings?.[image?.user?.currentFrame || "default"]?.color || "#ffffff"}
+                  frameOpacity={image?.user?.frameSettings?.[image?.user?.currentFrame || "default"]?.opacity || 1}
+                  layerOrder={image?.user?.frameSettings?.[image?.user?.currentFrame || "default"]?.layerOrder || "frame-on-top"}
+                  frameTransparency={image?.user?.frameSettings?.[image?.user?.currentFrame || "default"]?.frameOpacity || 1}
                 />
                 <span className="text-sm">{displayName}</span>
               </div>
@@ -382,6 +387,7 @@ export default function MobileImageSheet({
             <ImageInfoBox
               image={image}
               currentUser={currentUser}
+              displayMode={displayMode} // ✅ 傳遞顯示模式
               onClose={onClose}
               onDelete={undefined}
               fileUrl={fileUrlOf(image)}

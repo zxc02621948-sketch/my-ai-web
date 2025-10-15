@@ -417,7 +417,9 @@ export default function Header({
               <span>上傳圖片</span>
             </button>
 
-            <TutorialMenu onGuideClick={onGuideClick} />
+            <div className="hidden md:block">
+              <TutorialMenu onGuideClick={onGuideClick} />
+            </div>
 
             <Link
               href="/discussion"
@@ -432,7 +434,7 @@ export default function Header({
               <span className="hidden xl:inline">討論區</span>
             </Link>
 
-            {currentUser && <NotificationBell currentUser={currentUser} />}
+            {currentUser && <NotificationBell />}
             {currentUser && <InboxButton />}
 
             {/* 使用者選單 */}
@@ -467,8 +469,19 @@ export default function Header({
                             onClick={() => setUserMenuOpen(false)}
                             role="menuitem"
                           >
-                            我的頁面
+                            👤 我的頁面
                           </Link>
+
+                          <Link
+                            href="/settings"
+                            className="block px-4 py-2 hover:bg-zinc-700 text-sm"
+                            onClick={() => setUserMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            ⚙️ 設定
+                          </Link>
+
+                          <div className="border-t border-zinc-700 my-1"></div>
 
                           <button
                             onClick={async () => {
@@ -480,7 +493,7 @@ export default function Header({
                             className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-red-400"
                             role="menuitem"
                           >
-                            登出
+                            🚪 登出
                           </button>
                         </>
                       ) : (
@@ -555,7 +568,7 @@ export default function Header({
 
         {/* 第三列：📱 手機常用功能 */}
         <div className="md:hidden px-3 pb-2">
-          <div className="flex gap-2 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div className="flex gap-2 overflow-x-auto overflow-y-hidden" style={{ WebkitOverflowScrolling: "touch" }}>
             <TutorialMenu onGuideClick={onGuideClick} />
 
             <Link

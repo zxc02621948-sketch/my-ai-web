@@ -44,6 +44,8 @@ export async function GET(req) {
       createdAt: user.createdAt?.toISOString() ?? null,
       // ✅ 積分餘額
       pointsBalance: user.pointsBalance ?? 0,
+      // ✅ 總賺取積分（用於等級計算）
+      totalEarnedPoints: user.totalEarnedPoints ?? 0,
       // ✅ 播放器：使用者預設音樂 URL
       defaultMusicUrl: user.defaultMusicUrl || '',
       // ✅ 播放清單：完整播放清單
@@ -57,7 +59,10 @@ export async function GET(req) {
       frameSettings: user.frameSettings || {},
       
       // ✅ 功能解鎖狀態
-      frameColorEditorUnlocked: user.frameColorEditorUnlocked || false
+      frameColorEditorUnlocked: user.frameColorEditorUnlocked || false,
+      // ✅ 播放器體驗券狀態
+      playerCouponUsed: user.playerCouponUsed || false,
+      miniPlayerExpiry: user.miniPlayerExpiry || null
     }, { status: 200, headers: { "Cache-Control": "no-store" } });
 
   } catch (err) {

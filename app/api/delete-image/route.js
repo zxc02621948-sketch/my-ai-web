@@ -180,6 +180,12 @@ export async function POST(req) {
     let actionKey = (body?.actionKey ?? q.actionKey ?? "").trim();
     let reason = typeof (body?.reason ?? q.reason) === "string" ? (body?.reason ?? q.reason) : "";
 
+    // 新增：支持管理員操作類型
+    const adminAction = (body?.adminAction ?? q.adminAction ?? "delete").trim().toLowerCase();
+    const newCategory = (body?.newCategory ?? q.newCategory ?? "").trim();
+    const newRating = (body?.newRating ?? q.newRating ?? "").trim();
+    const note = typeof (body?.note ?? q.note) === "string" ? (body?.note ?? q.note) : "";
+
     if (!notify && reportId) notify = true;
 
     const ReportModel = await getReportModelSafe();
@@ -188,7 +194,7 @@ export async function POST(req) {
       return json({ ok: false, message: `找不到圖片（提供的是 ${idOrImageId || reportId}）` }, 404);
     }
 
-    // ✅ 權限：管理員或圖片作者本人可刪除
+    // ✅ 權限：管理員或圖片作者本人可刪除/修改
     let ownerId = ownerObjectIdFromImage(image);
     if (typeof ownerId === "string" && /^[0-9a-fA-F]{24}$/.test(ownerId)) {
       ownerId = new mongoose.Types.ObjectId(ownerId);
@@ -198,7 +204,49 @@ export async function POST(req) {
       return json({ ok: false, message: "需要管理員或作者本人權限" }, 403);
     }
 
-    await Image.deleteOne({ _id: image._id });
+    // 根據操作類型執行不同動作
+    let operationResult = {};
+    let operationSummary = "";
+
+    if (adminAction === "reclassify") {
+      // 更改分類
+      if (!newCategory) {
+        return json({ ok: false, message: "更改分類需要提供 newCategory" }, 400);
+      }
+      const fullImage = await Image.findById(image._id);
+      if (!fullImage) {
+        return json({ ok: false, message: "找不到圖片" }, 404);
+      }
+      const oldCategory = fullImage.category || "未分類";
+      fullImage.category = newCategory;
+      await fullImage.save();
+      
+      operationResult = { oldCategory, newCategory };
+      operationSummary = `已將分類從「${oldCategory}」調整為「${newCategory}」`;
+      if (!actionKey) actionKey = "recat.category_fixed";
+      if (!reason) reason = note || `分類錯誤，已從「${oldCategory}」調整為「${newCategory}」`;
+    } else if (adminAction === "rerate") {
+      // 更改分級
+      if (!newRating) {
+        return json({ ok: false, message: "更改分級需要提供 newRating" }, 400);
+      }
+      const fullImage = await Image.findById(image._id);
+      if (!fullImage) {
+        return json({ ok: false, message: "找不到圖片" }, 404);
+      }
+      const oldRating = fullImage.rating || "all";
+      fullImage.rating = newRating;
+      await fullImage.save();
+      
+      operationResult = { oldRating, newRating };
+      operationSummary = `已將分級從「${oldRating}」調整為「${newRating}」`;
+      if (!actionKey) actionKey = "rerate.fix_label";
+      if (!reason) reason = note || `分級錯誤，已從「${oldRating}」調整為「${newRating}」`;
+    } else {
+      // 刪除（預設行為）
+      await Image.deleteOne({ _id: image._id });
+      operationSummary = "已刪除圖片";
+    }
 
     let reportDoc = null;
     if ((!actionKey || !actionKey.length) && reportId && ReportModel && isOid(reportId)) {
@@ -213,9 +261,11 @@ export async function POST(req) {
 
     if (reportDoc) {
       try {
+        const resolution = adminAction === "reclassify" ? "reclassified" : 
+                          adminAction === "rerate" ? "rerated" : "deleted";
         await ReportModel.updateOne(
           { _id: reportDoc._id },
-          { $set: { resolved: true, resolvedAt: new Date(), resolution: "deleted" } }
+          { $set: { resolved: true, resolvedAt: new Date(), resolution } }
         );
       } catch {}
     }
@@ -245,6 +295,8 @@ export async function POST(req) {
           imageTitle: image.title || "",
           imageUuid: image.imageId || "",
           reason: reason || "",
+          // 新增：支持分類/分級調整
+          ...operationResult,
         };
 
         const tpl = renderTemplate(actionKey, ctx); // { title, subject, body }
@@ -282,15 +334,19 @@ export async function POST(req) {
     return json(
       {
         ok: true,
-        message: "已刪除圖片",
-        deletedId: String(image._id),
+        action: adminAction,
+        message: operationSummary || "操作完成",
+        summary: operationSummary,
+        imageId: String(image._id),
+        ...(adminAction === "delete" ? { deletedId: String(image._id) } : {}),
+        ...operationResult,
         mode,
         notifyUsed: notify,
         notify: notifyResult,
         ...(debugPreview ? { tplPreview } : {}),
       },
       200,
-      { "X-Delete-Image-Route": "v11.2" }
+      { "X-Delete-Image-Route": "v12.0" }
     );
   } catch (err) {
     console.error("POST /api/delete-image error:", err);

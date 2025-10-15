@@ -4,37 +4,32 @@ import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { Bell } from "lucide-react";
 import NotificationList from "./NotificationList";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
-export default function NotificationBell({ currentUser }) {
+export default function NotificationBell() {
+  const { currentUser, unreadCounts, fetchUnreadCounts, updateUnreadCount } = useCurrentUser();
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
-  const [unread, setUnread] = useState(false);
   const bellRef = useRef(null);
 
-  // ✅ 每 30 秒輪詢一次未讀狀態
+  // ✅ 使用 Context 緩存的未讀計數
   useEffect(() => {
     if (!currentUser?._id) return;
 
-    const fetchUnread = async () => {
-      try {
-        const res = await axios.get("/api/notifications/unread-count");
-        setUnread(res.data?.count > 0);
-      } catch (err) {
-        console.warn("🔔 無法取得未讀通知數", err);
-      }
+    const refreshNotifications = () => {
+      fetchUnreadCounts(true); // 強制刷新
     };
 
-    fetchUnread(); // 初次啟動先抓一次
-    const interval = setInterval(fetchUnread, 30000);
-
-    // ✅ 支援外部強制刷新紅點
-    window.addEventListener("refreshNotifications", fetchUnread);
+    // 初次載入
+    fetchUnreadCounts();
+    
+    // 支援外部強制刷新紅點
+    window.addEventListener("refreshNotifications", refreshNotifications);
 
     return () => {
-      clearInterval(interval);
-      window.removeEventListener("refreshNotifications", fetchUnread);
+      window.removeEventListener("refreshNotifications", refreshNotifications);
     };
-  }, [currentUser]);
+  }, [currentUser, fetchUnreadCounts]);
 
   // ✅ 點開鈴鐺後載入完整通知列表
   useEffect(() => {
@@ -42,18 +37,17 @@ export default function NotificationBell({ currentUser }) {
       axios.get("/api/notifications").then((res) => {
         const list = res.data.notifications || [];
         setNotifications(list);
-        setUnread(list.some((n) => !n.isRead));
+        const hasUnread = list.some((n) => !n.isRead);
+        updateUnreadCount('notifications', hasUnread ? 1 : 0);
       });
-
-      // ✅ 自動標記為已讀
+    } else if (!open && notifications.length > 0) {
+      // ✅ 關閉鈴鐺時才標記為已讀（只執行一次）
       axios.post("/api/notifications/mark-all-read").then(() => {
-        setNotifications((prev) =>
-          prev.map((n) => ({ ...n, isRead: true }))
-        );
-        setUnread(false);
+        updateUnreadCount('notifications', 0);
+        setNotifications([]); // 清空通知列表，避免重複觸發
       });
     }
-  }, [open]);
+  }, [open, updateUnreadCount]);
 
   // 點外部關閉彈窗
   useEffect(() => {
@@ -95,7 +89,7 @@ export default function NotificationBell({ currentUser }) {
         className="relative p-2 hover:text-yellow-400"
       >
         <Bell />
-        {unread && (
+        {unreadCounts.notifications > 0 && (
           <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
         )}
       </button>
@@ -105,7 +99,6 @@ export default function NotificationBell({ currentUser }) {
           <NotificationList
             notifications={notifications}
             setNotifications={setNotifications}
-            setUnread={setUnread}
             onNotificationClick={handleNotificationClick}
           />
         </div>

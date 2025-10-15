@@ -14,6 +14,7 @@ import PointsStoreModal from "@/components/user/PointsStoreModal";
 import PowerCouponModal from "@/components/user/PowerCouponModal";
 import { usePlayer } from "@/components/context/PlayerContext";
 import UnpinReminderModal from "@/components/player/UnpinReminderModal";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 // 重複 import 修正：axios 已在檔案頂部引入
 
 const labelToRating = {
@@ -27,6 +28,12 @@ export default function UserProfilePage() {
   const params = useSearchParams();
   const router = useRouter();
   const player = usePlayer();
+  const { currentUser, setCurrentUser } = useCurrentUser(); // 使用 Context
+  
+  // ✅ 立即滾動到頂部（在組件渲染前執行）
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [id]);
 
   const {
     levelFilters,
@@ -36,7 +43,6 @@ export default function UserProfilePage() {
     setFilterMenuOpen,
   } = useFilterContext();
 
-  const [currentUser, setCurrentUser] = useState(undefined);
   const [userData, setUserData] = useState(null);
   const [uploadedImages, setUploadedImages] = useState([]);
   const [likedImages, setLikedImages] = useState([]);
@@ -82,10 +88,11 @@ export default function UserProfilePage() {
   useEffect(() => {
     if (userData?.miniPlayerPurchased) {
       try {
+        console.log('🎵 [UserPage] 啟用播放器:', { userId: userData._id, username: userData.username });
         player?.setMiniPlayerEnabled?.(true);
       } catch {}
     }
-  }, [userData?.miniPlayerPurchased, player]); // 當播放器權限改變時執行
+  }, [userData?.miniPlayerPurchased, player]); // 移除 currentUser?.pinnedPlayer 依賴，避免釘選時重複觸發
 
   // ✅ 讀 URL 的 search 當唯一資料源（就地搜尋）
   const [searchQuery, setSearchQuery] = useState("");
@@ -145,42 +152,20 @@ export default function UserProfilePage() {
   const isOwnProfile =
     currentUser && (currentUser._id === id || currentUser.id === id || currentUser.username === id);
 
-  // 目前登入者
+  // 檢查釘選播放器狀態（使用 Context 中的 currentUser）
   useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const res = await axios.get("/api/current-user");
-        const userData = res.data.user || res.data;
-        
-        setCurrentUser(userData);
-        
-        // 檢查是否有釘選播放器
-        if (userData?.pinnedPlayer?.userId) {
-          const pinned = userData.pinnedPlayer;
-          // 檢查是否過期
-          const now = new Date();
-          if (pinned.expiresAt && new Date(pinned.expiresAt) > now) {
-            setPinnedPlayerData(pinned);
-          }
-        }
-      } catch {
-        setCurrentUser(null);
+    if (!currentUser || currentUser === undefined) return;
+    
+    // 檢查是否有釘選播放器
+    if (currentUser?.pinnedPlayer?.userId) {
+      const pinned = currentUser.pinnedPlayer;
+      // 檢查是否過期
+      const now = new Date();
+      if (pinned.expiresAt && new Date(pinned.expiresAt) > now) {
+        setPinnedPlayerData(pinned);
       }
-    };
-    
-    fetchCurrentUser();
-    
-    // 監聽釘選變更事件，重新獲取 currentUser
-    const handlePinnedChange = () => {
-      fetchCurrentUser();
-    };
-    
-    window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
-    
-    return () => {
-      window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
-    };
-  }, []);
+    }
+  }, [currentUser]);
 
   // 篩選面板快捷事件（保留）
   useEffect(() => {
@@ -557,7 +542,9 @@ export default function UserProfilePage() {
           if (list.length || uploadedImages.length === 0) setUploadedImages(list);
         })
         .catch((err) => {
-          console.warn("[user-images] failed:", err);
+          if (err.name !== 'AbortError') {
+            console.warn("[user-images] failed:", err);
+          }
         });
 
       getJSON(`/api/user-liked-images?id=${uid}`)
@@ -566,7 +553,9 @@ export default function UserProfilePage() {
           if (list.length || likedImages.length === 0) setLikedImages(list);
         })
         .catch((err) => {
-          console.warn("[user-liked-images] failed:", err);
+          if (err.name !== 'AbortError') {
+            console.warn("[user-liked-images] failed:", err);
+          }
         });
     })();
 
@@ -701,21 +690,29 @@ export default function UserProfilePage() {
 
   const handleUnpinPlayer = async () => {
     try {
+      console.log('📌 [UserPage] 開始解除釘選');
       await axios.delete('/api/player/pin');
       setPinnedPlayerData(null);
       player?.setIsPlaying?.(false);
+      
+      // 更新 CurrentUserContext，移除釘選數據
+      if (setCurrentUser) {
+        setCurrentUser(prevUser => {
+          if (!prevUser) return prevUser;
+          const { pinnedPlayer, ...rest } = prevUser;
+          console.log('🔄 [UserPage] 更新 CurrentUser，移除釘選數據');
+          return rest;
+        });
+      }
       
       // 觸發全局事件
       window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
         detail: { isPinned: false } 
       }));
       
-      // ✅ 重新獲取 currentUser，觸發播放清單重新載入
-      const res = await axios.get('/api/current-user');
-      const userData = res.data.user || res.data;
-      setCurrentUser(userData);
+      console.log('✅ [UserPage] 解除釘選完成');
     } catch (error) {
-      console.error('解除釘選失敗:', error);
+      console.error('❌ [UserPage] 解除釘選失敗:', error);
       throw error;
     }
   };
@@ -751,26 +748,29 @@ export default function UserProfilePage() {
           }}
         />
 
-        <div className="flex gap-4 mb-6">
+        {/* 標籤頁切換 - 手機版優化 */}
+        <div className="flex gap-2 md:gap-4 mb-4 md:mb-6 px-2 md:px-0">
           <button
-            className={`px-4 py-2 rounded font-medium transition ${
+            className={`flex-1 md:flex-none px-3 py-3 md:px-4 md:py-2 rounded-lg md:rounded font-medium transition text-sm md:text-base ${
               activeTab === "uploads"
-                ? "bg-white text-black shadow"
+                ? "bg-white text-black shadow-md"
                 : "bg-zinc-700 text-white hover:bg-zinc-600"
             }`}
             onClick={() => setActiveTab("uploads")}
           >
-            上傳作品
+            <span className="hidden sm:inline">上傳作品</span>
+            <span className="sm:hidden">作品</span>
           </button>
           <button
-            className={`px-4 py-2 rounded font-medium transition ${
+            className={`flex-1 md:flex-none px-3 py-3 md:px-4 md:py-2 rounded-lg md:rounded font-medium transition text-sm md:text-base ${
               activeTab === "likes"
-                ? "bg-white text-black shadow"   // ← 修正這裡
+                ? "bg-white text-black shadow-md"
                 : "bg-zinc-700 text-white hover:bg-zinc-600"
             }`}
             onClick={() => setActiveTab("likes")}
           >
-            ❤️ 收藏圖片
+            <span className="hidden sm:inline">❤️ 收藏圖片</span>
+            <span className="sm:hidden">❤️ 收藏</span>
           </button>
         </div>
 

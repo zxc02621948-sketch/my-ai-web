@@ -8,6 +8,8 @@ import FreeFrameSelector from "./FreeFrameSelector";
 import OwnedFrameSelector from "./OwnedFrameSelector";
 import FrameColorEditor from "./FrameColorEditor";
 import AvatarFrame from "@/components/common/AvatarFrame";
+import axios from "axios";
+import { getLevelIndex } from "@/utils/pointsLevels";
 
 export default function UnifiedAvatarModal({ 
   isOpen, 
@@ -139,7 +141,9 @@ export default function UnifiedAvatarModal({
       // 一般頭像框
       "ai-generated": "AI 生成",
       "animals": "動物",
-      "leaves": "葉子"
+      "leaves": "葉子",
+      "magic-circle": "魔法陣",
+      "magic-circle-2": "魔法陣2"
     };
     return frameMap[frameId] || frameId;
   };
@@ -439,12 +443,45 @@ export default function UnifiedAvatarModal({
           onClose={() => setShowColorEditor(false)}
           frameId={previewFrame}
           userAvatar={userAvatar}
-          onSave={(settings) => {
-            setFrameSettings(prev => ({
-              ...prev,
-              [previewFrame]: settings
-            }));
-            setShowColorEditor(false);
+          userPoints={userPoints}
+          isLevelUnlocked={frameColorEditorUnlocked}
+          onSave={async (settings) => {
+            try {
+              // 調用 API 保存設定並扣除積分
+              const res = await axios.post("/api/frame/save-color-settings", {
+                frameId: previewFrame,
+                settings: settings
+              });
+
+              if (res.data.success) {
+                // 更新本地狀態
+                setFrameSettings(prev => ({
+                  ...prev,
+                  [previewFrame]: settings
+                }));
+                setShowColorEditor(false);
+                
+                // 顯示成功訊息
+                alert(`✅ 顏色設定已保存！\n消費：50 積分\n剩餘：${res.data.newBalance} 積分`);
+                
+                // 廣播積分更新事件（刷新頭部顯示）
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(new Event("points-updated"));
+                  // 廣播頭像框設定更新事件
+                  window.dispatchEvent(new CustomEvent("frame-settings-updated", {
+                    detail: {
+                      frameId: previewFrame,
+                      settings: settings
+                    }
+                  }));
+                }
+              } else {
+                alert(res.data.error || "保存失敗");
+              }
+            } catch (error) {
+              console.error("保存調色盤設定失敗:", error);
+              alert(error.response?.data?.error || "保存失敗，請稍後再試");
+            }
           }}
           initialColor={frameSettings[previewFrame]?.color || "#ffffff"}
           initialOpacity={frameSettings[previewFrame]?.opacity || 1}

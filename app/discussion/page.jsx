@@ -1,19 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { MessageSquare, Plus, Search, Filter, Heart, MessageCircle, Bookmark, Share2, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 import ImageModal from "@/components/image/ImageModal";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export default function DiscussionPage() {
+  const { currentUser } = useCurrentUser(); // 使用 Context
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [currentUser, setCurrentUser] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  
+  // 防止重複調用
+  const lastFetchParamsRef = useRef(null);
 
   const categories = [
     { id: "all", name: "全部", icon: "📋" },
@@ -24,65 +28,98 @@ export default function DiscussionPage() {
     { id: "general", name: "閒聊", icon: "💬" }
   ];
 
-  // 釘選播放器邏輯已由 ConditionalPlayer 統一處理，這裡不需要重複調用
-
-  // 獲取當前用戶信息
+  // 合併數據載入邏輯，避免重複調用
   useEffect(() => {
-    fetch('/api/current-user')
-      .then(res => res.json())
-      .then(data => {
-        if (data.user) {
-          setCurrentUser(data.user);
+    const currentParams = JSON.stringify({ 
+      category: selectedCategory, 
+      search: searchQuery 
+    });
+    
+    console.log('🔄 [討論區] useEffect 觸發:', { currentParams, lastParams: lastFetchParamsRef.current });
+    
+    // 參數相同時跳過（但第一次載入除外）
+    if (lastFetchParamsRef.current === currentParams && lastFetchParamsRef.current !== null) {
+      console.log('⏭️ [討論區] 參數相同，跳過載入');
+      return;
+    }
+    
+    lastFetchParamsRef.current = currentParams;
+    
+    // 搜索延遲
+    if (searchQuery.length > 0 && searchQuery.length < 2) {
+      console.log('⏭️ [討論區] 搜索字數不足，跳過載入');
+      return; // 搜索字數不足，跳過
+    }
+    
+    const fetchPosts = async () => {
+      console.log('🔍 [討論區] fetchPosts 開始調用');
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          page: "1",
+          limit: "20",
+          category: selectedCategory,
+          sort: "newest"
+        });
+        
+        if (searchQuery) {
+          params.append("search", searchQuery);
         }
-      })
-      .catch(err => console.error('獲取用戶信息失敗:', err));
-  }, []);
-
-  useEffect(() => {
-    fetchPosts();
-  }, [selectedCategory]);
-
-  const fetchPosts = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: "1",
-        limit: "20",
-        category: selectedCategory,
-        sort: "newest"
-      });
-      
-      if (searchQuery) {
-        params.append("search", searchQuery);
-      }
-      
-      const response = await fetch(`/api/discussion/posts?${params}`);
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        console.log('✅ [討論區] 載入帖子:', result.data.length, '個');
-        setPosts(result.data);
-      } else {
-        console.error('❌ [討論區] 載入失敗:', result.error);
+        
+        console.log('📡 [討論區] 發送 API 請求:', `/api/discussion/posts?${params}`);
+        const response = await fetch(`/api/discussion/posts?${params}`);
+        const result = await response.json();
+        
+        console.log('📥 [討論區] API 響應:', result);
+        
+        if (result.success && result.data) {
+          console.log('✅ [討論區] 成功載入帖子:', result.data.length, '個');
+          setPosts(result.data);
+        } else {
+          console.error('❌ [討論區] 載入失敗:', result.error);
+          setPosts([]);
+        }
+      } catch (error) {
+        console.error('❌ [討論區] 載入錯誤:', error);
         setPosts([]);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('❌ [討論區] 載入錯誤:', error);
-      setPosts([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    
+    // 直接執行，不使用 setTimeout，避免 Strict Mode 清理問題
+    console.log('🚀 [討論區] 直接執行載入（避免 Strict Mode 清理）');
+    fetchPosts();
+  }, [selectedCategory, searchQuery]);
 
-  // 搜索功能：延遲搜索
+  // 監聽頁面可見性變化，當頁面重新獲得焦點時重新載入
   useEffect(() => {
-    if (searchQuery.length >= 2 || searchQuery.length === 0) {
-      const timer = setTimeout(() => {
-        fetchPosts();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [searchQuery]);
+    const handleVisibilityChange = () => {
+      if (!document.hidden && posts.length === 0) {
+        console.log('👁️ [討論區] 頁面重新獲得焦點且無數據，重新載入');
+        // 觸發重新載入：清空 lastFetchParamsRef 並重新設置參數
+        lastFetchParamsRef.current = null;
+        setSelectedCategory(prev => prev); // 觸發重新渲染
+      }
+    };
+
+    const handleFocus = () => {
+      if (posts.length === 0) {
+        console.log('🎯 [討論區] 窗口重新獲得焦點且無數據，重新載入');
+        // 觸發重新載入：清空 lastFetchParamsRef 並重新設置參數
+        lastFetchParamsRef.current = null;
+        setSelectedCategory(prev => prev); // 觸發重新渲染
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [posts.length]);
 
   // 客戶端過濾已由 API 處理，這裡直接使用 posts
   const filteredPosts = posts;

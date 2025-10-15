@@ -25,7 +25,7 @@ export async function GET(req){
   const archivedRows = await ArchivedThread.find({ userId: me._id }).select({ cid:1 }).lean();
   const archivedCids = new Set(archivedRows.map(r => String(r.cid)));
 
-  // ② 訊息層級雙型別過濾（輔助；保留）
+  // ② 訊息層級過濾（使用統一的封存機制）
   const notArchivedMsg = includeArchived ? {} : {
     $or:[ { deletedFor:{ $exists:false } }, { deletedFor:{ $size:0 } }, { deletedFor:{ $nin:[me._id, meIdStr] } } ]
   };

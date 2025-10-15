@@ -5,7 +5,7 @@ const PointsTransactionSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     type: { 
       type: String, 
-      enum: ["upload", "like_received", "comment_received", "daily_login", "like_given", "admin_gift"], 
+      enum: ["upload", "like_received", "comment_received", "daily_login", "like_given", "admin_gift", "store_purchase", "subscription_purchase", "frame_color_edit"], 
       required: true 
     },
     points: { type: Number, required: true },
@@ -27,4 +27,9 @@ PointsTransactionSchema.index({ userId: 1, type: 1, actorUserId: 1, sourceId: 1,
 // 針對終身去重查詢最佳化（不含 dateKey）
 PointsTransactionSchema.index({ userId: 1, type: 1, actorUserId: 1, sourceId: 1 });
 
-export default mongoose.models.PointsTransaction || mongoose.model("PointsTransaction", PointsTransactionSchema);
+// 強制使用新的 schema（開發環境）
+if (mongoose.models.PointsTransaction) {
+  delete mongoose.models.PointsTransaction;
+}
+
+export default mongoose.model("PointsTransaction", PointsTransactionSchema);
