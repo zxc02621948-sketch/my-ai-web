@@ -110,8 +110,8 @@ export async function GET(req) {
       return NextResponse.json({ dryRun, scanned, modified, note: "likesCount 與 popScore 已補正（或預覽）。" });
     }
 
-    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
-    const limit = Math.max(1, parseInt(url.searchParams.get("limit") || "24", 10));
+    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
+    const limit = Math.max(1, parseInt(url.searchParams.get("limit") || "24", 10) || 24);
     const sort = (url.searchParams.get("sort") || "popular").toLowerCase();
     const pinRecent = Math.max(0, parseInt(url.searchParams.get("pinRecent") || "6", 10));
 

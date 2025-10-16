@@ -48,8 +48,17 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
   const [copiedField, setCopiedField] = useState(null);
   const [copyTip, setCopyTip] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [showSecrets, setShowSecrets] = useState(false); // ✅ 畫廊模式下控制秘密展開
   const router = useRouter();
+  
+  // ✅ 手機檢測
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 768);
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // —— 1 秒冷卻（前端）——
   const [cooling, setCooling] = useState({}); // 例如 { "copy.workflow": true }
@@ -562,8 +571,8 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
         {getQualityIcon(getMetadataQuality(image))}
       </div>
 
-      {/* ✅ 作品展示模式：如果圖片有學習價值的元數據，顯示「揭開秘密」按鈕 */}
-      {displayMode === "gallery" && (getMetadataQuality(image) === "优质图" || getMetadataQuality(image) === "标准图") && (
+      {/* ✅ 作品展示模式：如果圖片有學習價值的元數據，顯示「揭開秘密」按鈕（手機版隱藏） */}
+      {displayMode === "gallery" && !isMobile && (getMetadataQuality(image) === "优质图" || getMetadataQuality(image) === "标准图") && (
         <button
           onClick={() => setShowSecrets(!showSecrets)}
           className="relative w-full mb-4 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg font-bold transition-all shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-100"

@@ -196,6 +196,20 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
     if (externalControlsRef.current && typeof externalControlsRef.current.play === 'function') {
       try {
         console.log('🎵 [PlayerContext.play] 使用外部播放器');
+        
+        // ✅ 新增：檢查播放器是否已經 ready
+        if (!window.__YT_READY__) {
+          console.warn('⚠️ [PlayerContext.play] 播放器尚未準備好，稍後重試');
+          // 等待播放器準備好後再嘗試
+          setTimeout(() => {
+            if (window.__YT_READY__ && externalControlsRef.current?.play) {
+              console.log('🎵 [PlayerContext.play] 播放器已準備好，重試播放');
+              externalControlsRef.current.play();
+            }
+          }, 500);
+          return false;
+        }
+        
         externalControlsRef.current.play();
         // 等待一下檢查播放是否真的成功
         setTimeout(() => {
@@ -342,6 +356,12 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
     // 優先使用外部播放器（YouTube）
     if (externalControlsRef.current && typeof externalControlsRef.current.seekTo === 'function') {
       try {
+        // ✅ 新增：檢查播放器是否已經 ready
+        if (!window.__YT_READY__) {
+          console.warn('⚠️ [PlayerContext.seekTo] 播放器尚未準備好，跳過');
+          return;
+        }
+        
         console.log("🔧 使用外部播放器跳轉");
         externalControlsRef.current && externalControlsRef.current.seekTo(time);
         return;

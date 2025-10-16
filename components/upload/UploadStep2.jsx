@@ -44,6 +44,7 @@ export default function UploadStep2({
   setModelLink,
   loraLink,
   setLoraLink,
+  uploadLimits,
 }) {
   // ====== Local state ======
   const [author, setAuthor] = useState("");
@@ -1011,7 +1012,17 @@ export default function UploadStep2({
           >
             ← 返回
           </button>
-          <div className="text-sm opacity-80">上傳圖片 · 填寫資訊</div>
+          <div className="text-center">
+            <div className="text-sm opacity-80">上傳圖片 · 填寫資訊</div>
+            {uploadLimits && (
+              <div className="text-xs text-zinc-400 mt-1">
+                今日上傳：{uploadLimits.todayUploads}/{uploadLimits.dailyLimit} 張
+                {uploadLimits.isLimitReached && (
+                  <span className="text-red-400 ml-1">（已達上限）</span>
+                )}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}

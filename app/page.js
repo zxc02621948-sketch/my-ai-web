@@ -41,6 +41,9 @@ export default function HomePage() {
   // ✅ 客戶端初始化
   const [isClient, setIsClient] = useState(false);
   
+  // ✅ 手機檢測（避免 hydration 錯誤）
+  const [isMobile, setIsMobile] = useState(false);
+  
   useEffect(() => {
     setIsClient(true);
     // 從 localStorage 讀取偏好
@@ -53,6 +56,11 @@ export default function HomePage() {
     if (!guideShown) {
       setShowGuide(true);
     }
+    // 檢測手機裝置
+    setIsMobile(window.innerWidth < 768);
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // 保存模式偏好
@@ -749,8 +757,8 @@ export default function HomePage() {
           </div>
         </div>
 
-               {/* ✅ 首次訪問引導橫幅 */}
-               {showGuide && displayMode === "gallery" && (
+               {/* ✅ 首次訪問引導橫幅（手機版隱藏） */}
+               {showGuide && displayMode === "gallery" && !isMobile && (
                  <div className="mt-3 bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/50 rounded-lg p-4 relative">
                    <button
                      onClick={() => {

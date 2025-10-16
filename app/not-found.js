@@ -63,10 +63,6 @@ export default function NotFound() {
               模型介紹
             </Link>
             <span className="text-zinc-600">•</span>
-            <Link href="/levels" className="text-blue-400 hover:text-blue-300 underline">
-              等級系統
-            </Link>
-            <span className="text-zinc-600">•</span>
             <Link href="/qa" className="text-blue-400 hover:text-blue-300 underline">
               新手Q&A
             </Link>

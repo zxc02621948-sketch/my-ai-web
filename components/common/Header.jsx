@@ -414,7 +414,7 @@ export default function Header({
               title="上傳圖片"
             >
               <Upload className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
-              <span>上傳圖片</span>
+              <span className="hidden lg:inline">上傳圖片</span>
             </button>
 
             <div className="hidden md:block">
@@ -431,7 +431,7 @@ export default function Header({
               title="討論區"
             >
               <MessageSquare className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
-              <span className="hidden xl:inline">討論區</span>
+              <span className="hidden lg:inline">討論區</span>
             </Link>
 
             {currentUser && <NotificationBell />}

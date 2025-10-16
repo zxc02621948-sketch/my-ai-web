@@ -5,7 +5,6 @@ User-agent: *
 Allow: /
 Allow: /discussion
 Allow: /models
-Allow: /levels
 Allow: /qa
 Allow: /install-guide
 Allow: /terms

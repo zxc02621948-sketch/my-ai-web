@@ -14,7 +14,6 @@ export async function GET() {
       { url: "", priority: "1.0", changefreq: "daily" }, // 首頁
       { url: "/discussion", priority: "0.9", changefreq: "daily" },
       { url: "/models", priority: "0.8", changefreq: "weekly" },
-      { url: "/levels", priority: "0.7", changefreq: "monthly" },
       { url: "/qa", priority: "0.8", changefreq: "monthly" },
       { url: "/install-guide", priority: "0.7", changefreq: "monthly" },
       { url: "/terms", priority: "0.5", changefreq: "monthly" },

@@ -683,7 +683,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                   </div>
                   <div className="flex justify-between">
                     <span>給予愛心</span>
-                    <span className="text-yellow-400">+1／每日上限 5</span>
+                    <span className="text-yellow-400">+1／每日上限 5（給他人按讚，自讚不計）</span>
                   </div>
                   <div className="flex justify-between">
                     <span>獲得留言</span>
@@ -732,7 +732,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                       </div>
                       <div className="flex justify-between">
                         <span>給予愛心</span>
-                        <span className="text-yellow-400">+1／每日上限 5</span>
+                        <span className="text-yellow-400">+1／每日上限 5（給他人按讚，自讚不計）</span>
                       </div>
                       <div className="flex justify-between">
                         <span>獲得留言</span>

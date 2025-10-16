@@ -196,7 +196,7 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
               );
             })}
             
-            {/* LV4-LV10 預留空間 */}
+            {/* LV4-LV10 顯示獎勵 */}
             {LEVELS.slice(3).map((level, index) => {
               const actualIndex = index + 3;
               const isUnlocked = actualIndex <= currentUserLevel;
@@ -205,8 +205,12 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
               return (
                 <div
                   key={level.key}
-                  className={`rounded-xl p-4 border transition-all duration-200 bg-zinc-700/30 border-zinc-600 opacity-70 ${
-                    isCurrent ? 'ring-2 ring-yellow-500/30' : ''
+                  className={`rounded-xl p-4 border transition-all duration-200 ${
+                    isUnlocked
+                      ? isCurrent
+                        ? 'bg-gradient-to-r from-yellow-900/30 to-orange-900/30 border-yellow-500/50 shadow-lg shadow-yellow-500/20'
+                        : 'bg-zinc-700/50 border-zinc-600'
+                      : 'bg-zinc-800/50 border-zinc-700 opacity-60'
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -217,29 +221,36 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
                       </div>
                       
                       {/* 等級信息 */}
-                      <div>
-                        <div className="text-lg font-semibold text-gray-400">
+                      <div className="flex-1">
+                        <div className={`text-lg font-semibold ${isUnlocked ? 'text-white' : 'text-gray-400'}`}>
                           {level.title}
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-gray-400 mb-2">
                           需要 {level.min} 積分
                           {isCurrent && <span className="ml-2 text-yellow-400">(當前等級)</span>}
+                        </div>
+                        <div className="space-y-1">
+                          {level.rewards.map((reward, rewardIndex) => (
+                            <div key={rewardIndex} className="flex items-center space-x-2">
+                              <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                              <span className="text-sm text-gray-300">{reward}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
 
-                    {/* 預留狀態 */}
+                    {/* 狀態標記 */}
                     <div className="text-right">
-                      <span className="bg-zinc-600 text-zinc-300 text-xs px-3 py-1 rounded-full">
-                        敬請期待
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 預留描述 */}
-                  <div className="mt-3 p-3 bg-zinc-700/20 rounded-lg">
-                    <div className="text-sm text-gray-500 italic">
-                      獎勵內容開發中，敬請期待更多精彩功能...
+                      {isCurrent && (
+                        <span className="text-yellow-400 font-semibold">當前等級</span>
+                      )}
+                      {!isCurrent && isUnlocked && (
+                        <span className="text-green-400 font-semibold">已解鎖</span>
+                      )}
+                      {!isCurrent && !isUnlocked && (
+                        <span className="text-gray-500 text-sm">未解鎖</span>
+                      )}
                     </div>
                   </div>
                 </div>

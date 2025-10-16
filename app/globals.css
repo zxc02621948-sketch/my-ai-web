@@ -7,15 +7,27 @@
   --foreground: #ededed;
 }
 
+/* 強制暗色主題，忽略系統主題偏好 */
 html {
   overflow-anchor: auto;
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--background) !important;
+  color: var(--foreground) !important;
   font-family: Arial, Helvetica, sans-serif;
   overflow-anchor: auto;
+}
+
+/* 確保所有元素都使用暗色主題 */
+* {
+  color-scheme: dark;
+}
+
+/* 防止瀏覽器自動調整顏色 */
+input, textarea, select, button {
+  color-scheme: dark;
 }
 
 .my-masonry-grid {
@@ -34,3 +46,135 @@ body {
 }
 
 /* stylelint-enable at-rule-no-unknown */
+
+/* ===== 貓咪播放器動畫 ===== */
+
+/* 音符飄動動畫 */
+@keyframes float-1 {
+  0%, 100% { 
+    transform: translate(0, 0) rotate(0deg) scale(1); 
+    opacity: 0.8;
+  }
+  25% { 
+    transform: translate(8px, -8px) rotate(15deg) scale(1.1); 
+    opacity: 1;
+  }
+  50% { 
+    transform: translate(12px, -15px) rotate(25deg) scale(1.2); 
+    opacity: 0.9;
+  }
+  75% { 
+    transform: translate(6px, -10px) rotate(10deg) scale(1.05); 
+    opacity: 1;
+  }
+}
+
+@keyframes float-2 {
+  0%, 100% { 
+    transform: translate(0, 0) rotate(0deg) scale(1); 
+    opacity: 0.7;
+  }
+  33% { 
+    transform: translate(-6px, -12px) rotate(-20deg) scale(1.3); 
+    opacity: 1;
+  }
+  66% { 
+    transform: translate(-10px, -8px) rotate(-10deg) scale(0.9); 
+    opacity: 0.8;
+  }
+}
+
+@keyframes float-3 {
+  0%, 100% { 
+    transform: translate(0, 0) rotate(0deg) scale(1); 
+    opacity: 0.6;
+  }
+  50% { 
+    transform: translate(5px, -12px) rotate(20deg) scale(1.2); 
+    opacity: 1;
+  }
+}
+
+@keyframes float-4 {
+  0%, 100% { 
+    transform: translate(0, 0) rotate(0deg) scale(1); 
+    opacity: 0.5;
+  }
+  40% { 
+    transform: translate(-4px, -8px) rotate(-15deg) scale(1.1); 
+    opacity: 0.9;
+  }
+  80% { 
+    transform: translate(-2px, -4px) rotate(-5deg) scale(0.95); 
+    opacity: 0.7;
+  }
+}
+
+/* 應用動畫類別 */
+.animate-float-1 {
+  animation: float-1 3s ease-in-out infinite;
+  animation-delay: 0s;
+}
+
+.animate-float-2 {
+  animation: float-2 2.5s ease-in-out infinite;
+  animation-delay: 0.5s;
+}
+
+.animate-float-3 {
+  animation: float-3 3.5s ease-in-out infinite;
+  animation-delay: 1s;
+}
+
+.animate-float-4 {
+  animation: float-4 2.8s ease-in-out infinite;
+  animation-delay: 1.5s;
+}
+
+/* 貓咪跳動動畫增強版 */
+@keyframes cat-bounce {
+  0%, 100% { 
+    transform: translateY(0) scale(1); 
+  }
+  25% { 
+    transform: translateY(-8px) scale(1.02); 
+  }
+  50% { 
+    transform: translateY(-12px) scale(1.05); 
+  }
+  75% { 
+    transform: translateY(-6px) scale(1.01); 
+  }
+}
+
+/* 彩虹色變換動畫 */
+@keyframes rainbow-shift {
+  0% { filter: hue-rotate(0deg) saturate(1.2) brightness(1.1); }
+  16% { filter: hue-rotate(60deg) saturate(1.2) brightness(1.1); }
+  33% { filter: hue-rotate(120deg) saturate(1.2) brightness(1.1); }
+  50% { filter: hue-rotate(180deg) saturate(1.2) brightness(1.1); }
+  66% { filter: hue-rotate(240deg) saturate(1.2) brightness(1.1); }
+  83% { filter: hue-rotate(300deg) saturate(1.2) brightness(1.1); }
+  100% { filter: hue-rotate(360deg) saturate(1.2) brightness(1.1); }
+}
+
+/* 應用彩虹動畫 */
+.animate-rainbow {
+  animation: rainbow-shift 3s linear infinite;
+}
+
+/* 音波擴散動畫 */
+@keyframes sound-wave {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+.animate-sound-wave {
+  animation: sound-wave 2s ease-out infinite;
+}

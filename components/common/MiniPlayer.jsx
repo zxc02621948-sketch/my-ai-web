@@ -4,6 +4,7 @@ import { usePlayer } from "@/components/context/PlayerContext";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import MiniPlayerArt from "@/components/common/MiniPlayerArt";
+import CatPlayerArt from "@/components/player/MiniPlayerArt";
 import PinPlayerButton from "@/components/player/PinPlayerButton";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import axios from "axios";
@@ -736,7 +737,7 @@ export default function MiniPlayer() {
             });
           }}
         >
-          <MiniPlayerArt isPlaying={player.isPlaying} palette={palette} />
+          <CatPlayerArt isPlaying={player.isPlaying} theme="default" />
           
           {/* 釘選按鈕 - 在播放器圖示左上方內部 */}
           {player?.playerOwner && player?.playlist?.length > 0 && (

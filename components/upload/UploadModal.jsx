@@ -29,6 +29,7 @@ export default function UploadModal() {
   const [currentUser, setCurrentUser] = useState(null);
   const [modelLink, setModelLink] = useState("");
   const [loraLink, setLoraLink] = useState("");
+  const [uploadLimits, setUploadLimits] = useState(null);
 
   useEffect(() => setMounted(true), []);
 
@@ -49,8 +50,20 @@ export default function UploadModal() {
 
   // 事件開啟（外部呼叫：window.dispatchEvent(new CustomEvent("openUploadModal", { detail: { user } }))）
   useEffect(() => {
-    const open = (e) => {
-      if (e?.detail?.user) setCurrentUser(e.detail.user);
+    const open = async (e) => {
+      if (e?.detail?.user) {
+        setCurrentUser(e.detail.user);
+        // 獲取上傳限制信息
+        try {
+          const response = await fetch('/api/upload-limits');
+          if (response.ok) {
+            const data = await response.json();
+            setUploadLimits(data);
+          }
+        } catch (error) {
+          console.error('獲取上傳限制失敗：', error);
+        }
+      }
       setIsOpen(true);
     };
     window.addEventListener("openUploadModal", open);
@@ -80,6 +93,7 @@ export default function UploadModal() {
       setCurrentUser(null);
       setModelLink("");
       setLoraLink("");
+      setUploadLimits(null);
     }
   }, [isOpen]);
 
@@ -117,7 +131,20 @@ export default function UploadModal() {
             {/* 頂部標題（sticky） */}
             <div className="shrink-0 sticky top-0 z-10 bg-neutral-900/95 backdrop-blur border-b border-white/10">
               <div className="px-6 py-4 flex items-center justify-between">
-                <Dialog.Title className="text-lg md:text-xl font-bold">圖片上傳</Dialog.Title>
+                <div>
+                  <Dialog.Title className="text-lg md:text-xl font-bold">圖片上傳</Dialog.Title>
+                  {uploadLimits && (
+                    <div className="text-sm text-zinc-400 mt-1">
+                      今日上傳：{uploadLimits.todayUploads}/{uploadLimits.dailyLimit} 張
+                      {uploadLimits.isLimitReached && (
+                        <span className="text-red-400 ml-2">（已達上限）</span>
+                      )}
+                      <span className="ml-2 text-xs bg-zinc-700 px-2 py-1 rounded">
+                        {uploadLimits.levelInfo.display}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={onClose}
                   className="hidden md:inline-flex px-3 py-1.5 rounded bg-white/10 hover:bg-white/15 text-sm"
@@ -174,6 +201,7 @@ export default function UploadModal() {
                     setModelLink={setModelLink}
                     loraLink={loraLink}
                     setLoraLink={setLoraLink}
+                    uploadLimits={uploadLimits}
                   />
                 </div>
               )}

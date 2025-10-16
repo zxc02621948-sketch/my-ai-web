@@ -7,6 +7,7 @@ import { Notification } from "@/models/Notification";
 import mongoose from "mongoose";
 import { computeCompleteness } from "@/utils/score"; // 👈 新增
 import { creditPoints } from "@/services/pointsService";
+import { getDailyUploadLimit } from "@/utils/pointsLevels";
 
 // === GET: 列表（也可讓詳情頁取用單筆資料） ===
 export async function GET(req) {
@@ -156,6 +157,34 @@ export async function POST(req) {
     // 验证 18+ 图片的成年声明
     if (rating === '18' && !body.adultDeclaration) {
       return NextResponse.json({ message: "18+ 图片必须勾选成年声明" }, { status: 400 });
+    }
+
+    // ✅ 檢查每日上傳限制
+    if (userId) {
+      const user = await User.findById(userId).select('totalEarnedPoints').lean();
+      if (user) {
+        const dailyLimit = getDailyUploadLimit(user.totalEarnedPoints || 0);
+        
+        // 計算今日已上傳數量
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        const todayUploads = await Image.countDocuments({
+          userId: userId,
+          createdAt: {
+            $gte: today,
+            $lt: tomorrow
+          }
+        });
+        
+        if (todayUploads >= dailyLimit) {
+          return NextResponse.json({ 
+            message: `今日上傳限制為 ${dailyLimit} 張，請明天再試` 
+          }, { status: 429 });
+        }
+      }
     }
     
     // 验证尺寸（如果提供）

@@ -53,6 +53,17 @@ export default function PointsHistoryModal({ isOpen, onClose }) {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="積分記錄">
+      {/* 積分規則說明 */}
+      <div className="mb-4 p-3 bg-blue-900/20 border border-blue-700/30 rounded-lg">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-blue-400 text-lg">💡</span>
+          <span className="text-blue-300 text-sm font-medium">積分規則</span>
+        </div>
+        <p className="text-gray-300 text-xs leading-relaxed">
+          給他人按讚可獲積分，自讚不計分，每日最多 5 分，同一圖片僅計一次
+        </p>
+      </div>
+      
       <div className="text-white max-h-[50vh] overflow-y-auto pr-2">
         {loading ? (
           <p className="text-gray-400">載入中...</p>
