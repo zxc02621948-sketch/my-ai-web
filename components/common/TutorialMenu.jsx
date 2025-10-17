@@ -8,24 +8,23 @@ export default function TutorialMenu({ onGuideClick }) {
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const ref = useRef(null);
   const buttonRef = useRef(null);
+  const menuRef = useRef(null);
 
   useEffect(() => {
-    const onDoc = (e) => { if (open && ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onDoc = (e) => { 
+      if (open && ref.current && menuRef.current && 
+          !ref.current.contains(e.target) && 
+          !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
     const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
     
-    // 防止下拉選單打開時觸發父容器滾動
-    if (open) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    
     return () => {
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = '';
     };
   }, [open]);
 
@@ -67,6 +66,7 @@ export default function TutorialMenu({ onGuideClick }) {
 
       {open && typeof window !== 'undefined' && createPortal(
         <div
+          ref={menuRef}
           role="menu"
           className="fixed w-48 bg-zinc-800 text-white border border-white/10 rounded-lg shadow-xl py-1 z-[9999]"
           style={{
