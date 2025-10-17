@@ -35,7 +35,6 @@ export async function POST(request) {
     });
 
     if (existingAdVisit) {
-      console.log(`[AD-VISIT] Skipped duplicate ad visit within 3s: ${ip} -> ${path}`);
       return NextResponse.json({ 
         success: true, 
         message: 'Ad visit logged (duplicate within 3s, skipped)',
@@ -62,8 +61,6 @@ export async function POST(request) {
     });
 
     await newAdVisit.save();
-
-    console.log(`[AD-VISIT] New ad visit logged: ${visitId} | ${ip} -> ${path}`);
 
     return NextResponse.json({ 
       success: true, 

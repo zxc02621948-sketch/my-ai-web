@@ -38,11 +38,9 @@ export default function DiscussionPage() {
       activeTab: activeTab
     });
     
-    console.log('🔄 [討論區] useEffect 觸發:', { currentParams, lastParams: lastFetchParamsRef.current });
     
     // 參數相同時跳過（但第一次載入除外）
     if (lastFetchParamsRef.current === currentParams && lastFetchParamsRef.current !== null) {
-      console.log('⏭️ [討論區] 參數相同，跳過載入');
       return;
     }
     
@@ -50,12 +48,10 @@ export default function DiscussionPage() {
     
     // 搜索延遲
     if (searchQuery.length > 0 && searchQuery.length < 2) {
-      console.log('⏭️ [討論區] 搜索字數不足，跳過載入');
       return; // 搜索字數不足，跳過
     }
     
     const fetchPosts = async () => {
-      console.log('🔍 [討論區] fetchPosts 開始調用');
       setLoading(true);
       try {
         const params = new URLSearchParams({
@@ -76,14 +72,11 @@ export default function DiscussionPage() {
           params.append("excludeRating", "18");
         }
         
-        console.log('📡 [討論區] 發送 API 請求:', `/api/discussion/posts?${params}`);
         const response = await fetch(`/api/discussion/posts?${params}`);
         const result = await response.json();
         
-        console.log('📥 [討論區] API 響應:', result);
         
         if (result.success && result.data) {
-          console.log('✅ [討論區] 成功載入帖子:', result.data.length, '個');
           setPosts(result.data);
         } else {
           console.error('❌ [討論區] 載入失敗:', result.error);
@@ -98,7 +91,6 @@ export default function DiscussionPage() {
     };
     
     // 直接執行，不使用 setTimeout，避免 Strict Mode 清理問題
-    console.log('🚀 [討論區] 直接執行載入（避免 Strict Mode 清理）');
     fetchPosts();
   }, [selectedCategory, searchQuery, activeTab]);
 
@@ -106,7 +98,6 @@ export default function DiscussionPage() {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && posts.length === 0) {
-        console.log('👁️ [討論區] 頁面重新獲得焦點且無數據，重新載入');
         // 觸發重新載入：清空 lastFetchParamsRef 並重新設置參數
         lastFetchParamsRef.current = null;
         setSelectedCategory(prev => prev); // 觸發重新渲染
@@ -115,7 +106,6 @@ export default function DiscussionPage() {
 
     const handleFocus = () => {
       if (posts.length === 0) {
-        console.log('🎯 [討論區] 窗口重新獲得焦點且無數據，重新載入');
         // 觸發重新載入：清空 lastFetchParamsRef 並重新設置參數
         lastFetchParamsRef.current = null;
         setSelectedCategory(prev => prev); // 觸發重新渲染
@@ -146,7 +136,6 @@ export default function DiscussionPage() {
       const result = await response.json();
       
       if (result.success) {
-        console.log('✅ [討論區] 帖子已刪除');
         // 從列表中移除
         setPosts(posts.filter(p => p._id !== postId));
       } else {
