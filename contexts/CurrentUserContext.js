@@ -28,7 +28,6 @@ export const CurrentUserProvider = ({ children }) => {
           subsMap[sub.type] = sub;
         });
         setSubscriptions(subsMap);
-        console.log("🔧 [Context] 訂閱狀態已更新:", subsMap);
         return subsMap;
       }
     } catch (error) {
@@ -43,21 +42,12 @@ export const CurrentUserProvider = ({ children }) => {
   const hasValidSubscription = (subscriptionType) => {
     const sub = subscriptions[subscriptionType];
     if (!sub || !sub.isActive) {
-      console.log(`🔧 [hasValidSubscription] ${subscriptionType}: 訂閱不存在或非活躍`, { sub, isActive: sub?.isActive });
       return false;
     }
     
     const now = new Date();
     const expiresAt = sub.expiresAt || sub.nextBillingDate;
     const isValid = expiresAt && new Date(expiresAt) > now;
-    
-    console.log(`🔧 [hasValidSubscription] ${subscriptionType}:`, {
-      isActive: sub.isActive,
-      cancelledAt: sub.cancelledAt,
-      expiresAt: sub.expiresAt,
-      now: now.toISOString(),
-      isValid
-    });
     
     // 檢查是否未過期（已取消的訂閱在到期前仍可使用）
     return isValid;

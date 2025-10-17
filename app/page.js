@@ -171,36 +171,22 @@ export default function HomePage() {
   useEffect(() => {
     // ✅ 等待 currentUser 載入完成
     if (currentUser === undefined) {
-      console.log('🔍 [首頁] currentUser 未載入，等待中...');
       return;
     }
     
     // 監聽釘選事件
     const handlePinnedChange = (e) => {
-      console.log('📡 [首頁] 收到釘選事件:', {
-        isPinned: e.detail.isPinned,
-        hasPlayerData: !!e.detail.pinnedPlayer,
-        playlistLength: e.detail.pinnedPlayer?.playlist?.length
-      });
       
       if (e.detail.isPinned) {
         // 用戶剛釘選播放器，使用事件中的數據
         const pinnedPlayer = e.detail.pinnedPlayer;
         const playlist = pinnedPlayer?.playlist || [];
         
-        console.log('✅ [首頁-event] 載入釘選歌單:', {
-          playlistLength: playlist.length,
-          currentIndex: pinnedPlayer?.currentIndex
-        });
         
         if (playlist.length > 0) {
           const currentIndex = pinnedPlayer.currentIndex || 0;
           const currentTrack = playlist[currentIndex];
           
-          console.log('🎵 [首頁-event] 當前曲目:', {
-            title: currentTrack?.title,
-            url: currentTrack?.url
-          });
           
           player?.setPlaylist?.(playlist);
           player?.setActiveIndex?.(currentIndex);
@@ -213,7 +199,6 @@ export default function HomePage() {
             player?.setSrc?.(currentTrack.url);
             player?.setOriginUrl?.(currentTrack.url);
             player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
-            console.log('✅ [首頁-event] 播放器設置完成');
           }
           
           // 確保 MiniPlayer 是啟用的
@@ -223,7 +208,6 @@ export default function HomePage() {
         player?.setShareMode?.("global");
       } else {
         // 用戶取消釘選，清空播放器
-        console.log('📌 [首頁-unpin] 取消釘選，清空播放器');
         player?.setMiniPlayerEnabled?.(false);
         player?.pause?.();
         player?.setExternalControls?.(null);
@@ -245,14 +229,9 @@ export default function HomePage() {
       pinnedPlayer?.expiresAt && 
       new Date(pinnedPlayer.expiresAt) > new Date();
     
-    console.log('🔍 [首頁-mount] 檢查 currentUser 中的釘選:', {
-      hasPinnedPlayer,
-      playlistLength: pinnedPlayer?.playlist?.length
-    });
     
     if (hasPinnedPlayer) {
       // 刷新頁面時恢復釘選播放器
-      console.log('✅ [首頁-mount] 發現釘選數據，載入播放器');
       const playlist = pinnedPlayer.playlist || [];
       if (playlist.length > 0) {
         const currentIndex = pinnedPlayer.currentIndex || 0;
@@ -269,14 +248,12 @@ export default function HomePage() {
           player?.setSrc?.(currentTrack.url);
           player?.setOriginUrl?.(currentTrack.url);
           player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
-          console.log('✅ [首頁-mount] 播放器設置完成');
         }
         
         player?.setMiniPlayerEnabled?.(true);
       }
     } else {
       // 沒有釘選數據，但不主動清空（讓 MiniPlayer 自己決定是否顯示）
-      console.log('ℹ️ [首頁-mount] 無釘選數據，設置為全局模式');
       player?.setShareMode?.("global");
       player?.setMiniPlayerEnabled?.(false);
     }
@@ -294,7 +271,6 @@ export default function HomePage() {
       try {
         // 防止並發請求
         if (isLogging) {
-          console.log('🔄 訪問記錄正在進行中，跳過重複請求');
           return;
         }
 
@@ -309,7 +285,6 @@ export default function HomePage() {
             const hasLoggedThisSession = sessionStorage.getItem(sessionKey);
             
             if (hasLoggedThisSession) {
-              console.log('🛡️ [防刷量] 此會話已記錄過訪問，跳過重複記錄');
               return { success: true, skipped: true, reason: 'session' };
             }
 
@@ -317,7 +292,6 @@ export default function HomePage() {
             const lastLogTime = sessionStorage.getItem('last_visit_log_time');
             const now = Date.now();
             if (lastLogTime && (now - parseInt(lastLogTime)) < 1000) { // 1秒內不重複記錄
-              console.log('🛡️ [防刷量] 最近剛記錄過訪問，跳過重複記錄');
               return { success: true, skipped: true, reason: 'debounce' };
             }
             
@@ -336,7 +310,6 @@ export default function HomePage() {
               // 標記此會話已記錄過訪問
               sessionStorage.setItem(sessionKey, 'true');
               sessionStorage.setItem('last_visit_log_time', now.toString());
-              console.log('✅ [防刷量] 訪問記錄成功');
               return { success: true, skipped: false };
             } else {
               throw new Error(`HTTP ${response.status}`);
@@ -354,7 +327,6 @@ export default function HomePage() {
             const adLastLogTime = sessionStorage.getItem('last_ad_visit_log_time');
             const now = Date.now();
             if (adLastLogTime && (now - parseInt(adLastLogTime)) < 200) { // 200ms內不重複記錄
-              console.log('💰 [廣告統計] 200ms內重複請求，跳過');
               return { success: true, skipped: true, reason: 'rapid_click' };
             }
 
@@ -372,7 +344,6 @@ export default function HomePage() {
             if (response.ok) {
               sessionStorage.setItem('last_ad_visit_log_time', now.toString());
               const result = await response.json();
-              console.log('💰 [廣告統計] 訪問記錄成功:', result.isDuplicate ? '(後端判定為重複)' : '(新記錄)');
               return { success: true, skipped: false, isDuplicate: result.isDuplicate };
             } else {
               throw new Error(`HTTP ${response.status}`);
@@ -390,10 +361,6 @@ export default function HomePage() {
         ]);
 
         // 記錄結果
-        console.log('📊 [雙軌統計] 結果:', {
-          防刷量: antiSpamResult.status === 'fulfilled' ? antiSpamResult.value : antiSpamResult.reason,
-          廣告統計: adRevenueResult.status === 'fulfilled' ? adRevenueResult.value : adRevenueResult.reason
-        });
 
       } catch (error) {
         console.warn('📊 [雙軌統計] 整體失敗:', error);
@@ -536,16 +503,9 @@ export default function HomePage() {
       const list = listRaw.map(normalizeImage);
       setHasMore(list.length >= PAGE_SIZE);
 
-      console.log('🔍 [fetchImages] Setting images:', { 
-        pageToFetch, 
-        listLength: list.length,
-        firstImageId: list[0]?._id || 'none'
-      });
 
       if (pageToFetch === 1) {
-        console.log('🔥 [fetchImages] Setting images for page 1:', list.length, 'images');
         setImages(list);
-        console.log('🔥 [fetchImages] Images set for page 1');
       } else {
         // 直接添加新圖片，不做任何滾動位置干預
         setImages((prev) => {

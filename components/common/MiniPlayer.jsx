@@ -173,15 +173,6 @@ export default function MiniPlayer() {
         
         // 避免重複輸出相同時間點
         if (currentTime !== lastLoggedTime) {
-          console.log('⏱️ [播放監測]', {
-            當前進度: `${currentTime}秒`,
-            總時長: `${Math.floor(currentPlayer?.duration || 0)}秒`,
-            進度百分比: `${Math.floor(pct)}%`,
-            音量: `${Math.floor((currentPlayer?.volume || 1) * 100)}%`,
-            播放狀態: currentPlayer?.isPlaying ? '播放中' : '已暫停',
-            當前曲目: currentPlayer?.trackTitle || '未知',
-            是否釘選: isPinned
-          });
           lastLoggedTime = currentTime;
         }
       }
@@ -381,24 +372,17 @@ export default function MiniPlayer() {
     if (player.duration > 0) {
       const newTime = percentage * player.duration;
       
-      console.log('🖱️ [進度條點擊]', {
-        點擊位置: `${Math.round(percentage * 100)}%`,
-        跳轉到: `${Math.floor(newTime)}秒`,
-        總時長: `${Math.floor(player.duration)}秒`
-      });
       
       // 優先使用外部播放器控制
       if (player.externalControls && typeof player.externalControls.seekTo === 'function') {
         try {
           player.externalControls.seekTo(newTime);
-          console.log("✅ [進度條點擊] 外部播放器跳轉成功:", Math.floor(newTime));
         } catch (error) {
           console.error("❌ [進度條點擊] 外部播放器跳轉失敗:", error);
           // 如果外部播放器跳轉失敗，嘗試本地播放器
           if (player.seekTo) {
             try {
               player.seekTo(newTime);
-              console.log("🔧 本地播放器跳轉成功:", newTime);
             } catch (localError) {
               console.error("🔧 本地播放器跳轉失敗:", localError);
             }
@@ -407,7 +391,6 @@ export default function MiniPlayer() {
       } else if (player.seekTo) {
         try {
           player.seekTo(newTime);
-          console.log("🔧 本地播放器跳轉成功:", newTime);
         } catch (error) {
           console.error("🔧 本地播放器跳轉失敗:", error);
         }
@@ -481,19 +464,12 @@ export default function MiniPlayer() {
   useEffect(() => {
     // 等待 currentUser 載入完成
     if (currentUser === undefined) {
-      console.log('🔍 [MiniPlayer] currentUser 未載入，等待中...');
       return;
     }
     
     const loadPinnedPlayer = async () => {
       try {
         const userData = currentUser;
-        console.log('🔍 [MiniPlayer] 檢查釘選狀態:', {
-          hasPinnedPlayer: !!userData?.pinnedPlayer?.userId,
-          pinnedUserId: userData?.pinnedPlayer?.userId,
-          pinnedUsername: userData?.pinnedPlayer?.username,
-          playlistLength: userData?.pinnedPlayer?.playlist?.length
-        });
         
         if (userData?.pinnedPlayer?.userId) {
           const pinned = userData.pinnedPlayer;
@@ -501,18 +477,11 @@ export default function MiniPlayer() {
           const now = new Date();
           const expiresAt = pinned.expiresAt ? new Date(pinned.expiresAt) : null;
           
-          console.log('🔍 [MiniPlayer] 釘選數據:', {
-            expiresAt,
-            now,
-            isExpired: expiresAt && expiresAt <= now,
-            playlistLength: pinned.playlist?.length
-          });
           
           if (expiresAt && expiresAt > now) {
             // 未過期，設置釘選狀態
             setIsPinned(true);
             setPinnedPlayerData(pinned);
-            console.log('✅ [MiniPlayer] 設置釘選狀態為 true');
             
             // 觸發全局事件，通知其他組件
             window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
@@ -526,12 +495,6 @@ export default function MiniPlayer() {
             if (playerRef.current && pinned.playlist && pinned.playlist.length > 0) {
               const currentIndex = pinned.currentIndex || 0;
               const track = pinned.playlist[currentIndex];
-              console.log('🎵 [MiniPlayer] 載入釘選歌單:', {
-                playlistLength: pinned.playlist.length,
-                currentIndex,
-                currentTrack: track?.title,
-                trackUrl: track?.url
-              });
               
               if (track?.url) {
                 // 設置播放清單和當前索引
@@ -549,20 +512,17 @@ export default function MiniPlayer() {
                   username: pinned.username 
                 });
                 
-                console.log('✅ [MiniPlayer] 歌單載入完成');
               }
             } else {
               console.warn('⚠️ [MiniPlayer] playerRef 或 playlist 不可用');
             }
           } else if (expiresAt && expiresAt <= now) {
             // 已過期，自動解除釘選
-            console.log('⏰ [MiniPlayer] 釘選已過期，自動解除');
             await axios.delete('/api/player/pin');
             setIsPinned(false);
             setPinnedPlayerData(null);
           }
         } else {
-          console.log('ℹ️ [MiniPlayer] 無釘選播放器');
         }
       } catch (error) {
         console.error('❌ [MiniPlayer] 載入釘選播放器失敗:', error);
@@ -575,11 +535,6 @@ export default function MiniPlayer() {
   // 監聽釘選變更事件（當用戶主動釘選/取消釘選時）
   useEffect(() => {
     const handlePinnedChange = (e) => {
-      console.log('📡 [MiniPlayer] 收到釘選事件:', {
-        isPinned: e.detail.isPinned,
-        hasPlayerData: !!e.detail.pinnedPlayer,
-        playlistLength: e.detail.playlist?.length || e.detail.pinnedPlayer?.playlist?.length
-      });
       
       if (e.detail.isPinned) {
         setIsPinned(true);
@@ -592,21 +547,11 @@ export default function MiniPlayer() {
         };
         setPinnedPlayerData(pinnedData);
         
-        console.log('📡 [MiniPlayer] 釘選數據:', {
-          userId: pinnedData.userId,
-          username: pinnedData.username,
-          playlistLength: pinnedData.playlist?.length,
-          currentIndex: pinnedData.currentIndex
-        });
         
         // 當收到釘選事件時，也載入歌單
         if (playerRef.current && pinnedData.playlist && pinnedData.playlist.length > 0) {
           const currentIndex = pinnedData.currentIndex || 0;
           const track = pinnedData.playlist[currentIndex];
-          console.log('🎵 [MiniPlayer-Event] 載入歌單:', {
-            track: track?.title,
-            url: track?.url
-          });
           
           if (track?.url) {
             // 設置播放清單和當前索引
@@ -624,13 +569,11 @@ export default function MiniPlayer() {
               username: pinnedData.username 
             });
             
-            console.log('✅ [MiniPlayer-Event] 歌單設置完成');
           }
         } else {
           console.warn('⚠️ [MiniPlayer-Event] playerRef 或 playlist 不可用');
         }
       } else {
-        console.log('📌 [MiniPlayer] 取消釘選');
         setIsPinned(false);
         setPinnedPlayerData(null);
       }
@@ -1082,12 +1025,6 @@ export default function MiniPlayer() {
               onClick={(e) => {
                 e.stopPropagation();
                 const action = player.isPlaying ? '暫停' : '播放';
-                console.log(`🎮 [播放控制] 用戶點擊${action}按鈕`, {
-                  當前狀態: player.isPlaying ? '播放中' : '已暫停',
-                  即將執行: action,
-                  當前曲目: player.trackTitle,
-                  當前進度: `${Math.floor(player.currentTime)}/${Math.floor(player.duration)}秒`
-                });
                 player.isPlaying ? player.pause() : player.play();
               }}
               onMouseDown={(e) => { e.stopPropagation(); }}

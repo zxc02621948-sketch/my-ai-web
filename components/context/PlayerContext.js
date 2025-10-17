@@ -174,12 +174,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
 
   // 完全重寫的播放函數
   const play = async () => {
-    console.log('▶️ [PlayerContext.play] 播放請求', {
-      有音源: !!(src || originUrl),
-      是否轉換中: isTransitioningRef.current,
-      有外部控制器: !!externalControlsRef.current,
-      當前曲目: trackTitle
-    });
     
     if (!src && !originUrl) {
       console.warn('⚠️ [PlayerContext.play] 無音源，跳過');
@@ -195,7 +189,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
     // 優先使用外部播放器（YouTube）
     if (externalControlsRef.current && typeof externalControlsRef.current.play === 'function') {
       try {
-        console.log('🎵 [PlayerContext.play] 使用外部播放器');
         
         // ✅ 新增：檢查播放器是否已經 ready
         if (!window.__YT_READY__) {
@@ -203,7 +196,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           // 等待播放器準備好後再嘗試
           setTimeout(() => {
             if (window.__YT_READY__ && externalControlsRef.current?.play) {
-              console.log('🎵 [PlayerContext.play] 播放器已準備好，重試播放');
               externalControlsRef.current.play();
             }
           }, 500);
@@ -262,16 +254,10 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
 
   // 完全重寫的暫停函數
   const pause = () => {
-    console.log('⏸️ [PlayerContext.pause] 暫停請求', {
-      有外部控制器: !!externalControlsRef.current,
-      當前曲目: trackTitle,
-      當前狀態: isPlaying ? '播放中' : '已暫停'
-    });
     
     // 優先使用外部播放器（YouTube）
     if (externalControlsRef.current && typeof externalControlsRef.current.pause === 'function') {
       try {
-        console.log('🎵 [PlayerContext.pause] 使用外部播放器暫停');
         externalControlsRef.current.pause();
         // 等待一下檢查暫停是否真的成功
         setTimeout(() => {
@@ -362,7 +348,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           return;
         }
         
-        console.log("🔧 使用外部播放器跳轉");
         externalControlsRef.current && externalControlsRef.current.seekTo(time);
         return;
       } catch (error) {
@@ -411,7 +396,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
   // 完全重寫的下一首函數
         const next = async () => {
           if (playlist.length === 0) {
-            console.log("🔧 PlayerContext 下一首：播放清單為空");
             return;
           }
           
@@ -424,14 +408,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           
           // ✅ 監測循環播放
           const isLooping = nextIndex === 0 && activeIndex === playlist.length - 1;
-          console.log('⏭️ [下一首監測]', {
-            當前索引: activeIndex,
-            下一首索引: nextIndex,
-            歌單長度: playlist.length,
-            是否循環: isLooping ? '✅ 是（回到第一首）' : '否',
-            下一首曲目: nextItem?.title,
-            當前時間: new Date().toLocaleTimeString()
-          });
           
           // console.log("🔧 PlayerContext 下一首:", { nextIndex, nextItem });
           
@@ -444,14 +420,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           
           // 只在有問題時才輸出詳細日誌
           if (youtubeIframes.length > 1 || playingAudio.length + playingVideo.length > 1) {
-            console.log("🔊 下一首前聲音檢查:", {
-              audioElements: audioElements.length,
-              playingAudio: playingAudio.length,
-              videoElements: videoElements.length,
-              playingVideo: playingVideo.length,
-              youtubeIframes: youtubeIframes.length,
-              totalPlaying: playingAudio.length + playingVideo.length
-            });
           }
     
     // 設置轉換標記，防止雙重播放
@@ -513,7 +481,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
       if (!isBackground) {
         // 前台分頁：移除所有 YouTube iframe
         const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
-        console.log(`🔧 發現 ${youtubeIframes.length} 個 YouTube iframe，開始清理`);
         youtubeIframes.forEach((iframe, index) => {
           try {
             // 先嘗試停止播放
@@ -527,7 +494,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
             }
             // 然後移除 iframe
             iframe.remove();
-            console.log(`🔧 移除 YouTube iframe ${index}`);
           } catch (error) {
             console.warn(`🔧 移除 iframe ${index} 失敗:`, error.message);
           }
@@ -535,13 +501,11 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
         
         // 清除外部播放器引用，強制重新初始化
         externalControlsRef.current = null;
-        console.log(`🔧 清除外部播放器引用`);
         
         // 等待 iframe 完全移除
         await new Promise(resolve => setTimeout(resolve, 200));
       } else {
         // 後台分頁：不移除 iframe，只停止播放
-        console.log("🔧 後台分頁，不移除 iframe");
       }
       
       // 強制停止所有音頻和視頻元素
@@ -553,7 +517,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
             element.currentTime = 0;
           }
           element.remove();
-          console.log(`🔧 移除媒體元素 ${index}: ${element.tagName}`);
         } catch (error) {
           console.warn(`🔧 移除媒體元素 ${index} 失敗:`, error.message);
         }
@@ -602,14 +565,12 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
   // 完全重寫的上一首函數
   const previous = async () => {
     if (playlist.length === 0) {
-      console.log("🔧 PlayerContext 上一首：播放清單為空");
       return;
     }
     
     const prevIndex = activeIndex === 0 ? playlist.length - 1 : activeIndex - 1;
     const prevItem = playlist[prevIndex];
     
-    console.log("🔧 PlayerContext 上一首:", { prevIndex, prevItem });
     
     // 設置轉換標記，防止雙重播放
     isTransitioningRef.current = true;
@@ -670,7 +631,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
       if (!isBackground) {
         // 前台分頁：移除所有 YouTube iframe
         const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
-        console.log(`🔧 發現 ${youtubeIframes.length} 個 YouTube iframe，開始清理`);
         youtubeIframes.forEach((iframe, index) => {
           try {
             // 先嘗試停止播放
@@ -684,7 +644,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
             }
             // 然後移除 iframe
             iframe.remove();
-            console.log(`🔧 移除 YouTube iframe ${index}`);
           } catch (error) {
             console.warn(`🔧 移除 iframe ${index} 失敗:`, error.message);
           }
@@ -694,7 +653,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
         await new Promise(resolve => setTimeout(resolve, 200));
       } else {
         // 後台分頁：不移除 iframe，只停止播放
-        console.log("🔧 後台分頁，不移除 iframe");
       }
       
       // 強制停止所有音頻和視頻元素
@@ -706,7 +664,6 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
             element.currentTime = 0;
           }
           element.remove();
-          console.log(`🔧 移除媒體元素 ${index}: ${element.tagName}`);
         } catch (error) {
           console.warn(`🔧 移除媒體元素 ${index} 失敗:`, error.message);
         }

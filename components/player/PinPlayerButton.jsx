@@ -55,13 +55,11 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         
         // 如果訂閱過期且當前已釘選，自動解除釘選
         if (!hasSubscription && isPinned) {
-          console.log('⚠️ [PinButton] 訂閱已過期，自動解除釘選');
           setIsPinned(false);
           
           // 調用 API 真正解除釘選
           try {
             await axios.delete('/api/player/pin');
-            console.log('✅ [PinButton] 訂閱過期，已自動解除釘選');
           } catch (error) {
             console.error('❌ [PinButton] 自動解除釘選失敗:', error);
           }
@@ -81,11 +79,6 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
           }));
         }
         
-        console.log('🔍 [PinButton] 訂閱狀態:', {
-          hasSubscription,
-          isPinned,
-          autoUnpinned: !hasSubscription && isPinned
-        });
         
       } catch (error) {
         console.error('檢查釘選狀態失敗:', error);
@@ -100,12 +93,6 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
     const handlePinnedChange = (event) => {
       const { isPinned: newIsPinned, userId } = event.detail;
       
-      console.log('📌 [PinButton-Event] 收到釘選事件:', {
-        newIsPinned,
-        eventUserId: userId,
-        targetUserId,
-        shouldUpdate: !userId || userId === targetUserId
-      });
       
       // 如果解除釘選（isPinned = false），所有按鈕都要更新
       if (!newIsPinned) {
@@ -129,11 +116,6 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
 
     setLoading(true);
     try {
-      console.log('📌 [PinButton] 開始釘選:', {
-        targetUserId,
-        targetUsername,
-        playlistLength: targetUserPlaylist?.length
-      });
       
       const res = await axios.post('/api/player/pin', {
         targetUserId,
@@ -141,11 +123,6 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         playlist: targetUserPlaylist
       });
 
-      console.log('📌 [PinButton] API 回應:', {
-        success: res.data.success,
-        hasPinnedPlayer: !!res.data.pinnedPlayer,
-        playlistLength: res.data.pinnedPlayer?.playlist?.length
-      });
 
       if (res.data.success) {
         setIsPinned(true);
@@ -155,11 +132,6 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         if (setCurrentUser) {
           setCurrentUser(prevUser => {
             if (!prevUser) return prevUser;
-            console.log('🔄 [PinPlayerButton] 更新 CurrentUser，添加釘選數據:', {
-              userId: targetUserId,
-              username: targetUsername,
-              playlistLength: res.data.pinnedPlayer?.playlist?.length
-            });
             return {
               ...prevUser,
               pinnedPlayer: res.data.pinnedPlayer
@@ -167,11 +139,6 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
           });
         }
         
-        console.log('📡 [PinButton] 觸發 pinnedPlayerChanged 事件:', {
-          isPinned: true,
-          pinnedPlayer: res.data.pinnedPlayer,
-          playlistLength: res.data.pinnedPlayer?.playlist?.length
-        });
         
         // 觸發全局事件，通知其他組件，傳遞完整的 pinnedPlayer 數據
         window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
@@ -185,7 +152,6 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
           } 
         }));
         
-        console.log('✅ [PinButton] 事件觸發完成');
       }
     } catch (error) {
       console.error('❌ [PinButton] 釘選失敗:', error);
@@ -238,7 +204,6 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
           setCurrentUser(prevUser => {
             if (!prevUser) return prevUser;
             const { pinnedPlayer, ...rest } = prevUser;
-            console.log('🔄 [PinPlayerButton] 更新 CurrentUser，移除釘選數據');
             return rest;
           });
         }

@@ -88,7 +88,6 @@ export default function UserProfilePage() {
   useEffect(() => {
     if (userData?.miniPlayerPurchased) {
       try {
-        console.log('🎵 [UserPage] 啟用播放器:', { userId: userData._id, username: userData.username });
         player?.setMiniPlayerEnabled?.(true);
       } catch {}
     }
@@ -690,7 +689,6 @@ export default function UserProfilePage() {
 
   const handleUnpinPlayer = async () => {
     try {
-      console.log('📌 [UserPage] 開始解除釘選');
       await axios.delete('/api/player/pin');
       setPinnedPlayerData(null);
       player?.setIsPlaying?.(false);
@@ -700,7 +698,6 @@ export default function UserProfilePage() {
         setCurrentUser(prevUser => {
           if (!prevUser) return prevUser;
           const { pinnedPlayer, ...rest } = prevUser;
-          console.log('🔄 [UserPage] 更新 CurrentUser，移除釘選數據');
           return rest;
         });
       }
@@ -709,8 +706,6 @@ export default function UserProfilePage() {
       window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
         detail: { isPinned: false } 
       }));
-      
-      console.log('✅ [UserPage] 解除釘選完成');
     } catch (error) {
       console.error('❌ [UserPage] 解除釘選失敗:', error);
       throw error;
@@ -743,7 +738,6 @@ export default function UserProfilePage() {
           onPointsOpen={() => setPointsModalOpen(true)}
           onPowerCouponOpen={() => setPowerCouponModalOpen(true)}
           onUserDataUpdate={(updatedUserData) => {
-            console.log("🔧 更新用戶數據:", updatedUserData);
             setUserData(updatedUserData);
           }}
         />
