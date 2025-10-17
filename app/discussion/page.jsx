@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { MessageSquare, Plus, Search, Filter, Heart, MessageCircle, Bookmark, Share2, Trash2 } from "lucide-react";
+import { MessageSquare, Plus, Search, Filter, Heart, MessageCircle, Bookmark, Share2, Trash2, Pin } from "lucide-react";
 import Link from "next/link";
 
 import ImageModal from "@/components/image/ImageModal";
@@ -14,6 +14,7 @@ export default function DiscussionPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [activeTab, setActiveTab] = useState("general"); // "general" 或 "adult"
   const [selectedImage, setSelectedImage] = useState(null);
   
   // 防止重複調用
@@ -21,6 +22,7 @@ export default function DiscussionPage() {
 
   const categories = [
     { id: "all", name: "全部", icon: "📋" },
+    { id: "announcement", name: "官方公告", icon: "📢" },
     { id: "technical", name: "技術討論", icon: "⚙️" },
     { id: "showcase", name: "作品展示", icon: "🎨" },
     { id: "question", name: "問題求助", icon: "❓" },
@@ -32,7 +34,8 @@ export default function DiscussionPage() {
   useEffect(() => {
     const currentParams = JSON.stringify({ 
       category: selectedCategory, 
-      search: searchQuery 
+      search: searchQuery,
+      activeTab: activeTab
     });
     
     console.log('🔄 [討論區] useEffect 觸發:', { currentParams, lastParams: lastFetchParamsRef.current });
@@ -66,6 +69,13 @@ export default function DiscussionPage() {
           params.append("search", searchQuery);
         }
         
+        // 根據當前標籤過濾內容
+        if (activeTab === "adult") {
+          params.append("rating", "18");
+        } else {
+          params.append("excludeRating", "18");
+        }
+        
         console.log('📡 [討論區] 發送 API 請求:', `/api/discussion/posts?${params}`);
         const response = await fetch(`/api/discussion/posts?${params}`);
         const result = await response.json();
@@ -90,7 +100,7 @@ export default function DiscussionPage() {
     // 直接執行，不使用 setTimeout，避免 Strict Mode 清理問題
     console.log('🚀 [討論區] 直接執行載入（避免 Strict Mode 清理）');
     fetchPosts();
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, searchQuery, activeTab]);
 
   // 監聽頁面可見性變化，當頁面重新獲得焦點時重新載入
   useEffect(() => {
@@ -222,14 +232,50 @@ export default function DiscussionPage() {
               <h1 className="text-3xl font-bold text-white mb-2">討論區</h1>
               <p className="text-gray-400">分享創作心得，交流技術經驗</p>
             </div>
-            <Link
-              href="/discussion/create"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 
-                         text-white font-semibold rounded-xl hover:shadow-lg transition-all"
+            <div className="flex items-center gap-3">
+              {currentUser && (
+                <Link
+                  href="/discussion/bookmarks"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700
+                             text-white font-semibold rounded-xl transition-all border border-zinc-700"
+                >
+                  <Bookmark className="w-4 h-4" />
+                  我的收藏
+                </Link>
+              )}
+              <Link
+                href={`/discussion/create${activeTab === "adult" ? "?zone=adult" : ""}`}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 
+                           text-white font-semibold rounded-xl hover:shadow-lg transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                發佈帖子
+              </Link>
+            </div>
+          </div>
+
+          {/* 標籤切換 - 類似首頁的作品展示/作品參考 */}
+          <div className="flex items-center gap-4 mb-6">
+            <button
+              onClick={() => setActiveTab("general")}
+              className={`px-6 py-3 rounded-xl font-bold text-lg transition-all ${
+                activeTab === "general"
+                  ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg"
+                  : "bg-zinc-800 text-gray-400 hover:bg-zinc-700"
+              }`}
             >
-              <Plus className="w-4 h-4" />
-              發佈帖子
-            </Link>
+              💬 一般討論區
+            </button>
+            <button
+              onClick={() => setActiveTab("adult")}
+              className={`px-6 py-3 rounded-xl font-bold text-lg transition-all ${
+                activeTab === "adult"
+                  ? "bg-gradient-to-r from-red-600 to-pink-600 text-white shadow-lg"
+                  : "bg-zinc-800 text-gray-400 hover:bg-zinc-700"
+              }`}
+            >
+              🔞 18+ 討論區
+            </button>
           </div>
 
           {/* 搜索和筛选 */}
@@ -318,11 +364,18 @@ export default function DiscussionPage() {
                     {/* 帖子内容 */}
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
+                        {/* 置頂標誌 */}
+                        {post.isPinned && (
+                          <span className="flex items-center gap-1 px-2 py-1 bg-amber-500/20 text-amber-500 text-xs rounded-full font-semibold">
+                            <Pin className="w-3 h-3" />
+                            置頂
+                          </span>
+                        )}
+                        
                         <span className="px-2 py-1 bg-zinc-700 text-xs rounded-full">
                           {categories.find(cat => cat.id === post.category)?.icon} 
                           {categories.find(cat => cat.id === post.category)?.name}
                         </span>
-                        <span className="text-gray-400 text-sm">by {post.authorName || post.author?.username}</span>
                         <span className="text-gray-500 text-sm">• {formatTime(post.createdAt)}</span>
                         
                         {/* 刪除按鈕（作者或管理員可見） */}
@@ -340,6 +393,7 @@ export default function DiscussionPage() {
                           </button>
                         )}
                       </div>
+
 
                       <Link href={`/discussion/${post._id}`}>
                         <h2 className="text-xl font-semibold text-white mb-2 hover:text-blue-400 cursor-pointer">

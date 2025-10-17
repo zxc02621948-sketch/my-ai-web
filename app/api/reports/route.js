@@ -34,7 +34,46 @@ export async function POST(req) {
     if (error) return error;
 
     const body = await req.json().catch(() => ({}));
-    const { imageId, type, message } = body || {};
+    const { imageId, type, message, targetId, reason, details } = body || {};
+    
+    // 檢查是否為討論區檢舉
+    if (type === 'discussion_post' || type === 'discussion_comment') {
+      if (!targetId) {
+        return NextResponse.json({ ok: false, message: "缺少目標 ID" }, { status: 400 });
+      }
+      if (!reason || !reason.trim()) {
+        return NextResponse.json({ ok: false, message: "請提供檢舉原因" }, { status: 400 });
+      }
+      
+      // 檢查是否檢舉自己的內容（需要查詢目標）
+      let targetAuthor = null;
+      if (type === 'discussion_post') {
+        const DiscussionPost = (await import('@/models/DiscussionPost')).default;
+        const post = await DiscussionPost.findById(targetId).select('author').lean();
+        if (post) targetAuthor = post.author;
+      } else if (type === 'discussion_comment') {
+        const DiscussionComment = (await import('@/models/DiscussionComment')).default;
+        const comment = await DiscussionComment.findById(targetId).select('author').lean();
+        if (comment) targetAuthor = comment.author;
+      }
+      
+      if (targetAuthor && String(targetAuthor) === String(user._id)) {
+        return NextResponse.json({ ok: false, message: "不能檢舉自己的內容" }, { status: 400 });
+      }
+      
+      // 創建討論區檢舉記錄
+      const doc = await Report.create({
+        type,
+        targetId,
+        reporterId: user._id,
+        message: reason.trim(),
+        details: details || ''
+      });
+      
+      return NextResponse.json({ ok: true, reportId: doc._id, message: "檢舉已提交" });
+    }
+    
+    // 原有的圖片檢舉邏輯
     if (!imageId || !mongoose.Types.ObjectId.isValid(imageId)) {
       return NextResponse.json({ ok: false, message: "無效的圖片 ID" }, { status: 400 });
     }

@@ -3,6 +3,8 @@ import { dbConnect } from "@/lib/db";
 import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import DiscussionPost from "@/models/DiscussionPost";
 import Image from "@/models/Image";
+import User from "@/models/User";
+import PointsTransaction from "@/models/PointsTransaction";
 import { uploadToCloudflare } from "@/lib/uploadToCloudflare";
 
 // 获取帖子列表
@@ -15,6 +17,8 @@ export async function GET(req) {
     const limit = parseInt(searchParams.get("limit")) || 10;
     const category = searchParams.get("category") || "all";
     const search = searchParams.get("search") || "";
+    const rating = searchParams.get("rating");
+    const excludeRating = searchParams.get("excludeRating");
     const sort = searchParams.get("sort") || "newest";
     
     // 构建查询条件
@@ -34,23 +38,32 @@ export async function GET(req) {
       ];
     }
     
-    // 排序选项
-    let sortOption = { createdAt: -1 };
+    // 分級過濾
+    if (rating) {
+      // 只顯示指定分級（例如：只顯示 18+）
+      query.rating = rating;
+    } else if (excludeRating) {
+      // 排除指定分級（例如：排除 18+）
+      query.rating = { $ne: excludeRating };
+    }
+    
+    // 排序选项（置頂帖子永遠在最前面）
+    let sortOption = { isPinned: -1, createdAt: -1 };
     switch (sort) {
       case "popular":
-        sortOption = { likesCount: -1, commentsCount: -1, createdAt: -1 };
+        sortOption = { isPinned: -1, likesCount: -1, commentsCount: -1, createdAt: -1 };
         break;
       case "oldest":
-        sortOption = { createdAt: 1 };
+        sortOption = { isPinned: -1, createdAt: 1 };
         break;
       case "most_commented":
-        sortOption = { commentsCount: -1, createdAt: -1 };
+        sortOption = { isPinned: -1, commentsCount: -1, createdAt: -1 };
         break;
     }
     
     // 执行查询
     const posts = await DiscussionPost.find(query)
-      .populate("author", "username image currentFrame")
+      .populate("author", "username image currentFrame frameSettings")
       .populate("imageRef", "title imageId")
       .sort(sortOption)
       .skip((page - 1) * limit)
@@ -97,8 +110,16 @@ export async function POST(req) {
     const title = formData.get("title");
     const content = formData.get("content");
     const category = formData.get("category");
+    const rating = formData.get("rating") || "一般";
     const imageRefId = formData.get("imageRefId");
-    const uploadedImage = formData.get("uploadedImage");
+    
+    // 獲取多圖上傳
+    const uploadedImages = [];
+    let imageIndex = 0;
+    while (formData.has(`uploadedImages[${imageIndex}]`)) {
+      uploadedImages.push(formData.get(`uploadedImages[${imageIndex}]`));
+      imageIndex++;
+    }
     
     // 验证必填字段
     if (!title || !content || !category) {
@@ -109,12 +130,81 @@ export async function POST(req) {
     }
     
     // 验证分类
-    const validCategories = ["technical", "showcase", "question", "tutorial", "general"];
+    const validCategories = ["announcement", "technical", "showcase", "question", "tutorial", "general"];
     if (!validCategories.includes(category)) {
       return NextResponse.json(
         { success: false, error: "無效的分類" },
         { status: 400 }
       );
+    }
+    
+    // 檢查官方公告權限（只有管理員可以發布）
+    if (category === "announcement") {
+      if (currentUser.role !== 'admin' && !currentUser.isAdmin) {
+        return NextResponse.json(
+          { success: false, error: "只有管理員可以發布官方公告" },
+          { status: 403 }
+        );
+      }
+    }
+    
+    // 檢查圖片數量限制
+    if (uploadedImages.length > 9) {
+      return NextResponse.json(
+        { success: false, error: "最多只能上傳 9 張圖片" },
+        { status: 400 }
+      );
+    }
+    
+    // 計算積分消耗
+    let pointsCost = 0;
+    const imageCount = uploadedImages.length;
+    if (imageCount >= 2 && imageCount <= 5) {
+      pointsCost = 5;
+    } else if (imageCount >= 6) {
+      pointsCost = 10;
+    }
+    
+    // 檢查積分是否足夠
+    if (pointsCost > 0) {
+      const user = await User.findById(currentUser._id);
+      if (!user) {
+        return NextResponse.json(
+          { success: false, error: "用戶不存在" },
+          { status: 404 }
+        );
+      }
+      
+      if (user.pointsBalance < pointsCost) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: `積分不足！需要 ${pointsCost} 積分，當前僅有 ${user.pointsBalance} 積分`,
+            suggestion: "簽到、上傳作品或參與互動來獲得積分"
+          },
+          { status: 400 }
+        );
+      }
+      
+      // 檢查每日多圖帖發布限制
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dailyMultiImagePosts = await DiscussionPost.countDocuments({
+        author: currentUser._id,
+        imageCount: { $gte: 2 },
+        createdAt: { $gte: today }
+      });
+      
+      if (dailyMultiImagePosts >= 5) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: "今日多圖帖發布數量已達上限（5個）",
+            suggestion: "明天再來發布，或升級為 VIP 解除限制"
+          },
+          { status: 429 }
+        );
+      }
     }
     
     // 处理图片引用
@@ -130,32 +220,38 @@ export async function POST(req) {
       imageRef = imageRefId;
     }
     
-    // 处理上传的图片
-    let uploadedImageData = null;
-    if (uploadedImage && uploadedImage.size > 0) {
-      try {
-        const uploadResult = await uploadToCloudflare(uploadedImage);
-        if (uploadResult.success) {
-          uploadedImageData = {
-            url: uploadResult.url,
-            imageId: uploadResult.imageId,
-            fileName: uploadedImage.name,
-            fileSize: uploadedImage.size,
-            width: uploadResult.width,
-            height: uploadResult.height
-          };
-        } else {
-          return NextResponse.json(
-            { success: false, error: "圖片上傳失敗" },
-            { status: 500 }
-          );
+    // 处理多圖上傳
+    const uploadedImagesData = [];
+    if (uploadedImages.length > 0) {
+      for (let i = 0; i < uploadedImages.length; i++) {
+        const file = uploadedImages[i];
+        if (file && file.size > 0) {
+          try {
+            const uploadResult = await uploadToCloudflare(file);
+            if (uploadResult.success) {
+              uploadedImagesData.push({
+                url: uploadResult.url,
+                imageId: uploadResult.imageId,
+                fileName: file.name,
+                fileSize: file.size,
+                width: uploadResult.width,
+                height: uploadResult.height,
+                order: i
+              });
+            } else {
+              return NextResponse.json(
+                { success: false, error: `圖片 ${i + 1} 上傳失敗` },
+                { status: 500 }
+              );
+            }
+          } catch (uploadError) {
+            console.error(`圖片 ${i + 1} 上傳錯誤:`, uploadError);
+            return NextResponse.json(
+              { success: false, error: `圖片 ${i + 1} 上傳失敗` },
+              { status: 500 }
+            );
+          }
         }
-      } catch (uploadError) {
-        console.error("圖片上傳錯誤:", uploadError);
-        return NextResponse.json(
-          { success: false, error: "圖片上傳失敗" },
-          { status: 500 }
-        );
       }
     }
     
@@ -164,10 +260,13 @@ export async function POST(req) {
       title: title.trim(),
       content: content.trim(),
       category,
+      rating,
       author: currentUser._id,
       authorName: currentUser.username,
       imageRef,
-      uploadedImage: uploadedImageData
+      uploadedImages: uploadedImagesData,
+      imageCount: uploadedImagesData.length,
+      pointsCost
     });
     
     console.log('📝 [討論區] 準備保存帖子:', {
@@ -175,10 +274,34 @@ export async function POST(req) {
       category: post.category,
       author: post.authorName,
       hasImageRef: !!imageRef,
-      hasUploadedImage: !!uploadedImageData
+      imageCount: uploadedImagesData.length,
+      pointsCost
     });
     
     await post.save();
+    
+    // 扣除積分（如果需要）
+    if (pointsCost > 0) {
+      const user = await User.findById(currentUser._id);
+      user.pointsBalance -= pointsCost;
+      await user.save();
+      
+      // 記錄積分交易
+      const dateKey = new Date().toISOString().split('T')[0];
+      await PointsTransaction.create({
+        userId: currentUser._id,
+        type: 'discussion_post_cost',
+        points: -pointsCost,
+        sourceId: post._id,
+        dateKey,
+        meta: {
+          postTitle: post.title,
+          imageCount: uploadedImagesData.length
+        }
+      });
+      
+      console.log(`💰 [討論區] 扣除積分: ${currentUser.username} -${pointsCost} 積分（多圖教學帖）`);
+    }
     
     console.log('✅ [討論區] 帖子已保存到數據庫，ID:', post._id);
     
@@ -193,13 +316,14 @@ export async function POST(req) {
     return NextResponse.json({
       success: true,
       data: createdPost,
-      message: "帖子創建成功"
+      pointsCost,
+      message: pointsCost > 0 ? `帖子創建成功！已消耗 ${pointsCost} 積分` : "帖子創建成功"
     });
     
   } catch (error) {
     console.error("創建帖子失敗:", error);
     return NextResponse.json(
-      { success: false, error: "創建帖子失敗" },
+      { success: false, error: `創建帖子失敗: ${error.message}` },
       { status: 500 }
     );
   }

@@ -70,6 +70,8 @@ const TYPE_OPTIONS = [
   { value: "broken",           label: "壞圖/無法顯示" },
   { value: "policy_violation", label: "站規違規" },
   { value: "other",            label: "其他" },
+  { value: "discussion_post",    label: "💬 討論帖子" },
+  { value: "discussion_comment", label: "💬 討論評論" },
 ];
 const TYPE_LABELS = TYPE_OPTIONS.reduce((m, o) => (o.value && (m[o.value] = o.label), m), {});
 
@@ -93,6 +95,31 @@ async function fetchImageInfo(imageId) {
   }
 }
 
+// 獲取討論區內容詳細資料
+async function fetchDiscussionContent(targetId, type) {
+  try {
+    if (type === 'discussion_post') {
+      const r = await fetch(`/api/discussion/posts/${targetId}`, { cache: "no-store" });
+      const j = await r.json();
+      if (j?.data) {
+        // 添加 authorName 以便顯示
+        return {
+          ...j.data,
+          authorName: j.data.author?.username || '未知用戶'
+        };
+      }
+      return null;
+    } else if (type === 'discussion_comment') {
+      const r = await fetch(`/api/discussion/comments/${targetId}`, { cache: "no-store" });
+      const j = await r.json();
+      return j?.comment || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function AdminReportsPage() {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
@@ -103,11 +130,21 @@ export default function AdminReportsPage() {
   const [status, setStatus] = useState("open");
   const [imageIdQuery, setImageIdQuery] = useState("");
   const [imgCache, setImgCache] = useState({}); // imageId -> imageInfo
+  const [discussionCache, setDiscussionCache] = useState({}); // targetId -> discussion content
 
   // 彈窗（含刪除/改分類/改分級）
   const [editModal, setEditModal] = useState({ open: false, mode: null, report: null });
   const [newCategory, setNewCategory] = useState("");
   const [newRating, setNewRating] = useState("18");
+  
+  // 通用確認/通知彈窗
+  const [notificationModal, setNotificationModal] = useState({ 
+    open: false, 
+    type: 'info', // 'info' | 'success' | 'error' | 'confirm'
+    title: '', 
+    message: '', 
+    onConfirm: null 
+  });
 
   // 警告選項（彈窗內可調整）
   const [sendWarning, setSendWarning] = useState(false);
@@ -138,6 +175,7 @@ export default function AdminReportsPage() {
 
         // 抓縮圖/基本資料快取
         const needFetch = (j.items || [])
+          .filter(it => it.imageId)
           .map(it => String(it.imageId))
           .filter(id => !(id in imgCache));
         if (needFetch.length) {
@@ -148,8 +186,22 @@ export default function AdminReportsPage() {
           }));
           setImgCache(newCache);
         }
+
+        // 抓討論區內容快取
+        const needFetchDiscussion = (j.items || [])
+          .filter(it => (it.type === 'discussion_post' || it.type === 'discussion_comment') && it.targetId)
+          .map(it => ({ id: String(it.targetId), type: it.type }))
+          .filter(({ id }) => !(id in discussionCache));
+        if (needFetchDiscussion.length) {
+          const newCache = { ...discussionCache };
+          await Promise.all(needFetchDiscussion.map(async ({ id, type }) => {
+            const content = await fetchDiscussionContent(id, type);
+            if (content) newCache[id] = content;
+          }));
+          setDiscussionCache(newCache);
+        }
       } catch (e) {
-        alert(e.message || "載入失敗");
+        showNotification('error', '載入失敗', e.message || '載入檢舉列表失敗');
       } finally {
         setLoading(false);
       }
@@ -160,6 +212,19 @@ export default function AdminReportsPage() {
 
   const refresh = () => {
     const p = page; setPage(p === 1 ? 2 : 1); setPage(p);
+  };
+
+  // 彈窗輔助函數
+  const showNotification = (type, title, message) => {
+    setNotificationModal({ open: true, type, title, message, onConfirm: null });
+  };
+
+  const showConfirm = (title, message, onConfirm) => {
+    setNotificationModal({ open: true, type: 'confirm', title, message, onConfirm });
+  };
+
+  const closeNotification = () => {
+    setNotificationModal({ open: false, type: 'info', title: '', message: '', onConfirm: null });
   };
 
   function resetWarningOptions() {
@@ -184,7 +249,7 @@ export default function AdminReportsPage() {
       if (!r.ok || !j?.ok) throw new Error(j?.message || `HTTP ${r.status}`);
       return true;
     } catch (e) {
-      alert(e.message || "更新狀態失敗");
+      showNotification('error', '更新失敗', e.message || '更新狀態失敗');
       return false;
     }
   }
@@ -283,10 +348,11 @@ export default function AdminReportsPage() {
       }
       await updateReportStatus(report._id, "已處置");
       await updateReportStatus(report._id, "action_taken"); // 顯示中文，但實際值用英文
+      showNotification('success', '刪除成功', '圖片已刪除並標記為已處置');
       closeModal();
       refresh();
     } catch (e) {
-      alert(e.message || "刪除失敗");
+      showNotification('error', '刪除失敗', e.message || '刪除操作失敗');
     }
   }
 
@@ -326,10 +392,11 @@ export default function AdminReportsPage() {
         }
       }
       await updateReportStatus(report._id, "action_taken");
+      showNotification('success', '分類成功', '圖片已重新分類並標記為已處置');
       closeModal();
       refresh();
     } catch (e) {
-      alert(e.message || "重新分類失敗");
+      showNotification('error', '分類失敗', e.message || '重新分類操作失敗');
     }
   }
 
@@ -369,17 +436,71 @@ export default function AdminReportsPage() {
         }
       }
       await updateReportStatus(report._id, "action_taken");
+      showNotification('success', '分級成功', '圖片已調整分級並標記為已處置');
       closeModal();
       refresh();
     } catch (e) {
-      alert(e.message || "調整分級失敗");
+      showNotification('error', '分級失敗', e.message || '調整分級操作失敗');
     }
   }
 
   async function onReject(report) {
-    if (!confirm("確定要駁回這則檢舉嗎？")) return;
-    const ok = await updateReportStatus(report._id, "rejected");
-    if (ok) refresh();
+    showConfirm(
+      '確認駁回',
+      '確定要駁回這則檢舉嗎？',
+      async () => {
+        const ok = await updateReportStatus(report._id, "rejected");
+        if (ok) {
+          showNotification('success', '已駁回', '檢舉已標記為駁回');
+          refresh();
+        }
+        closeNotification();
+      }
+    );
+  }
+
+  // 刪除討論區內容（帖子或評論）
+  async function deleteDiscussionContent(report) {
+    const contentType = report.type === 'discussion_post' ? '帖子' : '評論';
+    
+    showConfirm(
+      '確認刪除',
+      `確定要刪除這則${contentType}嗎？此操作無法復原。`,
+      async () => {
+        try {
+          const token = document.cookie.match(/token=([^;]+)/)?.[1];
+          if (!token) throw new Error("找不到登入憑證");
+
+          let endpoint = '';
+          if (report.type === 'discussion_post') {
+            endpoint = `/api/discussion/posts/${report.targetId}`;
+          } else if (report.type === 'discussion_comment') {
+            endpoint = `/api/discussion/comments/${report.targetId}`;
+          }
+
+          const r = await fetch(endpoint, {
+            method: "DELETE",
+            headers: { 
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`,
+            },
+            cache: "no-store"
+          });
+
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j?.error || j?.message || `HTTP ${r.status}`);
+
+          // 更新檢舉狀態為已處置
+          await updateReportStatus(report._id, "action_taken");
+          closeNotification();
+          showNotification('success', '刪除成功', `${contentType}已刪除並標記為已處置`);
+          refresh();
+        } catch (e) {
+          closeNotification();
+          showNotification('error', '刪除失敗', e.message || '刪除操作失敗');
+        }
+      }
+    );
   }
 
   return (
@@ -443,29 +564,69 @@ export default function AdminReportsPage() {
               </tr>
             )}
             {items.map((r) => {
+              const isDiscussion = r.type === 'discussion_post' || r.type === 'discussion_comment';
               const imgInfo = imgCache[String(r.imageId)];
               const thumb = imgInfo?.imageUrl || "";
+              const discussionContent = isDiscussion ? discussionCache[String(r.targetId)] : null;
+              
               return (
                 <tr key={r._id} className="border-t border-zinc-800 hover:bg-zinc-900/50">
                   <td className="px-3 py-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-16 h-16 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
-                        {thumb ? (
-                          <img src={thumb} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-xs text-zinc-400 px-1">#{String(r.imageId).slice(-6)}</span>
-                        )}
+                    {isDiscussion ? (
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
+                          <span className="text-2xl">💬</span>
+                        </div>
+                        <div className="text-xs text-zinc-400 max-w-[200px]">
+                          <div className="font-semibold text-zinc-200 mb-1">
+                            {r.type === 'discussion_post' ? '討論帖子' : '討論評論'}
+                          </div>
+                          {discussionContent ? (
+                            <>
+                              {r.type === 'discussion_post' && (
+                                <>
+                                  <div className="text-zinc-300 font-medium truncate">
+                                    標題: {discussionContent.title || '無標題'}
+                                  </div>
+                                  <div className="text-zinc-400 text-xs line-clamp-2 mt-1">
+                                    {discussionContent.content?.substring(0, 80) || '無內容'}...
+                                  </div>
+                                </>
+                              )}
+                              {r.type === 'discussion_comment' && (
+                                <div className="text-zinc-400 text-xs line-clamp-3">
+                                  {discussionContent.content?.substring(0, 100) || '無內容'}...
+                                </div>
+                              )}
+                              <div className="text-zinc-500 text-xs mt-1">
+                                作者: {discussionContent.authorName || discussionContent.author?.username || '未知'}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-red-400 text-xs">⚠️ 內容已被刪除或不存在</div>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-xs text-zinc-400">
-                        <div>ID: <span className="font-mono">{String(r.imageId)}</span></div>
-                        {imgInfo && (
-                          <>
-                            <div>分類：{imgInfo.category ?? "-"}</div>
-                            <div>分級：{imgInfo.rating ?? "-"}</div>
-                          </>
-                        )}
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
+                          {thumb ? (
+                            <img src={thumb} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-xs text-zinc-400 px-1">#{String(r.imageId).slice(-6)}</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-zinc-400">
+                          <div>ID: <span className="font-mono">{String(r.imageId)}</span></div>
+                          {imgInfo && (
+                            <>
+                              <div>分類：{imgInfo.category ?? "-"}</div>
+                              <div>分級：{imgInfo.rating ?? "-"}</div>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <span className="px-2 py-1 rounded bg-zinc-800">
@@ -478,45 +639,95 @@ export default function AdminReportsPage() {
                     </span>
                   </td>
                   <td className="px-3 py-2 max-w-[320px]">
-                    <div className="line-clamp-3 text-zinc-300">{r.message || <span className="text-zinc-500">—</span>}</div>
+                    <div className="space-y-2">
+                      <div className="text-sm text-amber-400 font-semibold">檢舉原因:</div>
+                      <div className="text-zinc-300 text-sm line-clamp-3">
+                        {r.message || r.details || <span className="text-zinc-500">—</span>}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {new Date(r.createdAt).toLocaleString()}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        className="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500"
-                        onClick={() => openDelete(r)}
-                        disabled={loading}
-                        title="刪除圖片（可選擇是否寄出警告）"
-                      >
-                        刪除
-                      </button>
-                      <button
-                        className="px-3 py-1 rounded bg-amber-600 hover:bg-amber-500"
-                        onClick={() => openReclassify(r)}
-                        disabled={loading}
-                        title="重新分類（可選擇是否寄出警告）"
-                      >
-                        改分類
-                      </button>
-                      <button
-                        className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500"
-                        onClick={() => openRerate(r)}
-                        disabled={loading}
-                        title="調整分級（可選擇是否寄出警告）"
-                      >
-                        改分級
-                      </button>
-                      <button
-                        className="px-3 py-1 rounded bg-zinc-700 hover:bg-zinc-600"
-                        onClick={() => onReject(r)}
-                        disabled={loading}
-                        title="駁回此檢舉"
-                      >
-                        駁回
-                      </button>
+                      {isDiscussion ? (
+                        <>
+                          {/* 討論區檢舉：直接刪除 */}
+                          <button
+                            className="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500"
+                            onClick={() => deleteDiscussionContent(r)}
+                            disabled={loading || !discussionContent}
+                            title={discussionContent ? "刪除此內容並標記為已處置" : "內容已不存在"}
+                          >
+                            刪除
+                          </button>
+                          <button
+                            className="px-3 py-1 rounded bg-purple-600 hover:bg-purple-500"
+                            onClick={() => {
+                              // 對於評論，需要找到所屬的帖子
+                              let url = '';
+                              if (r.type === 'discussion_post') {
+                                url = `/discussion/${r.targetId}`;
+                              } else if (r.type === 'discussion_comment' && discussionContent?.postId) {
+                                url = `/discussion/${discussionContent.postId}`;
+                              } else {
+                                showNotification('error', '無法定位', '無法定位到討論頁面');
+                                return;
+                              }
+                              window.open(url, '_blank');
+                            }}
+                            disabled={loading}
+                            title="在新視窗查看完整討論"
+                          >
+                            查看
+                          </button>
+                          <button
+                            className="px-3 py-1 rounded bg-zinc-700 hover:bg-zinc-600"
+                            onClick={() => onReject(r)}
+                            disabled={loading}
+                            title="駁回此檢舉"
+                          >
+                            駁回
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {/* 圖片檢舉：原有的操作 */}
+                          <button
+                            className="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500"
+                            onClick={() => openDelete(r)}
+                            disabled={loading}
+                            title="刪除圖片（可選擇是否寄出警告）"
+                          >
+                            刪除
+                          </button>
+                          <button
+                            className="px-3 py-1 rounded bg-amber-600 hover:bg-amber-500"
+                            onClick={() => openReclassify(r)}
+                            disabled={loading}
+                            title="重新分類（可選擇是否寄出警告）"
+                          >
+                            改分類
+                          </button>
+                          <button
+                            className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500"
+                            onClick={() => openRerate(r)}
+                            disabled={loading}
+                            title="調整分級（可選擇是否寄出警告）"
+                          >
+                            改分級
+                          </button>
+                          <button
+                            className="px-3 py-1 rounded bg-zinc-700 hover:bg-zinc-600"
+                            onClick={() => onReject(r)}
+                            disabled={loading}
+                            title="駁回此檢舉"
+                          >
+                            駁回
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -666,6 +877,86 @@ export default function AdminReportsPage() {
                   onClick={confirmDelete}
                 >
                   確認刪除
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 通用通知/確認彈窗 */}
+      {notificationModal.open && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
+          <div className="bg-zinc-900 rounded-2xl p-6 w-full max-w-md shadow-2xl border border-zinc-700">
+            {/* 圖示 */}
+            <div className="flex justify-center mb-4">
+              {notificationModal.type === 'success' && (
+                <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              )}
+              {notificationModal.type === 'error' && (
+                <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+              )}
+              {notificationModal.type === 'confirm' && (
+                <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+              )}
+              {notificationModal.type === 'info' && (
+                <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              )}
+            </div>
+
+            {/* 標題 */}
+            <div className="text-xl font-bold mb-2 text-center text-white">
+              {notificationModal.title}
+            </div>
+
+            {/* 訊息 */}
+            <div className="text-sm text-zinc-300 mb-6 text-center">
+              {notificationModal.message}
+            </div>
+
+            {/* 按鈕 */}
+            <div className="flex justify-center gap-3">
+              {notificationModal.type === 'confirm' ? (
+                <>
+                  <button
+                    className="px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white font-medium transition-colors"
+                    onClick={closeNotification}
+                  >
+                    取消
+                  </button>
+                  <button
+                    className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium transition-colors"
+                    onClick={() => {
+                      if (notificationModal.onConfirm) {
+                        notificationModal.onConfirm();
+                      }
+                    }}
+                  >
+                    確認
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
+                  onClick={closeNotification}
+                >
+                  確定
                 </button>
               )}
             </div>

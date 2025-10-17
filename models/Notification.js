@@ -7,7 +7,7 @@ const notificationSchema = new mongoose.Schema(
     fromUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     type: { 
       type: String, 
-      enum: ["comment", "reply", "new_image", "subscription_renewed", "subscription_cancelled", "subscription_expired", "subscription_expiring"], 
+      enum: ["comment", "reply", "new_image", "subscription_renewed", "subscription_cancelled", "subscription_expired", "subscription_expiring", "discussion_mention", "discussion_reply"], 
       required: true 
     },
     imageId: { type: mongoose.Schema.Types.ObjectId, ref: "Image" },

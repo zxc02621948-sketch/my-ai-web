@@ -131,7 +131,72 @@ input, textarea, select, button {
   animation-delay: 1.5s;
 }
 
-/* 貓咪跳動動畫增強版 */
+/* 貓咪律動跳動動畫 - 流順的雀躍感覺 */
+@keyframes cat-dance-smooth {
+  0% { 
+    transform: translateY(0) translateX(0) rotate(0deg) scale(1); 
+  }
+  15% { 
+    transform: translateY(-6px) translateX(-2px) rotate(-1deg) scale(1.01); 
+  }
+  30% { 
+    transform: translateY(-10px) translateX(0) rotate(0deg) scale(1.02); 
+  }
+  45% { 
+    transform: translateY(-6px) translateX(2px) rotate(1deg) scale(1.01); 
+  }
+  60% { 
+    transform: translateY(-8px) translateX(-1px) rotate(-0.5deg) scale(1.015); 
+  }
+  75% { 
+    transform: translateY(-12px) translateX(1px) rotate(0.5deg) scale(1.025); 
+  }
+  90% { 
+    transform: translateY(-4px) translateX(0) rotate(0deg) scale(1.005); 
+  }
+  100% { 
+    transform: translateY(0) translateX(0) rotate(0deg) scale(1); 
+  }
+}
+
+/* 舊版動畫（保留備用） */
+@keyframes cat-dance {
+  0% { 
+    transform: translateY(0) translateX(0) rotate(0deg) scale(1); 
+  }
+  10% { 
+    transform: translateY(-8px) translateX(-3px) rotate(-2deg) scale(1.02); 
+  }
+  20% { 
+    transform: translateY(-12px) translateX(0) rotate(0deg) scale(1.05); 
+  }
+  30% { 
+    transform: translateY(-8px) translateX(3px) rotate(2deg) scale(1.02); 
+  }
+  40% { 
+    transform: translateY(-4px) translateX(0) rotate(0deg) scale(1.01); 
+  }
+  50% { 
+    transform: translateY(-10px) translateX(-2px) rotate(-1deg) scale(1.03); 
+  }
+  60% { 
+    transform: translateY(-14px) translateX(2px) rotate(1deg) scale(1.06); 
+  }
+  70% { 
+    transform: translateY(-6px) translateX(-1px) rotate(-0.5deg) scale(1.02); 
+  }
+  80% { 
+    transform: translateY(-8px) translateX(1px) rotate(0.5deg) scale(1.03); 
+  }
+  90% { 
+    transform: translateY(-4px) translateX(0) rotate(0deg) scale(1.01); 
+  }
+  100% { 
+    transform: translateY(0) translateX(0) rotate(0deg) scale(1); 
+  }
+}
+
+/* 舊版簡單跳動動畫（保留作為備用） */
 @keyframes cat-bounce {
   0%, 100% { 
     transform: translateY(0) scale(1); 
@@ -177,4 +242,47 @@ input, textarea, select, button {
 
 .animate-sound-wave {
   animation: sound-wave 2s ease-out infinite;
+}
+
+/* 貓咪律動跳動動畫類別 */
+.animate-cat-dance {
+  animation: cat-dance 2s ease-in-out infinite;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+.animate-cat-dance-smooth {
+  animation: cat-dance-smooth 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+}
+
+/* RGB 流光動畫 */
+@keyframes rgb-flow {
+  0% { 
+    background-position: 0% 50%; 
+  }
+  50% { 
+    background-position: 100% 50%; 
+  }
+  100% { 
+    background-position: 0% 50%; 
+  }
+}
+
+.animate-rgb-flow {
+  animation: rgb-flow 6s ease infinite;
+}
+
+/* YouTube 錯誤提示動畫 */
+@keyframes slide-up {
+  0% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
 }

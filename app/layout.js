@@ -12,6 +12,7 @@ import ClientToaster from "@/components/common/ClientToaster";
 import { PlayerProvider } from "@/components/context/PlayerContext";
 import ConditionalPlayer from "@/components/common/ConditionalPlayer";
 import AdFooterPlaceholder from "@/components/common/AdFooterPlaceholder";
+import YouTubeErrorToast from "@/components/player/YouTubeErrorToast";
 // 移除全域 MiniPlayer / YouTubeBridge 與字型變數，恢復到較乾淨的版型
 
 export const metadata = {
@@ -100,6 +101,7 @@ export default async function RootLayout({ children }) {
 
               <FeedbackButton />
               <ClientToaster />
+              <YouTubeErrorToast />
               <AdFooterPlaceholder />
 
                   {/* 條件性播放器組件 */}

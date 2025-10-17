@@ -70,24 +70,46 @@ export default function YoutubeFallback({ videoId, startSeconds = 0, onReady, on
         onProgress={onProgress}
         onError={(e) => {
           console.error("🔧 YouTube 播放器錯誤:", e.data);
-          if (e.data === 101 || e.data === 150) {
-            console.warn("🔧 視頻不允許嵌入播放 (錯誤 150)，這通常表示視頻有嵌入限制");
-            console.warn("🔧 建議：1) 檢查視頻是否允許嵌入 2) 嘗試其他視頻 3) 使用原始 YouTube 鏈接");
-            console.warn("🔧 解決方案：嘗試使用不同的視頻或檢查視頻的嵌入設置");
-            // 當視頻不允許嵌入時，可以嘗試其他播放方式
-            // 例如：重定向到 YouTube 原始頁面或使用其他播放器
-          } else if (e.data === 2) {
-            console.warn("🔧 無效的視頻 ID");
-          } else if (e.data === 5) {
-            console.warn("🔧 HTML5 播放器錯誤");
+          
+          // 錯誤處理和用戶提示
+          const errorMessages = {
+            2: "無效的視頻 ID",
+            5: "HTML5 播放器錯誤",
+            100: "視頻不存在或已被刪除",
+            101: "視頻不允許嵌入播放",
+            150: "視頻不允許嵌入播放 (嵌入限制)",
+            503: "YouTube 服務暫時不可用"
+          };
+          
+          const errorMessage = errorMessages[e.data] || `未知錯誤 (${e.data})`;
+          console.warn(`🔧 ${errorMessage}`);
+          
+          // 針對不同錯誤提供具體建議
+          if (e.data === 150 || e.data === 101) {
+            console.warn("🔧 解決方案：");
+            console.warn("   1) 該視頻可能有嵌入限制，請嘗試其他視頻");
+            console.warn("   2) 或直接前往 YouTube 觀看：https://youtube.com/watch?v=" + videoId);
+            console.warn("   3) 建議選擇允許嵌入的公開視頻");
+            
+            // 可以考慮觸發一個事件來通知父組件
+            if (typeof window !== "undefined") {
+              // 顯示用戶友好的錯誤提示
+              const errorEvent = new CustomEvent('youtubeError', {
+                detail: {
+                  errorCode: e.data,
+                  videoId: videoId,
+                  message: "該視頻不允許嵌入播放，請嘗試其他視頻或直接前往 YouTube 觀看",
+                  youtubeUrl: `https://youtube.com/watch?v=${videoId}`
+                }
+              });
+              window.dispatchEvent(errorEvent);
+            }
           } else if (e.data === 100) {
-            console.warn("🔧 視頻不存在或已被刪除");
-          } else if (e.data === 101) {
-            console.warn("🔧 視頻不允許嵌入播放");
+            console.warn("🔧 解決方案：視頻可能已被刪除或設為私人，請嘗試其他視頻");
           } else if (e.data === 503) {
-            console.warn("🔧 YouTube 服務暫時不可用 (503 錯誤)");
-            console.warn("🔧 建議：1) 等待幾分鐘後重試 2) 檢查網絡連接 3) 嘗試其他視頻");
-            console.warn("🔧 解決方案：這通常是 YouTube 服務的暫時問題，請稍後重試");
+            console.warn("🔧 解決方案：這是 YouTube 服務的暫時問題，請稍後重試");
+          } else if (e.data === 2) {
+            console.warn("🔧 解決方案：請檢查視頻 ID 是否正確");
           }
         }}
       />

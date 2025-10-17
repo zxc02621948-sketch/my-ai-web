@@ -43,6 +43,12 @@ const userSchema = new mongoose.Schema(
     
     // ✅ 總獲得積分（用於等級計算，只增不減）
     totalEarnedPoints: { type: Number, default: 0 },
+    
+    // ✅ 討論區待領取積分（所有多圖教學帖的總和）
+    discussionPendingPoints: { type: Number, default: 0 },
+    
+    // ✅ 討論區收藏的帖子（存儲帖子 ID）
+    bookmarkedDiscussionPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: "DiscussionPost" }],
 
     // ✅ 使用者預設音樂來源（播放頁讀取）
     defaultMusicUrl: { type: String, default: '' },
@@ -61,6 +67,29 @@ const userSchema = new mongoose.Schema(
     miniPlayerTheme: { type: String, default: 'modern' },
     miniPlayerExpiry: { type: Date, default: null }, // 播放器過期時間（體驗券）
     playerCouponUsed: { type: Boolean, default: false }, // 1日免費體驗券是否已使用
+    
+    // ✅ 高階播放器造型系統（付費功能）
+    premiumPlayerSkin: { type: Boolean, default: false }, // 是否購買高階造型
+    premiumPlayerSkinExpiry: { type: Date, default: null }, // 造型過期時間（如果是訂閱制）
+    activePlayerSkin: { type: String, default: 'default' }, // 當前啟用的造型 ('default' | 'cat-headphone')
+    playerSkinSettings: { 
+      type: {
+        mode: { type: String, default: 'rgb' }, // 'rgb' | 'solid' | 'custom'
+        speed: { type: Number, default: 0.02 }, // 流動速度
+        saturation: { type: Number, default: 50 }, // 飽和度
+        lightness: { type: Number, default: 60 }, // 亮度
+        hue: { type: Number, default: 0 }, // 色相
+        opacity: { type: Number, default: 0.7 } // 透明度 (0-1)
+      },
+      default: {
+        mode: 'rgb',
+        speed: 0.02,
+        saturation: 50,
+        lightness: 60,
+        hue: 0,
+        opacity: 0.7
+      }
+    },
 
     // ✅ 頭像框系統
     currentFrame: { type: String, default: 'default' },

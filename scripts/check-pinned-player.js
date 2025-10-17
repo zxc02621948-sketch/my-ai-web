@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 // 手動設置 MongoDB URI
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://cvb120g:j3j79ru06@my-ai-web.tvohp.mongodb.net/ai-creation-db?retryWrites=true&w=majority&appName=my-ai-web';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://cvb120g:j3j79ru06@my-ai-web.9ugvdto.mongodb.net/myaiweb?retryWrites=true&w=majority&appName=my-ai-web';
 
 const User = require('../models/User').default;
 

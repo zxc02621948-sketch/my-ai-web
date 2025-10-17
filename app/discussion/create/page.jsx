@@ -4,16 +4,19 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Upload, X, Search, Image as ImageIcon, Camera, Link as LinkIcon } from "lucide-react";
 import Link from "next/link";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export default function CreatePostPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { currentUser } = useCurrentUser();
   const [formData, setFormData] = useState({
     title: "",
     content: "",
     category: "general",
+    rating: "一般",
     imageRef: null,
-    uploadedImage: null
+    uploadedImages: [] // 改為多圖數組
   });
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -24,12 +27,21 @@ export default function CreatePostPage() {
   const [searchLoading, setSearchLoading] = useState(false);
 
   const categories = [
+    { id: "announcement", name: "官方公告", icon: "📢", adminOnly: true },
     { id: "technical", name: "技術討論", icon: "⚙️" },
     { id: "showcase", name: "作品展示", icon: "🎨" },
     { id: "question", name: "問題求助", icon: "❓" },
     { id: "tutorial", name: "教學分享", icon: "📚" },
     { id: "general", name: "閒聊", icon: "💬" }
   ];
+
+  // 從 URL 自動設置分級
+  useEffect(() => {
+    const isAdultZone = searchParams.get('zone') === 'adult';
+    if (isAdultZone) {
+      setFormData(prev => ({ ...prev, rating: "18" }));
+    }
+  }, [searchParams]);
 
   // 從URL載入引用圖片
   useEffect(() => {
@@ -135,16 +147,26 @@ export default function CreatePostPage() {
       submitData.append("title", formData.title);
       submitData.append("content", formData.content);
       submitData.append("category", formData.category);
+      submitData.append("rating", formData.rating);
       
       // 添加圖片引用
       if (formData.imageRef?.id) {
         submitData.append("imageRefId", formData.imageRef.id);
       }
       
-      // 添加上傳的圖片
-      if (formData.uploadedImage?.file) {
-        submitData.append("uploadedImage", formData.uploadedImage.file);
+      // 添加多張上傳的圖片
+      if (formData.uploadedImages.length > 0) {
+        formData.uploadedImages.forEach((img, index) => {
+          submitData.append(`uploadedImages[${index}]`, img.file);
+        });
       }
+      
+      console.log('📝 準備發布:', {
+        title: formData.title,
+        category: formData.category,
+        imageCount: formData.uploadedImages.length,
+        hasImageRef: !!formData.imageRef
+      });
       
       const response = await fetch("/api/discussion/posts", {
         method: "POST",
@@ -155,7 +177,15 @@ export default function CreatePostPage() {
       
       if (result.success) {
         console.log("✅ 帖子創建成功:", result.data);
-        router.push("/discussion");
+        
+        // 顯示成功提示
+        if (result.pointsCost > 0) {
+          alert(`✅ 發布成功！已消耗 ${result.pointsCost} 積分\n💡 收到的愛心會回饋積分給你！`);
+        } else {
+          alert('✅ 發布成功！');
+        }
+        
+        router.push(`/discussion/${result.data._id}`);
       } else {
         console.error("❌ 創建失敗:", result.error);
         alert(result.error || "創建帖子失敗");
@@ -178,38 +208,82 @@ export default function CreatePostPage() {
     setFormData(prev => ({ ...prev, imageRef: null }));
   };
 
-  const removeUploadedImage = () => {
-    setFormData(prev => ({ ...prev, uploadedImage: null }));
-  };
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
+  const handleMultiImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    
+    if (files.length === 0) return;
+    
+    // 檢查總數量限制
+    if (formData.uploadedImages.length + files.length > 9) {
+      alert(`最多只能上傳 9 張圖片！當前已有 ${formData.uploadedImages.length} 張`);
+      return;
+    }
+    
+    // 處理每個文件
+    const newImages = [];
+    let processedCount = 0;
+    
+    files.forEach((file, index) => {
       // 檢查檔案類型
       if (!file.type.startsWith('image/')) {
-        alert('請選擇圖片檔案');
+        alert(`文件 ${file.name} 不是圖片`);
         return;
       }
-
-      // 檢查檔案大小 (5MB限制)
-      if (file.size > 5 * 1024 * 1024) {
-        alert('圖片大小不能超過 5MB');
+      
+      // 檢查檔案大小 (10MB限制)
+      if (file.size > 10 * 1024 * 1024) {
+        alert(`圖片 ${file.name} 超過 10MB`);
         return;
       }
-
+      
       // 建立預覽
       const reader = new FileReader();
       reader.onload = (e) => {
-        setFormData(prev => ({ 
-          ...prev, 
-          uploadedImage: {
-            file: file,
-            preview: e.target.result,
-            name: file.name
-          }
-        }));
+        newImages.push({
+          file: file,
+          preview: e.target.result,
+          name: file.name,
+          size: file.size,
+          order: formData.uploadedImages.length + index
+        });
+        
+        processedCount++;
+        
+        // 當所有文件都處理完成後，更新狀態
+        if (processedCount === files.length) {
+          setFormData(prev => ({
+            ...prev,
+            uploadedImages: [...prev.uploadedImages, ...newImages]
+          }));
+        }
       };
       reader.readAsDataURL(file);
+    });
+  };
+
+  const removeUploadedImage = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      uploadedImages: prev.uploadedImages.filter((_, i) => i !== index)
+    }));
+  };
+
+  const insertImageTag = (index) => {
+    const tag = `{{image:${index}}}`;
+    const textarea = document.querySelector('textarea[name="content"]');
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = formData.content;
+      const newText = text.substring(0, start) + tag + text.substring(end);
+      
+      setFormData(prev => ({ ...prev, content: newText }));
+      
+      // 恢復光標位置
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + tag.length, start + tag.length);
+      }, 0);
     }
   };
 
@@ -261,92 +335,124 @@ export default function CreatePostPage() {
               className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg 
                          text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {categories.map(category => (
-                <option key={category.id} value={category.id}>
-                  {category.icon} {category.name}
-                </option>
-              ))}
+              {categories
+                .filter(category => {
+                  // 過濾掉「僅管理員」分類（非管理員看不到）
+                  if (category.adminOnly) {
+                    return currentUser?.role === 'admin' || currentUser?.isAdmin;
+                  }
+                  return true;
+                })
+                .map(category => (
+                  <option key={category.id} value={category.id}>
+                    {category.icon} {category.name}
+                  </option>
+                ))}
             </select>
           </div>
 
-          {/* 图片选择 */}
+          {/* 分級提示（隱藏選擇器，自動根據來源設置） */}
+          {searchParams.get('zone') === 'adult' && (
+            <div className="bg-red-600/10 border border-red-600/30 rounded-lg p-4">
+              <p className="text-red-400 text-sm flex items-center gap-2">
+                🔞 <span className="font-semibold">您正在 18+ 討論區發文</span>
+              </p>
+              <p className="text-gray-400 text-xs mt-1">
+                此帖子將僅在 18+ 討論區顯示
+              </p>
+            </div>
+          )}
+
+          {/* 多圖上傳 */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              添加圖片（可選）
+              添加圖片（可選，最多 9 張）
             </label>
             
-            {/* 載入中狀態 */}
-            {loadingRefImage && (
-              <div className="flex items-center gap-4 p-4 bg-zinc-800 rounded-lg border border-zinc-700 mb-3">
-                <div className="w-16 h-16 bg-zinc-700 rounded-lg animate-pulse"></div>
-                <div className="flex-1">
-                  <div className="h-4 bg-zinc-700 rounded animate-pulse mb-2"></div>
-                  <div className="h-3 bg-zinc-700 rounded animate-pulse w-1/2"></div>
+            {/* 已上傳的圖片網格 */}
+            {formData.uploadedImages.length > 0 && (
+              <div className="mb-4">
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  {formData.uploadedImages.map((img, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={img.preview}
+                        alt={img.name}
+                        className="w-full h-32 object-cover rounded-lg border border-zinc-700"
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => insertImageTag(index)}
+                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                          title="插入到內容"
+                        >
+                          插入 #{index}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeUploadedImage(index)}
+                          className="p-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                          title="刪除"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="absolute top-1 left-1 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                        #{index}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="text-gray-400 text-sm">載入中...</div>
+                
+                <div className="text-sm text-gray-400">
+                  💡 在內容中輸入 <code className="bg-zinc-800 px-2 py-1 rounded">{'{{image:0}}'}</code> 來插入圖片，或點擊「插入」按鈕
+                </div>
               </div>
             )}
-
-            {/* 已选择的图片显示 */}
-            {(formData.imageRef || formData.uploadedImage) && !loadingRefImage && (
-              <div className="flex items-center gap-4 p-4 bg-zinc-800 rounded-lg border border-zinc-700 mb-3">
-                <img
-                  src={formData.imageRef?.thumbnail || formData.uploadedImage?.preview}
-                  alt={formData.imageRef?.title || formData.uploadedImage?.name}
-                  className="w-16 h-16 object-cover rounded-lg"
-                />
-                <div className="flex-1">
-                  <h4 className="font-medium text-white">
-                    {formData.imageRef?.title || formData.uploadedImage?.name}
-                  </h4>
-                  <p className="text-sm text-gray-400">
-                    {formData.imageRef ? `by ${formData.imageRef.author}` : '新上傳的圖片'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={formData.imageRef ? removeImageRef : removeUploadedImage}
-                  className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            {/* 图片选择方式 - 只在没有图片时显示 */}
-            {!formData.imageRef && !formData.uploadedImage && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* 上传新图片 */}
+            
+            {/* 上傳按鈕 */}
+            {formData.uploadedImages.length < 9 && (
               <div className="relative">
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={handleImageUpload}
+                  multiple
+                  onChange={handleMultiImageUpload}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
                 <div className="p-4 border-2 border-dashed border-zinc-700 rounded-lg 
                                hover:border-green-500 hover:bg-zinc-800 transition-colors
                                flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-green-400
-                               h-24">
+                               h-24 cursor-pointer">
                   <Camera className="w-6 h-6" />
-                  <span className="text-sm font-medium">上傳圖片</span>
-                  <span className="text-xs">截圖、照片等</span>
+                  <span className="text-sm font-medium">
+                    {formData.uploadedImages.length > 0 
+                      ? `繼續上傳圖片（${formData.uploadedImages.length}/9）` 
+                      : '上傳圖片（支援多選）'}
+                  </span>
+                  <span className="text-xs">支援一次選擇多張圖片</span>
                 </div>
               </div>
-
-              {/* 引用现有图片 */}
-              <button
-                type="button"
-                onClick={() => setShowImageSearch(true)}
-                className="p-4 border-2 border-dashed border-zinc-700 rounded-lg 
-                           hover:border-blue-500 hover:bg-zinc-800 transition-colors
-                           flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-blue-400
-                           h-24"
-              >
-                <LinkIcon className="w-6 h-6" />
-                <span className="text-sm font-medium">引用圖片</span>
-                <span className="text-xs">搜索現有圖片</span>
-              </button>
+            )}
+            
+            {/* 積分提示 */}
+            {formData.uploadedImages.length >= 2 && (
+              <div className="mt-4 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/50 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl">💡</div>
+                  <div className="flex-1">
+                    <div className="font-bold text-blue-400 mb-2">
+                      多圖教學帖
+                    </div>
+                    <div className="text-sm text-gray-300 space-y-1">
+                      <div>• 發布需要消耗 <span className="text-yellow-400 font-bold">
+                        {formData.uploadedImages.length <= 5 ? '5' : '10'} 積分</span></div>
+                      <div>• 如果是教學文章，收到的每個愛心會回饋 <span className="text-green-400 font-bold">
+                        1 積分</span></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -357,15 +463,21 @@ export default function CreatePostPage() {
               帖子內容 *
             </label>
             <textarea
+              name="content"
               required
               rows={8}
               value={formData.content}
               onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-              placeholder="分享你的想法、經驗或問題..."
+              placeholder="分享你的想法、經驗或問題...&#10;&#10;提示：使用 {{image:0}} 來插入第 0 張圖片"
               className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg 
                          text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500
                          resize-y"
             />
+            {formData.uploadedImages.length > 0 && (
+              <div className="text-xs text-gray-400 mt-2">
+                💡 提示：點擊圖片上的「插入」按鈕，或手動輸入 {'{{image:N}}'} 來插入圖片到內容中
+              </div>
+            )}
           </div>
 
           {/* 提交按钮 */}

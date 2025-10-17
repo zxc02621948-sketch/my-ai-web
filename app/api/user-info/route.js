@@ -25,7 +25,11 @@ export async function GET(req) {
       }
     } else {
       // 否則使用當前登入用戶
-      user = await getCurrentUser();
+      const currentUser = await getCurrentUser();
+      if (currentUser && currentUser._id) {
+        // 重新從數據庫查詢以確保獲取最新數據
+        user = await User.findById(currentUser._id);
+      }
     }
 
     if (!user) {
@@ -46,6 +50,8 @@ export async function GET(req) {
       pointsBalance: user.pointsBalance ?? 0,
       // ✅ 總賺取積分（用於等級計算）
       totalEarnedPoints: user.totalEarnedPoints ?? 0,
+      // ✅ 討論區待領取積分
+      discussionPendingPoints: user.discussionPendingPoints ?? 0,
       // ✅ 播放器：使用者預設音樂 URL
       defaultMusicUrl: user.defaultMusicUrl || '',
       // ✅ 播放清單：完整播放清單
@@ -62,7 +68,19 @@ export async function GET(req) {
       frameColorEditorUnlocked: user.frameColorEditorUnlocked || false,
       // ✅ 播放器體驗券狀態
       playerCouponUsed: user.playerCouponUsed || false,
-      miniPlayerExpiry: user.miniPlayerExpiry || null
+      miniPlayerExpiry: user.miniPlayerExpiry || null,
+      // ✅ 高階播放器造型
+      premiumPlayerSkin: user.premiumPlayerSkin || false,
+      premiumPlayerSkinExpiry: user.premiumPlayerSkinExpiry || null,
+      activePlayerSkin: user.activePlayerSkin || 'default',
+      playerSkinSettings: user.playerSkinSettings || {
+        mode: 'rgb',
+        speed: 0.02,
+        saturation: 50,
+        lightness: 60,
+        hue: 0,
+        opacity: 0.7
+      }
     }, { status: 200, headers: { "Cache-Control": "no-store" } });
 
   } catch (err) {

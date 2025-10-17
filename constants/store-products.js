@@ -45,6 +45,27 @@ export const STORE_PRODUCTS = {
   ],
   personalization: [
     {
+      id: "premium-player-skin",
+      title: "高階播放器造型 - 貓咪耳機",
+      description: "超酷的貓咪耳機造型搭配 RGB 流光動畫！可自定義顏色、速度、亮度，讓你的播放器獨一無二！",
+      icon: "/cat-headphone.png",
+      price: 500,
+      originalPrice: 800,
+      isLimited: false,
+      expiry: null,
+      category: "personalization",
+      type: "premium-skin",
+      features: [
+        "🐱 可愛貓咪耳機造型",
+        "🌈 RGB 流光動畫效果",
+        "🎨 完全自定義顏色設定",
+        "⚡ 可調整流動速度",
+        "✨ 純色/漸變多種模式",
+        "💎 全局生效（所有頁面）",
+        "♾️ 永久使用權"
+      ]
+    },
+    {
       id: "ai-generated-frame",
       title: "AI 生成頭像框",
       description: "AI 生成的藝術頭像框，展現科技與藝術的完美結合",

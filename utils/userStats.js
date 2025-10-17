@@ -67,8 +67,8 @@ export async function calculateUserStats(userId) {
       };
     }
 
-    // 直接使用已查詢的用戶積分餘額作為 totalEarned
-    const totalEarned = user?.pointsBalance || 0;
+    // ✅ 使用累計獲得積分（只增不減）來計算等級，而非當前餘額
+    const totalEarned = user?.totalEarnedPoints || 0;
     
     // 計算本月積分（從交易記錄）
     const monthlyAgg = await PointsTransaction.aggregate([

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>貓咪播放器測試</title>
+    <style>
+        body {
+            background: #0a0a0a;
+            color: #ededed;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .player-demo {
+            width: 140px;
+            height: 140px;
+            border: 2px solid #333;
+            border-radius: 20px;
+            margin: 20px;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+        }
+        
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #555;
+        }
+        
+        button.active {
+            background: #4ECDC4;
+        }
+        
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .demo-item {
+            text-align: center;
+        }
+        
+        .demo-label {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #888;
+        }
+        
+        /* 貓咪播放器動畫 */
+        .cat-player {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        .cat-headphone {
+            position: absolute;
+            left: 20px;
+            top: 20px;
+            width: 100px;
+            height: 100px;
+            transition: all 0.5s ease-in-out;
+            filter: drop-shadow(0 4px 12px rgba(0,0,0,0.2));
+        }
+        
+        .cat-headphone.playing {
+            animation: cat-dance-smooth 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+            transform: scale(1.03);
+        }
+        
+        .note {
+            position: absolute;
+            font-size: 20px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .note.visible {
+            opacity: 1;
+        }
+        
+        .note-1 {
+            top: 10px;
+            right: 15px;
+            color: #FF6B9D;
+            animation: float-1 3s ease-in-out infinite;
+        }
+        
+        .note-2 {
+            top: 35px;
+            left: 5px;
+            color: #4ECDC4;
+            animation: float-2 2.5s ease-in-out infinite;
+            animation-delay: 0.5s;
+        }
+        
+        .note-3 {
+            bottom: 45px;
+            right: 8px;
+            color: #FFD93D;
+            animation: float-3 3.5s ease-in-out infinite;
+            animation-delay: 1s;
+        }
+        
+        .note-4 {
+            top: 60px;
+            left: 8px;
+            color: #FF9FF3;
+            animation: float-4 2.8s ease-in-out infinite;
+            animation-delay: 1.5s;
+        }
+        
+        .sound-wave {
+            position: absolute;
+            left: 70px;
+            top: 70px;
+            width: 2px;
+            height: 2px;
+            background: #FF6B9D;
+            border-radius: 50%;
+            opacity: 0;
+        }
+        
+        .sound-wave.playing {
+            animation: sound-wave 2s ease-out infinite;
+        }
+        
+        /* 主題變色效果 */
+        .theme-pink .cat-headphone {
+            filter: hue-rotate(300deg) saturate(1.3) brightness(1.1) drop-shadow(0 4px 12px rgba(0,0,0,0.2));
+        }
+        
+        .theme-blue .cat-headphone {
+            filter: hue-rotate(200deg) saturate(1.2) brightness(1.05) drop-shadow(0 4px 12px rgba(0,0,0,0.2));
+        }
+        
+        .theme-green .cat-headphone {
+            filter: hue-rotate(120deg) saturate(1.1) brightness(1.05) drop-shadow(0 4px 12px rgba(0,0,0,0.2));
+        }
+        
+        .theme-rainbow .cat-headphone {
+            animation: rainbow-shift 3s linear infinite, cat-dance-smooth 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+        }
+        
+        /* 動畫定義 */
+        @keyframes cat-dance-smooth {
+            0% { 
+                transform: translateY(0) translateX(0) rotate(0deg) scale(1); 
+            }
+            15% { 
+                transform: translateY(-6px) translateX(-2px) rotate(-1deg) scale(1.01); 
+            }
+            30% { 
+                transform: translateY(-10px) translateX(0) rotate(0deg) scale(1.02); 
+            }
+            45% { 
+                transform: translateY(-6px) translateX(2px) rotate(1deg) scale(1.01); 
+            }
+            60% { 
+                transform: translateY(-8px) translateX(-1px) rotate(-0.5deg) scale(1.015); 
+            }
+            75% { 
+                transform: translateY(-12px) translateX(1px) rotate(0.5deg) scale(1.025); 
+            }
+            90% { 
+                transform: translateY(-4px) translateX(0) rotate(0deg) scale(1.005); 
+            }
+            100% { 
+                transform: translateY(0) translateX(0) rotate(0deg) scale(1); 
+            }
+        }
+        
+        @keyframes float-1 {
+            0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.8; }
+            25% { transform: translate(8px, -8px) rotate(15deg) scale(1.1); opacity: 1; }
+            50% { transform: translate(12px, -15px) rotate(25deg) scale(1.2); opacity: 0.9; }
+            75% { transform: translate(6px, -10px) rotate(10deg) scale(1.05); opacity: 1; }
+        }
+        
+        @keyframes float-2 {
+            0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.7; }
+            33% { transform: translate(-6px, -12px) rotate(-20deg) scale(1.3); opacity: 1; }
+            66% { transform: translate(-10px, -8px) rotate(-10deg) scale(0.9); opacity: 0.8; }
+        }
+        
+        @keyframes float-3 {
+            0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.6; }
+            50% { transform: translate(5px, -12px) rotate(20deg) scale(1.2); opacity: 1; }
+        }
+        
+        @keyframes float-4 {
+            0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.5; }
+            40% { transform: translate(-4px, -8px) rotate(-15deg) scale(1.1); opacity: 0.9; }
+            80% { transform: translate(-2px, -4px) rotate(-5deg) scale(0.95); opacity: 0.7; }
+        }
+        
+        @keyframes rainbow-shift {
+            0% { filter: hue-rotate(0deg) saturate(1.2) brightness(1.1) drop-shadow(0 4px 12px rgba(0,0,0,0.2)); }
+            16% { filter: hue-rotate(60deg) saturate(1.2) brightness(1.1) drop-shadow(0 4px 12px rgba(0,0,0,0.2)); }
+            33% { filter: hue-rotate(120deg) saturate(1.2) brightness(1.1) drop-shadow(0 4px 12px rgba(0,0,0,0.2)); }
+            50% { filter: hue-rotate(180deg) saturate(1.2) brightness(1.1) drop-shadow(0 4px 12px rgba(0,0,0,0.2)); }
+            66% { filter: hue-rotate(240deg) saturate(1.2) brightness(1.1) drop-shadow(0 4px 12px rgba(0,0,0,0.2)); }
+            83% { filter: hue-rotate(300deg) saturate(1.2) brightness(1.1) drop-shadow(0 4px 12px rgba(0,0,0,0.2)); }
+            100% { filter: hue-rotate(360deg) saturate(1.2) brightness(1.1) drop-shadow(0 4px 12px rgba(0,0,0,0.2)); }
+        }
+        
+        @keyframes sound-wave {
+            0% { transform: scale(0); opacity: 1; }
+            100% { transform: scale(4); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🐱 貓咪播放器測試頁面</h1>
+        <p>測試你的貓咪耳機 PNG 圖片和動畫效果</p>
+        
+        <div class="controls">
+            <button id="playBtn" onclick="togglePlay()">▶️ 播放/暫停</button>
+            <button id="themeBtn" onclick="cycleTheme()">🎨 切換主題</button>
+            <button onclick="showNotes()">🎵 顯示音符</button>
+            <button onclick="hideNotes()">🔇 隱藏音符</button>
+        </div>
+        
+        <div class="demo-grid">
+            <div class="demo-item">
+                <div class="player-demo" id="player1">
+                    <div class="cat-player">
+                        <!-- 這裡會顯示你的貓咪耳機圖片 -->
+                        <img src="/cat-headphone.png" alt="貓咪耳機" class="cat-headphone" />
+                        
+                        <div class="note note-1">♪</div>
+                        <div class="note note-2">♫</div>
+                        <div class="note note-3">♬</div>
+                        <div class="note note-4">♩</div>
+                        
+                        <div class="sound-wave"></div>
+                    </div>
+                </div>
+                <div class="demo-label">預設主題</div>
+            </div>
+            
+            <div class="demo-item">
+                <div class="player-demo theme-pink" id="player2">
+                    <div class="cat-player">
+                        <img src="/cat-headphone.png" alt="貓咪耳機" class="cat-headphone" />
+                        <div class="note note-1">♪</div>
+                        <div class="note note-2">♫</div>
+                        <div class="note note-3">♬</div>
+                        <div class="note note-4">♩</div>
+                    </div>
+                </div>
+                <div class="demo-label">粉色主題</div>
+            </div>
+            
+            <div class="demo-item">
+                <div class="player-demo theme-blue" id="player3">
+                    <div class="cat-player">
+                        <img src="/cat-headphone.png" alt="貓咪耳機" class="cat-headphone" />
+                        <div class="note note-1">♪</div>
+                        <div class="note note-2">♫</div>
+                        <div class="note note-3">♬</div>
+                        <div class="note note-4">♩</div>
+                    </div>
+                </div>
+                <div class="demo-label">藍色主題</div>
+            </div>
+            
+            <div class="demo-item">
+                <div class="player-demo theme-green" id="player4">
+                    <div class="cat-player">
+                        <img src="/cat-headphone.png" alt="貓咪耳機" class="cat-headphone" />
+                        <div class="note note-1">♪</div>
+                        <div class="note note-2">♫</div>
+                        <div class="note note-3">♬</div>
+                        <div class="note note-4">♩</div>
+                    </div>
+                </div>
+                <div class="demo-label">綠色主題</div>
+            </div>
+        </div>
+        
+        <h2>📋 使用說明</h2>
+        <ol>
+            <li>將你的貓咪耳機 PNG 圖片命名為 <code>cat-headphone.png</code></li>
+            <li>放到 <code>public/</code> 資料夾中</li>
+            <li>點擊「播放/暫停」按鈕測試動畫</li>
+            <li>點擊「切換主題」測試不同顏色效果</li>
+            <li>音符會自動在播放時顯示，暫停時隱藏</li>
+        </ol>
+        
+        <h2>🎯 功能特色</h2>
+        <ul>
+            <li>✅ <strong>貓咪跳動動畫</strong> - 播放時上下跳動</li>
+            <li>✅ <strong>彩色音符飄動</strong> - 4 個音符不同節奏飄動</li>
+            <li>✅ <strong>主題變色</strong> - 6 種顏色主題（預設、粉、藍、綠、紫、彩虹）</li>
+            <li>✅ <strong>音波效果</strong> - 播放時的擴散圓圈</li>
+            <li>✅ <strong>響應式設計</strong> - 適配不同螢幕尺寸</li>
+        </ul>
+    </div>
+
+    <script>
+        let isPlaying = false;
+        let currentTheme = 'default';
+        const themes = ['default', 'pink', 'blue', 'green', 'rainbow'];
+        
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            const btn = document.getElementById('playBtn');
+            btn.textContent = isPlaying ? '⏸️ 暫停' : '▶️ 播放';
+            
+            // 更新所有播放器
+            updateAllPlayers();
+        }
+        
+        function cycleTheme() {
+            const currentIndex = themes.indexOf(currentTheme);
+            currentTheme = themes[(currentIndex + 1) % themes.length];
+            
+            const btn = document.getElementById('themeBtn');
+            btn.textContent = `🎨 ${currentTheme} 主題`;
+            
+            updateAllPlayers();
+        }
+        
+        function showNotes() {
+            document.querySelectorAll('.note').forEach(note => {
+                note.classList.add('visible');
+            });
+        }
+        
+        function hideNotes() {
+            document.querySelectorAll('.note').forEach(note => {
+                note.classList.remove('visible');
+            });
+        }
+        
+        function updateAllPlayers() {
+            const players = document.querySelectorAll('.player-demo');
+            
+            players.forEach((player, index) => {
+                const headphone = player.querySelector('.cat-headphone');
+                const notes = player.querySelectorAll('.note');
+                const soundWave = player.querySelector('.sound-wave');
+                
+                // 移除所有主題類別
+                themes.forEach(theme => {
+                    player.classList.remove(`theme-${theme}`);
+                });
+                
+                // 應用當前主題（除了預設的演示）
+                if (index === 0) {
+                    player.classList.add(`theme-${currentTheme}`);
+                }
+                
+                // 播放狀態
+                if (isPlaying) {
+                    headphone.classList.add('playing');
+                    notes.forEach(note => note.classList.add('visible'));
+                    if (soundWave) soundWave.classList.add('playing');
+                } else {
+                    headphone.classList.remove('playing');
+                    notes.forEach(note => note.classList.remove('visible'));
+                    if (soundWave) soundWave.classList.remove('playing');
+                }
+            });
+        }
+        
+        // 初始化
+        updateAllPlayers();
+    </script>
+</body>
+</html>

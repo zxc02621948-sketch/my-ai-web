@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Heart, MessageCircle, Bookmark, Share2, Trash2 } from "lucide-react";
+import { ArrowLeft, Heart, MessageCircle, Bookmark, Share2, Trash2, Flag, Pin, PinOff, Edit } from "lucide-react";
 import Link from "next/link";
 import ImageModal from "@/components/image/ImageModal";
 import DiscussionCommentBox from "@/components/discussion/DiscussionCommentBox";
+import AuthorCard from "@/components/discussion/AuthorCard";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import ReportModal from "@/components/common/ReportModal";
+import NotificationModal from "@/components/common/NotificationModal";
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -15,8 +18,15 @@ export default function PostDetailPage() {
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
+  
+  // 檢舉彈窗狀態
+  const [reportModal, setReportModal] = useState({ isOpen: false });
+  
+  // 通知彈窗狀態
+  const [notification, setNotification] = useState({ isOpen: false, type: 'info', title: '', message: '' });
 
   const categories = [
+    { id: "announcement", name: "官方公告", icon: "📢" },
     { id: "technical", name: "技術討論", icon: "⚙️" },
     { id: "showcase", name: "作品展示", icon: "🎨" },
     { id: "question", name: "問題求助", icon: "❓" },
@@ -136,6 +146,69 @@ export default function PostDetailPage() {
     }
   };
 
+  const handleReport = () => {
+    if (!currentUser) {
+      setNotification({ isOpen: true, type: 'error', title: '請先登入', message: '您需要登入才能檢舉內容' });
+      return;
+    }
+    setReportModal({ isOpen: true });
+  };
+
+  const submitReport = async (reason) => {
+    try {
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'discussion_post',
+          targetId: post._id,
+          reason: reason,
+          details: post.title
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.ok || result.success) {
+        setNotification({ isOpen: true, type: 'success', title: '檢舉成功', message: '檢舉已提交，管理員將會審核' });
+      } else {
+        setNotification({ isOpen: true, type: 'error', title: '檢舉失敗', message: result.message || result.error || '檢舉失敗，請稍後再試' });
+      }
+    } catch (error) {
+      console.error('檢舉錯誤:', error);
+      setNotification({ isOpen: true, type: 'error', title: '檢舉失敗', message: '網路錯誤，請稍後再試' });
+    }
+  };
+
+  // 置頂/取消置頂
+  const handlePin = async () => {
+    try {
+      const action = post.isPinned ? 'unpin' : 'pin';
+      const response = await fetch(`/api/discussion/posts/${post._id}/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setPost({ ...post, isPinned: result.isPinned });
+        setNotification({ 
+          isOpen: true, 
+          type: 'success', 
+          title: result.isPinned ? '已置頂' : '已取消置頂', 
+          message: result.message 
+        });
+      } else {
+        setNotification({ isOpen: true, type: 'error', title: '操作失敗', message: result.error || '操作失敗' });
+      }
+    } catch (error) {
+      console.error('置頂錯誤:', error);
+      setNotification({ isOpen: true, type: 'error', title: '操作失敗', message: '網路錯誤，請稍後再試' });
+    }
+  };
+
 
   if (loading) {
     return (
@@ -161,7 +234,16 @@ export default function PostDetailPage() {
     : post.uploadedImage?.url;
 
   const isAuthor = currentUser?._id === post.author?._id || currentUser?._id === post.author?.toString();
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.isAdmin;
+  
+  // 調試信息
+  console.log('🔧 [討論區] 權限檢查:', {
+    currentUser: currentUser,
+    role: currentUser?.role,
+    isAdmin: currentUser?.isAdmin,
+    isAdminResult: isAdmin,
+    isAuthorResult: isAuthor
+  });
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -191,22 +273,70 @@ export default function PostDetailPage() {
                 {categories.find(cat => cat.id === post.category)?.name}
               </span>
             </div>
-            {(isAuthor || isAdmin) && (
-              <button
-                onClick={handleDelete}
-                className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
-                title="刪除帖子"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {/* 置頂按鈕（僅管理員可見） */}
+              {isAdmin && (
+                <button
+                  onClick={handlePin}
+                  className={`p-2 rounded transition-colors ${
+                    post.isPinned 
+                      ? 'text-amber-500 bg-amber-500/20 hover:bg-amber-500/30' 
+                      : 'text-gray-500 hover:text-amber-500 hover:bg-amber-500/10'
+                  }`}
+                  title={post.isPinned ? "取消置頂" : "置頂帖子"}
+                >
+                  {post.isPinned ? <PinOff className="w-5 h-5" /> : <Pin className="w-5 h-5" />}
+                </button>
+              )}
+              
+              {/* 編輯按鈕 */}
+              {(isAuthor || isAdmin) && (
+                <Link
+                  href={`/discussion/${post._id}/edit`}
+                  className="p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-500/10 rounded transition-colors"
+                  title="編輯帖子"
+                >
+                  <Edit className="w-5 h-5" />
+                </Link>
+              )}
+              
+              {/* 檢舉按鈕 */}
+              {currentUser && !isAuthor && (
+                <button
+                  onClick={handleReport}
+                  className="p-2 text-gray-500 hover:text-yellow-500 hover:bg-yellow-500/10 rounded transition-colors"
+                  title="檢舉帖子"
+                >
+                  <Flag className="w-5 h-5" />
+                </button>
+              )}
+              
+              {/* 刪除按鈕 */}
+              {(isAuthor || isAdmin) && (
+                <button
+                  onClick={handleDelete}
+                  className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                  title="刪除帖子"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* 標題 */}
-          <h1 className="text-3xl font-bold mb-4">{post.title}</h1>
+          <div className="flex items-center gap-3 mb-4">
+            {post.isPinned && (
+              <span className="flex items-center gap-1 px-3 py-1 bg-amber-500/20 text-amber-500 text-sm rounded-full font-semibold flex-shrink-0">
+                <Pin className="w-4 h-4" />
+                置頂
+              </span>
+            )}
+            <h1 className="text-3xl font-bold">{post.title}</h1>
+          </div>
 
           {/* 作者和時間 */}
-          <div className="flex items-center gap-3 text-sm text-gray-400 mb-6">
+          <div className="flex items-center gap-3 text-sm text-gray-400 mb-4">
             <span>作者：{post.authorName || post.author?.username}</span>
             <span>•</span>
             <span>{formatTime(post.createdAt)}</span>
@@ -214,16 +344,23 @@ export default function PostDetailPage() {
             <span>👁️ {post.viewCount || 0} 次瀏覽</span>
           </div>
 
+          {/* 作者名片 */}
+          {post.author && (
+            <div className="mb-6">
+              <AuthorCard author={post.author} compact={false} />
+            </div>
+          )}
+
           {/* 引用圖片 */}
           {post.imageRef && (
-            <div className="mb-6">
+            <div className="mb-6 flex flex-col items-center">
               <img
                 src={imageUrl}
                 alt={post.imageRef.title || '帖子圖片'}
-                className="max-w-full rounded-lg border border-zinc-700 cursor-pointer hover:opacity-90 transition-opacity"
-                onClick={() => setSelectedImage(post.imageRef._id)}
+                className="rounded-lg border border-zinc-700"
+                style={{ maxWidth: '800px' }}
               />
-              <p className="text-sm text-gray-400 mt-2">
+              <p className="text-sm text-gray-400 mt-2 text-center">
                 引用圖片：
                 <span 
                   className="text-blue-400 hover:underline cursor-pointer ml-1"
@@ -237,19 +374,84 @@ export default function PostDetailPage() {
           
           {/* 上傳圖片（非引用） */}
           {!post.imageRef && post.uploadedImage && (
-            <div className="mb-6">
+            <div className="mb-6 flex flex-col items-center">
               <img
                 src={post.uploadedImage.url}
                 alt="帖子圖片"
-                className="max-w-full rounded-lg border border-zinc-700"
+                className="rounded-lg border border-zinc-700"
+                style={{ maxWidth: '800px' }}
               />
-              <p className="text-sm text-gray-400 mt-2">上傳圖片</p>
             </div>
           )}
 
-          {/* 內容 */}
+          {/* 多圖教學帖統計（僅作者可見） - 簡化版，只顯示數據 */}
+          {post.imageCount >= 2 && post.author?._id === currentUser?._id && (
+            <div className="bg-zinc-800/30 border border-zinc-700/50 rounded-lg p-3 mb-4">
+              <div className="flex items-center justify-between text-sm">
+                <div className="text-gray-400">
+                  📚 多圖教學 · {post.likesCount} 個愛心 · 消耗 {post.pointsCost} 積分
+                </div>
+                <div className="flex items-center gap-3 text-xs">
+                  {(post.pendingPoints || 0) > 0 && (
+                    <div className="text-yellow-400">
+                      待領取 +{post.pendingPoints}
+                    </div>
+                  )}
+                  {(post.claimedPoints || 0) > 0 && (
+                    <div className="text-green-400">
+                      已領取 +{post.claimedPoints}
+                    </div>
+                  )}
+                  {(post.pendingPoints || 0) > 0 && (
+                    <div className="text-blue-400">
+                      → 前往個人頁面提領
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 內容 - 支持 {{image:N}} 插入 */}
           <div className="prose prose-invert max-w-none mb-6">
-            <p className="text-gray-300 whitespace-pre-wrap">{post.content}</p>
+            {(() => {
+              const content = post.content || '';
+              const parts = content.split(/({{image:\d+}})/g);
+              
+              return parts.map((part, index) => {
+                const match = part.match(/{{image:(\d+)}}/);
+                if (match) {
+                  const imageIndex = parseInt(match[1]);
+                  const image = post.uploadedImages?.[imageIndex];
+                  
+                  if (image) {
+                    return (
+                      <div key={index} className="my-6 flex flex-col items-center">
+                        <img
+                          src={image.url}
+                          alt={`圖片 ${imageIndex}`}
+                          className="rounded-lg border border-zinc-700"
+                          style={{ maxWidth: '800px' }}
+                        />
+                        <p className="text-sm text-gray-500 mt-2">圖片 {imageIndex}</p>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div key={index} className="my-4 p-3 bg-red-500/10 border border-red-500/50 rounded text-red-400 text-sm">
+                        ⚠️ 圖片 {imageIndex} 不存在
+                      </div>
+                    );
+                  }
+                }
+                
+                return (
+                  <p key={index} className="text-gray-300 whitespace-pre-wrap">
+                    {part}
+                  </p>
+                );
+              });
+            })()}
           </div>
 
           {/* 互動按鈕 */}
@@ -275,13 +477,13 @@ export default function PostDetailPage() {
             <button 
               onClick={handleBookmark}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                post.bookmarks?.includes(currentUser?._id) 
+                post.isBookmarkedByCurrentUser 
                   ? 'bg-yellow-500/20 text-yellow-500' 
                   : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700'
               }`}
             >
-              <Bookmark className={`w-5 h-5 ${post.bookmarks?.includes(currentUser?._id) ? 'fill-current' : ''}`} />
-              <span>{post.bookmarksCount || 0}</span>
+              <Bookmark className={`w-5 h-5 ${post.isBookmarkedByCurrentUser ? 'fill-current' : ''}`} />
+              <span>{post.isBookmarkedByCurrentUser ? '已收藏' : '收藏'}</span>
             </button>
             <button 
               onClick={handleShare}
@@ -317,6 +519,24 @@ export default function PostDetailPage() {
           onClose={() => setSelectedImage(null)}
         />
       )}
+
+      {/* 檢舉彈窗 */}
+      <ReportModal
+        isOpen={reportModal.isOpen}
+        onClose={() => setReportModal({ isOpen: false })}
+        onSubmit={submitReport}
+        title="檢舉帖子"
+        description="請詳細說明您檢舉此帖子的原因，以便管理員審核處理。"
+      />
+
+      {/* 通知彈窗 */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={() => setNotification({ ...notification, isOpen: false })}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+      />
     </div>
   );
 }

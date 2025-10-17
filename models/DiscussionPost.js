@@ -17,9 +17,14 @@ const DiscussionPostSchema = new mongoose.Schema({
     type: String,
     required: [true, "分類是必填的"],
     enum: {
-      values: ["technical", "showcase", "question", "tutorial", "general"],
-      message: "分類必須是：technical, showcase, question, tutorial, general"
+      values: ["announcement", "technical", "showcase", "question", "tutorial", "general"],
+      message: "分類必須是：announcement, technical, showcase, question, tutorial, general"
     }
+  },
+  rating: {
+    type: String,
+    enum: ["一般", "15", "18"],
+    default: "一般"
   },
   author: {
     type: mongoose.Schema.Types.ObjectId,
@@ -45,6 +50,43 @@ const DiscussionPostSchema = new mongoose.Schema({
     fileSize: Number,   // 文件大小
     width: Number,      // 图片宽度
     height: Number      // 图片高度
+  },
+  
+  // 多图上传支持
+  uploadedImages: [{
+    url: String,        // Cloudflare Images URL
+    imageId: String,    // Cloudflare Images ID
+    fileName: String,   // 原始文件名
+    fileSize: Number,   // 文件大小
+    width: Number,      // 图片宽度
+    height: Number,     // 图片高度
+    order: Number       // 图片顺序
+  }],
+  imageCount: {
+    type: Number,
+    default: 0
+  },
+  
+  // 积分相关
+  pointsCost: {
+    type: Number,
+    default: 0
+  },
+  pendingPoints: {
+    type: Number,
+    default: 0
+  },
+  claimedPoints: {
+    type: Number,
+    default: 0
+  },
+  rewardedUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User"
+  }], // 已獲得積分獎勵的用戶ID列表（防止重複累積）
+  lastClaimedAt: {
+    type: Date,
+    default: null
   },
   
   // 互动数据
@@ -76,7 +118,17 @@ const DiscussionPostSchema = new mongoose.Schema({
   // 状态和元数据
   isPinned: {
     type: Boolean,
-    default: false
+    default: false,
+    index: true
+  },
+  pinnedAt: {
+    type: Date,
+    default: null
+  },
+  pinnedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null
   },
   isLocked: {
     type: Boolean,
@@ -163,4 +215,9 @@ DiscussionPostSchema.methods.incrementView = function() {
   return this.save();
 };
 
-export default mongoose.models.DiscussionPost || mongoose.model("DiscussionPost", DiscussionPostSchema);
+// 強制重新定義模型以清除緩存
+if (mongoose.models.DiscussionPost) {
+  delete mongoose.models.DiscussionPost;
+}
+
+export default mongoose.model("DiscussionPost", DiscussionPostSchema);

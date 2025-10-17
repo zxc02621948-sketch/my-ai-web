@@ -9,6 +9,7 @@ import PlaylistModal from "@/components/player/PlaylistModal";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import MiniPlayerArt from "@/components/common/MiniPlayerArt";
 import AudioMonitor from "@/components/common/AudioMonitor";
+import PlayerSkinSettings from "@/components/player/PlayerSkinSettings";
 
 // 全域 YouTube 橋接（處理播放器控制）
 const GlobalYouTubeBridge = dynamic(() => import("@/components/player/GlobalYouTubeBridge"), { ssr: false });
@@ -575,6 +576,19 @@ export default function UserPlayerPage() {
           }}
           maxItems={5}
         />
+        )}
+
+        {/* 播放器造型設定面板 - 在播放控制下方 */}
+        {!loading && !error && (
+          <div className="mt-8 mb-8">
+            <PlayerSkinSettings 
+              currentUser={currentUser}
+              onSettingsSaved={(newSettings) => {
+                // 設定保存後刷新用戶數據
+                console.log('✅ 播放器造型設定已保存:', newSettings);
+              }}
+            />
+          </div>
         )}
 
         {/* 全域 YouTube 橋接 */}

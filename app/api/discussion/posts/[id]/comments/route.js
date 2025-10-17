@@ -3,6 +3,8 @@ import { dbConnect } from "@/lib/db";
 import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import DiscussionPost from "@/models/DiscussionPost";
 import DiscussionComment from "@/models/DiscussionComment";
+import Notification from "@/models/Notification";
+import User from "@/models/User";
 
 // 獲取帖子的所有評論
 export async function GET(req, { params }) {
@@ -48,7 +50,7 @@ export async function POST(req, { params }) {
     }
     
     const { id } = await params;
-    const { content, parentCommentId } = await req.json();
+    const { content, parentCommentId, mentions, replyTo } = await req.json();
     
     if (!content || content.trim().length === 0) {
       return NextResponse.json(
@@ -90,6 +92,48 @@ export async function POST(req, { params }) {
       id,
       { $push: { comments: comment._id }, $inc: { commentsCount: 1 } }
     );
+    
+    // 處理 @ 提及通知
+    if (mentions && mentions.length > 0) {
+      for (const mention of mentions) {
+        // 檢查被提及的用戶是否存在
+        const mentionedUser = await User.findById(mention.userId);
+        if (mentionedUser && mentionedUser._id.toString() !== currentUser._id.toString()) {
+          // 創建通知
+          const notification = new Notification({
+            userId: mentionedUser._id,
+            fromUserId: currentUser._id,
+            type: 'discussion_mention',
+            message: `在「${post.title}」中: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`,
+            link: `/discussion/${post._id}`,
+            commentId: comment._id,
+            text: `${currentUser.username} 在討論區提到了你`
+          });
+          
+          await notification.save();
+          console.log(`🔔 [提及通知] ${currentUser.username} 提及了 ${mention.username} 在討論區`);
+        }
+      }
+    }
+    
+    // 如果是回覆別人的評論（不是提及），也發送通知
+    if (replyTo && replyTo !== currentUser._id.toString()) {
+      const replyToUser = await User.findById(replyTo);
+      if (replyToUser) {
+        const notification = new Notification({
+          userId: replyToUser._id,
+          fromUserId: currentUser._id,
+          type: 'discussion_reply',
+          message: `在「${post.title}」中: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`,
+          link: `/discussion/${post._id}`,
+          commentId: comment._id,
+          text: `${currentUser.username} 回覆了你的評論`
+        });
+        
+        await notification.save();
+        console.log(`🔔 [回覆通知] ${currentUser.username} 回覆了 ${replyToUser.username} 的評論`);
+      }
+    }
     
     // 返回創建的評論
     const createdComment = await DiscussionComment.findById(comment._id)

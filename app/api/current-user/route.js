@@ -71,6 +71,7 @@ export async function GET() {
       following: user.following ?? [],
       pointsBalance: user.pointsBalance ?? 0,
       totalEarnedPoints: user.totalEarnedPoints ?? 0,
+      discussionPendingPoints: user.discussionPendingPoints ?? 0,
       defaultMusicUrl: user.defaultMusicUrl || "",
       ownedFrames: user.ownedFrames || ['default'],
       currentFrame: user.currentFrame || 'default',
@@ -79,6 +80,17 @@ export async function GET() {
       miniPlayerPurchased: user.miniPlayerPurchased || false,
       playerCouponUsed: user.playerCouponUsed || false,
       miniPlayerExpiry: user.miniPlayerExpiry || null,
+      premiumPlayerSkin: user.premiumPlayerSkin || false,
+      premiumPlayerSkinExpiry: user.premiumPlayerSkinExpiry || null,
+      activePlayerSkin: user.activePlayerSkin || 'default',
+      playerSkinSettings: user.playerSkinSettings || {
+        mode: 'rgb',
+        speed: 0.02,
+        saturation: 50,
+        lightness: 60,
+        hue: 0,
+        opacity: 0.7
+      },
     },
     // 兼容舊代碼（直接在根層級）
     _id: user._id,
@@ -87,10 +99,12 @@ export async function GET() {
     image: user.image,
     isVerified: user.isVerified,
     isAdmin: user.isAdmin,
+    role: user.role || (user.isAdmin ? 'admin' : 'user'),
     createdAt: user.createdAt?.toISOString() ?? null,
     following: user.following ?? [],
     pointsBalance: user.pointsBalance ?? 0,
     totalEarnedPoints: user.totalEarnedPoints ?? 0,
+    discussionPendingPoints: user.discussionPendingPoints ?? 0,
     defaultMusicUrl: user.defaultMusicUrl || "",
     ownedFrames: user.ownedFrames || ['default'],
     currentFrame: user.currentFrame || 'default',
@@ -99,5 +113,16 @@ export async function GET() {
     miniPlayerPurchased: user.miniPlayerPurchased || false,
     playerCouponUsed: user.playerCouponUsed || false,
     miniPlayerExpiry: user.miniPlayerExpiry || null,
+    premiumPlayerSkin: user.premiumPlayerSkin || false,
+    premiumPlayerSkinExpiry: user.premiumPlayerSkinExpiry || null,
+    activePlayerSkin: user.activePlayerSkin || 'default',
+    playerSkinSettings: user.playerSkinSettings || {
+      mode: 'rgb',
+      speed: 0.02,
+      saturation: 50,
+      lightness: 60,
+      hue: 0,
+      opacity: 0.7
+    },
   });
 }

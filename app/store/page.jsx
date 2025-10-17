@@ -76,6 +76,9 @@ export default function StorePage() {
           if (userResponse.data.playerCouponUsed) {
             purchasedSet.add("player-1day-coupon");
           }
+          if (userResponse.data.premiumPlayerSkin) {
+            purchasedSet.add("premium-player-skin");
+          }
           setPurchasedItems(purchasedSet);
         }
 
@@ -147,7 +150,28 @@ export default function StorePage() {
       }
       
       // 根據商品 ID 調用對應的購買 API
-      if (productId === "player-1day-coupon") {
+      if (productId === "premium-player-skin") {
+        const res = await axios.post("/api/store/purchase-premium-skin");
+        
+        if (res?.data?.success) {
+          alert(`🎉 購買成功！\n\n您現在擁有高階播放器造型了！\n\n✨ 前往播放器頁面即可自定義顏色設定\n💰 剩餘積分：${res.data.newBalance}`);
+          // 更新用戶信息
+          const info = await axios.get("/api/user-info");
+          setUserInfo(info.data);
+          
+          // 重新計算已購買商品
+          const purchasedSet = new Set();
+          if (info.data.playerCouponUsed) {
+            purchasedSet.add("player-1day-coupon");
+          }
+          if (info.data.premiumPlayerSkin) {
+            purchasedSet.add("premium-player-skin");
+          }
+          setPurchasedItems(purchasedSet);
+        } else {
+          alert(res?.data?.error || "購買失敗，請稍後再試。");
+        }
+      } else if (productId === "player-1day-coupon") {
         const res = await axios.post("/api/points/purchase-feature", { 
           productId: "player-1day-coupon", 
           cost: 0 

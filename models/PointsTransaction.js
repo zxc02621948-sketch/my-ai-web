@@ -5,7 +5,13 @@ const PointsTransactionSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     type: { 
       type: String, 
-      enum: ["upload", "like_received", "comment_received", "daily_login", "like_given", "admin_gift", "store_purchase", "subscription_purchase", "frame_color_edit"], 
+      enum: [
+        "upload", "like_received", "comment_received", "daily_login", "like_given", 
+        "admin_gift", "store_purchase", "subscription_purchase", "frame_color_edit",
+        "discussion_post_cost",      // 發多圖教學帖消耗積分
+        "discussion_like_reward",    // 多圖教學帖收到愛心獎勵
+        "discussion_claim_reward"    // 提領討論區獎勵積分
+      ], 
       required: true 
     },
     points: { type: Number, required: true },

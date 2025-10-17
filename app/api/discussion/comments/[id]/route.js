@@ -4,6 +4,43 @@ import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import DiscussionComment from "@/models/DiscussionComment";
 import DiscussionPost from "@/models/DiscussionPost";
 
+// 獲取單個評論
+export async function GET(req, { params }) {
+  try {
+    await dbConnect();
+    
+    const { id } = await params;
+    
+    const comment = await DiscussionComment.findById(id)
+      .populate('author', 'username avatar activeFrame')
+      .lean();
+    
+    if (!comment) {
+      return NextResponse.json(
+        { success: false, error: "評論不存在" },
+        { status: 404 }
+      );
+    }
+    
+    // 添加 authorName 和 postId 以便管理頁面使用
+    return NextResponse.json({
+      success: true,
+      comment: {
+        ...comment,
+        authorName: comment.author?.username || '未知用戶',
+        postId: comment.post // 評論所屬的帖子 ID
+      }
+    });
+    
+  } catch (error) {
+    console.error("獲取評論失敗:", error);
+    return NextResponse.json(
+      { success: false, error: "獲取評論失敗" },
+      { status: 500 }
+    );
+  }
+}
+
 // 刪除評論
 export async function DELETE(req, { params }) {
   try {

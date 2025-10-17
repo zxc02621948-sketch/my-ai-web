@@ -5,17 +5,17 @@ import { useState, useEffect } from 'react';
 export default function MiniPlayerArt({ isPlaying, theme = 'default' }) {
   const [colorShift, setColorShift] = useState(0);
 
-  // 彩虹色變換效果
+  // 溫和的彩色變換效果 - 只在透明區域
   useEffect(() => {
-    if (isPlaying && theme === 'rainbow') {
+    if (isPlaying) {
       const interval = setInterval(() => {
-        setColorShift(prev => (prev + 10) % 360);
-      }, 100);
+        setColorShift(prev => (prev + 8) % 360); // 放慢變色速度，更溫和
+      }, 200); // 更慢的變色節奏，更流順
       return () => clearInterval(interval);
     } else {
       setColorShift(0);
     }
-  }, [isPlaying, theme]);
+  }, [isPlaying]);
 
   // 主題色彩配置
   const themeFilters = {
@@ -28,37 +28,32 @@ export default function MiniPlayerArt({ isPlaying, theme = 'default' }) {
   };
 
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+    <div className="absolute inset-0 pointer-events-none" style={{ overflow: 'visible' }}>
       {/* 貓咪耳機主體 */}
-      <div className="relative w-full h-full">
-        <img 
-          src="/cat-headphone.png"
-          alt="貓咪耳機"
-          className={`absolute left-[20px] top-[20px] w-[100px] h-[100px] 
-            transition-all duration-500 ease-in-out
-            ${isPlaying ? 'animate-bounce' : ''}`}
-          style={{ 
-            filter: themeFilters[theme],
-            filterDropShadow: '0 4px 12px rgba(0,0,0,0.2)',
-            transform: isPlaying ? 'scale(1.05)' : 'scale(1)'
-          }}
-        />
-        
-        {/* 播放時的彩色光暈效果 */}
-        {isPlaying && (
+      <div className="relative w-full h-full" style={{ overflow: 'visible' }}>
+          {/* 貓咪耳機容器 - 包含 RGB 流光和耳機圖片 */}
           <div 
-            className="absolute left-[15px] top-[15px] w-[110px] h-[110px] 
-              rounded-full opacity-30 animate-pulse"
-            style={{
-              background: `radial-gradient(circle, 
-                rgba(255,107,157,0.3) 0%, 
-                rgba(78,205,196,0.2) 35%, 
-                rgba(255,217,61,0.2) 70%, 
-                transparent 100%)`,
-              animation: 'pulse 2s ease-in-out infinite'
+            className="absolute left-1/2 top-1/2 transition-all duration-300 ease-out"
+            style={{ 
+              transform: `translate(-50%, -50%) ${isPlaying ? 'scale(0.7)' : 'scale(1)'}`,
+              isolation: 'isolate',
+              overflow: 'visible',
+              width: '80px',
+              height: '80px'
+            }}
+          >
+          {/* 貓咪耳機圖片 - 根據播放狀態切換 */}
+          <img 
+            src={isPlaying ? "/cat-headphone-animated.png" : "/cat-headphone.png"}
+            alt="貓咪耳機"
+            className="w-full h-full relative object-contain"
+            style={{ 
+              filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.2))',
+              zIndex: 1
             }}
           />
-        )}
+        </div>
+        
       </div>
 
       {/* 音符動畫 - 只在播放時顯示 */}

@@ -65,6 +65,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
   const [isMobileStatsExpanded, setMobileStatsExpanded] = useState(false);
   const [isMobilePointsExpanded, setMobilePointsExpanded] = useState(false);
   const [isMobileEarningExpanded, setMobileEarningExpanded] = useState(false);
+  const [isClaimModalOpen, setClaimModalOpen] = useState(false);
 
   // 同步 userData 的 currentFrame 到本地狀態
   useEffect(() => {
@@ -504,8 +505,8 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                       <div className="hidden md:block">
                         <FollowListButton currentUser={currentUser} userId={userData._id} />
                       </div>
-                      {/* 播放器入口（僅有效訂閱後顯示） */}
-                      {hasValidSubscription('pinPlayerTest') || hasValidSubscription('pinPlayer') ? (
+                      {/* 播放器入口（有播放器功能即可顯示） */}
+                      {userData?.miniPlayerPurchased ? (
                         <Link
                           href={`/user/${userData._id}/player`}
                           className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs sm:text-sm font-semibold text-white border border-blue-500"
@@ -573,7 +574,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                 {/* 主要積分信息 */}
                 <div className="text-center sm:text-left">
                   <div className="text-gray-400 text-xs sm:text-sm mb-1">當前積分</div>
-                  <div className="text-xl sm:text-2xl font-bold text-yellow-400">{statsLoading ? "—" : Number(userStats?.totalEarned ?? 0)}</div>
+                  <div className="text-xl sm:text-2xl font-bold text-yellow-400">{statsLoading ? "—" : Number(userData?.pointsBalance ?? 0)}</div>
                 </div>
 
                 {/* 桌面版詳細積分信息 */}
@@ -584,7 +585,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                   </div>
                   <div className="text-center sm:text-left">
                     <div className="text-gray-500 text-sm mb-1">總計獲得</div>
-                    <div className="text-xl font-semibold text-gray-300">{statsLoading ? "—" : Number(userStats?.totalEarned ?? 0)}</div>
+                    <div className="text-xl font-semibold text-gray-300">{statsLoading ? "—" : Number(userData?.totalEarnedPoints ?? 0)}</div>
                   </div>
                 </div>
 
@@ -614,7 +615,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                       </div>
                       <div className="bg-zinc-800/30 rounded-lg p-3">
                         <div className="text-gray-500 text-sm mb-1">總計獲得</div>
-                        <div className="text-lg font-semibold text-gray-300">{statsLoading ? "—" : Number(userStats?.totalEarned ?? 0)}</div>
+                        <div className="text-lg font-semibold text-gray-300">{statsLoading ? "—" : Number(userData?.totalEarnedPoints ?? 0)}</div>
                       </div>
                     </div>
                   )}
@@ -661,6 +662,19 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                       )}
                       {couponCount === 0 && (
                         <span className="ml-1 text-xs opacity-75 hidden sm:inline">(無券)</span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setClaimModalOpen(true)}
+                      className="relative bg-gradient-to-r from-yellow-600 to-green-600 hover:from-yellow-500 hover:to-green-500 text-white py-2 px-3 rounded-lg font-medium transition-all duration-200 text-xs sm:text-sm"
+                      title="提領討論區收益"
+                    >
+                      <span className="hidden sm:inline">💰 積分提領</span>
+                      <span className="sm:hidden">💰 提領</span>
+                      {(userData?.discussionPendingPoints || 0) >= 5 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                          {userData.discussionPendingPoints > 99 ? '99+' : userData.discussionPendingPoints}
+                        </span>
                       )}
                     </button>
                   </div>
@@ -777,6 +791,95 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
         userPoints={userData?.pointsBalance || 0}
         ownedFrames={userData?.ownedFrames || []}
       />
+
+      {/* 積分提領彈窗 */}
+      {isClaimModalOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 rounded-2xl p-6 max-w-md w-full border border-yellow-500/50 shadow-2xl">
+            {/* 標題 */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-yellow-400 flex items-center gap-2">
+                💰 積分提領
+              </h3>
+              <button
+                onClick={() => setClaimModalOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 待領取積分顯示 */}
+            <div className="bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-yellow-500/50 rounded-xl p-6 mb-6">
+              <div className="text-center">
+                <div className="text-sm text-gray-400 mb-2">📚 討論區收益</div>
+                <div className="text-4xl font-bold text-yellow-400 mb-2">
+                  +{userData?.discussionPendingPoints || 0}
+                </div>
+                <div className="text-xs text-gray-400">
+                  來自多圖教學帖的愛心
+                </div>
+              </div>
+            </div>
+
+            {/* 說明文字 */}
+            <div className="bg-zinc-800/50 rounded-lg p-4 mb-6">
+              <p className="text-sm text-gray-300 leading-relaxed">
+                <span className="text-yellow-400 font-semibold">💡 提示：</span><br/>
+                • 發布 2-5 張圖的教學帖消耗 5 積分<br/>
+                • 發布 6-9 張圖的教學帖消耗 10 積分<br/>
+                • 收到的每個愛心轉化為 1 待領取積分<br/>
+                • 同一用戶重複點讚不會累積<br/>
+                • 取消愛心不會扣減已累積的積分<br/>
+                <span className="text-red-400 font-semibold">• 需要累積至少 5 個愛心才能提領</span>
+              </p>
+            </div>
+
+            {/* 操作按鈕 */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setClaimModalOpen(false)}
+                className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg font-semibold transition-all"
+              >
+                取消
+              </button>
+              <button
+                        onClick={async () => {
+                          const pending = userData?.discussionPendingPoints || 0;
+                          const isAdmin = currentUser?.isAdmin;
+                          if (pending < 5 && !isAdmin) {
+                            alert(`需要累積至少 5 個愛心才能提領，目前只有 ${pending} 個`);
+                            return;
+                          }
+                  
+                  try {
+                    const response = await fetch('/api/discussion/claim-points', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({})
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                      alert(`✅ 提領成功！獲得 ${result.claimed} 積分`);
+                      setClaimModalOpen(false);
+                      window.location.reload();
+                    } else {
+                      alert(result.error || '提領失敗');
+                    }
+                  } catch (error) {
+                    console.error('提領錯誤:', error);
+                    alert('提領失敗，請稍後再試');
+                  }
+                }}
+                disabled={(userData?.discussionPendingPoints || 0) < 5 && !currentUser?.isAdmin}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-green-500 hover:from-yellow-600 hover:to-green-600 text-white rounded-lg font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {(userData?.discussionPendingPoints || 0) >= 5 || currentUser?.isAdmin ? '確認提領' : '需要5個愛心'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

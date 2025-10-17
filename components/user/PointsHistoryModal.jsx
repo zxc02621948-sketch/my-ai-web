@@ -13,6 +13,9 @@ const TYPE_LABEL = {
   store_purchase: "商店購買",
   subscription_purchase: "訂閱購買",
   frame_color_edit: "頭像框調色",
+  discussion_post_cost: "討論區發文",
+  discussion_like_reward: "討論區愛心獎勵",
+  discussion_claim_reward: "討論區收益提領",
 };
 
 const TYPE_COLOR = {
@@ -25,6 +28,9 @@ const TYPE_COLOR = {
   store_purchase: "text-orange-300",
   subscription_purchase: "text-cyan-300",
   frame_color_edit: "text-purple-400",
+  discussion_post_cost: "text-red-400",
+  discussion_like_reward: "text-pink-400",
+  discussion_claim_reward: "text-green-400",
 };
 
 export default function PointsHistoryModal({ isOpen, onClose }) {

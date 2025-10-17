@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import MiniPlayerArt from "@/components/common/MiniPlayerArt";
 import CatPlayerArt from "@/components/player/MiniPlayerArt";
+import CatHeadphoneCanvas from "@/components/player/CatHeadphoneCanvas";
 import PinPlayerButton from "@/components/player/PinPlayerButton";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import axios from "axios";
@@ -33,6 +34,49 @@ export default function MiniPlayer() {
   const [pinnedPlayerData, setPinnedPlayerData] = useState(null);
   const [isPinned, setIsPinned] = useState(false);
   const playerRef = useRef(player); // 使用 ref 保存最新的 player 引用
+  
+  // 當前啟用的造型
+  const activePlayerSkin = useMemo(() => {
+    if (!currentUser) return 'default';
+    
+    // 如果沒有購買高階造型，強制使用預設造型
+    if (!currentUser.premiumPlayerSkin) {
+      return 'default';
+    }
+    
+    // 如果有過期時間且已過期，強制使用預設造型
+    if (currentUser.premiumPlayerSkinExpiry) {
+      const isExpired = new Date(currentUser.premiumPlayerSkinExpiry) <= new Date();
+      if (isExpired) {
+        return 'default';
+      }
+    }
+    
+    // 返回用戶選擇的造型（預設為 'default'）
+    return currentUser.activePlayerSkin || 'default';
+  }, [currentUser]);
+  
+  // 顏色設定狀態（優先使用數據庫設定，否則使用預設值）
+  const [colorSettings, setColorSettings] = useState(() => {
+    // 如果用戶已登入且有保存的設定，使用數據庫設定
+    if (currentUser?.playerSkinSettings) {
+      return currentUser.playerSkinSettings;
+    }
+    return {
+      mode: 'rgb',
+      speed: 0.02,
+      saturation: 50,
+      lightness: 60,
+      hue: 0
+    };
+  });
+  
+  // 當 currentUser 更新時，同步顏色設定
+  useEffect(() => {
+    if (currentUser?.playerSkinSettings) {
+      setColorSettings(currentUser.playerSkinSettings);
+    }
+  }, [currentUser]);
   
   // 更新 playerRef
   useEffect(() => {
@@ -392,6 +436,7 @@ export default function MiniPlayer() {
   // 音量滑桿事件處理
   const handleVolumeMouseDown = (e) => {
     e.stopPropagation();
+    e.preventDefault();
     setIsVolumeSliding(true);
     updateVolumeFromEvent(e);
   };
@@ -415,15 +460,18 @@ export default function MiniPlayer() {
   };
 
   const updateVolumeFromEvent = (e) => {
-    const host = volumeWrapperRef.current || volumeSliderRef.current;
-    if (!host) return;
+    const wrapper = volumeWrapperRef.current; // 使用外層容器
+    if (!wrapper) return;
 
-    const rect = host.getBoundingClientRect();
-    // 以實際顯示長邊為滑桿長度，避免旋轉造成高度僅 3~4px 導致點擊幾乎等於 100%
-    const isVertical = rect.height >= rect.width;
-    const length = Math.max(1, isVertical ? rect.height : rect.width);
-    const rel = isVertical ? (e.clientY - rect.top) : (e.clientX - rect.left);
-    let percentage = isVertical ? (1 - (rel / length)) : (rel / length);
+    const rect = wrapper.getBoundingClientRect();
+    // 外層容器旋轉了 -90deg，padding 是 4px 6px (上下 左右)
+    // 旋轉後：原本的左右 padding (6px) 變成了上下 padding
+    // 實際有效高度 = rect.height - 12px (上下各 6px padding)
+    const padding = 6; // 旋轉後的上下 padding
+    const clickY = e.clientY - rect.top;
+    const effectiveHeight = rect.height - (padding * 2);
+    const relativeY = clickY - padding;
+    let percentage = 1 - (relativeY / effectiveHeight); // 反向：頂部 = 1, 底部 = 0
     percentage = Math.max(0, Math.min(1, percentage));
 
     player.setVolume(percentage);
@@ -646,10 +694,11 @@ export default function MiniPlayer() {
 
   return (
     <div
-      className="fixed z-50 cursor-move select-none"
+      className="fixed z-50 select-none"
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
+        cursor: 'default' // 不顯示十字符號
       }}
       onMouseDown={handleMouseDown}
     >
@@ -705,6 +754,7 @@ export default function MiniPlayer() {
           title={player.originUrl || player.src || "未設定來源"}
           onClick={(e) => {
             e.stopPropagation();
+            if (justDraggedRef.current) return; // 如果剛拖動過，不要打開連結
             const href = player.originUrl || player.src;
             if (href) window.open(href, "_blank");
           }}
@@ -721,11 +771,12 @@ export default function MiniPlayer() {
 
         {/* 主體以 SVG 佈景為主視覺 */}
         <div 
-          className="relative cursor-pointer transition-shadow duration-200 hover:shadow-2xl"
+          className="relative transition-shadow duration-200 hover:shadow-2xl"
           style={{
             width: '140px',
             height: '140px',
-            borderRadius: '16px'
+            overflow: 'visible',
+            cursor: 'default'
           }}
           onClick={(e) => {
             e.stopPropagation();
@@ -737,7 +788,134 @@ export default function MiniPlayer() {
             });
           }}
         >
-          <CatPlayerArt isPlaying={player.isPlaying} theme="default" />
+          {/* 播放器造型：根據啟用的造型顯示 */}
+          {(() => {
+            switch (activePlayerSkin) {
+              case 'cat-headphone':
+                // 高階造型：Canvas 動畫貓咪耳機
+                return (
+                  <CatHeadphoneCanvas 
+                    isPlaying={player.isPlaying} 
+                    size={130} 
+                    colorSettings={colorSettings}
+                  />
+                );
+              
+              // 未來可以在這裡新增更多造型，例如：
+              // case 'neon-glow':
+              //   return <NeonGlowPlayer isPlaying={player.isPlaying} />;
+              
+              case 'default':
+              default:
+                // 預設造型：舊的播放器圖示
+                return <MiniPlayerArt isPlaying={player.isPlaying} palette={palette} />;
+            }
+          })()}
+
+          {/* 音符動畫 - 只在播放時且使用貓咪耳機造型時顯示 */}
+          {player.isPlaying && activePlayerSkin === 'cat-headphone' && (
+            <>
+              {/* 音符 1 - 頂部右側，粉紅色雙音符 */}
+              <div 
+                className="absolute text-xl animate-float-1"
+                style={{ 
+                  top: '5px', 
+                  right: '35px',
+                  color: '#FF6B9D',
+                  textShadow: '0 0 8px rgba(255, 107, 157, 0.8), 0 0 12px rgba(255, 107, 157, 0.6), 0 2px 6px rgba(0,0,0,0.4)',
+                  filter: 'drop-shadow(0 0 4px rgba(255, 107, 157, 0.9))',
+                  zIndex: 3,
+                  fontWeight: 'bold'
+                }}
+              >
+                🎵
+              </div>
+              
+              {/* 音符 2 - 頂部左側，青綠色單音符 */}
+              <div 
+                className="absolute text-xl animate-float-2"
+                style={{ 
+                  top: '5px', 
+                  left: '35px',
+                  color: '#4ECDC4',
+                  textShadow: '0 0 8px rgba(78, 205, 196, 0.8), 0 0 12px rgba(78, 205, 196, 0.6), 0 2px 6px rgba(0,0,0,0.4)',
+                  filter: 'drop-shadow(0 0 4px rgba(78, 205, 196, 0.9))',
+                  zIndex: 3,
+                  fontWeight: 'bold'
+                }}
+              >
+                ♪
+              </div>
+              
+              {/* 音符 3 - 右側中央，金黃色雙音符 */}
+              <div 
+                className="absolute text-xl animate-float-3"
+                style={{ 
+                  top: '50%',
+                  marginTop: '-12px',
+                  right: '5px',
+                  color: '#FFD93D',
+                  textShadow: '0 0 8px rgba(255, 217, 61, 0.8), 0 0 12px rgba(255, 217, 61, 0.6), 0 2px 6px rgba(0,0,0,0.4)',
+                  filter: 'drop-shadow(0 0 4px rgba(255, 217, 61, 0.9))',
+                  zIndex: 3,
+                  fontWeight: 'bold'
+                }}
+              >
+                🎶
+              </div>
+              
+              {/* 音符 4 - 左側中央，紫色三連音符 */}
+              <div 
+                className="absolute text-xl animate-float-4"
+                style={{ 
+                  top: '50%',
+                  marginTop: '-12px',
+                  left: '5px',
+                  color: '#C77DFF',
+                  textShadow: '0 0 8px rgba(199, 125, 255, 0.8), 0 0 12px rgba(199, 125, 255, 0.6), 0 2px 6px rgba(0,0,0,0.4)',
+                  filter: 'drop-shadow(0 0 4px rgba(199, 125, 255, 0.9))',
+                  zIndex: 3,
+                  fontWeight: 'bold'
+                }}
+              >
+                ♬
+              </div>
+              
+              {/* 音符 5 - 底部右側，橙色單音符 */}
+              <div 
+                className="absolute text-xl animate-float-1"
+                style={{ 
+                  bottom: '8px', 
+                  right: '35px',
+                  color: '#FF9F1C',
+                  textShadow: '0 0 8px rgba(255, 159, 28, 0.8), 0 0 12px rgba(255, 159, 28, 0.6), 0 2px 6px rgba(0,0,0,0.4)',
+                  filter: 'drop-shadow(0 0 4px rgba(255, 159, 28, 0.9))',
+                  zIndex: 3,
+                  fontWeight: 'bold',
+                  animationDelay: '0.3s'
+                }}
+              >
+                ♫
+              </div>
+              
+              {/* 音符 6 - 底部左側，綠色雙音符 */}
+              <div 
+                className="absolute text-xl animate-float-2"
+                style={{ 
+                  bottom: '8px', 
+                  left: '35px',
+                  color: '#6BCF7F',
+                  textShadow: '0 0 8px rgba(107, 207, 127, 0.8), 0 0 12px rgba(107, 207, 127, 0.6), 0 2px 6px rgba(0,0,0,0.4)',
+                  filter: 'drop-shadow(0 0 4px rgba(107, 207, 127, 0.9))',
+                  zIndex: 3,
+                  fontWeight: 'bold',
+                  animationDelay: '0.6s'
+                }}
+              >
+                ♩
+              </div>
+            </>
+          )}
           
           {/* 釘選按鈕 - 在播放器圖示左上方內部 */}
           {player?.playerOwner && player?.playlist?.length > 0 && (
@@ -749,6 +927,7 @@ export default function MiniPlayer() {
               />
             </div>
           )}
+          
 
           {/* 播放進度條：置於唱片下方居中顯示 */}
           {showProgressBar && (
@@ -757,12 +936,13 @@ export default function MiniPlayer() {
               style={{
                 left: '50%',
                 transform: 'translateX(-50%)',
-                bottom: '14px',
-                width: '104px',
-                height: '6px',
+                bottom: '5px',
+                width: '90px',
+                height: '4px',
                 background: 'rgba(0,0,0,0.10)',
                 borderRadius: '3px',
-                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.12)'
+                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.12)',
+                zIndex: 1
               }}
               onMouseDown={handleButtonClick}
               aria-label="播放進度"
@@ -782,10 +962,10 @@ export default function MiniPlayer() {
 
           {showInteractiveVolume && player.volumeSynced && (
             <div 
-              className="absolute cursor-pointer" 
+              className="absolute" 
               style={{ 
-                right: '-8px',
-                bottom: '50px',
+                right: '-12px',
+                bottom: '60px',
                 transform: 'rotate(-90deg)', 
                 transformOrigin: 'center',
                 background: 'rgba(0, 0, 0, 0.6)',
@@ -793,16 +973,24 @@ export default function MiniPlayer() {
                 borderRadius: '6px',
                 padding: '4px 6px',
                 boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                backdropFilter: 'blur(4px)'
+                backdropFilter: 'blur(4px)',
+                zIndex: 10,
+                cursor: 'pointer'
               }}
               ref={volumeWrapperRef}
               title={`音量: ${Math.round(player.volume * 100)}%`}
               onMouseEnter={handleVolumeMouseEnter}
               onMouseLeave={handleVolumeMouseLeave}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                handleVolumeMouseDown(e);
+              }}
             >
               <div 
                 ref={volumeSliderRef}
                 onMouseDown={handleVolumeMouseDown}
+                onClick={(e) => e.stopPropagation()}
                 style={{
                   width: '30px',
                   height: isVolumeHovering || isVolumeSliding ? '4px' : '3px',
