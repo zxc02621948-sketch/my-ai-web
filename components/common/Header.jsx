@@ -473,6 +473,15 @@ export default function Header({
                           </Link>
 
                           <Link
+                            href="/store"
+                            className="block px-4 py-2 hover:bg-zinc-700 text-sm"
+                            onClick={() => setUserMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            🛍️ 積分商店
+                          </Link>
+
+                          <Link
                             href="/settings"
                             className="block px-4 py-2 hover:bg-zinc-700 text-sm"
                             onClick={() => setUserMenuOpen(false)}

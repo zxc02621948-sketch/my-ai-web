@@ -5,7 +5,7 @@ import axios from "axios";
 import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function SettingsPage() {
-  const { subscriptions, updateSubscriptions } = useCurrentUser();
+  const { currentUser, subscriptions, updateSubscriptions } = useCurrentUser();
   const [loading, setLoading] = useState(false);
   
   // 將 subscriptions 對象轉換為數組，顯示所有有效的訂閱（包括已取消但未到期的）
@@ -13,6 +13,11 @@ export default function SettingsPage() {
     // 必須是活躍狀態
     return s.isActive;
   });
+  
+  // 檢查播放器體驗券狀態
+  const hasPlayerCoupon = currentUser?.playerCouponUsed && 
+                          currentUser?.miniPlayerExpiry && 
+                          new Date(currentUser.miniPlayerExpiry) > new Date();
 
   
   const cancelSubscription = async (subscriptionType, name) => {
@@ -67,9 +72,9 @@ export default function SettingsPage() {
         
         {/* 訂閱管理 */}
         <div className="mb-8 bg-zinc-800/40 border border-zinc-700/60 rounded-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">📋 我的訂閱</h2>
+          <h2 className="text-xl font-semibold mb-4">📋 我的訂閱與權益</h2>
           
-          {subscriptionsArray.length === 0 ? (
+          {subscriptionsArray.length === 0 && !hasPlayerCoupon ? (
             <div className="text-gray-400 text-center py-8">
               <p className="mb-4">尚無訂閱項目</p>
               <a 
@@ -81,6 +86,47 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* 播放器體驗券 */}
+              {hasPlayerCoupon && (
+                <div className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-500/40 rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-medium text-lg">🎧 播放器 1 日體驗券</h3>
+                      <p className="text-sm text-gray-400 mt-1">
+                        🎁 免費體驗（限時權益）
+                      </p>
+                    </div>
+                    <span className="px-3 py-1 text-sm rounded-full bg-purple-600/20 border border-purple-600/50 text-purple-400">
+                      體驗中
+                    </span>
+                  </div>
+                  <div className="text-sm space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">到期時間：</span>
+                      <span className="text-white font-medium">
+                        {new Date(currentUser.miniPlayerExpiry).toLocaleString('zh-TW', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">剩餘時間：</span>
+                      <span className="text-yellow-400 font-medium">
+                        {Math.ceil((new Date(currentUser.miniPlayerExpiry) - new Date()) / (1000 * 60 * 60))} 小時
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs text-gray-500">
+                    ⚠️ 體驗券到期後將自動失效。如需繼續使用，請前往積分商店購買完整版播放器或訂閱釘選播放器功能。
+                  </div>
+                </div>
+              )}
+              
+              {/* 正式訂閱列表 */}
               {subscriptionsArray.map((sub, index) => (
                 <div 
                   key={index}

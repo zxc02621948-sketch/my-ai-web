@@ -26,6 +26,19 @@ export async function POST(request) {
       return NextResponse.json({ error: '用戶不存在' }, { status: 404 });
     }
 
+    // ✅ 獲取被釘選用戶的播放器設定
+    const targetUser = await User.findById(targetUserId).select('activePlayerSkin playerSkinSettings premiumPlayerSkin');
+    const targetPlayerSkin = targetUser?.activePlayerSkin || 'default';
+    const targetPlayerSettings = targetUser?.playerSkinSettings || {
+      mode: 'rgb',
+      speed: 0.02,
+      saturation: 50,
+      lightness: 60,
+      hue: 0,
+      opacity: 0.7
+    };
+    const targetHasPremiumSkin = !!targetUser?.premiumPlayerSkin;
+
            // 檢查是否有釘選訂閱（包含試用和正式訂閱）
            const pinSubscription = user.subscriptions?.find(
              s => (s.type === 'pinPlayer' || s.type === 'pinPlayerTest') && s.isActive
@@ -65,19 +78,11 @@ export async function POST(request) {
       expiresAt: expiresAt,
       currentIndex: 0,
       currentTime: 0,
-      isPlaying: true
+      isPlaying: true,
+      activePlayerSkin: targetPlayerSkin,
+      playerSkinSettings: targetPlayerSettings,
+      premiumPlayerSkin: targetHasPremiumSkin
     };
-
-    console.log('📌 準備釘選播放器:', {
-      userId: currentUser._id,
-      currentUsername: currentUser.username,
-      targetUserId,
-      targetUsername,
-      playlistLength: playlist.length,
-      expiresAt: expiresAt.toISOString(),
-      playlistSample: playlist[0]
-    });
-    console.log('📌 完整播放清單:', playlist);
 
     // 使用 updateOne 直接更新，避免 Mongoose 模型緩存問題
     const pinnedPlayerToSave = {
@@ -91,33 +96,20 @@ export async function POST(request) {
       expiresAt: expiresAt,
       currentIndex: 0,
       currentTime: 0,
-      isPlaying: true
+      isPlaying: true,
+      activePlayerSkin: targetPlayerSkin,
+      playerSkinSettings: targetPlayerSettings,
+      premiumPlayerSkin: targetHasPremiumSkin
     };
 
     // 使用 MongoDB 原生 collection 直接更新
     const db = mongoose.connection.db;
     const usersCollection = db.collection('users');
     
-    const result = await usersCollection.updateOne(
+    await usersCollection.updateOne(
       { _id: new mongoose.Types.ObjectId(currentUser._id) },
       { $set: { pinnedPlayer: pinnedPlayerToSave } }
     );
-
-    console.log('📌 更新結果（原生）:', result);
-
-    // 重新查詢確認保存成功
-    const updatedUserRaw = await usersCollection.findOne(
-      { _id: new mongoose.Types.ObjectId(currentUser._id) }
-    );
-    
-    console.log('📌 釘選播放器成功（原生查詢）:', {
-      hasPinnedPlayer: !!updatedUserRaw.pinnedPlayer,
-      pinnedPlayerUserId: updatedUserRaw.pinnedPlayer?.userId?.toString(),
-      pinnedPlayerUsername: updatedUserRaw.pinnedPlayer?.username,
-      pinnedPlayerPlaylistLength: updatedUserRaw.pinnedPlayer?.playlist?.length,
-      pinnedPlayerExpiresAt: updatedUserRaw.pinnedPlayer?.expiresAt,
-      fullData: updatedUserRaw.pinnedPlayer
-    });
 
     // 直接返回我們設置的數據，而不依賴重新查詢
     return NextResponse.json({ 

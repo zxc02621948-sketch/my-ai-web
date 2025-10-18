@@ -36,8 +36,20 @@ export default function MiniPlayer() {
   const [isPinned, setIsPinned] = useState(false);
   const playerRef = useRef(player); // 使用 ref 保存最新的 player 引用
   
+  // ✅ 檢查當前路徑是否是用戶頁面（需要在 useMemo 之前定義）
+  const isUserPage = pathname.startsWith("/user/") && pathname !== "/user/following";
+  
   // 當前啟用的造型
   const activePlayerSkin = useMemo(() => {
+    // ✅ 如果在用戶頁面，使用頁面主人的造型
+    if (isUserPage && player?.pageOwnerSkin) {
+      if (!player.pageOwnerSkin.premiumPlayerSkin) {
+        return 'default';
+      }
+      return player.pageOwnerSkin.activePlayerSkin || 'default';
+    }
+    
+    // ✅ 否則使用當前用戶的造型
     if (!currentUser) return 'default';
     
     // 如果沒有購買高階造型，強制使用預設造型
@@ -55,7 +67,7 @@ export default function MiniPlayer() {
     
     // 返回用戶選擇的造型（預設為 'default'）
     return currentUser.activePlayerSkin || 'default';
-  }, [currentUser]);
+  }, [currentUser, isUserPage, player?.pageOwnerSkin]);
   
   // 顏色設定狀態（優先使用數據庫設定，否則使用預設值）
   const [colorSettings, setColorSettings] = useState(() => {
@@ -72,12 +84,32 @@ export default function MiniPlayer() {
     };
   });
   
-  // 當 currentUser 更新時，同步顏色設定
+  // 當 currentUser 或頁面主人造型更新時，同步顏色設定
   useEffect(() => {
-    if (currentUser?.playerSkinSettings) {
-      setColorSettings(currentUser.playerSkinSettings);
+    // ✅ 如果在用戶頁面，使用頁面主人的設定
+    if (isUserPage && player?.pageOwnerSkin?.playerSkinSettings) {
+      setColorSettings(prev => {
+        // 只在設定真的改變時才更新，避免無限循環
+        const newSettings = player.pageOwnerSkin.playerSkinSettings;
+        if (JSON.stringify(prev) !== JSON.stringify(newSettings)) {
+          return newSettings;
+        }
+        return prev;
+      });
+      return;
     }
-  }, [currentUser]);
+    
+    // 否則使用當前用戶的設定
+    if (currentUser?.playerSkinSettings) {
+      setColorSettings(prev => {
+        const newSettings = currentUser.playerSkinSettings;
+        if (JSON.stringify(prev) !== JSON.stringify(newSettings)) {
+          return newSettings;
+        }
+        return prev;
+      });
+    }
+  }, [currentUser?.playerSkinSettings, isUserPage, player?.pageOwnerSkin?.playerSkinSettings]);
   
   // 更新 playerRef
   useEffect(() => {
@@ -86,9 +118,6 @@ export default function MiniPlayer() {
   
   // 依照 Hooks 規則：所有 hooks 必須在每次 render 都被呼叫，
   // 因此不在條件分支中提前 return；改用條件渲染控制輸出。
-  
-  // 檢查當前路徑是否是用戶頁面
-  const isUserPage = pathname.startsWith("/user/") && pathname !== "/user/following";
   
   // 檢查用戶是否有播放器功能（LV3 或體驗券 或 購買過 或 有訂閱）
   const hasPlayerFeature = useMemo(() => {
@@ -113,9 +142,10 @@ export default function MiniPlayer() {
   
   // 顯示邏輯：
   // 1. currentUser 載入中 (undefined) → 不顯示（避免閃爍）
-  // 2. 如果釘選了 → 全站顯示（但仍需要有播放器功能）
-  // 3. 如果沒釘選 → 只在用戶頁面 AND player.miniPlayerEnabled AND 有播放器功能時顯示
-  const showMini = currentUser !== undefined && hasPlayerFeature && (isPinned || (isUserPage && player?.miniPlayerEnabled));
+  // 2. 如果釘選了 → 全站顯示 ✅
+  // 3. 如果在用戶頁面 AND player.miniPlayerEnabled → 顯示（由頁面主人控制）✅
+  // 4. 如果不在用戶頁面 AND player.miniPlayerEnabled → 需要自己有播放器權限才顯示
+  const showMini = currentUser !== undefined && player?.miniPlayerEnabled && (isPinned || isUserPage || hasPlayerFeature);
   
   // 確保所有值都是有效數字後才計算進度
   const currentTime = typeof player?.currentTime === 'number' && isFinite(player.currentTime) ? player.currentTime : 0;

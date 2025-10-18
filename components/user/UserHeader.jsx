@@ -507,7 +507,10 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                         <FollowListButton currentUser={currentUser} userId={userData._id} />
                       </div>
                       {/* 播放器入口（有播放器功能即可顯示） */}
-                      {userData?.miniPlayerPurchased ? (
+                      {(userData?.miniPlayerPurchased || 
+                        (userData?.playerCouponUsed && 
+                         userData?.miniPlayerExpiry && 
+                         new Date(userData.miniPlayerExpiry) > new Date())) ? (
                         <Link
                           href={`/user/${userData._id}/player`}
                           className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs sm:text-sm font-semibold text-white border border-blue-500"

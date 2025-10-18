@@ -38,6 +38,7 @@ const STORE_CATEGORIES = [
 export default function StorePage() {
   const { subscriptions, updateSubscriptions } = useCurrentUser(); // 使用 Context
   const [activeCategory, setActiveCategory] = useState("features");
+  const [activeSubCategory, setActiveSubCategory] = useState("all"); // 子分類：all, frames, skins
   const [loading, setLoading] = useState(false);
   const [purchaseStatus, setPurchaseStatus] = useState({});
   const [purchasedItems, setPurchasedItems] = useState(new Set());
@@ -359,7 +360,16 @@ export default function StorePage() {
     }
   };
 
-  const products = STORE_PRODUCTS[activeCategory] || [];
+  // 根據主分類和子分類過濾產品
+  const allProducts = STORE_PRODUCTS[activeCategory] || [];
+  const products = activeCategory === "personalization" 
+    ? allProducts.filter(p => {
+        if (activeSubCategory === "all") return true;
+        if (activeSubCategory === "frames") return p.id.includes("frame");
+        if (activeSubCategory === "skins") return p.id.includes("skin");
+        return true;
+      })
+    : allProducts;
 
   return (
     <div className="min-h-screen bg-zinc-900 text-white">
@@ -367,7 +377,20 @@ export default function StorePage() {
         {/* 頁面標題 */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">積分商店</h1>
-          <p className="text-gray-400">使用積分兌換豐富獎勵</p>
+          <p className="text-gray-400 mb-4">使用積分兌換豐富獎勵</p>
+          
+          {/* 可用積分顯示 */}
+          {userInfo && (
+            <div className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-yellow-600/20 to-yellow-500/20 border-2 border-yellow-500/50 rounded-xl">
+              <span className="text-2xl">💰</span>
+              <div className="text-left">
+                <div className="text-xs text-gray-400">可用積分</div>
+                <div className="text-2xl font-bold text-yellow-400">
+                  {userInfo.pointsBalance?.toLocaleString() || 0}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 分類導航 */}
@@ -375,7 +398,10 @@ export default function StorePage() {
           {STORE_CATEGORIES.map(category => (
             <button
               key={category.id}
-              onClick={() => setActiveCategory(category.id)}
+              onClick={() => {
+                setActiveCategory(category.id);
+                setActiveSubCategory("all"); // 切換主分類時重置子分類
+              }}
               className={`p-4 rounded-lg border transition-all ${
                 activeCategory === category.id
                   ? "bg-yellow-600 border-yellow-500 text-white"
@@ -388,6 +414,42 @@ export default function StorePage() {
             </button>
           ))}
         </div>
+
+        {/* 個性化子分類 */}
+        {activeCategory === "personalization" && (
+          <div className="flex justify-center gap-3 mb-8">
+            <button
+              onClick={() => setActiveSubCategory("all")}
+              className={`px-6 py-2 rounded-lg border transition-all ${
+                activeSubCategory === "all"
+                  ? "bg-purple-600 border-purple-500 text-white"
+                  : "bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700"
+              }`}
+            >
+              🎨 全部
+            </button>
+            <button
+              onClick={() => setActiveSubCategory("frames")}
+              className={`px-6 py-2 rounded-lg border transition-all ${
+                activeSubCategory === "frames"
+                  ? "bg-purple-600 border-purple-500 text-white"
+                  : "bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700"
+              }`}
+            >
+              🖼️ 頭像框
+            </button>
+            <button
+              onClick={() => setActiveSubCategory("skins")}
+              className={`px-6 py-2 rounded-lg border transition-all ${
+                activeSubCategory === "skins"
+                  ? "bg-purple-600 border-purple-500 text-white"
+                  : "bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700"
+              }`}
+            >
+              🎧 播放器造型
+            </button>
+          </div>
+        )}
 
         {/* 商品列表 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -1,0 +1,133 @@
+[1mdiff --git a/app/api/player/pin/route.js b/app/api/player/pin/route.js[m
+[1mindex 19538a8..54d3c69 100644[m
+[1m--- a/app/api/player/pin/route.js[m
+[1m+++ b/app/api/player/pin/route.js[m
+[36m@@ -26,6 +26,19 @@[m [mexport async function POST(request) {[m
+       return NextResponse.json({ error: '用戶不存在' }, { status: 404 });[m
+     }[m
+ [m
+[32m+[m[32m    // ✅ 獲取被釘選用戶的播放器設定[m
+[32m+[m[32m    const targetUser = await User.findById(targetUserId).select('activePlayerSkin playerSkinSettings premiumPlayerSkin');[m
+[32m+[m[32m    const targetPlayerSkin = targetUser?.activePlayerSkin || 'default';[m
+[32m+[m[32m    const targetPlayerSettings = targetUser?.playerSkinSettings || {[m
+[32m+[m[32m      mode: 'rgb',[m
+[32m+[m[32m      speed: 0.02,[m
+[32m+[m[32m      saturation: 50,[m
+[32m+[m[32m      lightness: 60,[m
+[32m+[m[32m      hue: 0,[m
+[32m+[m[32m      opacity: 0.7[m
+[32m+[m[32m    };[m
+[32m+[m[32m    const targetHasPremiumSkin = !!targetUser?.premiumPlayerSkin;[m
+[32m+[m
+            // 檢查是否有釘選訂閱（包含試用和正式訂閱）[m
+            const pinSubscription = user.subscriptions?.find([m
+              s => (s.type === 'pinPlayer' || s.type === 'pinPlayerTest') && s.isActive[m
+[36m@@ -65,7 +78,10 @@[m [mexport async function POST(request) {[m
+       expiresAt: expiresAt,[m
+       currentIndex: 0,[m
+       currentTime: 0,[m
+[31m-      isPlaying: true[m
+[32m+[m[32m      isPlaying: true,[m
+[32m+[m[32m      activePlayerSkin: targetPlayerSkin,[m
+[32m+[m[32m      playerSkinSettings: targetPlayerSettings,[m
+[32m+[m[32m      premiumPlayerSkin: targetHasPremiumSkin[m
+     };[m
+ [m
+     console.log('📌 準備釘選播放器:', {[m
+[36m@@ -91,7 +107,10 @@[m [mexport async function POST(request) {[m
+       expiresAt: expiresAt,[m
+       currentIndex: 0,[m
+       currentTime: 0,[m
+[31m-      isPlaying: true[m
+[32m+[m[32m      isPlaying: true,[m
+[32m+[m[32m      activePlayerSkin: targetPlayerSkin,[m
+[32m+[m[32m      playerSkinSettings: targetPlayerSettings,[m
+[32m+[m[32m      premiumPlayerSkin: targetHasPremiumSkin[m
+     };[m
+ [m
+     // 使用 MongoDB 原生 collection 直接更新[m
+[1mdiff --git a/app/user/[id]/player/page.jsx b/app/user/[id]/player/page.jsx[m
+[1mindex 5f08be2..9488469 100644[m
+[1m--- a/app/user/[id]/player/page.jsx[m
+[1m+++ b/app/user/[id]/player/page.jsx[m
+[36m@@ -404,7 +404,7 @@[m [mexport default function UserPlayerPage() {[m
+ [m
+               {/* 主視覺：根據造型切換顯示 */}[m
+               <div className="flex justify-center mb-16 mt-12">[m
+[31m-                {currentUser?.activePlayerSkin === 'cat-headphone' ? ([m
+[32m+[m[32m                {userData?.activePlayerSkin === 'cat-headphone' ? ([m
+                   // 貓咪耳機造型預覽[m
+                   <div[m
+                     className="drop-shadow-2xl relative"[m
+[36m@@ -414,7 +414,7 @@[m [mexport default function UserPlayerPage() {[m
+                     <CatHeadphoneCanvas [m
+                       isPlaying={player.isPlaying} [m
+                       size={200} [m
+[31m-                      colorSettings={currentUser?.playerSkinSettings || {[m
+[32m+[m[32m                      colorSettings={userData?.playerSkinSettings || {[m
+                         mode: 'rgb',[m
+                         speed: 0.02,[m
+                         saturation: 50,[m
+[1mdiff --git a/components/common/MiniPlayer.jsx b/components/common/MiniPlayer.jsx[m
+[1mindex 97db214..a44a4ed 100644[m
+[1m--- a/components/common/MiniPlayer.jsx[m
+[1m+++ b/components/common/MiniPlayer.jsx[m
+[36m@@ -38,6 +38,15 @@[m [mexport default function MiniPlayer() {[m
+   [m
+   // 當前啟用的造型[m
+   const activePlayerSkin = useMemo(() => {[m
+[32m+[m[32m    // ✅ 如果有釘選播放器，使用被釘選用戶的造型[m
+[32m+[m[32m    if (isPinned && pinnedPlayerData) {[m
+[32m+[m[32m      if (!pinnedPlayerData.premiumPlayerSkin) {[m
+[32m+[m[32m        return 'default';[m
+[32m+[m[32m      }[m
+[32m+[m[32m      return pinnedPlayerData.activePlayerSkin || 'default';[m
+[32m+[m[32m    }[m
+[32m+[m[41m    [m
+[32m+[m[32m    // 否則使用當前用戶的造型[m
+     if (!currentUser) return 'default';[m
+     [m
+     // 如果沒有購買高階造型，強制使用預設造型[m
+[36m@@ -55,7 +64,7 @@[m [mexport default function MiniPlayer() {[m
+     [m
+     // 返回用戶選擇的造型（預設為 'default'）[m
+     return currentUser.activePlayerSkin || 'default';[m
+[31m-  }, [currentUser]);[m
+[32m+[m[32m  }, [currentUser, isPinned, pinnedPlayerData]);[m
+   [m
+   // 顏色設定狀態（優先使用數據庫設定，否則使用預設值）[m
+   const [colorSettings, setColorSettings] = useState(() => {[m
+[36m@@ -72,12 +81,19 @@[m [mexport default function MiniPlayer() {[m
+     };[m
+   });[m
+   [m
+[31m-  // 當 currentUser 更新時，同步顏色設定[m
+[32m+[m[32m  // 當 currentUser 或 pinnedPlayerData 更新時，同步顏色設定[m
+   useEffect(() => {[m
+[32m+[m[32m    // ✅ 如果有釘選播放器，使用被釘選用戶的設定[m
+[32m+[m[32m    if (isPinned && pinnedPlayerData?.playerSkinSettings) {[m
+[32m+[m[32m      setColorSettings(pinnedPlayerData.playerSkinSettings);[m
+[32m+[m[32m      return;[m
+[32m+[m[32m    }[m
+[32m+[m[41m    [m
+[32m+[m[32m    // 否則使用當前用戶的設定[m
+     if (currentUser?.playerSkinSettings) {[m
+       setColorSettings(currentUser.playerSkinSettings);[m
+     }[m
+[31m-  }, [currentUser]);[m
+[32m+[m[32m  }, [currentUser, isPinned, pinnedPlayerData]);[m
+   [m
+   // 更新 playerRef[m
+   useEffect(() => {[m
+[36m@@ -113,9 +129,9 @@[m [mexport default function MiniPlayer() {[m
+   [m
+   // 顯示邏輯：[m
+   // 1. currentUser 載入中 (undefined) → 不顯示（避免閃爍）[m
+[31m-  // 2. 如果釘選了 → 全站顯示（但仍需要有播放器功能）[m
+[32m+[m[32m  // 2. 如果釘選了 → 全站顯示（不需要自己有播放器功能）✅[m
+   // 3. 如果沒釘選 → 只在用戶頁面 AND player.miniPlayerEnabled AND 有播放器功能時顯示[m
+[31m-  const showMini = currentUser !== undefined && hasPlayerFeature && (isPinned || (isUserPage && player?.miniPlayerEnabled));[m
+[32m+[m[32m  const showMini = currentUser !== undefined && (isPinned || (hasPlayerFeature && isUserPage && player?.miniPlayerEnabled));[m
+   [m
+   // 確保所有值都是有效數字後才計算進度[m
+   const currentTime = typeof player?.currentTime === 'number' && isFinite(player.currentTime) ? player.currentTime : 0;[m

@@ -86,12 +86,43 @@ export default function UserProfilePage() {
   
   // ✅ 當 userData 載入後，檢查並啟用播放器
   useEffect(() => {
-    if (userData?.miniPlayerPurchased) {
+    // 檢查是否有播放器權限（購買或體驗券）
+    const hasPurchased = userData?.miniPlayerPurchased;
+    const hasCoupon = userData?.playerCouponUsed && 
+                      userData?.miniPlayerExpiry && 
+                      new Date(userData.miniPlayerExpiry) > new Date();
+    
+    if (hasPurchased || hasCoupon) {
       try {
         player?.setMiniPlayerEnabled?.(true);
       } catch {}
     }
-  }, [userData?.miniPlayerPurchased, player]); // 移除 currentUser?.pinnedPlayer 依賴，避免釘選時重複觸發
+  }, [userData?.miniPlayerPurchased, userData?.playerCouponUsed, userData?.miniPlayerExpiry, player]); // 移除 currentUser?.pinnedPlayer 依賴，避免釘選時重複觸發
+  
+  // ✅ 設置頁面主人的播放器造型信息（獨立的 useEffect，避免循環）
+  useEffect(() => {
+    if (userData) {
+      try {
+        player?.setPageOwnerSkin?.({
+          activePlayerSkin: userData.activePlayerSkin || 'default',
+          playerSkinSettings: userData.playerSkinSettings || {
+            mode: 'rgb',
+            speed: 0.02,
+            saturation: 50,
+            lightness: 60,
+            hue: 0,
+            opacity: 0.7
+          },
+          premiumPlayerSkin: !!userData.premiumPlayerSkin
+        });
+      } catch {}
+    } else {
+      // 清除頁面主人的造型信息
+      try {
+        player?.setPageOwnerSkin?.(null);
+      } catch {}
+    }
+  }, [userData?.activePlayerSkin, userData?.playerSkinSettings, userData?.premiumPlayerSkin, userData?._id]); // 使用 _id 作為穩定的依賴
 
   // ✅ 讀 URL 的 search 當唯一資料源（就地搜尋）
   const [searchQuery, setSearchQuery] = useState("");
@@ -350,7 +381,13 @@ export default function UserProfilePage() {
         if (userJson) {
           const picked = pickUser(userJson);
           setUserData(picked);
-          const hasPlayer = !!picked?.miniPlayerPurchased;
+          // ✅ 檢查是否有播放器權限（購買或體驗券）
+          const hasPurchased = !!picked?.miniPlayerPurchased;
+          const hasCoupon = picked?.playerCouponUsed && 
+                            picked?.miniPlayerExpiry && 
+                            new Date(picked.miniPlayerExpiry) > new Date();
+          const hasPlayer = hasPurchased || hasCoupon;
+          
           if (hasPlayer) {
             try {
               player?.setMiniPlayerEnabled?.(true);
@@ -444,7 +481,13 @@ export default function UserProfilePage() {
             const backup = pickUser(r2?.data || r2);
             if (backup) {
               setUserData(backup);
-              const hasPlayer2 = !!backup?.miniPlayerPurchased;
+              // ✅ 檢查是否有播放器權限（購買或體驗券）
+              const hasPurchased2 = !!backup?.miniPlayerPurchased;
+              const hasCoupon2 = backup?.playerCouponUsed && 
+                                backup?.miniPlayerExpiry && 
+                                new Date(backup.miniPlayerExpiry) > new Date();
+              const hasPlayer2 = hasPurchased2 || hasCoupon2;
+              
               if (hasPlayer2) {
                 try {
                   player?.setMiniPlayerEnabled?.(true);
@@ -718,7 +761,12 @@ export default function UserProfilePage() {
       <UnpinReminderModal
         pageUserId={id}
         pageUsername={userData?.username}
-        pageHasPlayer={!!userData?.miniPlayerPurchased}
+        pageHasPlayer={
+          !!userData?.miniPlayerPurchased || 
+          (userData?.playerCouponUsed && 
+           userData?.miniPlayerExpiry && 
+           new Date(userData.miniPlayerExpiry) > new Date())
+        }
         currentPinnedUserId={pinnedPlayerData?.userId}
         currentPinnedUsername={pinnedPlayerData?.username}
         onUnpin={handleUnpinPlayer}

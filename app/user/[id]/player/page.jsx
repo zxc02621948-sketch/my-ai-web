@@ -74,6 +74,11 @@ export default function UserPlayerPage() {
           });
           userDataFetched = response.data;
           setUserData(userDataFetched); // 保存用戶數據用於釘選按鈕
+          
+          // ✅ 設置 playerOwner（用於顯示釘選按鈕）
+          if (userDataFetched.username) {
+            player.setPlayerOwner?.({ userId: id, username: userDataFetched.username });
+          }
         } catch (error) {
           console.error("獲取用戶資料失敗:", error.message);
           userDataFetched = {}; // 使用空物件作為備用
@@ -404,7 +409,7 @@ export default function UserPlayerPage() {
 
               {/* 主視覺：根據造型切換顯示 */}
               <div className="flex justify-center mb-16 mt-12">
-                {currentUser?.activePlayerSkin === 'cat-headphone' ? (
+                {userData?.activePlayerSkin === 'cat-headphone' ? (
                   // 貓咪耳機造型預覽
                   <div
                     className="drop-shadow-2xl relative"
@@ -414,7 +419,7 @@ export default function UserPlayerPage() {
                     <CatHeadphoneCanvas 
                       isPlaying={player.isPlaying} 
                       size={200} 
-                      colorSettings={currentUser?.playerSkinSettings || {
+                      colorSettings={userData?.playerSkinSettings || {
                         mode: 'rgb',
                         speed: 0.02,
                         saturation: 50,
@@ -658,12 +663,10 @@ export default function UserPlayerPage() {
         )}
 
         {/* 播放清單設定模態框 */}
-        {console.log("🔧 PlaylistModal 渲染狀態:", { modalOpen, playlistLength: playlist.length })}
         {modalOpen && (
         <PlaylistModal
           isOpen={modalOpen}
           onClose={() => {
-            console.log("🔧 關閉 PlaylistModal");
             setModalOpen(false);
           }}
           playlist={playlist}

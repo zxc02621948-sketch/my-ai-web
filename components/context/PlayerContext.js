@@ -87,6 +87,9 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
 
   // 播放器擁有者資訊（用於釘選功能）
   const [playerOwner, setPlayerOwner] = useState(null); // { userId, username }
+  
+  // 頁面主人的播放器造型信息（用於在別人頁面顯示他們的造型）
+  const [pageOwnerSkin, setPageOwnerSkin] = useState(null); // { activePlayerSkin, playerSkinSettings, premiumPlayerSkin }
 
   const audioRef = useRef(null);
   const externalControlsRef = useRef(null);
@@ -749,6 +752,8 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
     setActiveIndex,
     playerOwner,
     setPlayerOwner,
+    pageOwnerSkin,
+    setPageOwnerSkin,
     externalControls: externalControlsRef.current
   };
 
