@@ -1022,10 +1022,13 @@ export default function MiniPlayer() {
 
             {/* 播放/暫停 */}
             <button
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                const action = player.isPlaying ? '暫停' : '播放';
-                player.isPlaying ? player.pause() : player.play();
+                if (player.isPlaying) {
+                  player.pause();
+                } else {
+                  await player.play();
+                }
               }}
               onMouseDown={(e) => { e.stopPropagation(); }}
               className={`w-10 h-10 flex items-center justify-center text-orange-400 transition-all duration-200 ${isDragging ? '' : 'hover:text-orange-300 hover:scale-110'}`}

@@ -73,6 +73,20 @@ const FRAME_OPTIONS = [
     preview: "/frames/魔法陣2.png",
     cost: 0,
     description: "進階版魔法陣頭像框"
+  },
+  {
+    id: "military",
+    name: "戰損軍事",
+    preview: "/frames/avatar-frame-military-01.png",
+    cost: 0,
+    description: "硬核軍事風格頭像框"
+  },
+  {
+    id: "nature",
+    name: "花園自然",
+    preview: "/frames/avatar-frame-nature-01.png",
+    cost: 0,
+    description: "清新自然風格頭像框"
   }
 ];
 

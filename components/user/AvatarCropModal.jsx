@@ -96,6 +96,18 @@ export default function AvatarCropModal({ isOpen, onClose, imageSrc, onCropCompl
     name: "魔法陣2",
     preview: "/frames/魔法陣2.png",
     description: "進階版魔法陣頭像框"
+  },
+  {
+    id: "military",
+    name: "戰損軍事",
+    preview: "/frames/avatar-frame-military-01.png",
+    description: "硬核軍事風格頭像框"
+  },
+  {
+    id: "nature",
+    name: "花園自然",
+    preview: "/frames/avatar-frame-nature-01.png",
+    description: "清新自然風格頭像框"
   }
   ];
 

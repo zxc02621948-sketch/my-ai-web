@@ -70,7 +70,7 @@ export default function PointsHistoryModal({ isOpen, onClose }) {
         </p>
       </div>
       
-      <div className="text-white max-h-[50vh] overflow-y-auto pr-2">
+      <div className="text-white pr-2">
         {loading ? (
           <p className="text-gray-400">載入中...</p>
         ) : rows.length === 0 ? (

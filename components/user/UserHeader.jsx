@@ -788,7 +788,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       <LevelRewardsModal 
         isOpen={isLevelRewardsModalOpen} 
         onClose={() => setLevelRewardsModalOpen(false)}
-        userPoints={userData?.pointsBalance || 0}
+        userPoints={userStats?.totalEarned || 0}
         ownedFrames={userData?.ownedFrames || []}
       />
 

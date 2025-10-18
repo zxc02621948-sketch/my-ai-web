@@ -35,7 +35,9 @@ export default function ChangelogPage() {
           <h3 className="text-lg font-semibold text-purple-400 mb-2">🎨 頭像框與調色盤</h3>
           <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
             <li>新增多種頭像框（商店購買或等級解鎖）</li>
-            <li>頭像框調色盤功能（LV2 解鎖，50 積分/次）</li>
+            <li>LV4 解鎖：⚔️ 戰損軍事頭像框</li>
+            <li>LV5 解鎖：🌿 花園自然頭像框</li>
+            <li>頭像框調色盤功能（LV2 解鎖，20 積分/次）</li>
             <li>自定義頭像框顏色（支援漸變色）</li>
             <li>頭像框在各處正確顯示（評論、個人頁、追蹤列表等）</li>
           </ul>

@@ -132,6 +132,8 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
                                     }`}
                                   >
                                     {frameId === 'leaves' ? '🍃 葉子' : 
+                                     frameId === 'military' ? '⚔️ 戰損軍事' :
+                                     frameId === 'nature' ? '🌿 花園自然' :
                                      frameId === 'premium-gold' ? '👑 金色' :
                                      frameId === 'beta-tester' ? '🧪 Beta' :
                                      frameId === 'founder-crown' ? '👑 皇冠' :
@@ -154,6 +156,8 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
                                   >
                                     {feature === 'music-player' ? '🎵 播放器' : 
                                      feature === 'frame-color-editor' ? '🎨 頭像框調色盤' :
+                                     feature === 'pinned-player-trial' ? '📌 釘選播放器 30天' :
+                                     feature === 'pinned-player-permanent' ? '📌 永久釘選' :
                                      feature === 'advanced-frames' ? '🎨 高級編輯' :
                                      feature === 'priority-support' ? '⚡ 優先客服' :
                                      feature === 'exclusive-frames' ? '💎 獨家框' :
@@ -196,9 +200,11 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
               );
             })}
             
-            {/* LV4-LV10 顯示獎勵 */}
+            {/* LV4-LV10 詳細顯示（與 LV1-LV3 保持一致） */}
             {LEVELS.slice(3).map((level, index) => {
               const actualIndex = index + 3;
+              const levelKey = level.key;
+              const rewards = LEVEL_REWARDS[levelKey];
               const isUnlocked = actualIndex <= currentUserLevel;
               const isCurrent = actualIndex === currentUserLevel;
 
@@ -216,43 +222,109 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       {/* 等級標識 */}
-                      <div className={`px-3 py-2 rounded-full text-white font-bold ${level.color}`}>
+                      <div className={`px-3 py-2 rounded-full text-white font-bold ${level.color} ${
+                        isUnlocked ? '' : 'opacity-50'
+                      }`}>
                         {level.rank}
                       </div>
                       
                       {/* 等級信息 */}
-                      <div className="flex-1">
+                      <div>
                         <div className={`text-lg font-semibold ${isUnlocked ? 'text-white' : 'text-gray-400'}`}>
                           {level.title}
                         </div>
-                        <div className="text-sm text-gray-400 mb-2">
+                        <div className="text-sm text-gray-400">
                           需要 {level.min} 積分
                           {isCurrent && <span className="ml-2 text-yellow-400">(當前等級)</span>}
-                        </div>
-                        <div className="space-y-1">
-                          {level.rewards.map((reward, rewardIndex) => (
-                            <div key={rewardIndex} className="flex items-center space-x-2">
-                              <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
-                              <span className="text-sm text-gray-300">{reward}</span>
-                            </div>
-                          ))}
                         </div>
                       </div>
                     </div>
 
-                    {/* 狀態標記 */}
+                    {/* 獎勵狀態 */}
                     <div className="text-right">
-                      {isCurrent && (
-                        <span className="text-yellow-400 font-semibold">當前等級</span>
-                      )}
-                      {!isCurrent && isUnlocked && (
-                        <span className="text-green-400 font-semibold">已解鎖</span>
-                      )}
-                      {!isCurrent && !isUnlocked && (
-                        <span className="text-gray-500 text-sm">未解鎖</span>
+                      {rewards ? (
+                        <div className="space-y-2">
+                          {/* 頭像框獎勵 */}
+                          {rewards.frames && rewards.frames.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-300">頭像框:</span>
+                              <div className="flex gap-1">
+                                {rewards.frames.map(frameId => (
+                                  <div
+                                    key={frameId}
+                                    className={`px-2 py-1 rounded text-xs ${
+                                      ownedFrames.includes(frameId)
+                                        ? 'bg-green-600 text-white'
+                                        : isUnlocked
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-600 text-gray-300'
+                                    }`}
+                                  >
+                                    {frameId === 'leaves' ? '🍃 葉子' : 
+                                     frameId === 'military' ? '⚔️ 戰損軍事' :
+                                     frameId === 'nature' ? '🌿 花園自然' :
+                                     frameId === 'premium-gold' ? '👑 金色' :
+                                     frameId === 'beta-tester' ? '🧪 Beta' :
+                                     frameId === 'founder-crown' ? '👑 皇冠' :
+                                     frameId}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* 功能獎勵 */}
+                          {rewards.features && rewards.features.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-300">功能:</span>
+                              <div className="flex gap-1 flex-wrap">
+                                {rewards.features.map(feature => (
+                                  <div
+                                    key={feature}
+                                    className="px-2 py-1 rounded text-xs bg-purple-600 text-white"
+                                  >
+                                    {feature === 'music-player' ? '🎵 播放器' : 
+                                     feature === 'frame-color-editor' ? '🎨 頭像框調色盤' :
+                                     feature === 'pinned-player-trial' ? '📌 釘選播放器 30天' :
+                                     feature === 'pinned-player-permanent' ? '📌 永久釘選' :
+                                     feature === 'advanced-frames' ? '🎨 高級編輯' :
+                                     feature === 'priority-support' ? '⚡ 優先客服' :
+                                     feature === 'exclusive-frames' ? '💎 獨家框' :
+                                     feature === 'advanced-analytics' ? '📊 數據分析' :
+                                     feature === 'early-access' ? '🚀 優先體驗' :
+                                     feature === 'beta-tester' ? '🧪 Beta測試' :
+                                     feature === 'founder-status' ? '👑 創始人' :
+                                     feature}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* 積分獎勵 */}
+                          {rewards.points && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-300">積分:</span>
+                              <span className="px-2 py-1 rounded text-xs bg-yellow-600 text-white">
+                                +{rewards.points}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">
+                          {isUnlocked ? '已解鎖 - 無特殊獎勵' : '未解鎖'}
+                        </div>
                       )}
                     </div>
                   </div>
+
+                  {/* 獎勵描述 */}
+                  {rewards?.description && (
+                    <div className="mt-3 p-3 bg-zinc-700/30 rounded-lg">
+                      <div className="text-sm text-gray-300">{rewards.description}</div>
+                    </div>
+                  )}
                 </div>
               );
             })}

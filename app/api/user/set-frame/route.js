@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/getCurrentUser";
 import User from "@/models/User";
+import PointsTransaction from "@/models/PointsTransaction";
 
 const VALID_FRAMES = [
-  "default", "ai-generated", "animals", "leaves", "magic-circle", "magic-circle-2"
+  "default", "ai-generated", "animals", "leaves", "magic-circle", "magic-circle-2", "military", "nature"
 ];
 
 export async function POST(req) {

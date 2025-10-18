@@ -24,6 +24,20 @@ const FREE_FRAMES = [
     levelRequired: 1, // LV2（索引從 0 開始，所以 LV2 = 索引 1）
     unlockDescription: "達到 LV2 探索者",
     minPoints: 150 // LV2 的積分門檻
+  },
+  {
+    id: "military",
+    name: "戰損軍事",
+    preview: "/frames/avatar-frame-military-01.png",
+    description: "硬核軍事風格頭像框",
+    unlockType: "default" // 無條件
+  },
+  {
+    id: "nature",
+    name: "花園自然",
+    preview: "/frames/avatar-frame-nature-01.png",
+    description: "清新自然風格頭像框",
+    unlockType: "default" // 無條件
   }
   // 未來可添加更多免費頭像框
   // 例如：成就解鎖（上傳 100 張圖、獲得 1000 讚等）

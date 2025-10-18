@@ -4,8 +4,8 @@
 export const LEVEL_REWARDS = {
   lv2: {
     frames: ['leaves'], // 葉子頭像框
-    features: ['frame-color-editor'], // 調色盤功能（使用需付費 50 積分/次）
-    description: '恭喜達到 LV2！獲得葉子頭像框 + 解鎖頭像框調色盤功能（使用需 50 積分/次）'
+    features: ['frame-color-editor'], // 調色盤功能（使用需付費 20 積分/次）
+    description: '恭喜達到 LV2！獲得葉子頭像框 + 解鎖頭像框調色盤功能（使用需 20 積分/次）'
   },
   lv3: {
     features: ['music-player'], // 播放器功能
@@ -13,40 +13,21 @@ export const LEVEL_REWARDS = {
   },
   // LV4-10 獎勵設計
   lv4: {
-    points: 200, // 一次性積分獎勵
-    description: '恭喜達到 LV4！獲得 200 積分獎勵'
+    frames: ['military'], // 戰損軍事頭像框
+    description: '恭喜達到 LV4！獲得戰損軍事頭像框'
   },
   lv5: {
-    features: ['priority-support'], // 優先客服支持
-    points: 100, // 一次性積分獎勵
-    description: '恭喜達到 LV5！獲得優先客服支持 + 100 積分獎勵'
+    frames: ['nature'], // 花園自然頭像框
+    description: '恭喜達到 LV5！獲得花園自然頭像框'
   },
   lv6: {
-    features: ['exclusive-frames'], // 獨家頭像框
-    frames: ['premium-gold'], // 金色頭像框
-    description: '恭喜達到 LV6！解鎖獨家頭像框並獲得金色頭像框'
+    features: ['pinned-player-trial'], // 免費釘選播放器 30 天
+    description: '恭喜達到 LV6！獲得免費釘選播放器 30 天'
   },
-  lv7: {
-    features: ['advanced-analytics'], // 高級數據分析
-    points: 200, // 一次性積分獎勵
-    description: '恭喜達到 LV7！解鎖高級數據分析功能 + 200 積分獎勵'
-  },
-  lv8: {
-    features: ['early-access'], // 新功能優先體驗
-    points: 300, // 一次性積分獎勵
-    description: '恭喜達到 LV8！獲得新功能優先體驗權限 + 300 積分獎勵'
-  },
-  lv9: {
-    features: ['beta-tester'], // Beta 測試員
-    frames: ['beta-tester'], // Beta 測試員專屬頭像框
-    points: 500, // 一次性積分獎勵
-    description: '恭喜達到 LV9！成為 Beta 測試員 + 500 積分獎勵'
-  },
+  // LV7-LV9 暫無特殊獎勵（未來補充）
   lv10: {
-    features: ['founder-status'], // 創始人身份
-    frames: ['founder-crown'], // 創始人皇冠頭像框
-    points: 1000, // 一次性積分獎勵
-    description: '恭喜達到最高等級 LV10！獲得創始人身份 + 1000 積分獎勵'
+    features: ['pinned-player-permanent'], // 永久釘選播放器
+    description: '恭喜達到最高等級 LV10！獲得永久釘選播放器'
   },
 };
 
@@ -92,6 +73,19 @@ export async function grantLevelRewards(user, oldLevel, newLevel) {
         // 處理頭像框調色盤功能解鎖
         if (feature === 'frame-color-editor') {
           user.frameColorEditorUnlocked = true;
+        }
+        // 處理釘選播放器試用（30天）
+        if (feature === 'pinned-player-trial') {
+          rewards.subscriptionTrial = {
+            type: 'pinned-player',
+            duration: 30 // 天數
+          };
+        }
+        // 處理永久釘選播放器
+        if (feature === 'pinned-player-permanent') {
+          rewards.subscriptionPermanent = {
+            type: 'pinned-player'
+          };
         }
         // 其他功能可以在這裡添加
       }

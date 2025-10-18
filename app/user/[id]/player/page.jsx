@@ -10,9 +10,9 @@ import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import MiniPlayerArt from "@/components/common/MiniPlayerArt";
 import AudioMonitor from "@/components/common/AudioMonitor";
 import PlayerSkinSettings from "@/components/player/PlayerSkinSettings";
+import CatHeadphoneCanvas from "@/components/player/CatHeadphoneCanvas";
 
-// 全域 YouTube 橋接（處理播放器控制）
-const GlobalYouTubeBridge = dynamic(() => import("@/components/player/GlobalYouTubeBridge"), { ssr: false });
+// GlobalYouTubeBridge 已移至全域 layout.js，不需要在此重複渲染
 
 export default function UserPlayerPage() {
   const { id } = useParams();
@@ -381,54 +381,171 @@ export default function UserPlayerPage() {
                 )}
               </div>
 
-              {/* 主視覺：採用 SVG 佈景並依播放狀態旋轉 - 居中對齊 */}
+              {/* 主視覺：根據造型切換顯示 */}
               <div className="flex justify-center mb-16 mt-12">
-              <div
-                className="drop-shadow-2xl"
-                  style={{ width: "200px", height: "200px", transform: "scale(1.2)", transformOrigin: "center" }}
-                aria-label="Mini Player Art"
-              >
-                <MiniPlayerArt
-                  isPlaying={player.isPlaying}
-                  palette={{ bg: "#F8F1E4", border: "#F8F1E4", accent1: "#E67E22", accent2: "#D35400" }}
-                />
+                {currentUser?.activePlayerSkin === 'cat-headphone' ? (
+                  // 貓咪耳機造型預覽
+                  <div
+                    className="drop-shadow-2xl relative"
+                    style={{ width: "200px", height: "200px", transform: "scale(1.2)", transformOrigin: "center" }}
+                    aria-label="Cat Headphone Player"
+                  >
+                    <CatHeadphoneCanvas 
+                      isPlaying={player.isPlaying} 
+                      size={200} 
+                      colorSettings={currentUser?.playerSkinSettings || {
+                        mode: 'rgb',
+                        speed: 0.02,
+                        saturation: 50,
+                        lightness: 60,
+                        hue: 0,
+                        opacity: 0.7
+                      }}
+                    />
+                    
+                    {/* 播放時顯示音符動畫 */}
+                    {player.isPlaying && (
+                      <>
+                        {/* 音符 1 - 頂部右側 */}
+                        <div 
+                          className="absolute text-3xl animate-float-1"
+                          style={{ 
+                            top: '10px', 
+                            right: '40px',
+                            color: '#FF6B9D',
+                            textShadow: '0 0 12px rgba(255, 107, 157, 1), 0 0 16px rgba(255, 107, 157, 0.8), 0 3px 8px rgba(0,0,0,0.5)',
+                            zIndex: 10
+                          }}
+                        >
+                          🎵
+                        </div>
+                        
+                        {/* 音符 2 - 頂部左側 */}
+                        <div 
+                          className="absolute text-3xl animate-float-2"
+                          style={{ 
+                            top: '10px', 
+                            left: '40px',
+                            color: '#4ECDC4',
+                            textShadow: '0 0 12px rgba(78, 205, 196, 1), 0 0 16px rgba(78, 205, 196, 0.8), 0 3px 8px rgba(0,0,0,0.5)',
+                            zIndex: 10
+                          }}
+                        >
+                          ♪
+                        </div>
+                        
+                        {/* 音符 3 - 右側中央 */}
+                        <div 
+                          className="absolute text-3xl animate-float-3"
+                          style={{ 
+                            top: '50%',
+                            marginTop: '-18px',
+                            right: '10px',
+                            color: '#FFD93D',
+                            textShadow: '0 0 12px rgba(255, 217, 61, 1), 0 0 16px rgba(255, 217, 61, 0.8), 0 3px 8px rgba(0,0,0,0.5)',
+                            zIndex: 10
+                          }}
+                        >
+                          🎶
+                        </div>
+                        
+                        {/* 音符 4 - 左側中央 */}
+                        <div 
+                          className="absolute text-3xl animate-float-4"
+                          style={{ 
+                            top: '50%',
+                            marginTop: '-18px',
+                            left: '10px',
+                            color: '#C77DFF',
+                            textShadow: '0 0 12px rgba(199, 125, 255, 1), 0 0 16px rgba(199, 125, 255, 0.8), 0 3px 8px rgba(0,0,0,0.5)',
+                            zIndex: 10
+                          }}
+                        >
+                          ♫
+                        </div>
+                        
+                        {/* 音符 5 - 底部右側 */}
+                        <div 
+                          className="absolute text-3xl animate-float-1"
+                          style={{ 
+                            bottom: '15px', 
+                            right: '40px',
+                            color: '#FF9F43',
+                            textShadow: '0 0 12px rgba(255, 159, 67, 1), 0 0 16px rgba(255, 159, 67, 0.8), 0 3px 8px rgba(0,0,0,0.5)',
+                            zIndex: 10
+                          }}
+                        >
+                          ♫
+                        </div>
+                        
+                        {/* 音符 6 - 底部左側 */}
+                        <div 
+                          className="absolute text-3xl animate-float-2"
+                          style={{ 
+                            bottom: '15px', 
+                            left: '40px',
+                            color: '#6BCF7F',
+                            textShadow: '0 0 12px rgba(107, 207, 127, 1), 0 0 16px rgba(107, 207, 127, 0.8), 0 3px 8px rgba(0,0,0,0.5)',
+                            zIndex: 10
+                          }}
+                        >
+                          ♪
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  // 預設造型預覽
+                  <div
+                    className="drop-shadow-2xl"
+                    style={{ width: "200px", height: "200px", transform: "scale(1.2)", transformOrigin: "center" }}
+                    aria-label="Mini Player Art"
+                  >
+                    <MiniPlayerArt
+                      isPlaying={player.isPlaying}
+                      palette={{ bg: "#F8F1E4", border: "#F8F1E4", accent1: "#E67E22", accent2: "#D35400" }}
+                    />
+                  </div>
+                )}
               </div>
-            </div>
 
-              {/* 播放控制 - 增加間距避免擋到圖示 */}
-              <div className="flex items-center justify-center gap-6 mb-8">
-                  <button
+              {/* 播放控制 - 美化版 */}
+              <div className="flex items-center justify-center gap-4 mb-8">
+                {/* 上一首 */}
+                <button
                   onClick={prevTrack}
                   disabled={playlist.length === 0}
-                  className={`w-12 h-12 rounded-full transition-all duration-200 backdrop-blur-sm border shadow-lg flex items-center justify-center ${
+                  className={`group relative w-14 h-14 rounded-full transition-all duration-300 flex items-center justify-center border ${
                     playlist.length === 0 
-                      ? "bg-gray-600 text-gray-400 border-gray-500 cursor-not-allowed" 
-                      : "bg-white/10 hover:bg-white/20 text-white border-white/30 hover:scale-105"
+                      ? "bg-gray-700/50 text-gray-500 border-gray-600 cursor-not-allowed" 
+                      : "bg-black/70 hover:bg-black/90 text-white border-white/30 hover:border-white/50 hover:scale-110 backdrop-blur-sm"
                   }`}
                   title={playlist.length === 0 ? "請先建立播放清單" : "上一首"}
                 >
-                  ⏮️
-                  </button>
-              
-                  <button
-                    onClick={async () => {
+                  <svg className="w-6 h-6 transform group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                  </svg>
+                </button>
+            
+                {/* 播放/暫停 */}
+                <button
+                  onClick={async () => {
                     if (playlist.length === 0) {
                       alert("請先建立播放清單");
                       return;
                     }
                     
-                    // 防止快速切換
                     if (player.isPlaying) {
                       try {
                         console.log("🔧 暫停播放");
-                          await player.pause();
+                        await player.pause();
                       } catch (error) {
                         console.warn("🔧 暫停失敗:", error.message);
                       }
-                        } else {
+                    } else {
                       try {
                         console.log("🔧 開始播放");
-                          const ok = await player.play();
+                        const ok = await player.play();
                         if (!ok) {
                           console.log("🔧 播放失敗，可能是播放器未準備好");
                         }
@@ -438,29 +555,40 @@ export default function UserPlayerPage() {
                     }
                   }}
                   disabled={playlist.length === 0}
-                  className={`w-16 h-16 rounded-full transition-all duration-200 backdrop-blur-sm border shadow-lg flex items-center justify-center ${
+                  className={`group relative w-20 h-20 rounded-full transition-all duration-300 flex items-center justify-center border ${
                     playlist.length === 0 
-                      ? "bg-gray-600 text-gray-400 border-gray-500 cursor-not-allowed" 
-                      : "bg-white/10 hover:bg-white/20 text-white border-white/30 hover:scale-110"
+                      ? "bg-gray-700/50 text-gray-500 border-gray-600 cursor-not-allowed" 
+                      : "bg-black/70 hover:bg-black/90 text-white border-white/30 hover:border-white/50 hover:scale-110 backdrop-blur-sm"
                   }`}
                   title={playlist.length === 0 ? "請先建立播放清單" : (player.isPlaying ? "暫停" : "播放")}
                 >
-                  {player.isPlaying ? "⏸️" : "▶️"}
-                  </button>
-              
-                  <button
+                  {player.isPlaying ? (
+                    <svg className="w-8 h-8 transform group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-8 h-8 transform group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  )}
+                </button>
+            
+                {/* 下一首 */}
+                <button
                   onClick={nextTrack}
                   disabled={playlist.length === 0}
-                  className={`w-12 h-12 rounded-full transition-all duration-200 backdrop-blur-sm border shadow-lg flex items-center justify-center ${
+                  className={`group relative w-14 h-14 rounded-full transition-all duration-300 flex items-center justify-center border ${
                     playlist.length === 0 
-                      ? "bg-gray-600 text-gray-400 border-gray-500 cursor-not-allowed" 
-                      : "bg-white/10 hover:bg-white/20 text-white border-white/30 hover:scale-105"
+                      ? "bg-gray-700/50 text-gray-500 border-gray-600 cursor-not-allowed" 
+                      : "bg-black/70 hover:bg-black/90 text-white border-white/30 hover:border-white/50 hover:scale-110 backdrop-blur-sm"
                   }`}
                   title={playlist.length === 0 ? "請先建立播放清單" : "下一首"}
                 >
-                  ⏭️
-                  </button>
-                </div>
+                  <svg className="w-6 h-6 transform group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 6v12l8.5-6zm10 0h2v12h-2z"/>
+                  </svg>
+                </button>
+              </div>
 
             {/* 進度條 */}
             <div className="w-full max-w-md mx-auto mb-4">
@@ -592,7 +720,7 @@ export default function UserPlayerPage() {
         )}
 
         {/* 全域 YouTube 橋接 */}
-        <GlobalYouTubeBridge />
+        {/* GlobalYouTubeBridge 已移至全域 layout.js */}
       </div>
     </main>
   );

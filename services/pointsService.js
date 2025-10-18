@@ -91,6 +91,56 @@ export async function creditPoints({ userId, type, sourceId = null, actorUserId 
   if (newLevel > oldLevel) {
     // 升級了！發放獎勵
     levelUpRewards = await grantLevelRewards(user, oldLevel, newLevel);
+    
+    // 處理訂閱獎勵
+    if (levelUpRewards.subscriptionTrial) {
+      // LV6: 免費釘選播放器 30 天
+      const trial = levelUpRewards.subscriptionTrial;
+      const startDate = new Date();
+      const expiresAt = new Date(startDate);
+      expiresAt.setDate(expiresAt.getDate() + trial.duration);
+      
+      // 檢查是否已有 pinPlayerTest 訂閱
+      const existingSub = user.subscriptions.find(s => s.type === 'pinPlayerTest' && s.isActive);
+      if (!existingSub) {
+        user.subscriptions.push({
+          type: 'pinPlayerTest',
+          startDate: startDate,
+          expiresAt: expiresAt,
+          isActive: true,
+          monthlyCost: 0, // 免費試用
+          lastRenewedAt: startDate
+        });
+      }
+    }
+    
+    if (levelUpRewards.subscriptionPermanent) {
+      // LV10: 永久釘選播放器
+      const permanentDate = new Date('2099-12-31');
+      
+      const existingSub = user.subscriptions.find(s => s.type === 'pinPlayer' && s.isActive);
+      
+      if (existingSub) {
+        // 如果已有訂閱（月租或試用），升級為永久
+        if (existingSub.expiresAt <= new Date('2099-01-01')) {
+          existingSub.expiresAt = permanentDate;
+          existingSub.monthlyCost = 0;
+          existingSub.lastRenewedAt = new Date();
+        }
+        // 如果已經是永久訂閱，不做任何操作
+      } else {
+        // 沒有訂閱，創建新的永久訂閱
+        const startDate = new Date();
+        user.subscriptions.push({
+          type: 'pinPlayer',
+          startDate: startDate,
+          expiresAt: permanentDate,
+          isActive: true,
+          monthlyCost: 0,
+          lastRenewedAt: startDate
+        });
+      }
+    }
   }
   
   await user.save();

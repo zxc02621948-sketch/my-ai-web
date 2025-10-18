@@ -228,9 +228,28 @@ export default function PlayerSkinSettings({ currentUser, onSettingsSaved }) {
         </div>
       )}
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* 左側：設定選項 */}
-        <div className="space-y-6">
+      {/* 根據造型顯示不同內容 */}
+      {activeSkin === 'default' ? (
+        // 預設造型：顯示友好提示
+        <div className="text-center py-12">
+          <div className="inline-block bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/30 dark:to-purple-900/30 rounded-2xl p-8 border-2 border-blue-200 dark:border-blue-800">
+            <div className="text-6xl mb-4">🎧</div>
+            <h4 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              預設播放器
+            </h4>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              採用簡潔設計，無需額外調整
+            </p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg text-sm">
+              ✨ 當前已啟用預設造型
+            </div>
+          </div>
+        </div>
+      ) : (
+        // 貓咪耳機造型：顯示調整介面
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* 左側：設定選項 */}
+          <div className="space-y-6">
           {/* 顏色模式選擇 */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
@@ -558,6 +577,7 @@ export default function PlayerSkinSettings({ currentUser, onSettingsSaved }) {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

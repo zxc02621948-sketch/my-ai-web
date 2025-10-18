@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import AvatarFrame from "@/components/common/AvatarFrame";
+import axios from "axios";
 
 export default function FrameColorEditor({
   isOpen,
@@ -21,7 +22,6 @@ export default function FrameColorEditor({
   const [layerOrder, setLayerOrder] = useState("frame-on-top"); // 新增：層級順序狀態
   const [frameTransparency, setFrameTransparency] = useState(1); // 新增：頭像框透明度狀態
   const [hasCustomColor, setHasCustomColor] = useState(false);
-  const [showPaymentConfirm, setShowPaymentConfirm] = useState(false); // 新增：付費確認彈窗
 
   useEffect(() => {
     // 如果有初始設定，表示已經有自訂顏色
@@ -42,31 +42,21 @@ export default function FrameColorEditor({
     console.log("🔧 FrameColorEditor 接收到的 userAvatar:", userAvatar);
   }, [initialColor, initialOpacity, initialLayerOrder, initialFrameOpacity, frameId, userAvatar]);
 
-  const handleSaveClick = () => {
-    // 如果未解鎖功能，顯示提示
+  const handleSaveClick = async () => {
+    // 如果未解鎖功能，直接返回（不關閉編輯器）
     if (!isLevelUnlocked) {
-      alert("調色盤功能需要達到 LV2 才能使用！");
       return;
     }
     
-    // 顯示付費確認彈窗
-    setShowPaymentConfirm(true);
-  };
-
-  const handleConfirmPayment = () => {
-    setShowPaymentConfirm(false);
+    // 調用父組件的 onSave，父組件會處理確認彈窗和關閉邏輯
     onSave({
       color: frameColor,
       opacity: frameOpacity,
       layerOrder: layerOrder,
       frameOpacity: frameTransparency
     });
-    onClose();
   };
 
-  const handleCancelPayment = () => {
-    setShowPaymentConfirm(false);
-  };
 
   if (!isOpen) return null;
 
@@ -263,17 +253,11 @@ export default function FrameColorEditor({
                   <span className="text-yellow-400">🔒</span>
                   <span className="text-yellow-400">此功能需要達到 LV2 才能使用</span>
                 </>
-              ) : userPoints < 50 ? (
-                <>
-                  <span className="text-red-400">⚠️</span>
-                  <span className="text-red-400">積分不足！保存設定需要 50 積分（當前：{userPoints} 積分）</span>
-                </>
               ) : (
                 <>
                   <span className="text-blue-400">💡</span>
-                  <span className="text-gray-300">可免費預覽效果，保存設定將消費 </span>
-                  <span className="text-yellow-400 font-semibold">50 積分</span>
-                  <span className="text-gray-400">（當前餘額：{userPoints} 積分）</span>
+                  <span className="text-gray-300">可免費預覽效果，確認頭像框時將消費 </span>
+                  <span className="text-yellow-400 font-semibold">20 積分</span>
                 </>
               )}
             </div>
@@ -288,63 +272,18 @@ export default function FrameColorEditor({
             </button>
             <button
               onClick={handleSaveClick}
-              disabled={!isLevelUnlocked || userPoints < 50}
+              disabled={!isLevelUnlocked}
               className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
-                !isLevelUnlocked || userPoints < 50
+                !isLevelUnlocked
                   ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
             >
-              {!isLevelUnlocked ? '🔒 未解鎖' : userPoints < 50 ? '積分不足' : '保存設定 (50💎)'}
+              {!isLevelUnlocked ? '🔒 未解鎖' : '保存預覽設定'}
             </button>
           </div>
         </div>
 
-        {/* 付費確認彈窗 */}
-        {showPaymentConfirm && (
-          <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-[100000]">
-            <div className="bg-zinc-800 rounded-lg p-6 max-w-md mx-4 border-2 border-yellow-500/50">
-              <h3 className="text-xl font-bold text-white mb-4 text-center">💰 確認使用調色功能</h3>
-              
-              <div className="space-y-3 mb-6">
-                <div className="bg-zinc-700/50 p-4 rounded-lg">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-300">消費金額</span>
-                    <span className="text-yellow-400 font-semibold text-lg">50 積分</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">當前餘額</span>
-                    <span className="text-white font-semibold">{userPoints} 積分</span>
-                  </div>
-                  <div className="border-t border-zinc-600 my-2"></div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">扣除後餘額</span>
-                    <span className="text-green-400 font-semibold">{userPoints - 50} 積分</span>
-                  </div>
-                </div>
-
-                <div className="text-sm text-gray-400 text-center">
-                  💡 此操作將保存您的頭像框顏色設定
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCancelPayment}
-                  className="flex-1 px-4 py-3 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleConfirmPayment}
-                  className="flex-1 px-4 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-semibold"
-                >
-                  確認付費
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

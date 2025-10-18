@@ -149,9 +149,10 @@ export default function CatHeadphoneCanvas({ isPlaying, size = 130, colorSetting
       offCtx.drawImage(maskImageRef.current, 0, 0, maskWidth, maskHeight);
       
       // 把處理好的 RGB 疊加到主 Canvas（縮放到和耳機圖一樣大）
-      // 微調遮罩位置：往上移動 6 像素，往左移動 1 像素
-      const offsetX = -1; // 負數 = 往左移
-      const offsetY = -6; // 負數 = 往上移
+      // 微調遮罩位置：根據尺寸動態調整
+      const scale = size / 130; // 計算縮放比例（130 是基準尺寸）
+      const offsetX = -1 * scale; // 負數 = 往左移，根據尺寸縮放
+      const offsetY = -6 * scale; // 負數 = 往上移，根據尺寸縮放
       ctx.globalCompositeOperation = 'screen';
       
       // 使用用戶自訂的透明度

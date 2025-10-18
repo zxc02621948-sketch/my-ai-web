@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/serverAuth";
 import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
-import PointsTransaction from "@/models/PointsTransaction";
 import { getLevelIndex } from "@/utils/pointsLevels";
 
 export const dynamic = "force-dynamic";
@@ -37,20 +36,7 @@ export async function POST(req) {
       }, { status: 403 });
     }
 
-    // 檢查積分是否足夠
-    const COST = 20;
-    if (user.pointsBalance < COST) {
-      return NextResponse.json({ 
-        error: `積分不足！保存設定需要 ${COST} 積分`,
-        need: COST,
-        current: user.pointsBalance
-      }, { status: 400 });
-    }
-
-    // 扣除積分
-    user.pointsBalance -= COST;
-
-    // 保存顏色設定
+    // 保存預覽設定到 frameSettings，但不扣分
     if (!user.frameSettings) {
       user.frameSettings = {};
     }
@@ -58,30 +44,16 @@ export async function POST(req) {
 
     await user.save();
 
-    // 記錄積分交易
-    await PointsTransaction.create({
-      userId: user._id,
-      type: "frame_color_edit",
-      points: -COST,
-      dateKey: new Date().toISOString().split('T')[0],
-      meta: {
-        frameId: frameId,
-        settings: settings
-      }
-    });
-
-    console.log(`✅ 用戶 ${user.username} 使用調色盤功能，扣除 ${COST} 積分`);
+    console.log(`✅ 用戶 ${user.username} 保存調色預覽設定，frameId: ${frameId}`);
 
     return NextResponse.json({
       success: true,
-      message: "顏色設定已保存",
-      newBalance: user.pointsBalance,
-      cost: COST
+      message: "預覽設定已保存",
+      settings: settings
     });
 
   } catch (error) {
-    console.error("保存調色盤設定失敗:", error);
+    console.error("保存調色預覽設定失敗:", error);
     return NextResponse.json({ error: "伺服器錯誤" }, { status: 500 });
   }
 }
-

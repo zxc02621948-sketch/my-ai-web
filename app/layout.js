@@ -13,6 +13,7 @@ import { PlayerProvider } from "@/components/context/PlayerContext";
 import ConditionalPlayer from "@/components/common/ConditionalPlayer";
 import AdFooterPlaceholder from "@/components/common/AdFooterPlaceholder";
 import YouTubeErrorToast from "@/components/player/YouTubeErrorToast";
+import GlobalYouTubeBridgeWrapper from "@/components/player/GlobalYouTubeBridgeWrapper";
 // 移除全域 MiniPlayer / YouTubeBridge 與字型變數，恢復到較乾淨的版型
 
 export const metadata = {
@@ -104,8 +105,11 @@ export default async function RootLayout({ children }) {
               <YouTubeErrorToast />
               <AdFooterPlaceholder />
 
-                  {/* 條件性播放器組件 */}
-                  <ConditionalPlayer />
+              {/* 全域 YouTube 橋接（在所有頁面持續運行） */}
+              <GlobalYouTubeBridgeWrapper />
+
+              {/* 條件性播放器組件 */}
+              <ConditionalPlayer />
 
             </PlayerProvider>
           </FilterProvider>

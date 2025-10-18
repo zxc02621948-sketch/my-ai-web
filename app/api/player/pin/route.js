@@ -26,9 +26,9 @@ export async function POST(request) {
       return NextResponse.json({ error: '用戶不存在' }, { status: 404 });
     }
 
-           // 檢查是否有釘選訂閱
+           // 檢查是否有釘選訂閱（包含試用和正式訂閱）
            const pinSubscription = user.subscriptions?.find(
-             s => s.type === 'pinPlayer' && s.isActive
+             s => (s.type === 'pinPlayer' || s.type === 'pinPlayerTest') && s.isActive
            );
 
     if (!pinSubscription) {

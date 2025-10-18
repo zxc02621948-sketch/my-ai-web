@@ -33,6 +33,8 @@ export default function UnifiedAvatarModal({
   const [previewFrame, setPreviewFrame] = useState(currentFrame || "default");
   const [previewImage, setPreviewImage] = useState(null);
   const [frameSettings, setFrameSettings] = useState(initialFrameSettings);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmCallback, setConfirmCallback] = useState(null);
 
   // 同步初始 frameSettings
   useEffect(() => {
@@ -375,7 +377,8 @@ export default function UnifiedAvatarModal({
             {activeTab === "frame" && (
               <button
                 onClick={async () => {
-                  await onFrameSelect(previewFrame, frameSettings[previewFrame]);
+                  const settings = frameSettings[previewFrame];
+                  await onFrameSelect(previewFrame, settings);
                   onClose();
                 }}
                 className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
@@ -446,48 +449,99 @@ export default function UnifiedAvatarModal({
           userPoints={userPoints}
           isLevelUnlocked={frameColorEditorUnlocked}
           onSave={async (settings) => {
-            try {
-              // 調用 API 保存設定並扣除積分
-              const res = await axios.post("/api/frame/save-color-settings", {
-                frameId: previewFrame,
-                settings: settings
-              });
+            // 顯示確認彈窗
+            setConfirmCallback(() => async () => {
+              try {
+                // 用戶確認後，扣分並保存設定
+                const res = await axios.post("/api/frame/save-color-settings", {
+                  frameId: previewFrame,
+                  settings: settings
+                });
 
-              if (res.data.success) {
-                // 更新本地狀態
-                setFrameSettings(prev => ({
-                  ...prev,
-                  [previewFrame]: settings
-                }));
-                setShowColorEditor(false);
-                
-                // 顯示成功訊息
-                alert(`✅ 顏色設定已保存！\n消費：50 積分\n剩餘：${res.data.newBalance} 積分`);
-                
-                // 廣播積分更新事件（刷新頭部顯示）
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new Event("points-updated"));
-                  // 廣播頭像框設定更新事件
-                  window.dispatchEvent(new CustomEvent("frame-settings-updated", {
-                    detail: {
-                      frameId: previewFrame,
-                      settings: settings
-                    }
+                if (res.data.success) {
+                  // 更新本地狀態
+                  setFrameSettings(prev => ({
+                    ...prev,
+                    [previewFrame]: settings
                   }));
+                  
+                  // 廣播積分更新事件
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(new Event("points-updated"));
+                  }
+                  
+                  // 廣播頭像框設定更新事件
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(new CustomEvent("frame-settings-updated", {
+                      detail: { 
+                        frameId: previewFrame, 
+                        settings: settings 
+                      }
+                    }));
+                  }
+                  
+                  // 成功後關閉彈窗和調色編輯器
+                  setShowConfirmDialog(false);
+                  setShowColorEditor(false);
                 }
-              } else {
-                alert(res.data.error || "保存失敗");
+              } catch (error) {
+                console.error("保存調色盤設定失敗:", error);
+                setShowConfirmDialog(false);
               }
-            } catch (error) {
-              console.error("保存調色盤設定失敗:", error);
-              alert(error.response?.data?.error || "保存失敗，請稍後再試");
-            }
+            });
+            setShowConfirmDialog(true);
           }}
           initialColor={frameSettings[previewFrame]?.color || "#ffffff"}
           initialOpacity={frameSettings[previewFrame]?.opacity || 1}
           initialLayerOrder={frameSettings[previewFrame]?.layerOrder || "frame-on-top"}
           initialFrameOpacity={frameSettings[previewFrame]?.frameOpacity || 1}
         />
+      )}
+
+      {/* 自定義確認彈窗 */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100001]">
+          <div className="bg-zinc-800 rounded-xl p-6 max-w-md mx-4 border-2 border-yellow-500/50 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-4 text-center">💰 確認保存調色設定</h3>
+            
+            <div className="space-y-3 mb-6">
+              <div className="bg-zinc-700/50 p-4 rounded-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-300">消費金額</span>
+                  <span className="text-yellow-400 font-semibold text-lg">20 積分</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">當前餘額</span>
+                  <span className="text-white font-semibold">{userPoints} 積分</span>
+                </div>
+                <div className="border-t border-zinc-600 my-2"></div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">扣除後餘額</span>
+                  <span className="text-green-400 font-semibold">{userPoints - 20} 積分</span>
+                </div>
+              </div>
+
+              <div className="text-sm text-gray-400 text-center">
+                💡 此操作將保存您的頭像框調色設定
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmDialog(false)}
+                className="flex-1 px-4 py-3 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => confirmCallback && confirmCallback()}
+                className="flex-1 px-4 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-semibold"
+              >
+                確認保存
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

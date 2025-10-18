@@ -27,13 +27,13 @@ export default function Modal({ isOpen, onClose, title, children, bottomOffset =
 
       {/* 彈窗內容 */}
       <div
-        className="flex justify-center items-center min-h-screen px-4"
+        className="flex justify-center items-start min-h-screen px-4 pt-24"
         style={{ paddingBottom: `${bottomOffset}px` }} // ⬅ 底部留白，預設 80px
       >
         <div
           className="relative z-10 bg-zinc-900 text-white rounded-2xl shadow-xl p-6 w-full max-w-md overflow-y-auto"
           style={{
-            maxHeight: `calc(100vh - ${bottomOffset + 40}px)` // ⬅ 扣掉底部留白與額外空間
+            maxHeight: `calc(85vh - ${bottomOffset}px)` // ⬅ 高度為 85vh
           }}
         >
           {/* 標題區域 */}
