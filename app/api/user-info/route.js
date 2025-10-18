@@ -56,6 +56,8 @@ export async function GET(req) {
       defaultMusicUrl: user.defaultMusicUrl || '',
       // ✅ 播放清單：完整播放清單
       playlist: user.playlist || [],
+      // ✅ 播放清單上限
+      playlistMaxSize: user.playlistMaxSize || 5,
       // ✅ 迷你播放器：購買與樣式
       miniPlayerPurchased: !!user.miniPlayerPurchased,
       miniPlayerTheme: user.miniPlayerTheme || 'modern',

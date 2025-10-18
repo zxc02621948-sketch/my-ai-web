@@ -11,6 +11,7 @@ import MiniPlayerArt from "@/components/common/MiniPlayerArt";
 import AudioMonitor from "@/components/common/AudioMonitor";
 import PlayerSkinSettings from "@/components/player/PlayerSkinSettings";
 import CatHeadphoneCanvas from "@/components/player/CatHeadphoneCanvas";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 // GlobalYouTubeBridge 已移至全域 layout.js，不需要在此重複渲染
 
@@ -68,7 +69,9 @@ export default function UserPlayerPage() {
         // 從 API 獲取該用戶的資料（包含播放清單）
         let userDataFetched = {};
         try {
-          const response = await axios.get(`/api/user-info?id=${id}`);
+          const response = await axios.get(`/api/user-info?id=${id}`, {
+            headers: { 'Cache-Control': 'no-cache' }
+          });
           userDataFetched = response.data;
           setUserData(userDataFetched); // 保存用戶數據用於釘選按鈕
         } catch (error) {
@@ -163,14 +166,32 @@ export default function UserPlayerPage() {
       }
     };
     
+    // 🔥 監聽積分更新事件，刷新用戶數據（用於播放清單擴充等）
+    const handlePointsUpdated = async () => {
+      console.log("🔧 收到積分更新事件，刷新用戶數據");
+      try {
+        const response = await axios.get(`/api/user-info?id=${id}`, {
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        if (response.data) {
+          setUserData(response.data);
+          console.log("✅ 用戶數據已刷新，新的播放清單上限:", response.data.playlistMaxSize);
+        }
+      } catch (error) {
+        console.error("刷新用戶數據失敗:", error);
+      }
+    };
+    
     window.addEventListener('playerStateChanged', handlePlayerStateChange);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('points-updated', handlePointsUpdated); // ✅ 新增監聽器
     
     return () => {
       window.removeEventListener('playerStateChanged', handlePlayerStateChange);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('points-updated', handlePointsUpdated); // ✅ 清理監聽器
     };
-  }, [playlist, player]);
+  }, [playlist, player, id]);
 
   // 組件卸載時的清理
   useEffect(() => {
@@ -531,7 +552,7 @@ export default function UserPlayerPage() {
                 <button
                   onClick={async () => {
                     if (playlist.length === 0) {
-                      alert("請先建立播放清單");
+                      notify.warning("提示", "請先建立播放清單");
                       return;
                     }
                     
@@ -702,7 +723,7 @@ export default function UserPlayerPage() {
                 }
               }
           }}
-          maxItems={5}
+          maxItems={userData?.playlistMaxSize || 5}
         />
         )}
 

@@ -16,6 +16,7 @@ const TYPE_LABEL = {
   discussion_post_cost: "討論區發文",
   discussion_like_reward: "討論區愛心獎勵",
   discussion_claim_reward: "討論區收益提領",
+  playlist_expansion: "播放清單擴充",
 };
 
 const TYPE_COLOR = {
@@ -31,6 +32,7 @@ const TYPE_COLOR = {
   discussion_post_cost: "text-red-400",
   discussion_like_reward: "text-pink-400",
   discussion_claim_reward: "text-green-400",
+  playlist_expansion: "text-indigo-400",
 };
 
 export default function PointsHistoryModal({ isOpen, onClose }) {

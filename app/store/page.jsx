@@ -6,6 +6,7 @@ import ProductCard from "@/components/store/ProductCard";
 import axios from "axios";
 import { getLevelInfo } from "@/utils/pointsLevels";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 const STORE_CATEGORIES = [
   {
@@ -44,6 +45,10 @@ export default function StorePage() {
   const [userInfo, setUserInfo] = useState(null);
   const [powerCouponLimits, setPowerCouponLimits] = useState({});
   const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(true);
+  
+  // 自定義彈窗狀態
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [purchaseModalContent, setPurchaseModalContent] = useState({});
 
 
   // 檢查權力券限購狀態（一次查詢所有類型）
@@ -67,7 +72,9 @@ export default function StorePage() {
       try {
         setIsLoadingUserInfo(true);
         // 獲取用戶基本信息
-        const userResponse = await axios.get("/api/user-info");
+        const userResponse = await axios.get("/api/user-info", {
+          headers: { 'Cache-Control': 'no-cache' }
+        });
         if (userResponse.data) {
           setUserInfo(userResponse.data);
           
@@ -103,6 +110,60 @@ export default function StorePage() {
     setPurchaseStatus(prev => ({ ...prev, [productId]: true }));
     
     try {
+      // 處理播放清單擴充
+      if (productId === "playlist-expansion") {
+        try {
+          const res = await axios.post("/api/player/expand-playlist");
+          
+          if (res?.data?.success) {
+            const { oldMax, newMax, addSlots, cost, newBalance, nextExpansion } = res.data.data;
+            
+            // 設置購買成功彈窗內容
+            setPurchaseModalContent({
+              type: 'success',
+              title: '✅ 擴充成功！',
+              details: {
+                oldMax,
+                newMax,
+                addSlots,
+                cost,
+                newBalance,
+                nextExpansion
+              }
+            });
+            setShowPurchaseModal(true);
+            
+            // 刷新用戶信息
+            const info = await axios.get("/api/user-info", {
+              headers: { 'Cache-Control': 'no-cache' }
+            });
+            setUserInfo(info.data);
+            
+            // 廣播積分更新事件
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new Event("points-updated"));
+            }
+          } else {
+            setPurchaseModalContent({
+              type: 'error',
+              title: '❌ 擴充失敗',
+              message: res?.data?.error || "擴充失敗，請稍後再試。"
+            });
+            setShowPurchaseModal(true);
+          }
+        } catch (error) {
+          setPurchaseModalContent({
+            type: 'error',
+            title: '❌ 擴充失敗',
+            message: error.response?.data?.error || "擴充失敗，請檢查積分是否足夠"
+          });
+          setShowPurchaseModal(true);
+        }
+        setLoading(false);
+        setPurchaseStatus(prev => ({ ...prev, [productId]: false }));
+        return;
+      }
+      
       // 處理釘選播放器訂閱
       if (productId === "pin-player-subscription") {
         const subscriptionType = "pinPlayer";
@@ -115,14 +176,16 @@ export default function StorePage() {
           
           if (res.data.success) {
             const expiresAt = res.data.expiresAt ? new Date(res.data.expiresAt).toLocaleDateString('zh-TW') : '';
-            alert(`已取消釘選播放器訂閱\n\n您可以繼續使用到 ${expiresAt}\n到期後將自動失效，不會再續費。`);
+            notify.success("已取消釘選播放器訂閱", `您可以繼續使用到 ${expiresAt}\n到期後將自動失效，不會再續費。`);
             // 重新獲取訂閱狀態（確保前端狀態同步）
             await updateSubscriptions();
             // 重新加載用戶信息
-            const info = await axios.get("/api/user-info");
+            const info = await axios.get("/api/user-info", {
+              headers: { 'Cache-Control': 'no-cache' }
+            });
             setUserInfo(info.data);
           } else {
-            alert(res.data.error || "取消訂閱失敗");
+            notify.error("取消訂閱失敗", res.data.error || "取消訂閱失敗");
           }
         } 
         // 開通/續費訂閱
@@ -132,16 +195,25 @@ export default function StorePage() {
           });
           
           if (res.data.success) {
+            const expiresDate = new Date(res.data.expiresAt);
+            const isPermanent = expiresDate > new Date('2099-01-01');
             const daysRemaining = res.data.daysRemaining || 0;
-            const expiresAt = new Date(res.data.expiresAt).toLocaleDateString('zh-TW');
-            alert(`✅ 訂閱成功！\n\n📅 到期時間：${expiresAt}\n⏳ 剩餘天數：${daysRemaining} 天\n\n💡 續費時剩餘時間會累積，不會浪費。`);
+            const expiresAt = expiresDate.toLocaleDateString('zh-TW');
+            
+            if (isPermanent) {
+              notify.success("訂閱成功！", `🎉 有效期：永久訂閱\n📅 到期時間：${expiresAt}\n\n💡 恭喜獲得永久釘選播放器！`);
+            } else {
+              notify.success("訂閱成功！", `📅 到期時間：${expiresAt}\n⏳ 剩餘天數：${daysRemaining} 天\n\n💡 續費時剩餘時間會累積，不會浪費。`);
+            }
             // 重新獲取訂閱狀態（確保前端狀態同步）
             await updateSubscriptions();
             // 重新加載用戶信息
-            const info = await axios.get("/api/user-info");
+            const info = await axios.get("/api/user-info", {
+              headers: { 'Cache-Control': 'no-cache' }
+            });
             setUserInfo(info.data);
           } else {
-            alert(res.data.error || "訂閱失敗，請檢查積分是否足夠");
+            notify.error("訂閱失敗", res.data.error || "訂閱失敗，請檢查積分是否足夠");
           }
         }
         setLoading(false);
@@ -154,9 +226,11 @@ export default function StorePage() {
         const res = await axios.post("/api/store/purchase-premium-skin");
         
         if (res?.data?.success) {
-          alert(`🎉 購買成功！\n\n您現在擁有高階播放器造型了！\n\n✨ 前往播放器頁面即可自定義顏色設定\n💰 剩餘積分：${res.data.newBalance}`);
+          notify.success("購買成功！", `您現在擁有高階播放器造型了！\n\n✨ 前往播放器頁面即可自定義顏色設定\n💰 剩餘積分：${res.data.newBalance}`);
           // 更新用戶信息
-          const info = await axios.get("/api/user-info");
+          const info = await axios.get("/api/user-info", {
+            headers: { 'Cache-Control': 'no-cache' }
+          });
           setUserInfo(info.data);
           
           // 重新計算已購買商品
@@ -169,7 +243,7 @@ export default function StorePage() {
           }
           setPurchasedItems(purchasedSet);
         } else {
-          alert(res?.data?.error || "購買失敗，請稍後再試。");
+          notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
         }
       } else if (productId === "player-1day-coupon") {
         const res = await axios.post("/api/points/purchase-feature", { 
@@ -178,17 +252,19 @@ export default function StorePage() {
         });
         
         if (res?.data?.success) {
-          alert("播放器 1 日免費體驗券已激活！");
+          notify.success("體驗券已激活！", "播放器 1 日免費體驗券已激活！");
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新用戶信息
-          const info = await axios.get("/api/user-info");
+          const info = await axios.get("/api/user-info", {
+            headers: { 'Cache-Control': 'no-cache' }
+          });
           setUserInfo(info.data);
           // 刷新頁面以顯示播放器
           setTimeout(() => {
             window.location.reload();
           }, 1000);
         } else {
-          alert(res?.data?.error || "購買失敗，請稍後再試。");
+          notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
         }
       } else if (productId === "ai-generated-frame") {
         const res = await axios.post("/api/user/purchase-frame", { 
@@ -196,7 +272,7 @@ export default function StorePage() {
           cost: 300 
         });
         if (res?.data?.success) {
-          alert("已獲得 AI 生成頭像框！");
+          notify.success("購買成功！", "已獲得 AI 生成頭像框！");
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新已擁有的頭像框列表
           setUserOwnedFrames(prev => [...prev, "ai-generated"]);
@@ -205,7 +281,7 @@ export default function StorePage() {
             window.location.reload();
           }, 1000);
         } else {
-          alert(res?.data?.error || "購買失敗，請稍後再試。");
+          notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
         }
       } else if (productId === "animals-frame") {
         const res = await axios.post("/api/user/purchase-frame", { 
@@ -213,7 +289,7 @@ export default function StorePage() {
           cost: 200 
         });
         if (res?.data?.success) {
-          alert("已獲得動物頭像框！");
+          notify.success("購買成功！", "已獲得動物頭像框！");
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新已擁有的頭像框列表
           setUserOwnedFrames(prev => [...prev, "animals"]);
@@ -222,7 +298,7 @@ export default function StorePage() {
             window.location.reload();
           }, 1000);
         } else {
-          alert(res?.data?.error || "購買失敗，請稍後再試。");
+          notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
         }
       } else if (productId === "magic-circle-frame") {
         const res = await axios.post("/api/user/purchase-frame", { 
@@ -230,13 +306,13 @@ export default function StorePage() {
           cost: 300 
         });
         if (res?.data?.success) {
-          alert("已獲得魔法陣頭像框！");
+          notify.success("購買成功！", "已獲得魔法陣頭像框！");
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新已擁有的頭像框列表
           setUserOwnedFrames(prev => [...prev, "magic-circle"]);
           // 不需要刷新頁面，狀態已經更新
         } else {
-          alert(res?.data?.error || "購買失敗，請稍後再試。");
+          notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
         }
       } else if (productId === "magic-circle-2-frame") {
         const res = await axios.post("/api/user/purchase-frame", { 
@@ -244,13 +320,13 @@ export default function StorePage() {
           cost: 300 
         });
         if (res?.data?.success) {
-          alert("已獲得魔法陣2頭像框！");
+          notify.success("購買成功！", "已獲得魔法陣2頭像框！");
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新已擁有的頭像框列表
           setUserOwnedFrames(prev => [...prev, "magic-circle-2"]);
           // 不需要刷新頁面，狀態已經更新
         } else {
-          alert(res?.data?.error || "購買失敗，請稍後再試。");
+          notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
         }
       } else if (productId.startsWith("power-coupon-")) {
         // 處理權力券購買
@@ -263,13 +339,15 @@ export default function StorePage() {
         });
         
         if (res?.data?.success) {
-          alert("權力券購買成功！");
+          notify.success("購買成功！", "權力券購買成功！");
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新用戶信息
-          const info = await axios.get("/api/user-info");
+          const info = await axios.get("/api/user-info", {
+            headers: { 'Cache-Control': 'no-cache' }
+          });
           setUserInfo(info.data);
         } else {
-          alert(res?.data?.message || "購買失敗，請稍後再試。");
+          notify.error("購買失敗", res?.data?.message || "購買失敗，請稍後再試。");
         }
       }
       // 其他商品的購買邏輯...
@@ -372,6 +450,47 @@ export default function StorePage() {
               isPurchased = isPurchased || frameOwned;
             }
             
+            // 處理播放清單擴充的動態價格和狀態
+            let dynamicPrice = product.price;
+            let dynamicFeatures = product.features;
+            let playlistExpansionInfo = null;
+            
+            if (product.id === "playlist-expansion") {
+              const currentMax = userInfo?.playlistMaxSize || 5;
+              const currentSize = userInfo?.playlist?.length || 0;
+              const isMaxed = currentMax >= 50;
+              
+              // 計算下次擴充的資訊
+              const expansionConfig = [
+                { fromSize: 5, toSize: 10, addSlots: 5, cost: 50 },
+                { fromSize: 10, toSize: 15, addSlots: 5, cost: 100 },
+                { fromSize: 15, toSize: 20, addSlots: 5, cost: 200 },
+                { fromSize: 20, toSize: 30, addSlots: 10, cost: 400 },
+                { fromSize: 30, toSize: 40, addSlots: 10, cost: 600 },
+                { fromSize: 40, toSize: 50, addSlots: 10, cost: 800 },
+              ];
+              
+              const nextExpansion = expansionConfig.find(e => e.fromSize === currentMax);
+              
+              if (nextExpansion) {
+                dynamicPrice = nextExpansion.cost;
+                playlistExpansionInfo = {
+                  currentMax,
+                  currentSize,
+                  nextExpansion,
+                  isMaxed: false
+                };
+              } else {
+                playlistExpansionInfo = {
+                  currentMax,
+                  currentSize,
+                  nextExpansion: null,
+                  isMaxed: true
+                };
+                isPurchased = true; // 已達上限，視為已購買
+              }
+            }
+            
             // 檢查訂閱狀態（針對月租商品）
             let isSubscribed = false;
             let subscriptionInfo = null;
@@ -390,6 +509,7 @@ export default function StorePage() {
                 
                 if (expiresAt) {
                   isSubscribed = sub.isActive && expiresAt > now;
+                  const isPermanent = expiresAt > new Date('2099-01-01');
                   
                   // 計算剩餘天數
                   const daysRemaining = Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24));
@@ -397,7 +517,8 @@ export default function StorePage() {
                   subscriptionInfo = {
                     expiresAt: expiresAtValue,
                     daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
-                    cancelledAt: sub.cancelledAt
+                    cancelledAt: sub.cancelledAt,
+                    isPermanent: isPermanent
                   };
                 }
               } else {
@@ -414,12 +535,14 @@ export default function StorePage() {
               <ProductCard
                 key={product.id}
                 {...product}
+                price={dynamicPrice}
                 loading={loading && purchaseStatus[product.id]}
                 isPurchased={isPurchased}
                 isLimitedPurchase={isLimited}
                 limitMessage={limitMessage}
                 isSubscribed={isSubscribed}
                 subscriptionInfo={subscriptionInfo}
+                playlistExpansionInfo={playlistExpansionInfo}
                 onPurchase={(options) => handlePurchase(product.id, options)}
               />
             );
@@ -427,6 +550,69 @@ export default function StorePage() {
           }
         </div>
       </div>
+
+      {/* 自定義購買結果彈窗 */}
+      {showPurchaseModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100001]">
+          <div className="bg-zinc-800 rounded-xl p-6 max-w-md mx-4 border-2 border-purple-500/50 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-4 text-center">
+              {purchaseModalContent.title}
+            </h3>
+            
+            {purchaseModalContent.type === 'success' && purchaseModalContent.details ? (
+              <div className="space-y-3 mb-6">
+                <div className="bg-zinc-700/50 p-4 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-300">播放清單上限</span>
+                    <span className="text-purple-400 font-semibold">
+                      {purchaseModalContent.details.oldMax} → {purchaseModalContent.details.newMax} 首
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-300">新增容量</span>
+                    <span className="text-green-400 font-semibold">+{purchaseModalContent.details.addSlots} 首</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-300">消費積分</span>
+                    <span className="text-yellow-400 font-semibold">{purchaseModalContent.details.cost} 積分</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-300">剩餘積分</span>
+                    <span className="text-white font-semibold">{purchaseModalContent.details.newBalance} 積分</span>
+                  </div>
+                </div>
+                
+                {purchaseModalContent.details.nextExpansion ? (
+                  <div className="bg-blue-900/20 border border-blue-600/30 rounded-lg p-3">
+                    <div className="text-sm text-blue-300 mb-1">下次擴充資訊</div>
+                    <div className="text-xs text-gray-300">
+                      <div>+{purchaseModalContent.details.nextExpansion.addSlots} 首（{purchaseModalContent.details.nextExpansion.newMax} 首）</div>
+                      <div>需要：{purchaseModalContent.details.nextExpansion.cost} 積分</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-green-900/20 border border-green-600/30 rounded-lg p-3 text-center">
+                    <div className="text-green-400 font-semibold">🎉 已達最大上限（50 首）！</div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mb-6">
+                <p className="text-gray-300 text-center">{purchaseModalContent.message}</p>
+              </div>
+            )}
+            
+            <div className="flex justify-center">
+              <button
+                onClick={() => setShowPurchaseModal(false)}
+                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-semibold"
+              >
+                確定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -102,7 +102,14 @@ export default function PlaylistModal({
           </button>
         </div>
         {!canAddMore ? (
-          <p className="text-xs text-orange-300">已達 {maxItems} 首上限，解鎖更多請使用積分購買播放空間。</p>
+          <div className="bg-orange-900/20 border border-orange-600/30 rounded-lg p-2">
+            <p className="text-xs text-orange-300 mb-1">
+              ⚠️ 已達播放清單上限（{maxItems} 首）
+            </p>
+            <p className="text-xs text-gray-400">
+              💡 前往 <a href="/store" className="text-blue-400 hover:text-blue-300 underline">積分商店</a> 購買擴充，最多可擴充至 50 首！
+            </p>
+          </div>
         ) : (
           <p className="text-xs text-gray-400">目前僅支援 YouTube 連結。可新增至 {maxItems} 首。</p>
         )}

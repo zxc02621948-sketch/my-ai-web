@@ -17,10 +17,11 @@ export default function ProductCard({
   features = [],
   isLimitedPurchase = false,
   limitMessage = "",
-  type = "normal", // "normal" | "subscription"
+  type = "normal", // "normal" | "subscription" | "playlist-expansion"
   billingCycle = null,
   isSubscribed = false, // 是否已訂閱
-  subscriptionInfo = null // 訂閱詳情（包含 expiresAt, daysRemaining 等）
+  subscriptionInfo = null, // 訂閱詳情（包含 expiresAt, daysRemaining 等）
+  playlistExpansionInfo = null // 播放清單擴充詳情
 }) {
   return (
     <div className="bg-zinc-800/40 border border-zinc-700/60 rounded-lg p-6 relative">
@@ -84,6 +85,43 @@ export default function ProductCard({
         </div>
       )}
       
+      {/* 播放清單擴充狀態顯示 */}
+      {type === "playlist-expansion" && playlistExpansionInfo && (
+        <div className="mb-4 p-3 border rounded-lg bg-blue-900/20 border-blue-600/30">
+          <div className="text-sm font-medium mb-2 text-blue-300">
+            📊 目前狀態
+          </div>
+          <div className="text-xs text-gray-300 space-y-1">
+            <div className="flex justify-between">
+              <span>目前上限：</span>
+              <span className="text-yellow-400 font-semibold">{playlistExpansionInfo.currentMax} 首</span>
+            </div>
+            <div className="flex justify-between">
+              <span>已使用：</span>
+              <span className="text-blue-400">{playlistExpansionInfo.currentSize} 首</span>
+            </div>
+            {playlistExpansionInfo.nextExpansion && (
+              <>
+                <div className="border-t border-blue-600/20 my-2"></div>
+                <div className="flex justify-between">
+                  <span>下次擴充：</span>
+                  <span className="text-green-400 font-semibold">+{playlistExpansionInfo.nextExpansion.addSlots} 首</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>擴充後上限：</span>
+                  <span className="text-purple-400 font-semibold">{playlistExpansionInfo.nextExpansion.toSize} 首</span>
+                </div>
+              </>
+            )}
+            {playlistExpansionInfo.isMaxed && (
+              <div className="text-green-400 text-center mt-2 font-semibold">
+                🎉 已達最大上限（50 首）
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* 訂閱狀態顯示 */}
       {type === "subscription" && subscriptionInfo && (
         <div className={`mb-4 p-3 border rounded-lg ${
@@ -137,13 +175,15 @@ export default function ProductCard({
         }`}
       >
         {isPurchased 
-          ? "已購買" 
+          ? (type === "playlist-expansion" ? "已達上限" : "已購買")
           : isLimitedPurchase 
           ? "限購中" 
           : loading 
           ? "處理中..." 
           : type === "subscription"
           ? (isSubscribed ? "續費延長" : "開通訂閱")
+          : type === "playlist-expansion"
+          ? "立即擴充"
           : "立即購買"}
       </button>
       

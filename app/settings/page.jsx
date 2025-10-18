@@ -105,19 +105,25 @@ export default function SettingsPage() {
                     {(() => {
                       const expiresAtValue = sub.expiresAt || sub.nextBillingDate;
                       const expiresAt = expiresAtValue ? new Date(expiresAtValue) : null;
+                      const isPermanent = expiresAt && expiresAt > new Date('2099-01-01');
                       const daysRemaining = expiresAt ? Math.ceil((expiresAt - new Date()) / (1000 * 60 * 60 * 24)) : 0;
                       
                       return (
                         <>
                           {expiresAt && (
                             <>
-                              <p>📅 到期時間：{expiresAt.toLocaleDateString('zh-TW')}</p>
-                              <p>⏳ 剩餘天數：{daysRemaining > 0 ? daysRemaining : 0} 天</p>
+                              <p>📅 到期時間：{isPermanent ? <span className="text-yellow-400 font-semibold">🎉 永久訂閱</span> : expiresAt.toLocaleDateString('zh-TW')}</p>
+                              {!isPermanent && (
+                                <p>⏳ 剩餘天數：{daysRemaining > 0 ? daysRemaining : 0} 天</p>
+                              )}
                             </>
                           )}
                           <p>📆 開始日期：{new Date(sub.startDate).toLocaleDateString('zh-TW')}</p>
-                          {sub.cancelledAt && (
+                          {sub.cancelledAt && !isPermanent && (
                             <p className="text-red-400">⚠️ 已取消，到期後失效</p>
+                          )}
+                          {isPermanent && (
+                            <p className="text-green-400">✨ 等級獎勵 - 永久免費</p>
                           )}
                         </>
                       );

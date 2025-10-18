@@ -1,70 +1,81 @@
 "use client";
 
-/**
- * 通用通知彈窗組件
- * @param {Object} props
- * @param {boolean} props.isOpen - 是否打開
- * @param {Function} props.onClose - 關閉回調
- * @param {string} props.type - 類型 ('success' | 'error' | 'info')
- * @param {string} props.title - 標題
- * @param {string} props.message - 訊息
- */
-export default function NotificationModal({ isOpen, onClose, type = 'info', title, message }) {
+import { useEffect } from "react";
+
+export default function NotificationModal({ 
+  isOpen, 
+  onClose, 
+  type = "info", // "success", "error", "warning", "info"
+  title, 
+  message, 
+  autoClose = false,
+  autoCloseDelay = 3000 
+}) {
+  useEffect(() => {
+    if (isOpen && autoClose) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, autoCloseDelay);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, autoClose, autoCloseDelay, onClose]);
+
   if (!isOpen) return null;
 
-  const getIcon = () => {
+  const getTypeStyles = () => {
     switch (type) {
-      case 'success':
-        return (
-          <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
-            <svg className="w-10 h-10 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-        );
-      case 'error':
-        return (
-          <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
-            <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </div>
-        );
-      case 'info':
+      case "success":
+        return {
+          borderColor: "border-green-500/50",
+          titleColor: "text-green-400",
+          icon: "✅"
+        };
+      case "error":
+        return {
+          borderColor: "border-red-500/50",
+          titleColor: "text-red-400",
+          icon: "❌"
+        };
+      case "warning":
+        return {
+          borderColor: "border-yellow-500/50",
+          titleColor: "text-yellow-400",
+          icon: "⚠️"
+        };
       default:
-        return (
-          <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center">
-            <svg className="w-10 h-10 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-        );
+        return {
+          borderColor: "border-blue-500/50",
+          titleColor: "text-blue-400",
+          icon: "ℹ️"
+        };
     }
   };
 
+  const styles = getTypeStyles();
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="bg-zinc-900 rounded-2xl p-6 w-full max-w-md shadow-2xl border border-zinc-700 animate-fadeIn">
-        {/* 圖示 */}
-        <div className="flex justify-center mb-4">
-          {getIcon()}
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100001]">
+      <div className={`bg-zinc-800 rounded-xl p-6 max-w-md mx-4 border-2 ${styles.borderColor} shadow-2xl`}>
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-2xl">{styles.icon}</span>
+          <h3 className={`text-xl font-bold ${styles.titleColor}`}>
+            {title}
+          </h3>
         </div>
-
-        {/* 標題 */}
-        <div className="text-xl font-bold mb-2 text-center text-white">
-          {title}
+        
+        <div className="mb-6">
+          {typeof message === 'string' ? (
+            <p className="text-gray-300 whitespace-pre-line">{message}</p>
+          ) : (
+            <div className="text-gray-300">{message}</div>
+          )}
         </div>
-
-        {/* 訊息 */}
-        <div className="text-sm text-zinc-300 mb-6 text-center">
-          {message}
-        </div>
-
-        {/* 按鈕 */}
+        
         <div className="flex justify-center">
           <button
-            className="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
             onClick={onClose}
+            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-semibold"
           >
             確定
           </button>
@@ -73,4 +84,3 @@ export default function NotificationModal({ isOpen, onClose, type = 'info', titl
     </div>
   );
 }
-

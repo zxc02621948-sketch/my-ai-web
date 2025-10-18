@@ -68,7 +68,7 @@ export default function PowerCouponGuideModal({ isOpen, onClose, hasNoCoupon, co
                 <div className="space-y-3">
                   {[
                     { step: 1, text: '點擊你想加乘的圖片，打開大圖彈窗' },
-                    { step: 2, text: '在彈窗右上角找到「使用加乘券」按鈕（⚡ 圖示）' },
+                    { step: 2, text: '在彈窗中找到紫色的「🎫 權力券」按鈕' },
                     { step: 3, text: '選擇券種（7天券或30天券）' },
                     { step: 4, text: '確認後，該圖片將重新獲得新圖的曝光加成！' }
                   ].map(({ step, text }) => (
@@ -192,7 +192,7 @@ export default function PowerCouponGuideModal({ isOpen, onClose, hasNoCoupon, co
                     { 
                       step: 3, 
                       text: '找到「使用加乘券」按鈕',
-                      detail: '在彈窗右上角有一個閃電圖示（⚡）的按鈕'
+                      detail: '在彈窗中找到紫色的「🎫 權力券」按鈕'
                     },
                     { 
                       step: 4, 

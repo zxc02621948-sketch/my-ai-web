@@ -61,6 +61,9 @@ const userSchema = new mongoose.Schema(
       }], 
       default: [] 
     },
+    
+    // ✅ 播放清單上限（可通過購買擴充）
+    playlistMaxSize: { type: Number, default: 5 },
 
     // ✅ 迷你播放器購買狀態與樣式（僅個人頁顯示）
     miniPlayerPurchased: { type: Boolean, default: false },

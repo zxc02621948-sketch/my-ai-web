@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import Modal from "@/components/common/Modal";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 const UserEditModal = ({ isOpen, onClose, currentUser, onUpdate }) => {
   const router = useRouter();
@@ -12,7 +13,6 @@ const UserEditModal = ({ isOpen, onClose, currentUser, onUpdate }) => {
   const [bio, setBio] = useState("");
   const [email, setEmail] = useState("");
   const [backupEmail, setBackupEmail] = useState("");
-  const [defaultMusicUrl, setDefaultMusicUrl] = useState("");
 
   useEffect(() => {
     if (currentUser) {
@@ -20,7 +20,6 @@ const UserEditModal = ({ isOpen, onClose, currentUser, onUpdate }) => {
       setBio(currentUser.bio || "");
       setEmail(currentUser.email || "");
       setBackupEmail(currentUser.backupEmail || "");
-      setDefaultMusicUrl(currentUser.defaultMusicUrl || "");
     }
   }, [currentUser]);
 
@@ -30,7 +29,6 @@ const UserEditModal = ({ isOpen, onClose, currentUser, onUpdate }) => {
         username,
         bio,
         backupEmail, // ✅ 僅送出可變更的欄位
-        defaultMusicUrl, // ✅ 新增音樂連結欄位
       });
       if (res.status === 200) {
         onUpdate?.(res.data);
@@ -42,7 +40,7 @@ const UserEditModal = ({ isOpen, onClose, currentUser, onUpdate }) => {
       }
     } catch (err) {
       console.error("更新失敗：", err);
-      alert("更新失敗：" + (err.response?.data?.message || err.message));
+      notify.error("更新失敗", err.response?.data?.message || err.message);
     }
   };
 
@@ -102,21 +100,6 @@ const UserEditModal = ({ isOpen, onClose, currentUser, onUpdate }) => {
           />
           <p className="text-xs text-yellow-400 mt-1">
             ※ 備用信箱可用於找回帳號，未來會要求驗證
-          </p>
-        </div>
-
-        {/* 音樂連結（僅允許 YouTube / youtu.be 的 https 連結） */}
-        <div>
-          <label className="block text-sm font-medium mb-1">預設音樂連結（YouTube）</label>
-          <input
-            type="url"
-            placeholder="https://www.youtube.com/watch?v=... 或 https://youtu.be/..."
-            className="w-full rounded border bg-black/30 p-2"
-            value={defaultMusicUrl}
-            onChange={(e) => setDefaultMusicUrl(e.target.value)}
-          />
-          <p className="text-xs text-gray-400 mt-1">
-            目前僅接受 https 的 YouTube 或 youtu.be 連結，避免釣魚或惡意網站。
           </p>
         </div>
 

@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/serverAuth";
 import User from "@/models/User";
 import PointsTransaction from "@/models/PointsTransaction";
 import { dbConnect } from "@/lib/db";
+import { getLevelIndex } from "@/utils/pointsLevels";
+import { grantLevelRewards } from "@/utils/levelRewards";
 
 export async function POST(req) {
   try {
@@ -42,9 +44,67 @@ export async function POST(req) {
       targetUser.pointsBalance = 0;
     }
 
-    // 更新積分
+    // 更新積分（同時更新餘額和等級經驗）
     const oldBalance = targetUser.pointsBalance;
+    const oldTotalEarned = targetUser.totalEarnedPoints || 0;
+    const oldLevel = getLevelIndex(oldTotalEarned);
+    
     targetUser.pointsBalance += pointsAmount;
+    targetUser.totalEarnedPoints = oldTotalEarned + pointsAmount; // ✅ 同時計入等級經驗
+    
+    const newLevel = getLevelIndex(targetUser.totalEarnedPoints);
+    
+    // 檢查是否升級
+    let levelUpRewards = null;
+    if (newLevel > oldLevel) {
+      // 升級了！發放獎勵
+      levelUpRewards = await grantLevelRewards(targetUser, oldLevel, newLevel);
+      
+      // 處理訂閱獎勵
+      if (levelUpRewards.subscriptionTrial) {
+        const trial = levelUpRewards.subscriptionTrial;
+        const startDate = new Date();
+        const expiresAt = new Date(startDate);
+        expiresAt.setDate(expiresAt.getDate() + trial.duration);
+        
+        const existingSub = targetUser.subscriptions.find(s => s.type === 'pinPlayerTest' && s.isActive);
+        if (!existingSub) {
+          targetUser.subscriptions.push({
+            type: 'pinPlayerTest',
+            startDate: startDate,
+            expiresAt: expiresAt,
+            isActive: true,
+            monthlyCost: 0,
+            lastRenewedAt: startDate
+          });
+        }
+      }
+      
+      if (levelUpRewards.subscriptionPermanent) {
+        const permanentDate = new Date('2099-12-31');
+        const existingSub = targetUser.subscriptions.find(s => s.type === 'pinPlayer' && s.isActive);
+        
+        if (existingSub) {
+          // 升級現有訂閱為永久
+          if (existingSub.expiresAt <= new Date('2099-01-01')) {
+            existingSub.expiresAt = permanentDate;
+            existingSub.monthlyCost = 0;
+            existingSub.lastRenewedAt = new Date();
+          }
+        } else {
+          // 創建新的永久訂閱
+          const startDate = new Date();
+          targetUser.subscriptions.push({
+            type: 'pinPlayer',
+            startDate: startDate,
+            expiresAt: permanentDate,
+            isActive: true,
+            monthlyCost: 0,
+            lastRenewedAt: startDate
+          });
+        }
+      }
+    }
     
     await targetUser.save();
 
@@ -73,14 +133,18 @@ export async function POST(req) {
 
     return NextResponse.json({
       success: true,
-      message: `成功發送 ${pointsAmount} 積分`,
+      message: `成功發送 ${pointsAmount} 積分${newLevel > oldLevel ? `，用戶已升級至 LV${newLevel + 1}` : ''}`,
       data: {
         targetUser: {
           id: targetUser._id,
           username: targetUser.username,
           oldBalance: oldBalance,
           newBalance: targetUser.pointsBalance
-        }
+        },
+        oldLevel: oldLevel + 1,
+        newLevel: newLevel + 1,
+        levelUp: newLevel > oldLevel,
+        rewards: levelUpRewards
       }
     });
 

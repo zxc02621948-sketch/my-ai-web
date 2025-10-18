@@ -40,6 +40,27 @@ export const STORE_PRODUCTS = {
         "到期前 3 天提醒",
         "每月 200 積分"
       ]
+    },
+    {
+      id: "playlist-expansion",
+      title: "播放清單擴充",
+      description: "增加播放清單容量，存放更多你喜愛的歌曲！每次擴充增加不同數量，價格隨次數遞增。",
+      icon: "📜",
+      price: "動態", // 動態價格
+      originalPrice: null,
+      isLimited: false,
+      expiry: null,
+      category: "features",
+      type: "playlist-expansion",
+      features: [
+        "第 1 次：+5 首（10 首）→ 50 積分",
+        "第 2 次：+5 首（15 首）→ 100 積分",
+        "第 3 次：+5 首（20 首）→ 200 積分",
+        "第 4 次：+10 首（30 首）→ 400 積分",
+        "第 5 次：+10 首（40 首）→ 600 積分",
+        "第 6 次：+10 首（50 首）→ 800 積分",
+        "永久有效，可重複購買至上限"
+      ]
     }
     // 調色盤功能已改為 LV2 等級獎勵，不再於商店販售
   ],
