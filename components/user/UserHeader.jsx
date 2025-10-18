@@ -18,6 +18,7 @@ import LevelRewardsModal from "./LevelRewardsModal";
 import PowerCouponGuideModal from "./PowerCouponGuideModal";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 const cloudflarePrefix = "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/";
 
@@ -221,7 +222,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       }
     } catch (error) {
       console.error("❌ 頭像框設置失敗:", error);
-      alert(error.response?.data?.error || "設置頭像框失敗，請重試");
+      notify.error("設置失敗", error.response?.data?.error || "設置頭像框失敗，請重試");
       throw error;
     }
   };
@@ -242,7 +243,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       }
     } catch (error) {
       console.error("❌ 頭像上傳失敗:", error);
-      alert("上傳失敗，請重試");
+      notify.error("上傳失敗", "上傳失敗，請重試");
       throw error;
     }
   };
@@ -299,7 +300,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       if (error?.response?.status === 401) {
         window.dispatchEvent(new CustomEvent("openLoginModal"));
       } else {
-        alert("操作失敗，請稍後再試");
+        notify.error("操作失敗", "操作失敗，請稍後再試");
       }
     } finally {
       setFollowLoading(false);
@@ -848,7 +849,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                           const pending = userData?.discussionPendingPoints || 0;
                           const isAdmin = currentUser?.isAdmin;
                           if (pending < 5 && !isAdmin) {
-                            alert(`需要累積至少 5 個愛心才能提領，目前只有 ${pending} 個`);
+                            notify.warning("提示", `需要累積至少 5 個愛心才能提領，目前只有 ${pending} 個`);
                             return;
                           }
                   
@@ -860,15 +861,15 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                     });
                     const result = await response.json();
                     if (result.success) {
-                      alert(`✅ 提領成功！獲得 ${result.claimed} 積分`);
+                      notify.success("提領成功！", `獲得 ${result.claimed} 積分`);
                       setClaimModalOpen(false);
                       window.location.reload();
                     } else {
-                      alert(result.error || '提領失敗');
+                      notify.error("提領失敗", result.error || '提領失敗');
                     }
                   } catch (error) {
                     console.error('提領錯誤:', error);
-                    alert('提領失敗，請稍後再試');
+                    notify.error("提領失敗", '提領失敗，請稍後再試');
                   }
                 }}
                 disabled={(userData?.discussionPendingPoints || 0) < 5 && !currentUser?.isAdmin}

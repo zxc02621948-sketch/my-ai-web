@@ -6,6 +6,7 @@ import { jwtDecode } from "jwt-decode";
 import CATEGORIES from "@/constants/categories";
 import { civitaiByHash } from "@/lib/civitai";
 import { parseComfyWorkflow } from "@/lib/parseComfyWorkflow";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function UploadStep2({
   rating,
@@ -745,7 +746,7 @@ export default function UploadStep2({
       }
 
       if (!comfyParsed) {
-        alert("讀取/解析 ComfyUI workflow 失敗，請確認檔案內容。");
+        notify.error("解析失敗", "讀取/解析 ComfyUI workflow 失敗，請確認檔案內容。");
         return;
       }
 
@@ -753,11 +754,11 @@ export default function UploadStep2({
       applyParsed(comfyParsed);
       setShowAdvanced(true);
 
-      alert("已解析 workflow 並填入參數！");
+      notify.success("解析成功", "已解析 workflow 並填入參數！");
       scrollAreaRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       console.error("workflow parse error", e);
-      alert("解析 workflow 過程中發生錯誤。");
+      notify.error("解析失敗", "解析 workflow 過程中發生錯誤。");
     }
   };
 
@@ -766,38 +767,38 @@ export default function UploadStep2({
 
   const handleUpload = async () => {
     if (!imageFile) {
-      alert("請先選擇圖片檔");
+      notify.warning("提示", "請先選擇圖片檔");
       return;
     }
     
     // 验证是否有可上传的文件（原图或压缩图）
     if (!useOriginal && !compressedImage) {
-      alert("圖片正在壓縮中，請稍候...");
+      notify.warning("提示", "圖片正在壓縮中，請稍候...");
       return;
     }
     
     if (!title || !title.trim()) {
-      alert("請輸入圖片標題！");
+      notify.warning("提示", "請輸入圖片標題！");
       return;
     }
     if (!category) {
-      alert("請選擇圖片分類！");
+      notify.warning("提示", "請選擇圖片分類！");
       return;
     }
     if (modelLink && !civitaiRegex.test(modelLink)) {
-      alert("模型連結僅允許 civitai.com 網址。");
+      notify.warning("提示", "模型連結僅允許 civitai.com 網址。");
       return;
     }
     if (loraLink) {
       const lines = loraLink.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       const invalid = lines.some(line => !civitaiRegex.test(line));
       if (invalid) {
-        alert("LoRA 連結僅允許 civitai.com 網址（多筆請每行一條）。");
+        notify.warning("提示", "LoRA 連結僅允許 civitai.com 網址（多筆請每行一條）。");
         return;
       }
     }
     if (rating === "18" && !confirmAdult) {
-      alert("請勾選『成年聲明』以確認內容不涉及未成年人。");
+      notify.warning("提示", "請勾選『成年聲明』以確認內容不涉及未成年人。");
       return;
     }
 

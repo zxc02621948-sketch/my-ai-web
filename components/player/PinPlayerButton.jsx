@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { useCurrentUser } from '@/contexts/CurrentUserContext';
+import { notify } from '@/components/common/GlobalNotificationManager';
 
 export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targetUsername }) {
   const router = useRouter();
@@ -110,7 +111,7 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
 
   const handlePin = async () => {
     if (!currentUser) {
-      alert('請先登入');
+      notify.warning("提示", '請先登入');
       return;
     }
 
@@ -126,7 +127,7 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
 
       if (res.data.success) {
         setIsPinned(true);
-        alert(`已釘選 @${targetUsername} 的播放器！\n將在全站持續播放，直到解除釘選。`);
+        notify.success("釘選成功", `已釘選 @${targetUsername} 的播放器！\n將在全站持續播放，直到解除釘選。`);
         
         // 更新 CurrentUserContext，添加釘選數據
         if (setCurrentUser) {
@@ -183,7 +184,7 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         }
       } 
       else {
-        alert(error.response?.data?.error || '釘選失敗，請稍後再試');
+        notify.error("釘選失敗", error.response?.data?.error || '釘選失敗，請稍後再試');
       }
     } finally {
       setLoading(false);
@@ -197,7 +198,7 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
 
       if (res.data.success) {
         setIsPinned(false);
-        alert('已解除釘選播放器');
+        notify.success("已解除釘選", '已解除釘選播放器');
         
         // 更新 CurrentUserContext，移除釘選數據
         if (setCurrentUser) {
@@ -215,7 +216,7 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
       }
     } catch (error) {
       console.error('解除釘選失敗:', error);
-      alert(error.response?.data?.error || '解除釘選失敗，請稍後再試');
+      notify.error("解除釘選失敗", error.response?.data?.error || '解除釘選失敗，請稍後再試');
     } finally {
       setLoading(false);
     }

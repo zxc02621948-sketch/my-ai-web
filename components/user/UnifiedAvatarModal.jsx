@@ -10,6 +10,7 @@ import FrameColorEditor from "./FrameColorEditor";
 import AvatarFrame from "@/components/common/AvatarFrame";
 import axios from "axios";
 import { getLevelIndex } from "@/utils/pointsLevels";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function UnifiedAvatarModal({ 
   isOpen, 
@@ -101,7 +102,7 @@ export default function UnifiedAvatarModal({
       }
     } catch (error) {
       console.error("處理圖片時發生錯誤:", error);
-      alert("處理圖片時發生錯誤，請重試");
+      notify.error("處理失敗", "處理圖片時發生錯誤，請重試");
     }
   };
 

@@ -9,6 +9,7 @@ import CatHeadphoneCanvas from "@/components/player/CatHeadphoneCanvas";
 import PinPlayerButton from "@/components/player/PinPlayerButton";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import axios from "axios";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function MiniPlayer() {
   const player = usePlayer();
@@ -679,7 +680,7 @@ export default function MiniPlayer() {
                     }));
                   } catch (error) {
                     console.error('解除釘選失敗:', error);
-                    alert('解除釘選失敗');
+                    notify.error("解除釘選失敗", "解除釘選播放器時發生錯誤");
                   }
                 }
               }}

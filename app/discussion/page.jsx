@@ -7,6 +7,7 @@ import Link from "next/link";
 
 import ImageModal from "@/components/image/ImageModal";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function DiscussionPage() {
   const { currentUser } = useCurrentUser(); // 使用 Context
@@ -139,18 +140,18 @@ export default function DiscussionPage() {
         // 從列表中移除
         setPosts(posts.filter(p => p._id !== postId));
       } else {
-        alert(result.error || '刪除失敗');
+        notify.error("刪除失敗", result.error || '刪除失敗');
       }
     } catch (error) {
       console.error('❌ [討論區] 刪除錯誤:', error);
-      alert('刪除失敗，請稍後再試');
+      notify.error("刪除失敗", '刪除失敗，請稍後再試');
     }
   };
 
   // 點讚
   const handleLike = async (postId) => {
     if (!currentUser) {
-      alert('請先登入');
+      notify.warning("提示", '請先登入');
       return;
     }
     
@@ -165,18 +166,18 @@ export default function DiscussionPage() {
         // 更新帖子數據
         setPosts(posts.map(p => p._id === postId ? result.data : p));
       } else {
-        alert(result.error || '操作失敗');
+        notify.error("操作失敗", result.error || '操作失敗');
       }
     } catch (error) {
       console.error('❌ [討論區] 點讚錯誤:', error);
-      alert('操作失敗，請稍後再試');
+      notify.error("操作失敗", '操作失敗，請稍後再試');
     }
   };
 
   // 收藏
   const handleBookmark = async (postId) => {
     if (!currentUser) {
-      alert('請先登入');
+      notify.warning("提示", '請先登入');
       return;
     }
     
@@ -191,11 +192,11 @@ export default function DiscussionPage() {
         // 更新帖子數據
         setPosts(posts.map(p => p._id === postId ? result.data : p));
       } else {
-        alert(result.error || '操作失敗');
+        notify.error("操作失敗", result.error || '操作失敗');
       }
     } catch (error) {
       console.error('❌ [討論區] 收藏錯誤:', error);
-      alert('操作失敗，請稍後再試');
+      notify.error("操作失敗", '操作失敗，請稍後再試');
     }
   };
 
@@ -204,10 +205,10 @@ export default function DiscussionPage() {
     const url = `${window.location.origin}/discussion/${postId}`;
     try {
       await navigator.clipboard.writeText(url);
-      alert('鏈接已複製到剪貼板！');
+      notify.success("複製成功", '鏈接已複製到剪貼板！');
     } catch (error) {
       console.error('❌ [討論區] 複製失敗:', error);
-      alert('複製失敗，請手動複製');
+      notify.error("複製失敗", '複製失敗，請手動複製');
     }
   };
 

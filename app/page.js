@@ -11,6 +11,7 @@ import { useFilterContext, labelToRating } from "@/components/context/FilterCont
 import useLikeHandler from "@/hooks/useLikeHandler";
 import { usePlayer } from "@/components/context/PlayerContext";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 
 /** ====== 超精簡資料流：去掉預覽/快取/一次性旗標，只保留 inFlightId ====== */
@@ -419,11 +420,11 @@ export default function HomePage() {
           });
           setSelectedImage(normalizeImage(img));
         } else {
-          alert("找不到該圖片，可能已被刪除");
+          notify.warning("提示", "找不到該圖片，可能已被刪除");
         }
       } catch (err) {
         console.warn("⚠️ 找不到該圖片，可能已被刪除", err);
-        alert("找不到該圖片，可能已被刪除");
+        notify.warning("提示", "找不到該圖片，可能已被刪除");
       }
     };
     window.addEventListener("openImageModal", onOpenFromNotification);

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import axios from "axios";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function SettingsPage() {
   const { subscriptions, updateSubscriptions } = useCurrentUser();
@@ -27,11 +28,11 @@ export default function SettingsPage() {
       
       if (res.data.success) {
         const expiresAt = res.data.expiresAt ? new Date(res.data.expiresAt).toLocaleDateString('zh-TW') : '';
-        alert(`訂閱已取消\n\n您可以繼續使用到 ${expiresAt}\n到期後將自動失效，不會再續費。`);
+        notify.success("訂閱已取消", `您可以繼續使用到 ${expiresAt}\n到期後將自動失效，不會再續費。`);
         updateSubscriptions();
       }
     } catch (error) {
-      alert("取消失敗");
+      notify.error("取消失敗", "取消訂閱時發生錯誤，請稍後再試");
     } finally {
       setLoading(false);
     }
