@@ -145,6 +145,38 @@ const userSchema = new mongoose.Schema(
     pinnedPlayerSettings: {
       showReminder: { type: Boolean, default: true }
     },
+
+    // ===== 內容釘選系統（預留欄位） =====
+    pinnedContentSlots: {
+      type: Number,
+      default: 1,
+      comment: '可用的內容釘選位數量（基礎 + 購買 + VIP）'
+    },
+
+    purchasedPinnedSlots: {
+      type: Number,
+      default: 0,
+      comment: '已購買的額外釘選位（永久）'
+    },
+
+    // ===== 每日上傳限制系統 =====
+    dailyVideoUploads: {
+      type: Number,
+      default: 0,
+      comment: '今日已上傳影片數量'
+    },
+
+    lastVideoUploadDate: {
+      type: Date,
+      default: null,
+      comment: '最後上傳影片的日期（用於每日重置）'
+    },
+
+    dailyVideoLimit: {
+      type: Number,
+      default: 5,
+      comment: '每日影片上傳限制（可通過等級或購買提升）'
+    },
     
     // ✅ 訂閱管理系統（月租功能 - 累積制）
     subscriptions: [{

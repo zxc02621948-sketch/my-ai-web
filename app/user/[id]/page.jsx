@@ -4,6 +4,8 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import axios from "axios";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import ImageModal from "@/components/image/ImageModal";
+import VideoModal from "@/components/video/VideoModal";
+import EditVideoModal from "@/components/video/EditVideoModal";
 import UserHeader from "@/components/user/UserHeader";
 import UserImageGrid from "@/components/user/UserImageGrid";
 import UserEditModal from "@/components/user/UserEditModal";
@@ -45,7 +47,9 @@ export default function UserProfilePage() {
 
   const [userData, setUserData] = useState(null);
   const [uploadedImages, setUploadedImages] = useState([]);
+  const [uploadedVideos, setUploadedVideos] = useState([]);
   const [likedImages, setLikedImages] = useState([]);
+  const [likedVideos, setLikedVideos] = useState([]);
   const [pinnedPlayerData, setPinnedPlayerData] = useState(null);
   const playlistLoadedRef = useRef(null); // 追踪已載入的播放清單，避免重複載入
   const lastPageIdRef = useRef(id); // 追踪上次訪問的頁面 ID
@@ -64,6 +68,7 @@ export default function UserProfilePage() {
   );
 
   const [selectedImage, setSelectedImage] = useState(null);
+  const [showEditVideoModal, setShowEditVideoModal] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [isPowerCouponModalOpen, setPowerCouponModalOpen] = useState(false);
   const [isPointsModalOpen, setPointsModalOpen] = useState(false);
@@ -82,7 +87,7 @@ export default function UserProfilePage() {
         player?.setShareMode?.("global");
       } catch {}
     };
-  }, [id, player]); // 當頁面 ID 改變時重新執行
+  }, [id]); // 移除 player 依賴，避免無限循環
   
   // ✅ 當 userData 載入後，檢查並啟用播放器
   useEffect(() => {
@@ -97,7 +102,7 @@ export default function UserProfilePage() {
         player?.setMiniPlayerEnabled?.(true);
       } catch {}
     }
-  }, [userData?.miniPlayerPurchased, userData?.playerCouponUsed, userData?.miniPlayerExpiry, player]); // 移除 currentUser?.pinnedPlayer 依賴，避免釘選時重複觸發
+  }, [userData?.miniPlayerPurchased, userData?.playerCouponUsed, userData?.miniPlayerExpiry]); // 移除 player 依賴，避免無限循環
   
   // ✅ 設置頁面主人的播放器造型信息（獨立的 useEffect，避免循環）
   useEffect(() => {
@@ -589,6 +594,18 @@ export default function UserProfilePage() {
           }
         });
 
+      // 抓取用戶上傳的影片
+      getJSON(`/api/user-videos?id=${uid}`)
+        .then((val) => {
+          const list = pickList(val);
+          if (list.length || uploadedVideos.length === 0) setUploadedVideos(list);
+        })
+        .catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.warn("[user-videos] failed:", err);
+          }
+        });
+
       getJSON(`/api/user-liked-images?id=${uid}`)
         .then((val) => {
           const list = pickList(val);
@@ -597,6 +614,18 @@ export default function UserProfilePage() {
         .catch((err) => {
           if (err.name !== 'AbortError') {
             console.warn("[user-liked-images] failed:", err);
+          }
+        });
+
+      // 抓取用戶收藏的影片
+      getJSON(`/api/user-liked-videos?id=${uid}`)
+        .then((val) => {
+          const list = pickList(val);
+          if (list.length || likedVideos.length === 0) setLikedVideos(list);
+        })
+        .catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.warn("[user-liked-videos] failed:", err);
           }
         });
     })();
@@ -611,9 +640,15 @@ export default function UserProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, currentUser]); // 重新加回 currentUser，但用 ref 防止重複載入
 
-  // 取完整圖片資訊並合併（模型/提示詞/生成參數等）
+  // 取完整圖片/影片資訊並合併（模型/提示詞/生成參數等）
   const enrichImage = async (img) => {
     let full = img;
+    
+    // 如果是影片，直接返回不需要 enrich
+    if (img.type === 'video') {
+      return full;
+    }
+    
     try {
       // 1) 取完整 image
       const r = await axios.get(`/api/images/${img._id}`);
@@ -654,31 +689,48 @@ export default function UserProfilePage() {
     setSelectedImage(enriched);
   };
 
-  // 畫面用的過濾清單
+  // 畫面用的過濾清單（混合圖片和影片）
   const filteredImages = useMemo(() => {
-    const base = activeTab === "uploads" ? uploadedImages : likedImages;
+    let base = [];
+    
+    if (activeTab === "uploads") {
+      // 混合圖片和影片，按時間排序
+      const combinedItems = [
+        ...uploadedImages.map(img => ({ ...img, type: 'image' })),
+        ...uploadedVideos.map(video => ({ ...video, type: 'video' }))
+      ];
+      base = combinedItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    } else {
+      // 收藏頁面混合顯示圖片和影片
+      const combinedLikedItems = [
+        ...likedImages.map(img => ({ ...img, type: 'image' })),
+        ...likedVideos.map(video => ({ ...video, type: 'video' }))
+      ];
+      base = combinedLikedItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+    
     const keyword = searchQuery.toLowerCase();
     const selectedRatings = levelFilters.map((label) => labelToRating[label]);
 
-    return base.filter((img) => {
-      const rating = img.rating || "all";
+    return base.filter((item) => {
+      const rating = item.rating || "all";
       const matchLevel =
         selectedRatings.length === 0 ? rating !== "18" : selectedRatings.includes(rating);
 
       const matchCategory =
-        categoryFilters.length === 0 || categoryFilters.includes(img.category);
+        categoryFilters.length === 0 || categoryFilters.includes(item.category);
 
       const matchSearch =
         keyword === "" ||
-        (img.title?.toLowerCase() || "").includes(keyword) ||
-        (img.user?.username?.toLowerCase() || "").includes(keyword) ||
-        (Array.isArray(img.tags)
-          ? img.tags.some((tag) => tag.toLowerCase().includes(keyword))
+        (item.title?.toLowerCase() || "").includes(keyword) ||
+        (item.user?.username?.toLowerCase() || "").includes(keyword) ||
+        (Array.isArray(item.tags)
+          ? item.tags.some((tag) => tag.toLowerCase().includes(keyword))
           : false);
 
       return matchLevel && matchCategory && matchSearch;
     });
-  }, [activeTab, uploadedImages, likedImages, levelFilters, categoryFilters, searchQuery]);
+  }, [activeTab, uploadedImages, uploadedVideos, likedImages, likedVideos, levelFilters, categoryFilters, searchQuery]);
 
   // Like hook（共用）
   const { handleToggleLike, onLikeUpdate } = useLikeHandler({
@@ -811,7 +863,7 @@ export default function UserProfilePage() {
             }`}
             onClick={() => setActiveTab("likes")}
           >
-            <span className="hidden sm:inline">❤️ 收藏圖片</span>
+            <span className="hidden sm:inline">❤️ 收藏</span>
             <span className="sm:hidden">❤️ 收藏</span>
           </button>
         </div>
@@ -837,40 +889,86 @@ export default function UserProfilePage() {
         />
 
         {selectedImage && (
-          <ImageModal
-            imageData={selectedImage}
-            prevImage={prevImage}
-            nextImage={nextImage}
-            currentUser={currentUser}
-            onFollowChange={handleFollowChange}
-            onLikeUpdate={(updated) => {
-              onLikeUpdate(updated);
+          selectedImage.type === 'video' ? (
+            <VideoModal
+              video={selectedImage}
+              currentUser={currentUser}
+              displayMode="gallery"
+              onClose={() => setSelectedImage(null)}
+              onUserClick={() => {
+                const authorId = selectedImage?.author?._id || selectedImage?.author;
+                if (authorId) {
+                  router.push(`/user/${authorId}`);
+                }
+              }}
+              onDelete={async (videoId) => {
+                try {
+                  const response = await fetch(`/api/videos/${videoId}/delete`, {
+                    method: 'DELETE',
+                  });
 
-              const me = currentUser?._id || currentUser?.id;
-              const stillLiked = Array.isArray(updated.likes) && updated.likes.includes(me);
+                  if (response.ok) {
+                    // 從列表中移除影片
+                    setUploadedVideos(prev => prev.filter(v => v._id !== videoId));
+                    setLikedVideos(prev => prev.filter(v => v._id !== videoId));
+                    // 關閉 Modal
+                    setSelectedImage(null);
+                    console.log('✅ 影片刪除成功');
+                  } else {
+                    const error = await response.json();
+                    console.error('❌ 刪除影片失敗:', error);
+                    alert('刪除失敗：' + (error.error || '未知錯誤'));
+                  }
+                } catch (error) {
+                  console.error('❌ 刪除影片錯誤:', error);
+                  alert('刪除失敗，請稍後再試');
+                }
+              }}
+              canEdit={currentUser && selectedImage?.author?._id && String(currentUser._id) === String(selectedImage.author._id)}
+              onEdit={() => {
+                setShowEditVideoModal(true);
+              }}
+              onLikeUpdate={(updated) => {
+                onLikeUpdate(updated);
+                setSelectedImage(updated);
+              }}
+            />
+          ) : (
+            <ImageModal
+              imageData={selectedImage}
+              prevImage={prevImage}
+              nextImage={nextImage}
+              currentUser={currentUser}
+              onFollowChange={handleFollowChange}
+              onLikeUpdate={(updated) => {
+                onLikeUpdate(updated);
 
-              if (activeTab === "likes") {
-                if (!stillLiked) {
-                  setLikedImages((prev) => prev.filter((img) => img._id !== updated._id));
-                  setSelectedImage((prev) => (prev?._id === updated._id ? null : prev));
+                const me = currentUser?._id || currentUser?.id;
+                const stillLiked = Array.isArray(updated.likes) && updated.likes.includes(me);
+
+                if (activeTab === "likes") {
+                  if (!stillLiked) {
+                    setLikedImages((prev) => prev.filter((img) => img._id !== updated._id));
+                    setSelectedImage((prev) => (prev?._id === updated._id ? null : prev));
+                  } else {
+                    setLikedImages((prev) =>
+                      prev.map((img) =>
+                        img._id === updated._id ? { ...img, likes: updated.likes } : img
+                      )
+                    );
+                  }
                 } else {
-                  setLikedImages((prev) =>
+                  setUploadedImages((prev) =>
                     prev.map((img) =>
                       img._id === updated._id ? { ...img, likes: updated.likes } : img
                     )
                   );
                 }
-              } else {
-                setUploadedImages((prev) =>
-                  prev.map((img) =>
-                    img._id === updated._id ? { ...img, likes: updated.likes } : img
-                  )
-                );
-              }
-            }}
-            onClose={() => setSelectedImage(null)}
-            onNavigate={(dir) => navigateFromSelected(dir)}
-          />
+              }}
+              onClose={() => setSelectedImage(null)}
+              onNavigate={(dir) => navigateFromSelected(dir)}
+            />
+          )
         )}
       </main>
 
@@ -898,6 +996,31 @@ export default function UserProfilePage() {
         onClose={() => setPowerCouponModalOpen(false)}
         userData={userData}
       />
+
+      {/* 編輯影片 Modal */}
+      {showEditVideoModal && selectedImage?.type === 'video' && (
+        <EditVideoModal
+          video={selectedImage}
+          isOpen={showEditVideoModal}
+          onClose={() => setShowEditVideoModal(false)}
+          onSuccess={(updatedVideo) => {
+            // 更新影片列表中的資料
+            if (activeTab === "uploads") {
+              setUploadedVideos(prev => prev.map(v => 
+                v._id === updatedVideo._id ? updatedVideo : v
+              ));
+            } else {
+              setLikedVideos(prev => prev.map(v => 
+                v._id === updatedVideo._id ? updatedVideo : v
+              ));
+            }
+            // 更新選中的影片
+            setSelectedImage(updatedVideo);
+            // 關閉編輯 Modal
+            setShowEditVideoModal(false);
+          }}
+        />
+      )}
     </>
   );
 }

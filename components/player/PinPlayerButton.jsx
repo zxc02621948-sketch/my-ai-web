@@ -54,31 +54,30 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         
         setHasPinFeature(true);
         
-        // 如果訂閱過期且當前已釘選，自動解除釘選
-        if (!hasSubscription && isPinned) {
-          setIsPinned(false);
-          
-          // 調用 API 真正解除釘選
-          try {
-            await axios.delete('/api/player/pin');
-          } catch (error) {
-            console.error('❌ [PinButton] 自動解除釘選失敗:', error);
-          }
-          
-          // 更新 CurrentUserContext
-          if (setCurrentUser) {
-            setCurrentUser(prevUser => {
-              if (!prevUser) return prevUser;
-              const { pinnedPlayer, ...rest } = prevUser;
-              return rest;
-            });
-          }
-          
-          // 觸發解除釘選事件
-          window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
-            detail: { isPinned: false } 
-          }));
-        }
+        // 🎯 註解掉訂閱過期檢查，因為這會導致釘選被自動解除
+        // 訂閱過期應該在釘選時檢查，而不是在檢查狀態時自動解除
+        // if (!hasSubscription && isPinned) {
+        //   setIsPinned(false);
+        //   try {
+        //     await axios.delete('/api/player/pin');
+        //   } catch (error) {
+        //     console.error('❌ [PinButton] 自動解除釘選失敗:', error);
+        //   }
+        //   
+        //   // 更新 CurrentUserContext
+        //   if (setCurrentUser) {
+        //     setCurrentUser(prevUser => {
+        //       if (!prevUser) return prevUser;
+        //       const { pinnedPlayer, ...rest } = prevUser;
+        //       return rest;
+        //     });
+        //   }
+        //   
+        //   // 觸發解除釘選事件
+        //   window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
+        //     detail: { isPinned: false } 
+        //   }));
+        // }
         
         
       } catch (error) {

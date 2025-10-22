@@ -15,7 +15,9 @@ const ReportSchema = new mongoose.Schema(
         // 圖片檢舉類型
         "category_wrong","rating_wrong","duplicate","broken","policy_violation","other",
         // 討論區檢舉類型
-        "discussion_post","discussion_comment"
+        "discussion_post","discussion_comment",
+        // 圖片留言檢舉類型
+        "image_comment"
       ],
       required: true
     },

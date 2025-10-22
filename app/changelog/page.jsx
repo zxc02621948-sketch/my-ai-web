@@ -18,10 +18,35 @@ export default function ChangelogPage() {
 
       {/* v0.8.0 - 大版本更新 */}
       <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-2 text-yellow-400">v0.8.0（2025-10-15）🎉 大版本更新</h2>
+        <h2 className="text-xl font-semibold mb-2 text-yellow-400">v0.8.0（2025-01-20）🎉 大版本更新</h2>
         
         <div className="mb-4">
-          <h3 className="text-lg font-semibold text-blue-400 mb-2">🎵 播放器系統</h3>
+          <h3 className="text-lg font-semibold text-purple-400 mb-2">🎬 影片系統</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>完整的影片上傳功能（支援多種格式，自動提取元數據）</li>
+            <li>整合 YouTube 播放器，支援釘選功能</li>
+            <li>影片搜索功能（標題、標籤、描述搜索）</li>
+            <li>影片排序系統（熱門、最新、最舊、隨機、最多讚）</li>
+            <li>無限滾動載入更多影片內容</li>
+            <li>完整的影片評論系統，支援回覆</li>
+            <li>影片檢舉功能，管理員審核</li>
+            <li>影片編輯功能（標題、描述、標籤）</li>
+            <li>影片統計與熱門度計算</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-blue-400 mb-2">🎵 音樂系統</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>音樂播放功能整合</li>
+            <li>音樂搜索功能</li>
+            <li>音樂排序系統</li>
+            <li>音樂熱門度計算</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-cyan-400 mb-2">🎵 播放器系統</h3>
           <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
             <li>新增個人頁播放器功能（支援 YouTube 音樂）</li>
             <li>迷你播放器「釘選」功能（LV3 解鎖）</li>
@@ -53,6 +78,27 @@ export default function ChangelogPage() {
             <li>上傳圖片、收到讚、評論等獲得積分</li>
             <li>積分商店（頭像框、權力券、播放器訂閱等）</li>
             <li>權力券系統（限時加倍獲得積分）</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-green-400 mb-2">🔍 搜索功能升級</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>統一搜索功能（圖片、影片、音樂一鍵搜索）</li>
+            <li>智能過濾與快速搜索</li>
+            <li>搜索歷史記錄</li>
+            <li>清空搜索回到全部內容</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-orange-400 mb-2">💬 評論系統升級</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>5層反垃圾機制（內容長度、頻率限制、重複檢測等）</li>
+            <li>評論檢舉功能</li>
+            <li>管理員檢舉處理系統</li>
+            <li>評論影響圖片熱門度計算</li>
+            <li>更好的錯誤提示與用戶體驗</li>
           </ul>
         </div>
 
@@ -90,13 +136,25 @@ export default function ChangelogPage() {
         </div>
 
         <div className="mb-4">
-          <h3 className="text-lg font-semibold text-pink-400 mb-2">📱 用戶體驗優化</h3>
+          <h3 className="text-lg font-semibold text-pink-400 mb-2">👤 個人頁面升級</h3>
+          <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
+            <li>混合顯示功能（圖片和影片統一展示）</li>
+            <li>按創建時間和點讚時間智能排序</li>
+            <li>視覺區分不同媒體類型</li>
+            <li>頭像點擊導航功能</li>
+            <li>編輯與刪除按鈕位置優化</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-gray-400 mb-2">📱 用戶體驗優化</h3>
           <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
             <li>個人頁按鈕權限優化（只有本人可見特定按鈕）</li>
             <li>手機版教學按鈕優化</li>
             <li>導航自動滾動到頂部</li>
             <li>討論論壇載入優化</li>
             <li>重複 API 呼叫優化（性能提升）</li>
+            <li>播放器位置優化（避免邊緣遮擋）</li>
           </ul>
         </div>
 
@@ -120,6 +178,10 @@ export default function ChangelogPage() {
             <li>修復頭像框在追蹤列表不顯示</li>
             <li>修復圖片模態框標題與按鈕排版</li>
             <li>修復站內信封存內容殘留</li>
+            <li>修復影片縮圖消失問題</li>
+            <li>修復播放器釘選狀態同步問題</li>
+            <li>修復評論系統重複 key 錯誤</li>
+            <li>修復檢舉系統 API 錯誤</li>
             <li>清理冗餘代碼與測試檔案</li>
           </ul>
         </div>

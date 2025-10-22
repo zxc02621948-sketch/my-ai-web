@@ -61,6 +61,7 @@ const ImageSchema = new mongoose.Schema(
     likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     likesCount: { type: Number, default: 0 },
     clicks: { type: Number, default: 0 },
+    commentsCount: { type: Number, default: 0 },  // ✅ 新增：留言數量
     completenessScore: { type: Number, default: 0 },
 
     // ✅ 新圖時間加成
@@ -88,6 +89,90 @@ const ImageSchema = new mongoose.Schema(
     // ✅ 是否包含元數據（用於「作品展示」vs「創作參考」篩選）
     hasMetadata: { type: Boolean, default: false, index: true },
 
+    // ===== 內容生命週期管理（預留欄位） =====
+    status: {
+      type: String,
+      enum: ['active', 'cold', 'archived', 'deleted'],
+      default: 'active',
+      index: true,
+      comment: 'active=正常, cold=冷藏, archived=歸檔, deleted=已刪除'
+    },
+
+    // ===== 互動數據 =====
+    viewCount: {
+      type: Number,
+      default: 0,
+      index: true,
+      comment: '觀看次數'
+    },
+
+    lastViewedAt: {
+      type: Date,
+      default: null,
+      comment: '最後觀看時間'
+    },
+
+    lastInteractionAt: {
+      type: Date,
+      default: null,
+      index: true,
+      comment: '最後互動時間（點讚/評論/觀看）'
+    },
+
+    // ===== 冷藏/歸檔時間戳 =====
+    coldAt: {
+      type: Date,
+      default: null,
+      index: true,
+      comment: '進入冷藏狀態的時間'
+    },
+
+    archivedAt: {
+      type: Date,
+      default: null,
+      comment: '進入歸檔狀態的時間'
+    },
+
+    // ===== 保護標記 =====
+    isPinned: {
+      type: Boolean,
+      default: false,
+      index: true,
+      comment: '用戶釘選的重要作品，永不冷藏'
+    },
+
+    pinnedAt: {
+      type: Date,
+      default: null,
+      comment: '釘選時間'
+    },
+
+    isHighQuality: {
+      type: Boolean,
+      default: false,
+      index: true,
+      comment: '高質量內容標記（管理員或演算法判定），永不冷藏'
+    },
+
+    qualityScore: {
+      type: Number,
+      default: 0,
+      comment: '質量評分（用於自動判定 isHighQuality）'
+    },
+
+    // ===== 管理員功能 =====
+    adminNotes: {
+      type: String,
+      default: '',
+      comment: '管理員備註'
+    },
+
+    forceActive: {
+      type: Boolean,
+      default: false,
+      comment: '管理員強制保持活躍（永不冷藏）'
+    },
+
     createdAt: { type: Date, default: Date.now },
   },
   { collection: "images" }
@@ -105,6 +190,13 @@ ImageSchema.index({ userId: 1 });
 ImageSchema.index({ popScore: -1, createdAt: -1 });
 ImageSchema.index({ modelHash: 1 });
 ImageSchema.index({ 'loraRefs.hash': 1 });
+
+// ===== 內容生命週期管理索引（預留） =====
+ImageSchema.index({ status: 1, popScore: -1 });
+ImageSchema.index({ status: 1, createdAt: -1 });
+ImageSchema.index({ lastInteractionAt: -1 });
+ImageSchema.index({ isPinned: 1, user: 1 });
+ImageSchema.index({ isHighQuality: 1 });
 
 // 目前最高分（取 popScore）
 async function fetchCurrentMaxPopScore(model) {

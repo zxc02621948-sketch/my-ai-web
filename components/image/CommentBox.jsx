@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import CommentItem from "./CommentItem";
 import { DEFAULT_AVATAR_IDS } from "@/lib/constants";
+import ReportModal from "@/components/common/ReportModal";
+import NotificationModal from "@/components/common/NotificationModal";
 
 function findCommentById(comments, id) {
   for (const comment of comments) {
@@ -30,6 +32,13 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
   const [replyMap, setReplyMap] = useState({});
   const [replyInputs, setReplyInputs] = useState({});
   const [replyExpandMap, setReplyExpandMap] = useState({});
+  const [errorMessage, setErrorMessage] = useState("");  // ✅ 新增：本地錯誤提示
+  
+  // 檢舉彈窗狀態
+  const [reportModal, setReportModal] = useState({ isOpen: false, commentId: null, content: '' });
+  
+  // 通知彈窗狀態
+  const [notification, setNotification] = useState({ isOpen: false, type: 'info', title: '', message: '' });
 
   useEffect(() => {
     if (!imageId) return;
@@ -50,6 +59,9 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
   const handleCommentSubmit = async (parentCommentId = null) => {
     const text = parentCommentId ? replyInputs[parentCommentId] : newComment;
     if (!text?.trim()) return;
+
+    // 清空之前的錯誤提示
+    setErrorMessage("");
 
     try {
       const res = await axios.post(`/api/comments/${imageId}`, {
@@ -102,7 +114,17 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
       window.dispatchEvent(new Event("refreshNotifications"));
 
     } catch (err) {
-      console.error("留言發送錯誤：", err);
+      // 顯示本地錯誤提示（在輸入框下方）
+      const errMsg = err.response?.data?.error || "留言發送失敗，請稍後再試";
+      setErrorMessage(errMsg);
+      
+      // 3 秒後自動清除錯誤提示
+      setTimeout(() => setErrorMessage(""), 3000);
+      
+      // 只在真正的系統錯誤時才 console.error
+      if (!err.response?.data?.error) {
+        console.error("留言發送錯誤：", err);
+      }
     }
   };
 
@@ -136,6 +158,61 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
     }
   };
 
+  const handleReport = (commentId, commentContent) => {
+    if (!currentUser) {
+      setNotification({ 
+        isOpen: true, 
+        type: 'error', 
+        title: '請先登入', 
+        message: '您需要登入才能檢舉內容' 
+      });
+      return;
+    }
+    setReportModal({ isOpen: true, commentId, content: commentContent });
+  };
+
+  const submitReport = async (reason) => {
+    try {
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'image_comment',
+          targetId: reportModal.commentId,
+          reason: reason,
+          details: reportModal.content
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.ok || result.success) {
+        setNotification({ 
+          isOpen: true, 
+          type: 'success', 
+          title: '檢舉成功', 
+          message: '檢舉已提交，管理員將會審核。感謝你協助維護社群品質！' 
+        });
+        setReportModal({ isOpen: false, commentId: null, content: '' });
+      } else {
+        setNotification({ 
+          isOpen: true, 
+          type: 'error', 
+          title: '檢舉失敗', 
+          message: result.message || result.error || '檢舉失敗，請稍後再試' 
+        });
+      }
+    } catch (error) {
+      console.error('檢舉錯誤:', error);
+      setNotification({ 
+        isOpen: true, 
+        type: 'error', 
+        title: '檢舉失敗', 
+        message: '網路錯誤，請稍後再試' 
+      });
+    }
+  };
+
   return (
     <div className="w-full">
       {/* 留言清單 */}
@@ -158,6 +235,7 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
                     currentUser={currentUser}
                     onDelete={handleDeleteComment}
                     onReply={handleCommentSubmit}
+                    onReport={handleReport}
                     replyInputs={replyInputs}
                     onReplyChange={(id, val) =>
                       setReplyInputs((prev) => ({ ...prev, [id]: val }))
@@ -181,24 +259,58 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
       {/* 輸入欄 */}
       {!onlyList &&
         (currentUser ? (
-          <div className="mt-3 flex gap-2">
-            <input
-              type="text"
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              className="flex-1 rounded bg-neutral-700 text-white p-2 text-sm placeholder-gray-400"
-              placeholder="輸入留言..."
-            />
-            <button
-              onClick={() => handleCommentSubmit(null)}
-              className="bg-blue-600 px-3 py-2 text-sm rounded hover:bg-blue-700 transition"
-            >
-              發送
-            </button>
+          <div className="mt-3">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newComment}
+                onChange={(e) => {
+                  setNewComment(e.target.value);
+                  // 用戶輸入時清空錯誤提示
+                  if (errorMessage) setErrorMessage("");
+                }}
+                className="flex-1 rounded bg-neutral-700 text-white p-2 text-sm placeholder-gray-400"
+                placeholder="輸入留言..."
+              />
+              <button
+                onClick={() => handleCommentSubmit(null)}
+                className="bg-blue-600 px-3 py-2 text-sm rounded hover:bg-blue-700 transition"
+              >
+                發送
+              </button>
+            </div>
+            
+            {/* 錯誤提示（在輸入框下方） */}
+            {errorMessage && (
+              <div className="mt-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-sm flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{errorMessage}</span>
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-sm text-red-400 mt-3">請先登入才能留言喔～</p>
         ))}
+      
+      {/* 檢舉彈窗 */}
+      <ReportModal
+        isOpen={reportModal.isOpen}
+        onClose={() => setReportModal({ isOpen: false, commentId: null, content: '' })}
+        onSubmit={submitReport}
+        title="檢舉留言"
+        description="請說明檢舉原因，我們會盡快審核處理"
+      />
+      
+      {/* 通知彈窗 */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={() => setNotification({ ...notification, isOpen: false })}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+      />
     </div>
   );
 }
+ 
+ 

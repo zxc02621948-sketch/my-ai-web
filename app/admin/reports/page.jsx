@@ -72,6 +72,7 @@ const TYPE_OPTIONS = [
   { value: "other",            label: "其他" },
   { value: "discussion_post",    label: "💬 討論帖子" },
   { value: "discussion_comment", label: "💬 討論評論" },
+  { value: "image_comment",      label: "💬 圖片留言" },
 ];
 const TYPE_LABELS = TYPE_OPTIONS.reduce((m, o) => (o.value && (m[o.value] = o.label), m), {});
 
@@ -111,6 +112,11 @@ async function fetchDiscussionContent(targetId, type) {
       return null;
     } else if (type === 'discussion_comment') {
       const r = await fetch(`/api/discussion/comments/${targetId}`, { cache: "no-store" });
+      const j = await r.json();
+      return j?.comment || null;
+    } else if (type === 'image_comment') {
+      // 獲取圖片留言內容 - 使用專用的單個留言 API
+      const r = await fetch(`/api/comments/single/${targetId}`, { cache: "no-store" });
       const j = await r.json();
       return j?.comment || null;
     }
@@ -187,9 +193,9 @@ export default function AdminReportsPage() {
           setImgCache(newCache);
         }
 
-        // 抓討論區內容快取
+        // 抓討論區和留言內容快取
         const needFetchDiscussion = (j.items || [])
-          .filter(it => (it.type === 'discussion_post' || it.type === 'discussion_comment') && it.targetId)
+          .filter(it => (it.type === 'discussion_post' || it.type === 'discussion_comment' || it.type === 'image_comment') && it.targetId)
           .map(it => ({ id: String(it.targetId), type: it.type }))
           .filter(({ id }) => !(id in discussionCache));
         if (needFetchDiscussion.length) {
@@ -459,9 +465,10 @@ export default function AdminReportsPage() {
     );
   }
 
-  // 刪除討論區內容（帖子或評論）
+  // 刪除討論區內容或圖片留言（帖子/評論/留言）
   async function deleteDiscussionContent(report) {
-    const contentType = report.type === 'discussion_post' ? '帖子' : '評論';
+    const contentType = report.type === 'discussion_post' ? '帖子' : 
+                        report.type === 'discussion_comment' ? '評論' : '留言';
     
     showConfirm(
       '確認刪除',
@@ -476,6 +483,8 @@ export default function AdminReportsPage() {
             endpoint = `/api/discussion/posts/${report.targetId}`;
           } else if (report.type === 'discussion_comment') {
             endpoint = `/api/discussion/comments/${report.targetId}`;
+          } else if (report.type === 'image_comment') {
+            endpoint = `/api/delete-comment/${report.targetId}`;
           }
 
           const r = await fetch(endpoint, {
@@ -564,7 +573,7 @@ export default function AdminReportsPage() {
               </tr>
             )}
             {items.map((r) => {
-              const isDiscussion = r.type === 'discussion_post' || r.type === 'discussion_comment';
+              const isDiscussion = r.type === 'discussion_post' || r.type === 'discussion_comment' || r.type === 'image_comment';
               const imgInfo = imgCache[String(r.imageId)];
               const thumb = imgInfo?.imageUrl || "";
               const discussionContent = isDiscussion ? discussionCache[String(r.targetId)] : null;
@@ -579,7 +588,7 @@ export default function AdminReportsPage() {
                         </div>
                         <div className="text-xs text-zinc-400 max-w-[200px]">
                           <div className="font-semibold text-zinc-200 mb-1">
-                            {r.type === 'discussion_post' ? '討論帖子' : '討論評論'}
+                            {r.type === 'discussion_post' ? '討論帖子' : r.type === 'discussion_comment' ? '討論評論' : '圖片留言'}
                           </div>
                           {discussionContent ? (
                             <>
@@ -598,8 +607,13 @@ export default function AdminReportsPage() {
                                   {discussionContent.content?.substring(0, 100) || '無內容'}...
                                 </div>
                               )}
+                              {r.type === 'image_comment' && (
+                                <div className="text-zinc-400 text-xs line-clamp-3">
+                                  {discussionContent.text?.substring(0, 100) || '無內容'}...
+                                </div>
+                              )}
                               <div className="text-zinc-500 text-xs mt-1">
-                                作者: {discussionContent.authorName || discussionContent.author?.username || '未知'}
+                                作者: {discussionContent.userName || discussionContent.authorName || discussionContent.author?.username || '未知'}
                               </div>
                             </>
                           ) : (
@@ -640,6 +654,28 @@ export default function AdminReportsPage() {
                   </td>
                   <td className="px-3 py-2 max-w-[320px]">
                     <div className="space-y-2">
+                      {/* 被檢舉的內容（留言/討論區） */}
+                      {isDiscussion && discussionContent && (
+                        <>
+                          <div className="text-sm text-rose-400 font-semibold">被檢舉的內容:</div>
+                          <div className="text-zinc-300 text-sm line-clamp-2 bg-zinc-800/50 p-2 rounded border-l-2 border-rose-500">
+                            {r.type === 'discussion_post' && discussionContent.title && (
+                              <div className="font-medium mb-1">「{discussionContent.title}」</div>
+                            )}
+                            {r.type === 'discussion_post' && discussionContent.content && (
+                              <div className="text-xs">{discussionContent.content.substring(0, 80)}...</div>
+                            )}
+                            {r.type === 'discussion_comment' && discussionContent.content && (
+                              <div className="text-xs">{discussionContent.content.substring(0, 100)}...</div>
+                            )}
+                            {r.type === 'image_comment' && discussionContent.text && (
+                              <div className="text-xs">「{discussionContent.text.substring(0, 100)}」</div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* 檢舉原因 */}
                       <div className="text-sm text-amber-400 font-semibold">檢舉原因:</div>
                       <div className="text-zinc-300 text-sm line-clamp-3">
                         {r.message || r.details || <span className="text-zinc-500">—</span>}

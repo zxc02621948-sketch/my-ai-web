@@ -5,6 +5,8 @@ import ClientHeaderWrapper from "@/components/common/ClientHeaderWrapper";
 import { CurrentUserProvider } from "@/contexts/CurrentUserContext";
 import { getCurrentUser } from "@/lib/serverAuth";
 import UploadModal from "@/components/upload/UploadModal";
+import UploadVideoModal from "@/components/upload/UploadVideoModal";
+import UploadMusicModal from "@/components/upload/UploadMusicModal";
 import LoginModal from "@/components/auth/LoginModal";
 import RegisterModal from "@/components/auth/RegisterModal";
 import { FilterProvider } from "@/components/context/FilterContext";
@@ -93,6 +95,8 @@ export default async function RootLayout({ children }) {
               <ClientHeaderWrapper currentUser={currentUser} />
 
               <UploadModal />
+              <UploadVideoModal />
+              <UploadMusicModal />
               <LoginModal />
               <RegisterModal />
 

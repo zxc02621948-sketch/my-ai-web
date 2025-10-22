@@ -15,17 +15,17 @@ export async function POST(_req, ctx) {
     // 1) 點擊 +1
     await Image.updateOne({ _id: id }, { $inc: { clicks: 1 } });
 
-    // 2) 重新取資料（這裡多抓 initialBoost）
+    // 2) 重新取資料（這裡多抓 initialBoost 和 commentsCount）
     const fresh = await Image.findById(
       id,
-      "clicks likes likesCount completenessScore createdAt initialBoost"
+      "clicks likes likesCount commentsCount completenessScore createdAt initialBoost"
     ).lean();
     if (!fresh) return NextResponse.json({ ok: false }, { status: 404 });
 
     // 3) 校正 likesCount
     const likesCount = ensureLikesCount(fresh);
 
-    // 4) 重算 popScore
+    // 4) 重算 popScore（包含留言數）
     const popScore = computePopScore({ ...fresh, _id: id, likesCount });
 
     // 5) 存回 DB

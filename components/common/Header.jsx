@@ -15,6 +15,8 @@ import toast from "react-hot-toast";
 import { Package2, Wrench, CircleHelp, Upload, MessageSquare } from "lucide-react";
 import InboxButton from "@/components/common/InboxButton";
 import TutorialMenu from "@/components/common/TutorialMenu";
+import UploadDropdown from "@/components/common/UploadDropdown";
+import ContentMenuDropdown from "@/components/common/ContentMenuDropdown";
 
 export default function Header({
   currentUser,
@@ -88,6 +90,9 @@ export default function Header({
 
   // ==== 新增：哪些路由支援「就地搜尋」 ====
   const LOCAL_SEARCH_PATHS = [
+    /^\/$/,             // 首頁（圖片搜尋）
+    /^\/videos$/,       // 影片頁
+    /^\/music$/,        // 音樂頁（如有）
     /^\/user\//,        // 個人頁
     /^\/tag\//,         // 標籤頁（如有）
     /^\/collection\//,  // 收藏/清單頁（如有）
@@ -398,41 +403,15 @@ export default function Header({
 
           {/* 右：操作區 */}
           <div className="flex items-center gap-2 md:gap-2 lg:gap-3 shrink-0">
-            <button
-              onClick={() => {
-                if (!currentUser) {
-                  toast("請先登入才能上傳圖片", { icon: "🔒", id: "login-required", duration: 1000 });
-                  return;
-                }
-                onUploadClick?.();
-              }}
-              className="group hidden md:inline-flex items-center gap-2 px-4 py-2 rounded-xl
-                         bg-gradient-to-r from-green-500 to-green-600 text白 font-semibold
-                         shadow-[0_6px_20px_-6px_rgba(34,197,94,0.55)]
-                         hover:shadow-[0_8px_28px_-6px_rgba(34,197,94,0.7)]
-                         transition-all active:translate-y-[1px]"
-              title="上傳圖片"
-            >
-              <Upload className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
-              <span className="hidden lg:inline">上傳圖片</span>
-            </button>
+            <div className="hidden md:block">
+              <UploadDropdown />
+            </div>
 
             <div className="hidden md:block">
               <TutorialMenu onGuideClick={onGuideClick} />
             </div>
 
-            <Link
-              href="/discussion"
-              className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
-                         bg-gradient-to-r from-blue-400 to-cyan-500 text白 font-semibold
-                         shadow-[0_6px_20px_-6px_rgba(59,130,246,0.55)]
-                         hover:shadow-[0_8px_28px_-6px_rgba(6,182,212,0.7)]
-                         transition-all active:translate-y-[1px]"
-              title="討論區"
-            >
-              <MessageSquare className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" />
-              <span className="hidden lg:inline">討論區</span>
-            </Link>
+            <ContentMenuDropdown />
 
             {currentUser && <NotificationBell />}
             {currentUser && <InboxButton />}
@@ -580,36 +559,11 @@ export default function Header({
           <div className="flex gap-2 overflow-x-auto overflow-y-hidden" style={{ WebkitOverflowScrolling: "touch" }}>
             <TutorialMenu onGuideClick={onGuideClick} />
 
-            <Link
-              href="/discussion"
-              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
-                         bg-gradient-to-r from-blue-400 to-cyan-500 text白
-                         shadow-[0_4px_12px_-4px_rgba(59,130,246,0.4)]
-                         hover:shadow-[0_6px_16px_-4px_rgba(6,182,212,0.6)]
-                         transition-all active:translate-y-[1px] shrink-0"
-              title="討論區"
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span>討論</span>
-            </Link>
+            <ContentMenuDropdown />
 
-            <button
-              onClick={() => {
-                if (!currentUser) {
-                  onLoginOpen?.();
-                  return;
-                }
-                onUploadClick?.();
-              }}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
-                         bg-gradient-to-r from-green-500 to-green-600 text白
-                         shadow-[0_4px_12px_-4px_rgba(34,197,94,0.4)]
-                         hover:shadow-[0_6px_16px_-4px_rgba(34,197,94,0.6)]
-                         transition-all active:translate-y-[1px] shrink-0"
-              title="上傳圖片"
-            >
-              <Upload className="w-4 h-4" /> <span>上傳</span>
-            </button>
+            <div className="md:hidden">
+              <UploadDropdown />
+            </div>
           </div>
         </div>
       </header>

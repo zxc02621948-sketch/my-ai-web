@@ -41,7 +41,7 @@ export async function POST(request) {
 
            // 檢查是否有釘選訂閱（包含試用和正式訂閱）
            const pinSubscription = user.subscriptions?.find(
-             s => (s.type === 'pinPlayer' || s.type === 'pinPlayerTest') && s.isActive
+             s => (s.type === 'pinPlayer' || s.type === 'pinPlayerTest') && s.isActive && !s.cancelledAt
            );
 
     if (!pinSubscription) {

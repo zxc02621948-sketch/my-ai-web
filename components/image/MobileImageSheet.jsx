@@ -343,13 +343,6 @@ export default function MobileImageSheet({
           </div>
         </div>
 
-        {/* ✅ 提示文字：保留並更新敘述 */}
-        <div
-          className="absolute left-1/2 -translate-x-1/2 bottom-4 text-xs text-white/80 text-center px-3 py-1 rounded-full bg-black/30 md:hidden"
-          data-stop-nav
-        >
-          ← 點左邊上一張　·　→ 點右邊下一張　·　↔ 左右滑動關閉　·　↓ 下滑關閉　·　↑ 上滑看資訊
-        </div>
       </section>
 
       {/* ===== Mobile：Section 2 — 資訊 & 留言 ===== */}

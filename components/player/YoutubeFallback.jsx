@@ -15,47 +15,23 @@ export default function YoutubeFallback({ videoId, startSeconds = 0, onReady, on
     height: "0",
     width: "0",
     playerVars: {
-      autoplay: 0, // 禁用自動播放，避免錯誤 150
-      mute: 0, // 不靜音
+      autoplay: 0,
+      mute: 0,
       playsinline: 1,
       controls: 1,
       modestbranding: 1,
-      rel: 0, // 不顯示相關視頻
+      rel: 0,
       start: Math.max(0, Number(startSeconds || 0)),
       origin: currentOrigin,
       enablejsapi: 1,
-      iv_load_policy: 3, // 不顯示註釋
-      cc_load_policy: 0, // 不顯示字幕
-      disablekb: 1, // 禁用鍵盤控制
-      fs: 0, // 禁用全屏
-      // 音頻質量設置 - 修復聲調問題
-      quality: "medium", // 使用中等質量，避免音頻問題
-      // 添加更多兼容性設置來避免錯誤 150
-      allowfullscreen: 0,
-      allowscriptaccess: "always",
-      wmode: "transparent",
-      // 添加隱私設置
-      privacy: 1, // 啟用隱私增強模式
-      // 添加更多錯誤處理設置
-      error: 0, // 禁用錯誤覆蓋
-      // 添加更多設置來避免錯誤 150
-      hl: "zh-TW", // 設置語言
-      cc_lang_pref: "zh-TW", // 字幕語言偏好
-      // 嘗試不同的嵌入設置
-      embed: 1, // 強制嵌入模式
-      // 添加更多兼容性設置
-      widget_referrer: currentOrigin,
-      // 添加音頻相關設置來修復聲調問題
-      audioQuality: "medium", // 設置音頻質量
-      audioMode: "normal", // 設置音頻模式
-      audioTrack: "default", // 設置音頻軌道
-      // 添加更多設置來避免 503 錯誤
-      loadPolicy: 1, // 設置載入策略
-      playerapiid: 1, // 啟用播放器 API ID
-      // 添加更多穩定性設置
-      html5: 1, // 強制使用 HTML5 播放器
+      iv_load_policy: 3,
+      cc_load_policy: 0,
+      disablekb: 1,
+      fs: 0,
+      // 🎯 簡化參數，避免複雜設定導致的問題
+      html5: 1,
     },
-  }), [currentOrigin, startSeconds]); // 依賴 currentOrigin 和 startSeconds
+  }), [currentOrigin, startSeconds]);
 
   if (!videoId) return null;
 

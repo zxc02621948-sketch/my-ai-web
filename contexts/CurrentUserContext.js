@@ -41,6 +41,7 @@ export const CurrentUserProvider = ({ children }) => {
   // 檢查特定訂閱是否有效
   const hasValidSubscription = (subscriptionType) => {
     const sub = subscriptions[subscriptionType];
+    
     if (!sub || !sub.isActive) {
       return false;
     }

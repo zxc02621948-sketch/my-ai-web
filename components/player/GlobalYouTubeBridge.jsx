@@ -148,7 +148,7 @@ export default function GlobalYouTubeBridge() {
     
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [player?.play]);
+  }, []); // 移除 player 依賴，避免無限循環
 
   // 監聽播放狀態變化事件
   useEffect(() => {
@@ -163,7 +163,7 @@ export default function GlobalYouTubeBridge() {
     
     window.addEventListener('playerStateChanged', handlePlayerStateChange);
     return () => window.removeEventListener('playerStateChanged', handlePlayerStateChange);
-  }, [player?.setExternalPlaying]);
+  }, []); // 移除 player 依賴，避免無限循環
 
   // 添加頁面卸載時的清理
   useEffect(() => {
@@ -389,8 +389,10 @@ export default function GlobalYouTubeBridge() {
                 // 添加延遲，確保播放器完全準備好
                 setTimeout(() => {
                   try {
-                    ytRef.current.playVideo();
-                    // console.log("🔧 YouTube 直接播放成功");
+                    if (ytRef.current && typeof ytRef.current.playVideo === 'function') {
+                      ytRef.current.playVideo();
+                      // console.log("🔧 YouTube 直接播放成功");
+                    }
                   } catch (playError) {
                     console.error("🔧 playVideo 調用失敗:", playError);
                   }
@@ -907,7 +909,7 @@ export default function GlobalYouTubeBridge() {
       // console.log("🔧 清理進度更新定時器");
       clearInterval(interval);
     };
-  }, [player?.setExternalProgress]);
+  }, []); // 移除 player 依賴，避免無限循環
 
   // 使用 YouTube API 的 onProgress 事件來更新進度
   const onProgress = useCallback((e) => {
@@ -1017,7 +1019,7 @@ export default function GlobalYouTubeBridge() {
       // 重置播放器狀態，確保能正確初始化
       setPlayerKey(prev => prev + 1);
     }
-  }, [player?.originUrl, videoId]);
+  }, [videoId]); // 移除 player 依賴，避免無限循環
 
   // 組件卸載時的清理
   useEffect(() => {

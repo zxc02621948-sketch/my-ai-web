@@ -190,6 +190,21 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
                     </div>
                   </div>
 
+                  {/* 基本權益（從 LEVELS.rewards 顯示） */}
+                  {level.rewards && level.rewards.length > 0 && (
+                    <div className="mt-3 p-3 bg-blue-900/20 rounded-lg border border-blue-500/20">
+                      <div className="text-xs text-blue-300 mb-2 font-semibold">📋 基本權益</div>
+                      <ul className="space-y-1">
+                        {level.rewards.map((reward, idx) => (
+                          <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                            <span className="text-blue-400">•</span>
+                            <span>{reward}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
                   {/* 獎勵描述 */}
                   {rewards?.description && (
                     <div className="mt-3 p-3 bg-zinc-700/30 rounded-lg">
@@ -318,6 +333,21 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
                       )}
                     </div>
                   </div>
+
+                  {/* 基本權益（從 LEVELS.rewards 顯示） */}
+                  {level.rewards && level.rewards.length > 0 && (
+                    <div className="mt-3 p-3 bg-blue-900/20 rounded-lg border border-blue-500/20">
+                      <div className="text-xs text-blue-300 mb-2 font-semibold">📋 基本權益</div>
+                      <ul className="space-y-1">
+                        {level.rewards.map((reward, idx) => (
+                          <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
+                            <span className="text-blue-400">•</span>
+                            <span>{reward}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   {/* 獎勵描述 */}
                   {rewards?.description && (

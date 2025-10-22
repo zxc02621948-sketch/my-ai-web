@@ -20,7 +20,7 @@ export async function POST(req) {
     }
 
     // 可用的造型列表
-    const availableSkins = ['default', 'cat-headphone'];
+    const availableSkins = ['default', 'cassette-player', 'cat-headphone'];
     
     if (!availableSkins.includes(skinId)) {
       return Response.json({ error: '不支援的造型' }, { status: 400 });
@@ -42,10 +42,17 @@ export async function POST(req) {
     user.activePlayerSkin = skinId;
     await user.save();
 
+    // 造型名稱對應
+    const skinNames = {
+      'default': '預設造型',
+      'cassette-player': '卡帶播放器',
+      'cat-headphone': '貓咪耳機造型'
+    };
+
     return Response.json({ 
       success: true,
       activePlayerSkin: user.activePlayerSkin,
-      message: `已切換至${skinId === 'default' ? '預設造型' : '貓咪耳機造型'}！`
+      message: `已切換至${skinNames[skinId] || '未知造型'}！`
     });
   } catch (error) {
     console.error('切換播放器造型失敗:', error);

@@ -1,8 +1,10 @@
 import { dbConnect } from "@/lib/db";
 import Comment from "@/models/Comment";
+import Image from "@/models/Image";
 import { verifyToken } from "@/lib/serverAuth";
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
+import { computePopScore } from "@/utils/score";
 
 // ✅ Edge Runtime workaround
 export async function DELETE(req, context) {
@@ -44,11 +46,29 @@ export async function DELETE(req, context) {
       return NextResponse.json({ message: "沒有刪除權限" }, { status: 403 });
     }
 
+    // 記錄 imageId 以便更新計數
+    const imageId = comment.imageId;
+
     // ✅ 新增：刪除所有回覆留言（children）
     await Comment.deleteMany({ parentCommentId: commentId });
 
     // ✅ 刪除主留言
     await Comment.findByIdAndDelete(commentId);
+
+    // ✅ 更新圖片的留言數和熱門度分數
+    if (imageId) {
+      const image = await Image.findById(imageId);
+      if (image) {
+        // 重新計算留言總數
+        const totalComments = await Comment.countDocuments({ imageId });
+        image.commentsCount = totalComments;
+        
+        // 重新計算熱門度分數
+        image.popScore = computePopScore(image);
+        
+        await image.save();
+      }
+    }
 
     return NextResponse.json({ message: "留言刪除成功" }, { status: 200 });
   } catch (err) {

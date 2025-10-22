@@ -323,12 +323,13 @@ export default function MiniPlayer() {
     } catch {}
   }, []);
 
-  // 預設位置：右上角；若有已儲存位置則優先使用
+  // 預設位置：右上角（留有安全距離）；若有已儲存位置則優先使用
   useEffect(() => {
     const initializePosition = () => {
       const margin = 16;
       const width = 140; // 與元件寬度一致
       const height = 80; // 播放器高度
+      const safeOffset = 60; // ✅ 新增：額外的安全距離，避免太靠邊
       
       try {
         const saved = localStorage.getItem("miniPlayerPosition");
@@ -347,10 +348,10 @@ export default function MiniPlayer() {
         }
       } catch {}
 
-      // 預設位置：右上角
+      // 預設位置：右上角，但留有安全距離
       if (typeof window !== "undefined") {
-        const x = Math.max(margin, window.innerWidth - width - margin);
-        const y = margin;
+        const x = Math.max(margin + safeOffset, window.innerWidth - width - margin - safeOffset);
+        const y = margin + safeOffset;
         setPosition({ x, y });
       }
     };
@@ -684,7 +685,10 @@ export default function MiniPlayer() {
               <span className="mr-1">📌</span>
               <span className="truncate">@{pinnedPlayerData.username}</span>
               <span className="ml-1 text-[10px] opacity-75 flex-shrink-0">
-                ({Math.ceil((new Date(pinnedPlayerData.expiresAt) - new Date()) / (1000 * 60 * 60 * 24))}天)
+                ({(() => {
+                  const days = Math.ceil((new Date(pinnedPlayerData.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
+                  return days > 10000 ? '永久' : `${days}天`;
+                })()})
               </span>
             </div>
             <button

@@ -300,6 +300,11 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
       const videoElements = document.querySelectorAll('video');
       videoElements.forEach((video, index) => {
         try {
+          // 跳過影片縮圖的 video 元素
+          if (video.dataset.videoPreview === 'true') {
+            return;
+          }
+          
           if (!video.paused) {
             video.pause();
             video.currentTime = 0; // 重置播放位置
@@ -419,7 +424,7 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           const videoElements = document.querySelectorAll('video');
           const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
           const playingAudio = Array.from(audioElements).filter(audio => !audio.paused);
-          const playingVideo = Array.from(videoElements).filter(video => !video.paused);
+          const playingVideo = Array.from(videoElements).filter(video => !video.paused && video.dataset.videoPreview !== 'true');
           
           // 只在有問題時才輸出詳細日誌
           if (youtubeIframes.length > 1 || playingAudio.length + playingVideo.length > 1) {
@@ -468,6 +473,11 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
         const videoElements = document.querySelectorAll('video');
         videoElements.forEach((video, index) => {
           try {
+            // 跳過影片縮圖的 video 元素
+            if (video.dataset.videoPreview === 'true') {
+              return;
+            }
+            
             if (!video.paused) {
               video.pause();
               video.currentTime = 0;
@@ -515,6 +525,11 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
       const audioVideoElements = document.querySelectorAll('audio, video');
       audioVideoElements.forEach((element, index) => {
         try {
+          // 跳過影片縮圖的 video 元素
+          if (element.tagName === 'VIDEO' && element.dataset.videoPreview === 'true') {
+            return;
+          }
+          
           if (!element.paused) {
             element.pause();
             element.currentTime = 0;
@@ -618,6 +633,11 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
         const videoElements = document.querySelectorAll('video');
         videoElements.forEach((video, index) => {
           try {
+            // 跳過影片縮圖的 video 元素
+            if (video.dataset.videoPreview === 'true') {
+              return;
+            }
+            
             if (!video.paused) {
               video.pause();
               video.currentTime = 0;
@@ -662,6 +682,11 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
       const audioVideoElements = document.querySelectorAll('audio, video');
       audioVideoElements.forEach((element, index) => {
         try {
+          // 跳過影片縮圖的 video 元素
+          if (element.tagName === 'VIDEO' && element.dataset.videoPreview === 'true') {
+            return;
+          }
+          
           if (!element.paused) {
             element.pause();
             element.currentTime = 0;
@@ -715,6 +740,33 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
       }
     }
   };
+
+  // 監聽 skipToNext 事件（添加防抖，避免重複觸發）
+  useEffect(() => {
+    let skipTimeout = null;
+    
+    const handleSkipToNext = () => {
+      // 防抖：避免短時間內重複觸發
+      if (skipTimeout) {
+        clearTimeout(skipTimeout);
+      }
+      
+      skipTimeout = setTimeout(() => {
+        console.warn("🔧 收到 skipToNext 事件，執行下一首");
+        next();
+        skipTimeout = null;
+      }, 500); // 500ms 防抖
+    };
+
+    window.addEventListener('skipToNext', handleSkipToNext);
+    
+    return () => {
+      if (skipTimeout) {
+        clearTimeout(skipTimeout);
+      }
+      window.removeEventListener('skipToNext', handleSkipToNext);
+    };
+  }, []); // 移除 next 依賴，避免無限循環
 
   const contextValue = {
     src,

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
 import NewBadge from "@/components/image/NewBadge";
 import FireEffect from "@/components/image/FireEffect";
+import VideoPreview from "@/components/video/VideoPreview";
 import { updateLikeCacheAndBroadcast } from "@/lib/likeSync"; 
 
 // ⬇️ 從 ObjectId 推回建立時間（備援）
@@ -162,22 +163,24 @@ export default function ImageCard({
         />
       )}
 
-      {/* 愛心與數量（固定在卡片右上角） */}
-      <div 
-        className={`absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1 ${
-          canLike ? "hover:scale-110 cursor-pointer" : "opacity-70"
-        }`}
-        onClick={handleLikeClick}
-      >
-        <Heart
-          key={renderKey}
-          fill={isLikedLocal ? "#f472b6" : "transparent"}
-          color={isLikedLocal ? "#f472b6" : likeCountLocal > 0 ? "#f472b6" : "#ccc"}
-          strokeWidth={2.5}
-          className="w-4 h-4 transition duration-200 pointer-events-none"
-        />
-        <span className="text-white text-xs pointer-events-none">{likeCountLocal}</span>
-      </div>
+      {/* 愛心與數量（固定在卡片右上角）- 只在圖片時顯示 */}
+      {img?.type !== 'video' && (
+        <div 
+          className={`absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1 ${
+            canLike ? "hover:scale-110 cursor-pointer" : "opacity-70"
+          }`}
+          onClick={handleLikeClick}
+        >
+          <Heart
+            key={renderKey}
+            fill={isLikedLocal ? "#f472b6" : "transparent"}
+            color={isLikedLocal ? "#f472b6" : likeCountLocal > 0 ? "#f472b6" : "#ccc"}
+            strokeWidth={2.5}
+            className="w-4 h-4 transition duration-200 pointer-events-none"
+          />
+          <span className="text-white text-xs pointer-events-none">{likeCountLocal}</span>
+        </div>
+      )}
 
       {/* 縮圖容器 */}
       <div className="overflow-hidden rounded-lg relative bg-zinc-900">
@@ -188,25 +191,39 @@ export default function ImageCard({
           </div>
         )}
         
-        {/* ✅ 懶加載圖片 */}
-        <img
-          src={imageUrl}
-          alt={img?.title || "圖片"}
-          loading="lazy"
-          decoding="async"
-          className={`w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg ${
-            imageLoaded ? "opacity-100" : "opacity-0"
-          }`}
-          onLoad={() => {
-            setImageLoaded(true);
-            onImageLoad?.();
-          }}
-          onError={(e) => {
-            e.currentTarget.onerror = null;
-            e.currentTarget.src = "/default-image.svg";
-            setImageLoaded(true);
-          }}
-        />
+        {/* ✅ 根據類型顯示圖片或影片 */}
+        {img?.type === 'video' ? (
+          /* 使用 VideoPreview 組件顯示影片 */
+          <VideoPreview
+            video={img}
+            onClick={onClick}
+            currentUser={currentUser}
+            isLiked={isLiked}
+            onToggleLike={onToggleLike}
+            onLikeUpdate={onLikeUpdate}
+            className="w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg"
+          />
+        ) : (
+          /* 圖片 */
+          <img
+            src={imageUrl}
+            alt={img?.title || "圖片"}
+            loading="lazy"
+            decoding="async"
+            className={`w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg ${
+              imageLoaded ? "opacity-100" : "opacity-0"
+            }`}
+            onLoad={() => {
+              setImageLoaded(true);
+              onImageLoad?.();
+            }}
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/default-image.svg";
+              setImageLoaded(true);
+            }}
+          />
+        )}
 
         {/* hover 顯示模式 */}
         {viewMode !== "default" && (

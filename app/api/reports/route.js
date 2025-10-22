@@ -36,8 +36,8 @@ export async function POST(req) {
     const body = await req.json().catch(() => ({}));
     const { imageId, type, message, targetId, reason, details } = body || {};
     
-    // 檢查是否為討論區檢舉
-    if (type === 'discussion_post' || type === 'discussion_comment') {
+    // 檢查是否為留言檢舉（討論區或圖片留言）
+    if (type === 'discussion_post' || type === 'discussion_comment' || type === 'image_comment') {
       if (!targetId) {
         return NextResponse.json({ ok: false, message: "缺少目標 ID" }, { status: 400 });
       }
@@ -55,13 +55,17 @@ export async function POST(req) {
         const DiscussionComment = (await import('@/models/DiscussionComment')).default;
         const comment = await DiscussionComment.findById(targetId).select('author').lean();
         if (comment) targetAuthor = comment.author;
+      } else if (type === 'image_comment') {
+        const Comment = (await import('@/models/Comment')).default;
+        const comment = await Comment.findById(targetId).select('userId').lean();
+        if (comment) targetAuthor = comment.userId;
       }
       
       if (targetAuthor && String(targetAuthor) === String(user._id)) {
         return NextResponse.json({ ok: false, message: "不能檢舉自己的內容" }, { status: 400 });
       }
       
-      // 創建討論區檢舉記錄
+      // 創建留言檢舉記錄
       const doc = await Report.create({
         type,
         targetId,

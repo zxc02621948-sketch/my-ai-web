@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
 import { getCurrentUser } from "@/lib/serverAuth";
+import { computeCompleteness } from "@/utils/score";
 
 // —— 小工具 ——
 
@@ -159,6 +160,18 @@ export async function PATCH(req, ctx) {
         image[k] = updates[k];
       }
     }
+
+    // ✅ 重新計算完整度（但不重算 popScore）
+    image.completenessScore = computeCompleteness(image);
+    image.hasMetadata = image.completenessScore >= 50;
+    
+    // 確保 likesCount 同步（數據一致性）
+    if (Array.isArray(image.likes)) {
+      image.likesCount = image.likes.length;
+    }
+    
+    // ❌ 不重算 popScore - 編輯元數據不應影響熱門度
+    // popScore 只在互動時更新（點讚、點擊）
 
     await image.save();
 
