@@ -1,8 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
 import { dbConnect } from "@/lib/db";
 import Video from "@/models/Video";
 import { computeVideoCompleteness } from "@/utils/scoreVideo";
@@ -11,9 +10,9 @@ const noStore = { headers: { "Cache-Control": "no-store" } };
 
 export async function PUT(req, { params }) {
   try {
-    // 驗證登入
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    // 驗證登入 - 使用統一的 JWT 認證
+    const user = await getCurrentUserFromRequest(req);
+    if (!user) {
       return NextResponse.json(
         { error: "未登入" },
         { status: 401, ...noStore }
@@ -33,7 +32,7 @@ export async function PUT(req, { params }) {
     }
 
     // 檢查權限（只有作者可以編輯）
-    if (String(video.author) !== String(session.user.id)) {
+    if (String(video.author) !== String(user._id)) {
       return NextResponse.json(
         { error: "無權限編輯此影片" },
         { status: 403, ...noStore }
