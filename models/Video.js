@@ -112,11 +112,11 @@ const VideoSchema = new mongoose.Schema({
     default: '',
   },
   
-  // ✅ 分級與分類
+  // ✅ 分級與分類 - 統一使用與圖片一致的評級系統
   rating: {
     type: String,
-    enum: ['all', '15', '18'],
-    default: 'all',
+    enum: ['sfw', '15', '18'],
+    default: 'sfw',
   },
   category: {
     type: String,

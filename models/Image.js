@@ -8,7 +8,7 @@ const ImageSchema = new mongoose.Schema(
     platform: String,
     positivePrompt: String,
     negativePrompt: String,
-    rating: { type: String, enum: ["all", "15", "18"], default: "all" },
+    rating: { type: String, enum: ["sfw", "15", "18"], default: "sfw" },
     category: String,
     description: String,
     author: { type: String, default: "" },

@@ -9,6 +9,14 @@ export const labelToRating = {
   "18+ 圖片": "18",
 };
 
+/** 支援舊的 'all' 評級映射到 'sfw' */
+export const legacyRatingMap = {
+  "all": "sfw",
+  "sfw": "sfw",
+  "15": "15",
+  "18": "18",
+};
+
 /** 後端值 → 前端顯示用（有需要時可用） */
 export const ratingToLabel = {
   sfw: "一般圖片",

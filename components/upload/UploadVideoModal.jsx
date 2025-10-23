@@ -17,7 +17,7 @@ export default function UploadVideoModal() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
-  const [rating, setRating] = useState('');
+  const [rating, setRating] = useState('sfw');
   const [category, setCategory] = useState('');
   const [videoWidth, setVideoWidth] = useState(null);
   const [videoHeight, setVideoHeight] = useState(null);
@@ -301,7 +301,7 @@ export default function UploadVideoModal() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <button
                     onClick={() => {
-                      setRating('all');
+                      setRating('sfw');
                       setStep(2);
                     }}
                     className="p-6 rounded-lg text-white text-xl font-bold bg-green-600 hover:bg-green-700 transition-colors"
@@ -341,7 +341,7 @@ export default function UploadVideoModal() {
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-zinc-400">已選分級:</span>
                     <div className={`text-sm font-bold px-3 py-1 rounded text-white ${getRatingColor()}`}>
-                      {rating === 'all' ? '一般 All' : rating === '15' ? '15+ 清涼' : '18+ 限制'}
+                      {rating === 'sfw' ? '一般 All' : rating === '15' ? '15+ 清涼' : '18+ 限制'}
                     </div>
                   </div>
                   <button

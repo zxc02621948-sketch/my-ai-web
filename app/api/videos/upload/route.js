@@ -85,8 +85,8 @@ export async function POST(request) {
     const cfgScale = formData.get('cfgScale') ? Number(formData.get('cfgScale')) : null;
     const seed = formData.get('seed') || '';
     
-    // ✅ 分級與分類
-    const rating = formData.get('rating') || 'all';
+    // ✅ 分級與分類 - 統一使用與圖片一致的評級系統
+    const rating = formData.get('rating') || 'sfw';
     const category = formData.get('category') || '';
 
     if (!file) {

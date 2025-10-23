@@ -48,7 +48,9 @@ export async function GET(request) {
     // ✅ 新增：分級篩選
     if (ratings) {
       const ratingList = ratings.split(',').map(rating => decodeURIComponent(rating));
-      match.rating = { $in: ratingList };
+      // 支援 'all' 映射到 'sfw'，確保向後兼容
+      const mappedRatings = ratingList.map(rating => rating === 'all' ? 'sfw' : rating);
+      match.rating = { $in: mappedRatings };
     }
 
     // 查詢總數

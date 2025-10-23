@@ -7,6 +7,7 @@ import EditVideoModal from '@/components/video/EditVideoModal';
 import VideoGrid from '@/components/video/VideoGrid';
 import SortSelect from '@/components/common/SortSelect';
 import { usePlayer } from '@/components/context/PlayerContext';
+import { useFilterContext, labelToRating } from '@/components/context/FilterContext';
 
 const PAGE_SIZE = 20;
 
@@ -26,6 +27,12 @@ const VideosPage = () => {
   const player = usePlayer();
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // ✅ 新增：篩選功能
+  const {
+    levelFilters,
+    categoryFilters,
+  } = useFilterContext();
   
   // Refs for infinite scroll
   const loadMoreRef = useRef(null);
@@ -71,6 +78,18 @@ const VideosPage = () => {
         params.append('search', searchQuery);
       }
       
+      // ✅ 新增：篩選參數
+      if (categoryFilters.length > 0) {
+        params.append('categories', categoryFilters.join(','));
+      }
+      
+      if (levelFilters.length > 0) {
+        const ratings = levelFilters.map(label => labelToRating[label]).filter(Boolean);
+        if (ratings.length > 0) {
+          params.append('ratings', ratings.join(','));
+        }
+      }
+      
       const response = await fetch(`/api/videos?${params}`);
       const data = await response.json();
       
@@ -93,16 +112,18 @@ const VideosPage = () => {
       setIsLoading(false);
       setLoading(false);
     }
-  }, [isLoading]);
+  }, [isLoading, categoryFilters, levelFilters]);
 
-  // 監聽搜尋或排序變化
+  // 監聽搜尋、排序或篩選變化
   useEffect(() => {
     const searchQuery = (searchParams.get('search') || '').trim();
     
     // 檢查參數是否與上次相同
     const currentParams = JSON.stringify({
       search: searchQuery,
-      sort: sort
+      sort: sort,
+      categories: categoryFilters,
+      ratings: levelFilters
     });
     
     if (lastFetchParamsRef.current === currentParams) {
@@ -117,7 +138,7 @@ const VideosPage = () => {
     setPage(1);
     setHasMore(true);
     fetchVideos(1, searchQuery, sort);
-  }, [searchParams, sort, fetchVideos]);
+  }, [searchParams, sort, fetchVideos, categoryFilters, levelFilters]);
 
   // 無限滾動
   useEffect(() => {
@@ -325,16 +346,33 @@ const VideosPage = () => {
   }, [videos]);
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen bg-zinc-950 -mt-2 md:-mt-16">
       {/* 頁面標題 */}
       <div className="bg-zinc-900 shadow-sm border-b border-zinc-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-3 sm:gap-6">
+            {/* 左側：標題和描述 */}
             <div>
               <h1 className="text-3xl font-bold text-white">🎬 影片專區</h1>
-              <p className="mt-2 text-gray-400">探索精彩的 AI 生成影片</p>
+              <p className="mt-1 text-gray-400">探索精彩的 AI 生成影片</p>
             </div>
-            {/* 排序選擇器 */}
+            
+            {/* 中間：版本資訊和法律連結（手機版隱藏） */}
+            <div className="hidden md:flex items-center gap-4 text-xs text-gray-400 flex-1 justify-center flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-yellow-400">版本 v0.8.0（2025-10-15）🎉</span>
+                <a href="/changelog" className="text-sm underline hover:text-white">
+                  查看更新內容
+                </a>
+              </div>
+              <div className="flex items-center gap-2">
+                <a href="/privacy" className="hover:text-white transition">隱私政策</a>
+                <span className="text-gray-600">•</span>
+                <a href="/terms" className="hover:text-white transition">服務條款</a>
+              </div>
+            </div>
+            
+            {/* 右側：排序選擇器 */}
             <div className="flex-shrink-0">
               <SortSelect value={sort} onChange={setSort} />
             </div>
