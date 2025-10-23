@@ -13,6 +13,9 @@ const nextConfig = {
   },
   pageExtensions: ["js", "jsx", "ts", "tsx"],
   
+  // ✅ 增加檔案上傳大小限制
+  serverExternalPackages: ['mongoose'],
+  
   // ✅ 安全標頭設置
   async headers() {
     return [
