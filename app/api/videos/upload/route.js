@@ -6,11 +6,11 @@ import { dbConnect } from '@/lib/db';
 import Video from '@/models/Video';
 import { computeVideoCompleteness, computeVideoInitialBoostFromTop, computeVideoPopScore } from '@/utils/scoreVideo';
 
-// ✅ 設定請求體大小限制
+// ✅ 設定請求體大小限制（與程式碼中的 20MB 限制一致）
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '50mb',
+      sizeLimit: '25mb', // 稍微大於 20MB，給一些緩衝空間
     },
   },
 };
