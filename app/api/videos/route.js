@@ -20,6 +20,10 @@ export async function GET(request) {
     const sort = (searchParams.get('sort') || 'popular').toLowerCase();
     const useLive = searchParams.get('live') === '1';
     const search = searchParams.get('search') || '';
+    
+    // ✅ 新增：分類和分級篩選支援
+    const categories = searchParams.get('categories');
+    const ratings = searchParams.get('ratings');
 
     const skip = (page - 1) * limit;
 
@@ -33,6 +37,18 @@ export async function GET(request) {
         { description: { $regex: search.trim(), $options: 'i' } },
         { tags: { $regex: search.trim(), $options: 'i' } }
       ];
+    }
+
+    // ✅ 新增：分類篩選
+    if (categories) {
+      const categoryList = categories.split(',').map(cat => decodeURIComponent(cat));
+      match.category = { $in: categoryList };
+    }
+
+    // ✅ 新增：分級篩選
+    if (ratings) {
+      const ratingList = ratings.split(',').map(rating => decodeURIComponent(rating));
+      match.rating = { $in: ratingList };
     }
 
     // 查詢總數
