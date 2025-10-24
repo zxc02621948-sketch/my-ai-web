@@ -16,31 +16,45 @@ export default function TestStreamUploadPage() {
     setError('');
 
     try {
-      console.log(`Starting Stream upload: ${file.name} (${file.size} bytes)`);
+      console.log(`Starting direct Stream upload: ${file.name} (${file.size} bytes)`);
 
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('title', file.name);
-      formData.append('description', '測試 Stream 上傳');
-      formData.append('category', 'general');
-      formData.append('rating', 'sfw');
-
-      console.log('Uploading to Stream API...');
-
-      const response = await fetch('/api/videos/upload-stream', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Stream upload failed: ${response.status} - ${errorText}`);
+      // 直接上傳到 Cloudflare Stream（跳過 Vercel）
+      const streamResult = await uploadDirectlyToStream(file);
+      
+      if (!streamResult.success) {
+        throw new Error(streamResult.error);
       }
 
-      const result = await response.json();
+      console.log('Direct Stream upload successful:', streamResult);
+
+      // 上傳完成後，調用我們的 API 保存記錄
+      const saveResponse = await fetch('/api/videos/save-stream-record', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          streamId: streamResult.streamId,
+          playbackUrl: streamResult.playbackUrl,
+          title: file.name,
+          description: '測試 Stream 上傳',
+          category: 'general',
+          rating: 'sfw',
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        const errorText = await saveResponse.text();
+        throw new Error(`Save record failed: ${errorText}`);
+      }
+
+      const saveResult = await saveResponse.json();
       setProgress(100);
-      setResult(result);
-      console.log('Stream upload successful:', result);
+      setResult({
+        streamUpload: streamResult,
+        databaseRecord: saveResult,
+      });
+      console.log('Complete upload successful:', saveResult);
 
     } catch (error) {
       console.error('Stream upload error:', error);
@@ -48,6 +62,54 @@ export default function TestStreamUploadPage() {
       setResult({ error: error.message });
     } finally {
       setUploading(false);
+    }
+  };
+
+  // 直接上傳到 Cloudflare Stream 的函數
+  const uploadDirectlyToStream = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('name', file.name);
+
+      console.log('Uploading directly to Cloudflare Stream...');
+
+      // 注意：這裡需要你填入實際的 Account ID 和 API Token
+      // 為了測試，請將下面的值替換為你的實際值
+      const ACCOUNT_ID = '你的_Account_ID'; // 請替換為實際值
+      const API_TOKEN = '你的_API_Token'; // 請替換為實際值
+      
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/stream`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${API_TOKEN}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Stream API error response:', errorData);
+        throw new Error(`Stream API error: ${errorData.errors?.[0]?.message || 'Unknown error'}`);
+      }
+
+      const data = await response.json();
+      console.log('Stream API success:', data);
+      
+      return {
+        success: true,
+        streamId: data.result.uid,
+        playbackUrl: data.result.playback.hls,
+      };
+    } catch (error) {
+      console.error('Direct Stream upload error:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
     }
   };
 
