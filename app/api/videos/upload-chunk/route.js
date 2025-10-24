@@ -59,23 +59,29 @@ export async function POST(request) {
 
     // 如果是第一個塊，初始化上傳
     if (chunkIndex === 0) {
-      // 創建臨時檔案記錄
-      const tempVideo = new Video({
-        title: fileName,
-        description: '',
-        category: 'general',
-        rating: 'sfw',
-        author: user._id, // 使用 ObjectId
-        authorName: user.username || user.email,
-        videoUrl: 'temp://uploading', // 暫時值，上傳完成後會更新
-        status: 'active', // 使用有效的 enum 值
-        uploadId: uploadId,
-        totalChunks: totalChunks,
-        receivedChunks: 0,
-        fileSize: fileSize,
-      });
-      await tempVideo.save();
-      console.log('Created temp video record:', tempVideo._id);
+      console.log('Creating temp video record for first chunk...');
+      try {
+        // 創建臨時檔案記錄
+        const tempVideo = new Video({
+          title: fileName,
+          description: '',
+          category: 'general',
+          rating: 'sfw',
+          author: user._id, // 使用 ObjectId
+          authorName: user.username || user.email,
+          videoUrl: 'temp://uploading', // 暫時值，上傳完成後會更新
+          status: 'active', // 使用有效的 enum 值
+          uploadId: uploadId,
+          totalChunks: totalChunks,
+          receivedChunks: 0,
+          fileSize: fileSize,
+        });
+        await tempVideo.save();
+        console.log('Created temp video record:', tempVideo._id);
+      } catch (error) {
+        console.error('Failed to create temp video record:', error);
+        throw new Error(`創建影片記錄失敗: ${error.message}`);
+      }
     }
 
     // 上傳塊到 Cloudflare R2
