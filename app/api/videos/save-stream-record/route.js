@@ -13,7 +13,26 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { streamId, playbackUrl, title, description, category, rating } = body;
+    const { 
+      streamId, 
+      playbackUrl, 
+      title, 
+      description, 
+      category, 
+      rating,
+      tags,
+      platform,
+      prompt,
+      negativePrompt,
+      fps,
+      resolution,
+      steps,
+      cfgScale,
+      seed,
+      width,
+      height,
+      duration
+    } = body;
 
     if (!streamId || !playbackUrl) {
       return NextResponse.json({ 
@@ -35,6 +54,7 @@ export async function POST(request) {
     const video = new Video({
       title: title || '未命名影片',
       description: description || '',
+      tags: tags ? tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [],
       category: category || 'general',
       rating: rating || 'sfw',
       author: user._id,
@@ -42,6 +62,20 @@ export async function POST(request) {
       videoUrl: playbackUrl,
       streamId: streamId,
       status: 'active',
+      // AI 生成元數據
+      platform: platform || '',
+      prompt: prompt || '',
+      negativePrompt: negativePrompt || '',
+      // 生成參數
+      fps: fps || '',
+      resolution: resolution || '',
+      steps: steps || '',
+      cfgScale: cfgScale || '',
+      seed: seed || '',
+      // 影片尺寸
+      width: width || null,
+      height: height || null,
+      duration: duration || null,
     });
 
     await video.save();

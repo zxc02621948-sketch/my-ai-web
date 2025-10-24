@@ -188,47 +188,62 @@ export default function UploadVideoModal() {
     setUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('title', title);
-      formData.append('description', description);
-      formData.append('tags', tags);
-      formData.append('rating', rating);
-      formData.append('category', category);
-
-      if (platform) formData.append('platform', platform);
-      if (prompt) formData.append('prompt', prompt);
-      if (negativePrompt) formData.append('negativePrompt', negativePrompt);
-      if (fps) formData.append('fps', fps);
-      if (resolution) formData.append('resolution', resolution);
-      if (steps) formData.append('steps', steps);
-      if (cfgScale) formData.append('cfgScale', cfgScale);
-      if (seed) formData.append('seed', seed);
+      // 直接上傳到 Cloudflare Stream（跳過 Vercel）
+      const streamResult = await uploadDirectlyToStream(file, title);
       
-      // 添加影片尺寸
-      if (videoWidth) formData.append('width', videoWidth);
-      if (videoHeight) formData.append('height', videoHeight);
-      if (duration) formData.append('duration', duration);
+      if (!streamResult.success) {
+        throw new Error(streamResult.error);
+      }
 
-      const response = await fetch('/api/videos/upload', {
+      console.log('Direct Stream upload successful:', streamResult);
+
+      // 上傳完成後，調用我們的 API 保存記錄
+      const saveResponse = await fetch('/api/videos/save-stream-record', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          streamId: streamResult.streamId,
+          playbackUrl: streamResult.playbackUrl,
+          title,
+          description,
+          category,
+          rating,
+          tags,
+          platform,
+          prompt,
+          negativePrompt,
+          fps,
+          resolution,
+          steps,
+          cfgScale,
+          seed,
+          width: videoWidth,
+          height: videoHeight,
+          duration,
+        }),
         credentials: 'include',
       });
 
-      const result = await response.json();
+      if (!saveResponse.ok) {
+        const errorText = await saveResponse.text();
+        throw new Error(`Save record failed: ${errorText}`);
+      }
 
-      if (result.success) {
-        const completeness = result.video?.completenessScore || 0;
+      const saveResult = await saveResponse.json();
+
+      if (saveResult.success) {
+        const completeness = saveResult.video?.completenessScore || 0;
         
         // 更新每日配額顯示
-        if (result.dailyUploads) {
+        if (saveResult.dailyUploads) {
           setDailyQuota({
-            current: result.dailyUploads.current,
-            limit: result.dailyUploads.limit,
-            remaining: result.dailyUploads.remaining
+            current: saveResult.dailyUploads.current,
+            limit: saveResult.dailyUploads.limit,
+            remaining: saveResult.dailyUploads.remaining
           });
-          toast.success(`✅ 影片上傳成功！完整度：${completeness}分\n今日剩餘：${result.dailyUploads.remaining}/${result.dailyUploads.limit}`);
+          toast.success(`✅ 影片上傳成功！完整度：${completeness}分\n今日剩餘：${saveResult.dailyUploads.remaining}/${saveResult.dailyUploads.limit}`);
         } else {
           toast.success(`✅ 影片上傳成功！完整度：${completeness}分`);
         }
@@ -237,17 +252,65 @@ export default function UploadVideoModal() {
         window.location.href = '/videos';
       } else {
         // 處理每日限制錯誤
-        if (response.status === 429) {
-          toast.error(`❌ ${result.error}\n${result.resetInfo || ''}`);
+        if (saveResponse.status === 429) {
+          toast.error(`❌ ${saveResult.error}\n${saveResult.resetInfo || ''}`);
         } else {
-          toast.error(result.error || '上傳失敗');
+          toast.error(saveResult.error || '保存記錄失敗');
         }
       }
+
     } catch (error) {
       console.error('上傳失敗:', error);
       toast.error('上傳失敗，請重試');
     } finally {
       setUploading(false);
+    }
+  };
+
+  // 直接上傳到 Cloudflare Stream 的函數
+  const uploadDirectlyToStream = async (file, title) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('name', title);
+
+      console.log('Uploading directly to Cloudflare Stream...');
+
+      // 注意：這裡需要你填入實際的 Account ID 和 API Token
+      const ACCOUNT_ID = '5c6250a0576aa4ca0bb9cdf32be0bee1';
+      const API_TOKEN = 'FDh62HwIzm31AhAY05nuaGfsF4B4z1q61onBT4-s';
+      
+      const response = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/stream`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${API_TOKEN}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Stream API error response:', errorData);
+        throw new Error(`Stream API error: ${errorData.errors?.[0]?.message || 'Unknown error'}`);
+      }
+
+      const data = await response.json();
+      console.log('Stream API success:', data);
+      
+      return {
+        success: true,
+        streamId: data.result.uid,
+        playbackUrl: data.result.playback.hls,
+      };
+    } catch (error) {
+      console.error('Direct Stream upload error:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
     }
   };
 
