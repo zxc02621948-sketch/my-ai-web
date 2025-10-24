@@ -166,9 +166,9 @@ export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
                   required
                 >
                   <option value="">選擇分級</option>
-                  <option value="all">全年齡</option>
+                  <option value="sfw">全年齡</option>
                   <option value="15">15+</option>
-                  <option value="18+">18+</option>
+                  <option value="18">18+</option>
                 </select>
               </div>
 

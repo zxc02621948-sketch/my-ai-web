@@ -24,6 +24,10 @@ const VideoSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  previewUrl: {
+    type: String,
+    default: '',
+  },
   thumbnailUrl: {
     type: String,
     default: '',

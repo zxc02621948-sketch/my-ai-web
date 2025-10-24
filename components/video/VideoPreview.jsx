@@ -195,21 +195,39 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       {video.videoUrl && (
         <>
           {video.streamId ? (
-            // Stream 影片使用縮圖
-            <img
-              src={`https://customer-h5be4kbubhrszsgr.cloudflarestream.com/${video.streamId}/thumbnails/thumbnail.jpg?time=1s`}
-              alt={video.title || '影片縮圖'}
-              className="w-full h-full object-cover transition-all duration-300"
-              style={{
-                filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
-                transform: isHovered ? 'scale(1.02)' : 'scale(1)',
-              }}
-              onError={(e) => {
-                // 如果縮圖載入失敗，顯示預設圖片
-                e.target.style.display = 'none';
-                e.target.nextSibling.style.display = 'block';
-              }}
-            />
+            // Stream 影片：如果有預覽 URL 則使用預覽影片，否則使用縮圖
+            video.previewUrl ? (
+              // 有預覽影片，使用 video 標籤（支援預覽動畫）
+              <video
+                ref={videoRef}
+                src={video.previewUrl}
+                className="w-full h-full object-cover transition-all duration-300"
+                preload="metadata"
+                muted
+                playsInline
+                data-video-preview="true"
+                style={{
+                  filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
+                  transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+                }}
+              />
+            ) : (
+              // 沒有預覽影片，使用縮圖
+              <img
+                src={`https://customer-h5be4kbubhrszsgr.cloudflarestream.com/${video.streamId}/thumbnails/thumbnail.jpg?time=1s`}
+                alt={video.title || '影片縮圖'}
+                className="w-full h-full object-cover transition-all duration-300"
+                style={{
+                  filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
+                  transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+                }}
+                onError={(e) => {
+                  // 如果縮圖載入失敗，顯示預設圖片
+                  e.target.style.display = 'none';
+                  e.target.nextSibling.style.display = 'block';
+                }}
+              />
+            )
           ) : (
             // 一般影片使用 video 標籤
             <video
@@ -264,12 +282,12 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
         </div>
       )}
 
-      {/* 影片時長標籤 */}
-      {video.duration > 0 && (
+      {/* 影片時長標籤 - 移除顯示 */}
+      {/* {video.duration > 0 && (
         <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-sm text-white text-xs px-2 py-1 rounded">
           {video.duration}秒
         </div>
-      )}
+      )} */}
 
       {/* 愛心按鈕 - 右上角 */}
       <div 

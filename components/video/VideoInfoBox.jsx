@@ -128,13 +128,13 @@ export default function VideoInfoBox({
       {video.rating && (
         <div className="flex items-center gap-2">
           <span className={`px-3 py-1 text-sm rounded ${
-            video.rating === '18+' 
+            video.rating === '18' 
               ? 'bg-red-500/20 text-red-300' 
-              : video.rating === 'all'
+              : video.rating === 'sfw'
               ? 'bg-green-500/20 text-green-300'
               : 'bg-yellow-500/20 text-yellow-300'
           }`}>
-            {video.rating === '18+' ? '🔞 18+' : video.rating === 'all' ? '✅ 全年齡' : `${video.rating}+`}
+            {video.rating === '18' ? '🔞 18+' : video.rating === 'sfw' ? '✅ 全年齡' : `${video.rating}+`}
           </span>
         </div>
       )}

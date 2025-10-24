@@ -188,7 +188,49 @@ export default function UploadVideoModal() {
     setUploading(true);
 
     try {
-      // 直接上傳到 Cloudflare Stream（跳過 Vercel）
+      // 使用混合上傳方案
+      const response = await fetch('/api/videos/upload-hybrid', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Hybrid upload failed: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        const completeness = result.video?.completenessScore || 0;
+        
+        // 更新每日配額顯示
+        if (result.dailyUploads) {
+          setDailyQuota({
+            current: result.dailyUploads.current,
+            limit: result.dailyUploads.limit,
+            remaining: result.dailyUploads.remaining
+          });
+          toast.success(`✅ 影片上傳成功！完整度：${completeness}分\n今日剩餘：${result.dailyUploads.remaining}/${result.dailyUploads.limit}`);
+        } else {
+          toast.success(`✅ 影片上傳成功！完整度：${completeness}分`);
+        }
+        
+        setIsOpen(false);
+        window.location.href = '/videos';
+      } else {
+        // 處理每日限制錯誤
+        if (response.status === 429) {
+          toast.error(`❌ ${result.error}\n${result.resetInfo || ''}`);
+        } else {
+          toast.error(result.error || '上傳失敗');
+        }
+      }
+
+      return; // 提前返回，避免執行後面的舊邏輯
+
+      // 舊的 Stream 上傳邏輯（保留作為備用）
       const streamResult = await uploadDirectlyToStream(file, title);
       
       if (!streamResult.success) {
