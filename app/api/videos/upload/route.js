@@ -8,8 +8,10 @@ import { computeVideoCompleteness, computeVideoInitialBoostFromTop, computeVideo
 
 // ✅ 設定請求體大小限制
 export const config = {
-  bodyParser: {
-    sizeLimit: '25mb',
+  api: {
+    bodyParser: {
+      sizeLimit: '25mb',
+    },
   },
 };
 
