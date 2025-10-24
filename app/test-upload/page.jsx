@@ -14,24 +14,46 @@ export default function TestUploadPage() {
     setProgress(0);
 
     try {
-      // 先測試簡單的 API
-      const formData = new FormData();
-      formData.append('file', file);
+      // 使用分塊上傳
+      const CHUNK_SIZE = 1024 * 1024; // 1MB per chunk
+      const chunks = Math.ceil(file.size / CHUNK_SIZE);
+      const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      const response = await fetch('/api/test-simple', {
-        method: 'POST',
-        body: formData,
-      });
+      console.log(`Starting chunked upload: ${chunks} chunks for ${file.name}`);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Simple test failed: ${response.status} - ${errorText}`);
+      for (let i = 0; i < chunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+
+        const formData = new FormData();
+        formData.append('chunk', chunk);
+        formData.append('chunkIndex', i);
+        formData.append('totalChunks', chunks);
+        formData.append('fileName', file.name);
+        formData.append('fileSize', file.size);
+        formData.append('uploadId', uploadId);
+
+        console.log(`Uploading chunk ${i + 1}/${chunks} (${chunk.size} bytes)`);
+
+        const response = await fetch('/api/videos/upload-chunk', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Chunk upload failed: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        setProgress((i + 1) / chunks * 100);
+
+        if (result.completed) {
+          setResult(result);
+          break;
+        }
       }
-
-      const result = await response.json();
-      setProgress(100);
-      setResult(result);
-      
     } catch (error) {
       console.error('Upload error:', error);
       setResult({ error: error.message });
