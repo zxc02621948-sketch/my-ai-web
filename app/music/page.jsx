@@ -154,12 +154,14 @@ const MusicPage = () => {
             
             {/* 中間：版本資訊和法律連結（手機版隱藏） */}
             <div className="hidden md:flex items-center gap-4 text-xs text-gray-400 flex-1 justify-center flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-yellow-400">版本 v0.8.0（2025-10-15）🎉</span>
-                <a href="/changelog" className="text-sm underline hover:text-white">
-                  查看更新內容
-                </a>
-              </div>
+                <div className="flex items-center gap-2">
+                  <a href="/about" className="hover:text-white transition text-sm font-medium text-blue-400">我們的故事</a>
+              <span className="text-gray-600">•</span>
+              <span className="text-sm text-yellow-400">版本 v0.8.0（2025-10-15）🎉</span>
+              <a href="/changelog" className="text-sm underline hover:text-white">
+                查看更新內容
+              </a>
+            </div>
               <div className="flex items-center gap-2">
                 <a href="/privacy" className="hover:text-white transition">隱私政策</a>
                 <span className="text-gray-600">•</span>

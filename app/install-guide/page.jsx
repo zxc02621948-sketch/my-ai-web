@@ -15,10 +15,10 @@ export default function InstallGuide() {
       id: "sdwebui",
       title: "🟢 SD WebUI（標準版）",
       level: "⭐☆☆☆☆（非常簡單）",
-      purpose: "穩定繪圖基礎款，功能完整、社群最大",
-      pros: "安裝簡單、資源最多、相容性好、教學多",
-      cons: "介面偏老、設定項目偏多、邏輯零散。僅限 PC 使用",
-      recommended: "初學者或剛接觸 AI 繪圖的使用者",
+      purpose: "穩定繪圖入門款，功能完整、社群最大",
+      pros: "安裝最容易，新手可直接上手\n社群資源、模型、教學最多\n擴充插件豐富（ControlNet、LoRA、Inpaint…）\n適合練習 prompt 與理解基礎參數",
+      cons: "介面略舊、設定分散\n效能表現不如 ComfyUI\n僅限 PC 使用",
+      recommended: "AI 繪圖新手、想快速出成果者",
       url: "https://www.youtube.com/watch?v=4HCPrO1vrIQ",
       duration: "約 45 分鐘",
       steps: [
@@ -33,10 +33,10 @@ export default function InstallGuide() {
       id: "reforge",
       title: "🔵 WebUI-ReForge（強化版）",
       level: "⭐⭐☆☆☆（稍有基礎可上手）",
-      purpose: "功能優化版本，介面整合、資源集中",
-      pros: "操作更順、批量處理快、UI 友善",
-      cons: "更新不一定穩、說明較少。僅限 PC 使用",
-      recommended: "有 SDWebUI 基礎、想優化流程的人",
+      purpose: "WebUI 強化整合版，操作更順、效率更高",
+      pros: "更現代的 UI、整合度高\n支援批量處理與多圖流程\n維持與 SD WebUI 相容",
+      cons: "官方更新穩定度略低\n中文教學相對少\n僅限 PC 使用",
+      recommended: "已有 WebUI 基礎、想優化流程的使用者",
       url: "https://www.youtube.com/watch?v=BBvjHMbkqxw",
       duration: "約 40 分鐘",
       steps: [
@@ -48,12 +48,12 @@ export default function InstallGuide() {
     },
     {
       id: "comfyui",
-      title: "🟠 ComfyUI（節點式）",
+      title: "🟠 ComfyUI（節點式工作流）",
       level: "⭐⭐⭐⭐☆（進階）",
-      purpose: "模組化節點工作流，靈活自由",
-      pros: "流程清楚、效果可控、自定義超強",
-      cons: "初期學習曲線高、需理解節點邏輯。僅限 PC 使用",
-      recommended: "熟悉繪圖流程、追求極致控制感的進階使用者",
+      purpose: "模組化節點控制，可自由打造流程與動畫",
+      pros: "效能穩定、省顯存\n工作流邏輯清楚，可視化每一步\n支援批量、差分、影片生成等進階功能\n可完全自訂創作流程",
+      cons: "學習曲線高，需要理解節點邏輯\n初期會覺得像在看電路圖\n僅限 PC 使用",
+      recommended: "熟悉 WebUI、追求自動化與高控制力的進階使用者",
       url: "https://www.youtube.com/watch?v=g0xYOVybAVc",
       duration: "約 60 分鐘",
       steps: [
@@ -115,8 +115,8 @@ export default function InstallGuide() {
             <ul className="text-sm text-gray-300 space-y-1">
               <li><strong>🔥 使用難易度：</strong>{g.level}</li>
               <li><strong>📌 用途：</strong>{g.purpose}</li>
-              <li><strong>✅ 優點：</strong>{g.pros}</li>
-              <li><strong>⚠️ 缺點：</strong>{g.cons}</li>
+              <li><strong>✅ 優點：</strong><div className="mt-1">{g.pros.split('\n').map((line, idx) => <div key={idx}>{line}</div>)}</div></li>
+              <li><strong>⚠️ 缺點：</strong><div className="mt-1">{g.cons.split('\n').map((line, idx) => <div key={idx}>{line}</div>)}</div></li>
               <li><strong>👍 推薦對象：</strong>{g.recommended}</li>
               <li><strong>⏱️ 安裝時間：</strong><span className="text-blue-400">{g.duration}</span></li>
             </ul>
