@@ -20,6 +20,10 @@ const VideoSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  streamId: {
+    type: String,
+    default: '',
+  },
   thumbnailUrl: {
     type: String,
     default: '',
