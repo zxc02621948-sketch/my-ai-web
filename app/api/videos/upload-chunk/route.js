@@ -3,7 +3,8 @@ import { getCurrentUserFromRequest } from '@/lib/auth/getCurrentUserFromRequest'
 import { dbConnect } from '@/lib/db';
 import Video from '@/models/Video';
 import { computeVideoCompleteness, computeVideoInitialBoostFromTop, computeVideoPopScore } from '@/utils/scoreVideo';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client, R2_BUCKET_NAME } from '@/lib/r2';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 
 // 分塊上傳配置
 export const config = {
@@ -81,23 +82,12 @@ export async function POST(request) {
     const chunkFileName = `${uploadId}_chunk_${chunkIndex}`;
     
     console.log('R2 Configuration:', {
-      endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
-      bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME,
-      hasAccessKey: !!process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
-      hasSecretKey: !!process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY
+      bucket: R2_BUCKET_NAME,
+      hasBucket: !!R2_BUCKET_NAME
     });
     
-    const s3Client = new S3Client({
-      region: 'auto',
-      endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
-      credentials: {
-        accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
-      },
-    });
-
     const uploadParams = {
-      Bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME,
+      Bucket: R2_BUCKET_NAME,
       Key: `videos/chunks/${chunkFileName}`,
       Body: chunk,
       ContentType: 'application/octet-stream',
