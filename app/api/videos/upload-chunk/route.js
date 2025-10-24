@@ -101,13 +101,22 @@ export async function POST(request) {
     console.log('Chunk uploaded successfully:', chunkFileName);
 
     // 更新接收到的塊數
-    await Video.findOneAndUpdate(
+    const updateResult = await Video.findOneAndUpdate(
       { uploadId: uploadId },
-      { $inc: { receivedChunks: 1 } }
+      { $inc: { receivedChunks: 1 } },
+      { new: true }
     );
+
+    if (!updateResult) {
+      throw new Error(`找不到 uploadId: ${uploadId} 的影片記錄`);
+    }
 
     // 檢查是否所有塊都已上傳
     const video = await Video.findOne({ uploadId: uploadId });
+    if (!video) {
+      throw new Error(`找不到 uploadId: ${uploadId} 的影片記錄`);
+    }
+
     if (video.receivedChunks >= totalChunks) {
       // 所有塊都已上傳，開始合併
       // 這裡需要實作合併邏輯
