@@ -103,35 +103,52 @@ const VideoModal = ({
         <div className="flex flex-col md:flex-row h-full">
           {/* 左側：影片播放器 */}
           <div className="flex-1 relative bg-black flex items-center justify-center">
-            <video
-              ref={videoRef}
-              src={video.videoUrl}
-              controls
-              autoPlay
-              loop
-              className="w-full h-full max-h-[70vh] object-contain"
-              onError={(e) => {
-                console.error('影片載入失敗:', e);
-                console.log('影片 URL:', video.videoUrl);
-                console.log('請檢查：');
-                console.log('1. R2 Bucket 是否設定公開存取');
-                console.log('2. 自訂域名是否正確設定');
-                console.log('3. 直接在新分頁開啟 URL 測試：', video.videoUrl);
-                
-                // 測試檔案是否存在
-                fetch(video.videoUrl, {method: 'HEAD'})
-                  .then(response => {
-                    console.log('檔案狀態:', response.status);
-                    console.log('檔案存在:', response.ok);
-                    if (!response.ok) {
-                      console.error('檔案不存在或無法存取！');
-                    }
-                  })
-                  .catch(error => {
-                    console.error('檔案測試失敗:', error);
-                  });
-              }}
-            />
+            {/* 檢查是否為 Stream 影片 */}
+            {video.streamId ? (
+              // Cloudflare Stream 影片使用 iframe 播放器
+              <iframe
+                src={`https://iframe.cloudflarestream.com/${video.streamId}?autoplay=true&loop=true`}
+                className="w-full h-full max-h-[70vh] border-0"
+                allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
+                allowFullScreen
+                onError={(e) => {
+                  console.error('Stream 影片載入失敗:', e);
+                  console.log('Stream ID:', video.streamId);
+                  console.log('播放 URL:', video.videoUrl);
+                }}
+              />
+            ) : (
+              // 一般影片使用 HTML5 video 標籤
+              <video
+                ref={videoRef}
+                src={video.videoUrl}
+                controls
+                autoPlay
+                loop
+                className="w-full h-full max-h-[70vh] object-contain"
+                onError={(e) => {
+                  console.error('影片載入失敗:', e);
+                  console.log('影片 URL:', video.videoUrl);
+                  console.log('請檢查：');
+                  console.log('1. R2 Bucket 是否設定公開存取');
+                  console.log('2. 自訂域名是否正確設定');
+                  console.log('3. 直接在新分頁開啟 URL 測試：', video.videoUrl);
+                  
+                  // 測試檔案是否存在
+                  fetch(video.videoUrl, {method: 'HEAD'})
+                    .then(response => {
+                      console.log('檔案狀態:', response.status);
+                      console.log('檔案存在:', response.ok);
+                      if (!response.ok) {
+                        console.error('檔案不存在或無法存取！');
+                      }
+                    })
+                    .catch(error => {
+                      console.error('檔案測試失敗:', error);
+                    });
+                }}
+              />
+            )}
             
             {/* 愛心按鈕 - 右下角（避開進度條） */}
             {currentUser && (

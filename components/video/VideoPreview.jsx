@@ -193,19 +193,49 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     >
       {/* 影片元素 */}
       {video.videoUrl && (
-        <video
-          ref={videoRef}
-          src={video.videoUrl}
-          className="w-full h-full object-cover transition-all duration-300"
-          preload="metadata"
-          muted
-          playsInline
-          data-video-preview="true"
-          style={{
-            filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
-            transform: isHovered ? 'scale(1.02)' : 'scale(1)',
-          }}
-        />
+        <>
+          {video.streamId ? (
+            // Stream 影片使用縮圖
+            <img
+              src={`https://customer-h5be4kbubhrszsgr.cloudflarestream.com/${video.streamId}/thumbnails/thumbnail.jpg?time=1s`}
+              alt={video.title || '影片縮圖'}
+              className="w-full h-full object-cover transition-all duration-300"
+              style={{
+                filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
+                transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+              }}
+              onError={(e) => {
+                // 如果縮圖載入失敗，顯示預設圖片
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'block';
+              }}
+            />
+          ) : (
+            // 一般影片使用 video 標籤
+            <video
+              ref={videoRef}
+              src={video.videoUrl}
+              className="w-full h-full object-cover transition-all duration-300"
+              preload="metadata"
+              muted
+              playsInline
+              data-video-preview="true"
+              style={{
+                filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
+                transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+              }}
+            />
+          )}
+          {/* 預設縮圖（當 Stream 縮圖載入失敗時顯示） */}
+          {video.streamId && (
+            <div 
+              className="w-full h-full bg-zinc-600 flex items-center justify-center"
+              style={{ display: 'none' }}
+            >
+              <div className="text-white text-sm opacity-50">🎬 Stream 影片</div>
+            </div>
+          )}
+        </>
       )}
       
       {/* 當 videoUrl 不存在時顯示佔位符 */}
