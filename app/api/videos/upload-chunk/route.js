@@ -31,9 +31,30 @@ export async function POST(request) {
     const fileSize = parseInt(formData.get('fileSize'));
     const uploadId = formData.get('uploadId');
 
+    console.log('Chunk upload request:', {
+      chunkIndex,
+      totalChunks,
+      fileName,
+      fileSize,
+      uploadId,
+      chunkSize: chunk?.size
+    });
+
     if (!chunk || chunkIndex === undefined || totalChunks === undefined || !fileName || !uploadId) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+      return NextResponse.json({ 
+        error: 'Missing required fields',
+        details: {
+          chunk: !!chunk,
+          chunkIndex,
+          totalChunks,
+          fileName,
+          uploadId
+        }
+      }, { status: 400 });
     }
+
+    // 連接資料庫
+    await dbConnect();
 
     // 如果是第一個塊，初始化上傳
     if (chunkIndex === 0) {
@@ -51,6 +72,7 @@ export async function POST(request) {
         fileSize: fileSize,
       });
       await tempVideo.save();
+      console.log('Created temp video record:', tempVideo._id);
     }
 
     // 上傳塊到 Cloudflare R2
@@ -72,7 +94,9 @@ export async function POST(request) {
       ContentType: 'application/octet-stream',
     };
 
+    console.log('Uploading chunk to R2:', chunkFileName);
     await s3Client.send(new PutObjectCommand(uploadParams));
+    console.log('Chunk uploaded successfully:', chunkFileName);
 
     // 更新接收到的塊數
     await Video.findOneAndUpdate(
@@ -105,7 +129,8 @@ export async function POST(request) {
     console.error('Chunk upload error:', error);
     return NextResponse.json({ 
       error: 'Upload failed', 
-      details: error.message 
+      details: error.message,
+      stack: error.stack
     }, { status: 500 });
   }
 }
