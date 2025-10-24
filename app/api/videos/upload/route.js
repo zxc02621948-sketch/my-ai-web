@@ -6,7 +6,12 @@ import { dbConnect } from '@/lib/db';
 import Video from '@/models/Video';
 import { computeVideoCompleteness, computeVideoInitialBoostFromTop, computeVideoPopScore } from '@/utils/scoreVideo';
 
-// ✅ 請求體大小限制由 next.config.js 全局配置處理
+// ✅ 設定請求體大小限制
+export const config = {
+  bodyParser: {
+    sizeLimit: '25mb',
+  },
+};
 
 export async function POST(request) {
   try {

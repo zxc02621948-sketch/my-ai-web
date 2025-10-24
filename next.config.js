@@ -16,12 +16,7 @@ const nextConfig = {
   // ✅ 增加檔案上傳大小限制
   serverExternalPackages: ['mongoose'],
   
-  // ✅ API 路由配置
-  api: {
-    bodyParser: {
-      sizeLimit: '25mb',
-    },
-  },
+  // ✅ API 路由配置已移至個別路由檔案
   
   // ✅ 安全標頭設置
   async headers() {
