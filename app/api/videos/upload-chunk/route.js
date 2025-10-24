@@ -3,7 +3,7 @@ import { getCurrentUserFromRequest } from '@/lib/auth/getCurrentUserFromRequest'
 import { dbConnect } from '@/lib/db';
 import Video from '@/models/Video';
 import { computeVideoCompleteness, computeVideoInitialBoostFromTop, computeVideoPopScore } from '@/utils/scoreVideo';
-import { put } from '@vercel/blob';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 // 分塊上傳配置
 export const config = {
@@ -55,9 +55,24 @@ export async function POST(request) {
 
     // 上傳塊到 Cloudflare R2
     const chunkFileName = `${uploadId}_chunk_${chunkIndex}`;
-    const blob = await put(chunkFileName, chunk, {
-      access: 'public',
+    
+    const s3Client = new S3Client({
+      region: 'auto',
+      endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
+      credentials: {
+        accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+      },
     });
+
+    const uploadParams = {
+      Bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME,
+      Key: `videos/chunks/${chunkFileName}`,
+      Body: chunk,
+      ContentType: 'application/octet-stream',
+    };
+
+    await s3Client.send(new PutObjectCommand(uploadParams));
 
     // 更新接收到的塊數
     await Video.findOneAndUpdate(
