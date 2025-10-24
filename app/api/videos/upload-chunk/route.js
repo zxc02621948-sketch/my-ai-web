@@ -80,6 +80,13 @@ export async function POST(request) {
     // 上傳塊到 Cloudflare R2
     const chunkFileName = `${uploadId}_chunk_${chunkIndex}`;
     
+    console.log('R2 Configuration:', {
+      endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
+      bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME,
+      hasAccessKey: !!process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
+      hasSecretKey: !!process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY
+    });
+    
     const s3Client = new S3Client({
       region: 'auto',
       endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
