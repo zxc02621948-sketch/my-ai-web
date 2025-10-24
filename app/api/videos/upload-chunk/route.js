@@ -86,14 +86,17 @@ export async function POST(request) {
       hasBucket: !!R2_BUCKET_NAME
     });
     
+    // 將 Blob 轉換為 Buffer
+    const chunkBuffer = Buffer.from(await chunk.arrayBuffer());
+    
     const uploadParams = {
       Bucket: R2_BUCKET_NAME,
       Key: `videos/chunks/${chunkFileName}`,
-      Body: chunk,
+      Body: chunkBuffer,
       ContentType: 'application/octet-stream',
     };
 
-    console.log('Uploading chunk to R2:', chunkFileName);
+    console.log('Uploading chunk to R2:', chunkFileName, 'Size:', chunkBuffer.length);
     await s3Client.send(new PutObjectCommand(uploadParams));
     console.log('Chunk uploaded successfully:', chunkFileName);
 
