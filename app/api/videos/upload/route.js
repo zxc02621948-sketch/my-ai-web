@@ -16,6 +16,9 @@ export const config = {
   maxDuration: 60, // 增加執行時間限制
 };
 
+// 動態導入以避免構建時錯誤
+const runtime = 'nodejs';
+
 export async function POST(request) {
   try {
     // 驗證用戶

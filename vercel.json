@@ -17,5 +17,6 @@
     "app/api/videos/upload/route.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "regions": ["hkg1"]
 }
