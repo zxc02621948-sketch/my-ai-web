@@ -76,8 +76,8 @@ export default function TestStreamUploadPage() {
 
       // 注意：這裡需要你填入實際的 Account ID 和 API Token
       // 為了測試，請將下面的值替換為你的實際值
-      const ACCOUNT_ID = '你的_Account_ID'; // 請替換為實際值
-      const API_TOKEN = '你的_API_Token'; // 請替換為實際值
+      const ACCOUNT_ID = '5c6250a0576aa4ca0bb9cdf32be0bee1'; // 請替換為實際值
+      const API_TOKEN = 'FDh62HwIzm31AhAY05nuaGfsF4B4z1q61onBT4-s'; // 請替換為實際值
       
       const response = await fetch(
         `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/stream`,
