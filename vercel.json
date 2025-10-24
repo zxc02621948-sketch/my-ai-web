@@ -12,5 +12,10 @@
       "path": "/api/cron/check-expiring-subscriptions",
       "schedule": "0 12 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "app/api/videos/upload/route.js": {
+      "maxDuration": 60
+    }
+  }
 }

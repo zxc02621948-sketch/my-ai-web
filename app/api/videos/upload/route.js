@@ -13,6 +13,7 @@ export const config = {
       sizeLimit: '25mb',
     },
   },
+  maxDuration: 60, // 增加執行時間限制
 };
 
 export async function POST(request) {
