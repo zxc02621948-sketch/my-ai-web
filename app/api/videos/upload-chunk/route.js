@@ -64,11 +64,10 @@ export async function POST(request) {
         description: '',
         category: 'general',
         rating: 'sfw',
-        uploader: user._id,
-        author: user.username || user.email,
+        author: user._id, // 使用 ObjectId
         authorName: user.username || user.email,
-        videoUrl: '', // 暫時為空，上傳完成後會更新
-        status: 'pending', // 使用有效的 enum 值
+        videoUrl: 'temp://uploading', // 暫時值，上傳完成後會更新
+        status: 'active', // 使用有效的 enum 值
         uploadId: uploadId,
         totalChunks: totalChunks,
         receivedChunks: 0,
