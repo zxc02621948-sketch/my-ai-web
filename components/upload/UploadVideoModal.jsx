@@ -188,37 +188,98 @@ export default function UploadVideoModal() {
     setUploading(true);
 
     try {
-      // 使用後端代理上傳到 R2（避開 CORS，但受 Vercel 4MB 限制）
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('title', title);
-      formData.append('description', description);
-      formData.append('tags', tags);
-      formData.append('category', category);
-      formData.append('rating', rating);
-      formData.append('platform', platform);
-      formData.append('prompt', prompt);
-      formData.append('negativePrompt', negativePrompt);
-      formData.append('fps', fps || '');
-      formData.append('resolution', resolution || '');
-      formData.append('steps', steps || '');
-      formData.append('cfgScale', cfgScale || '');
-      formData.append('seed', seed || '');
-      formData.append('width', videoWidth || '');
-      formData.append('height', videoHeight || '');
-      formData.append('duration', duration || '');
-
-      console.log('開始上傳影片到 R2（透過後端代理）...');
-      
-      const uploadResponse = await fetch('/api/videos/upload-r2-direct', {
+      // 步驟 1: 獲取 Presigned URL
+      const urlResponse = await fetch('/api/videos/upload-presigned-url', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+          title,
+          description,
+          tags,
+          category,
+          rating,
+          platform,
+          prompt,
+          negativePrompt,
+          fps,
+          resolution,
+          steps,
+          cfgScale,
+          seed,
+          width: videoWidth,
+          height: videoHeight,
+          duration,
+        }),
         credentials: 'include',
       });
 
-      const result = await uploadResponse.json();
+      if (!urlResponse.ok) {
+        const errorData = await urlResponse.json();
+        throw new Error(errorData.error || '獲取上傳 URL 失敗');
+      }
 
-      if (!uploadResponse.ok || !result.success) {
+      const urlData = await urlResponse.json();
+      if (!urlData.success) {
+        throw new Error(urlData.error || '獲取上傳 URL 失敗');
+      }
+
+      console.log('預簽名 URL 已獲取，開始直接上傳到 R2...');
+
+      // 步驟 2: 直接上傳影片到 R2（繞過 Vercel，不受 4MB 限制）
+      const uploadResponse = await fetch(urlData.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type,
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error('R2 上傳失敗:', errorText);
+        throw new Error(`影片上傳到 R2 失敗: ${uploadResponse.status} - ${errorText}`);
+      }
+
+      console.log('R2 上傳成功，正在建立資料庫記錄...');
+
+      // 步驟 3: 建立資料庫記錄
+      const saveResponse = await fetch('/api/videos/create-record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description,
+          tags,
+          category,
+          rating,
+          platform,
+          prompt,
+          negativePrompt,
+          fps,
+          resolution,
+          steps,
+          cfgScale,
+          seed,
+          width: videoWidth,
+          height: videoHeight,
+          duration,
+          videoUrl: urlData.publicUrl,
+          videoKey: urlData.key,
+        }),
+        credentials: 'include',
+      });
+
+      if (!saveResponse.ok) {
+        const errorText = await saveResponse.text();
+        throw new Error(`建立記錄失敗: ${saveResponse.status} - ${errorText}`);
+      }
+
+      const result = await saveResponse.json();
+
+      if (!result.success) {
         throw new Error(result.error || '上傳失敗');
       }
 
@@ -241,7 +302,7 @@ export default function UploadVideoModal() {
 
     } catch (error) {
       console.error('上傳失敗:', error);
-      toast.error('上傳失敗，請重試');
+      toast.error(error.message || '上傳失敗，請重試');
     } finally {
       setUploading(false);
     }
