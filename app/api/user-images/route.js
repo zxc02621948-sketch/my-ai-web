@@ -1,5 +1,6 @@
 // app/api/user-images/route.js
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";

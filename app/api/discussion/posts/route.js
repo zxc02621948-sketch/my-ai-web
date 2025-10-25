@@ -7,6 +7,8 @@ import User from "@/models/User";
 import PointsTransaction from "@/models/PointsTransaction";
 import { uploadToCloudflare } from "@/lib/uploadToCloudflare";
 
+export const dynamic = 'force-dynamic';
+
 // 获取帖子列表
 export async function GET(req) {
   try {

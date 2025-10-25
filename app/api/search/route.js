@@ -1,4 +1,6 @@
 // app/api/search/route.js
+export const dynamic = 'force-dynamic';
+
 import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
 
