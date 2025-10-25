@@ -3,8 +3,6 @@ import { dbConnect } from '@/lib/db';
 import Video from '@/models/Video';
 import { VIDEO_AUTHOR_STAGES } from '@/utils/videoQuery';
 
-export const dynamic = 'force-dynamic';
-
 // 熱門度計算常數（與圖片系統一致）
 const POP_W_CLICK = 1.0;
 const POP_W_LIKE = 8.0;

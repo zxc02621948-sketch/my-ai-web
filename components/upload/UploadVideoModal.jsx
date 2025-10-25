@@ -188,7 +188,7 @@ export default function UploadVideoModal() {
     setUploading(true);
 
     try {
-      // 建立 FormData 並填入所有資料
+      // 使用 FormData 直接上傳到後端
       const formData = new FormData();
       formData.append('file', file);
       formData.append('title', title);
@@ -196,31 +196,32 @@ export default function UploadVideoModal() {
       formData.append('tags', tags);
       formData.append('category', category);
       formData.append('rating', rating);
-      if (platform) formData.append('platform', platform);
-      if (prompt) formData.append('prompt', prompt);
-      if (negativePrompt) formData.append('negativePrompt', negativePrompt);
-      if (fps) formData.append('fps', fps);
-      if (resolution) formData.append('resolution', resolution);
-      if (steps) formData.append('steps', steps);
-      if (cfgScale) formData.append('cfgScale', cfgScale);
-      if (seed) formData.append('seed', seed);
-      if (videoWidth) formData.append('width', videoWidth);
-      if (videoHeight) formData.append('height', videoHeight);
-      if (duration) formData.append('duration', duration);
+      formData.append('platform', platform || '');
+      formData.append('prompt', prompt || '');
+      formData.append('negativePrompt', negativePrompt || '');
+      formData.append('fps', fps || '');
+      formData.append('resolution', resolution || '');
+      formData.append('steps', steps || '');
+      formData.append('cfgScale', cfgScale || '');
+      formData.append('seed', seed || '');
+      formData.append('width', videoWidth || '');
+      formData.append('height', videoHeight || '');
+      formData.append('duration', duration || '');
 
-      // 使用混合上傳方案
-      const response = await fetch('/api/videos/upload-hybrid', {
+      console.log('準備上傳到後端:', { fileSize: file.size, fileType: file.type });
+
+      const uploadResponse = await fetch('/api/videos/upload-r2-direct', {
         method: 'POST',
         body: formData,
         credentials: 'include',
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Hybrid upload failed: ${response.status} - ${errorText}`);
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.error || '上傳失敗');
       }
 
-      const result = await response.json();
+      const result = await uploadResponse.json();
 
       if (result.success) {
         const completeness = result.video?.completenessScore || 0;
@@ -241,85 +242,14 @@ export default function UploadVideoModal() {
         window.location.href = '/videos';
       } else {
         // 處理每日限制錯誤
-        if (response.status === 429) {
+        if (uploadResponse.status === 429) {
           toast.error(`❌ ${result.error}\n${result.resetInfo || ''}`);
         } else {
           toast.error(result.error || '上傳失敗');
         }
       }
 
-      return; // 提前返回，避免執行後面的舊邏輯
 
-      // 舊的 Stream 上傳邏輯（保留作為備用）
-      const streamResult = await uploadDirectlyToStream(file, title);
-      
-      if (!streamResult.success) {
-        throw new Error(streamResult.error);
-      }
-
-      console.log('Direct Stream upload successful:', streamResult);
-
-      // 上傳完成後，調用我們的 API 保存記錄
-      const saveResponse = await fetch('/api/videos/save-stream-record', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          streamId: streamResult.streamId,
-          playbackUrl: streamResult.playbackUrl,
-          title,
-          description,
-          category,
-          rating,
-          tags,
-          platform,
-          prompt,
-          negativePrompt,
-          fps,
-          resolution,
-          steps,
-          cfgScale,
-          seed,
-          width: videoWidth,
-          height: videoHeight,
-          duration,
-        }),
-        credentials: 'include',
-      });
-
-      if (!saveResponse.ok) {
-        const errorText = await saveResponse.text();
-        throw new Error(`Save record failed: ${errorText}`);
-      }
-
-      const saveResult = await saveResponse.json();
-
-      if (saveResult.success) {
-        const completeness = saveResult.video?.completenessScore || 0;
-        
-        // 更新每日配額顯示
-        if (saveResult.dailyUploads) {
-          setDailyQuota({
-            current: saveResult.dailyUploads.current,
-            limit: saveResult.dailyUploads.limit,
-            remaining: saveResult.dailyUploads.remaining
-          });
-          toast.success(`✅ 影片上傳成功！完整度：${completeness}分\n今日剩餘：${saveResult.dailyUploads.remaining}/${saveResult.dailyUploads.limit}`);
-        } else {
-          toast.success(`✅ 影片上傳成功！完整度：${completeness}分`);
-        }
-        
-        setIsOpen(false);
-        window.location.href = '/videos';
-      } else {
-        // 處理每日限制錯誤
-        if (saveResponse.status === 429) {
-          toast.error(`❌ ${saveResult.error}\n${saveResult.resetInfo || ''}`);
-        } else {
-          toast.error(saveResult.error || '保存記錄失敗');
-        }
-      }
 
     } catch (error) {
       console.error('上傳失敗:', error);
