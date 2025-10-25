@@ -188,6 +188,26 @@ export default function UploadVideoModal() {
     setUploading(true);
 
     try {
+      // 建立 FormData 並填入所有資料
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', title);
+      formData.append('description', description);
+      formData.append('tags', tags);
+      formData.append('category', category);
+      formData.append('rating', rating);
+      if (platform) formData.append('platform', platform);
+      if (prompt) formData.append('prompt', prompt);
+      if (negativePrompt) formData.append('negativePrompt', negativePrompt);
+      if (fps) formData.append('fps', fps);
+      if (resolution) formData.append('resolution', resolution);
+      if (steps) formData.append('steps', steps);
+      if (cfgScale) formData.append('cfgScale', cfgScale);
+      if (seed) formData.append('seed', seed);
+      if (videoWidth) formData.append('width', videoWidth);
+      if (videoHeight) formData.append('height', videoHeight);
+      if (duration) formData.append('duration', duration);
+
       // 使用混合上傳方案
       const response = await fetch('/api/videos/upload-hybrid', {
         method: 'POST',
