@@ -6,6 +6,7 @@ import { computeVideoCompleteness, computeVideoInitialBoostFromTop, computeVideo
 import { uploadToR2, generateR2Key, R2_PUBLIC_URL } from '@/lib/r2';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 120;
 
 export async function POST(request) {
   try {

@@ -14,10 +14,13 @@
     }
   ],
   "functions": {
-    "app/api/videos/upload/route.js": {
-      "maxDuration": 60,
+    "app/api/videos/upload-r2-direct/route.js": {
+      "maxDuration": 120,
       "memory": 1024
     }
   },
-  "regions": ["hkg1"]
+  "regions": ["hkg1"],
+  "env": {
+    "VERCEL_MAX_BODY_SIZE": "104857600"
+  }
 }
