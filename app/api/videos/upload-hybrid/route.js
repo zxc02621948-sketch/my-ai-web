@@ -3,15 +3,17 @@ import { getCurrentUserFromRequest } from '@/lib/auth/getCurrentUserFromRequest'
 import { dbConnect } from '@/lib/db';
 import Video from '@/models/Video';
 import { computeVideoCompleteness, computeVideoInitialBoostFromTop, computeVideoPopScore } from '@/utils/scoreVideo';
-import { uploadToR2 } from '@/lib/r2';
+import { uploadToR2, generateR2Key } from '@/lib/r2';
+
+export const dynamic = 'force-dynamic';
 
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '100mb', // Stream API 支援更大的檔案
+      sizeLimit: '100mb',
     },
   },
-  maxDuration: 300, // 5 分鐘執行時間
+  maxDuration: 300,
 };
 
 export async function POST(request) {
@@ -44,24 +46,16 @@ export async function POST(request) {
     // 連接資料庫
     await dbConnect();
 
-    // 步驟 1: 上傳到 Cloudflare Stream
-    const streamResult = await uploadToStream(file, title);
-    
-    if (!streamResult.success) {
-      throw new Error(streamResult.error);
-    }
+    // 步驟 1: 上傳到 R2（直接上傳，無需經過 Stream）
+    console.log('Uploading directly to R2...');
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const key = generateR2Key(user._id.toString(), 'videos', file.name);
+    const videoUrl = await uploadToR2(buffer, key, file.type);
 
-    console.log('Stream upload successful:', streamResult.streamId);
+    console.log('R2 upload successful:', videoUrl);
 
-    // 步驟 2: 從 Stream 生成預覽影片並上傳到 R2
-    const previewResult = await generatePreviewAndUpload(streamResult.streamId, title);
-    
-    if (!previewResult.success) {
-      console.warn('Preview generation failed:', previewResult.error);
-      // 繼續執行，但沒有預覽影片
-    }
-
-    // 步驟 3: 創建影片記錄
+    // 步驟 2: 創建影片記錄
     const video = new Video({
       title,
       description,
@@ -69,9 +63,9 @@ export async function POST(request) {
       rating,
       author: user._id,
       authorName: user.username || user.email,
-      videoUrl: streamResult.playbackUrl, // Stream 播放連結
-      streamId: streamResult.streamId,
-      previewUrl: previewResult.success ? previewResult.previewUrl : '', // R2 預覽連結
+      videoUrl: videoUrl,
+      streamId: null,
+      previewUrl: '',
       status: 'active',
     });
 
@@ -95,7 +89,6 @@ export async function POST(request) {
         title: video.title,
         videoUrl: video.videoUrl,
         previewUrl: video.previewUrl,
-        streamId: video.streamId,
         completenessScore: video.completenessScore,
         popScore: video.popScore,
       }
@@ -110,75 +103,4 @@ export async function POST(request) {
   }
 }
 
-// 上傳到 Cloudflare Stream 的函數
-async function uploadToStream(file, title) {
-  try {
-    console.log('Uploading to Cloudflare Stream...', {
-      fileName: file.name,
-      fileSize: file.size,
-      title
-    });
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('name', title);
-
-    const response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/stream`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.CLOUDFLARE_STREAM_API_TOKEN}`,
-        },
-        body: formData,
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Stream API error response:', errorData);
-      throw new Error(`Stream API error: ${errorData.errors?.[0]?.message || 'Unknown error'}`);
-    }
-
-    const data = await response.json();
-    console.log('Stream API success:', data);
-    
-    return {
-      success: true,
-      streamId: data.result.uid,
-      playbackUrl: data.result.playback.hls,
-    };
-  } catch (error) {
-    console.error('Stream upload error:', error);
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-}
-
-// 從 Stream 生成預覽影片並上傳到 R2
-async function generatePreviewAndUpload(streamId, title) {
-  try {
-    console.log('Generating preview for Stream ID:', streamId);
-
-    // 步驟 1: 從 Stream 下載影片
-    const streamUrl = `https://customer-h5be4kbubhrszsgr.cloudflarestream.com/${streamId}/manifest/video.m3u8`;
-    
-    // 步驟 2: 使用 ffmpeg 生成預覽影片（前2秒）
-    // 這裡需要實作 ffmpeg 處理邏輯
-    // 暫時返回成功，但沒有預覽 URL
-    console.log('Preview generation not implemented yet');
-    
-    return {
-      success: false,
-      error: 'Preview generation not implemented yet',
-    };
-  } catch (error) {
-    console.error('Preview generation error:', error);
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-}
