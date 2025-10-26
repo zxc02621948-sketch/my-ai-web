@@ -230,6 +230,7 @@ export default function UploadVideoModal() {
         method: 'PUT',
         headers: {
           'Content-Type': file.type,
+          'Host': '5c6250a0576aa4ca0bb9cdf32be0bee1.r2.cloudflarestorage.com',
         },
         body: file,
       });
