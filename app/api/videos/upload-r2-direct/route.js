@@ -3,10 +3,21 @@ import { getCurrentUserFromRequest } from '@/lib/auth/getCurrentUserFromRequest'
 import { dbConnect } from '@/lib/db';
 import Video from '@/models/Video';
 import { computeVideoCompleteness, computeVideoInitialBoostFromTop, computeVideoPopScore } from '@/utils/scoreVideo';
-import { uploadToR2, generateR2Key, R2_PUBLIC_URL } from '@/lib/r2';
+import { generateR2Key, R2_PUBLIC_URL } from '@/lib/r2';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120;
+export const maxDuration = 300; // 增加到 5 分鐘
+
+// 直接創建 S3Client for streaming
+const s3Client = new S3Client({
+  region: 'auto',
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+});
 
 export async function POST(request) {
   try {
@@ -48,10 +59,23 @@ export async function POST(request) {
       return NextResponse.json({ error: '影片檔案過大，請選擇小於 100MB 的檔案' }, { status: 400 });
     }
 
-    // 上傳到 R2
+    // 使用 Streaming 上傳到 R2
     const key = generateR2Key(user._id.toString(), 'videos', file.name);
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
-    const publicUrl = await uploadToR2(fileBuffer, key, file.type);
+    
+    console.log('Starting streaming upload to R2:', { key, size: file.size });
+
+    // Stream the file directly to R2
+    const command = new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+      Body: file.stream(), // 使用 stream() 而不是 arrayBuffer()
+      ContentType: file.type,
+    });
+
+    await s3Client.send(command);
+    
+    const publicUrl = `${R2_PUBLIC_URL}/${key}`;
+    console.log('Upload completed:', publicUrl);
 
     await dbConnect();
 
