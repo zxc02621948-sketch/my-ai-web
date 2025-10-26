@@ -226,6 +226,13 @@ export default function UploadVideoModal() {
       console.log('✅ 預簽名 URL 已取得，開始直傳 R2...');
 
       // Step 2️⃣ 直接 PUT 到 R2 S3 端點
+      console.log('🔍 調試信息:', {
+        uploadUrl: presignData.uploadUrl,
+        fileSize: file.size,
+        fileType: file.type,
+        fileName: file.name
+      });
+
       const uploadRes = await fetch(presignData.uploadUrl, {
         method: 'PUT',
         headers: {
@@ -234,9 +241,21 @@ export default function UploadVideoModal() {
         body: file,
       });
 
+      console.log('🔍 上傳回應:', {
+        status: uploadRes.status,
+        statusText: uploadRes.statusText,
+        ok: uploadRes.ok,
+        headers: Object.fromEntries(uploadRes.headers.entries())
+      });
+
       if (!uploadRes.ok) {
-        console.warn('R2 直傳失敗，狀態:', uploadRes.status);
-        throw new Error(`R2 直傳失敗 (${uploadRes.status})`);
+        const errorText = await uploadRes.text();
+        console.error('R2 直傳失敗詳情:', {
+          status: uploadRes.status,
+          statusText: uploadRes.statusText,
+          errorText
+        });
+        throw new Error(`R2 直傳失敗 (${uploadRes.status}): ${errorText}`);
       }
 
       console.log('✅ 成功直傳 R2:', presignData.publicUrl);

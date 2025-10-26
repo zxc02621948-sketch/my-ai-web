@@ -100,6 +100,7 @@ export async function POST(request) {
       contentType,
       uploadUrl: presignedUrl.substring(0, 100) + '...',
       publicUrl,
+      fullUploadUrl: presignedUrl, // 完整 URL 用於調試
     });
 
     return NextResponse.json({ 
