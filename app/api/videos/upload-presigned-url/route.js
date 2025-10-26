@@ -10,11 +10,10 @@ function generatePresignedUrl(key, contentType) {
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const region = 'auto';
-  const bucket = process.env.R2_BUCKET_NAME;
   
-  // 解析 endpoint URL
-  const endpointUrl = process.env.R2_ENDPOINT || `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
-  const endpointHost = endpointUrl.replace(/^https?:\/\//, '').split('/')[0];
+  // 使用公開開發 URL
+  const endpointUrl = 'https://pub-6cf7152c4b50428953a2b540d37346f.r2.dev';
+  const endpointHost = 'pub-6cf7152c4b50428953a2b540d37346f.r2.dev';
   
   const now = new Date();
   const dateTime = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -25,8 +24,8 @@ function generatePresignedUrl(key, contentType) {
   // 注意：對於 R2，canonicalUri 只包含 key，不包含 bucket
   const canonicalUri = `/${encodedKey}`;
   const canonicalQuerystring = '';
-  const canonicalHeaders = `host:${endpointHost}\ncontent-type:${contentType}\nx-amz-acl:public-read\n`;
-  const signedHeaders = 'host;content-type;x-amz-acl';
+  const canonicalHeaders = `host:${endpointHost}\ncontent-type:${contentType}\n`;
+  const signedHeaders = 'host;content-type';
   const hashedPayload = 'UNSIGNED-PAYLOAD';
   
   const canonicalRequest = [
@@ -60,7 +59,6 @@ function generatePresignedUrl(key, contentType) {
     'X-Amz-Expires': '300',
     'X-Amz-SignedHeaders': signedHeaders,
     'X-Amz-Signature': signature,
-    'x-amz-acl': 'public-read',
   });
   
   // 返回 URL: 對於 R2，URL 格式為 endpoint/key
