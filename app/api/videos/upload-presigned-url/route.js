@@ -25,8 +25,8 @@ function generatePresignedUrl(key, contentType) {
   // 注意：對於 R2，canonicalUri 只包含 key，不包含 bucket
   const canonicalUri = `/${encodedKey}`;
   const canonicalQuerystring = '';
-  const canonicalHeaders = `host:${endpointHost}\ncontent-type:${contentType}\n`;
-  const signedHeaders = 'host;content-type';
+  const canonicalHeaders = `host:${endpointHost}\ncontent-type:${contentType}\nx-amz-acl:public-read\n`;
+  const signedHeaders = 'host;content-type;x-amz-acl';
   const hashedPayload = 'UNSIGNED-PAYLOAD';
   
   const canonicalRequest = [
@@ -60,6 +60,7 @@ function generatePresignedUrl(key, contentType) {
     'X-Amz-Expires': '300',
     'X-Amz-SignedHeaders': signedHeaders,
     'X-Amz-Signature': signature,
+    'x-amz-acl': 'public-read',
   });
   
   // 返回 URL: 對於 R2，URL 格式為 endpoint/key

@@ -230,6 +230,7 @@ export default function UploadVideoModal() {
         method: 'PUT',
         headers: {
           'Content-Type': file.type,
+          'x-amz-acl': 'public-read',
         },
         body: file,
       });
