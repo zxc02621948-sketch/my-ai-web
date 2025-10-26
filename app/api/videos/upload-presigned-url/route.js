@@ -10,6 +10,7 @@ function generatePresignedUrl(key, contentType) {
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const region = 'auto';
+  const bucket = process.env.R2_BUCKET_NAME;
   
   // 使用 S3 簽名端點
   const endpointUrl = 'https://5c6250a0576aa4ca0bb9cdf32be0bee1.r2.cloudflarestorage.com';
@@ -22,7 +23,6 @@ function generatePresignedUrl(key, contentType) {
   // URI 編碼 key，但保留 / 符號
   const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/');
   // S3 路徑格式：/bucket/key
-  const bucket = process.env.R2_BUCKET_NAME;
   const canonicalUri = `/${bucket}/${encodedKey}`;
   const canonicalQuerystring = '';
   const canonicalHeaders = `host:${endpointHost}\ncontent-type:${contentType}\n`;
@@ -57,7 +57,7 @@ function generatePresignedUrl(key, contentType) {
     'X-Amz-Algorithm': algorithm,
     'X-Amz-Credential': `${accessKeyId}/${credentialScope}`,
     'X-Amz-Date': dateTime,
-    'X-Amz-Expires': '300',
+    'X-Amz-Expires': '600', // 10 分鐘
     'X-Amz-SignedHeaders': signedHeaders,
     'X-Amz-Signature': signature,
   });
@@ -70,26 +70,26 @@ export async function POST(request) {
   try {
     const user = await getCurrentUserFromRequest(request);
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
     const { filename, contentType, fileSize, ...metadata } = await request.json();
 
     if (!filename || !contentType) {
-      return NextResponse.json({ error: 'Missing filename or contentType' }, { status: 400 });
+      return NextResponse.json({ success: false, error: "缺少參數" }, { status: 400 });
     }
 
     const allowedTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/webm', 'video/quicktime'];
     if (!allowedTypes.includes(contentType)) {
-      return NextResponse.json({ error: '不支援的影片格式' }, { status: 400 });
+      return NextResponse.json({ success: false, error: '不支援的影片格式' }, { status: 400 });
     }
 
     const maxSize = 100 * 1024 * 1024; // 100MB
     if (fileSize > maxSize) {
-      return NextResponse.json({ error: '影片檔案過大，請選擇小於 100MB 的檔案' }, { status: 400 });
+      return NextResponse.json({ success: false, error: '影片檔案過大，請選擇小於 100MB 的檔案' }, { status: 400 });
     }
 
-    const key = generateR2Key(user._id.toString(), 'videos', filename);
+    const key = generateR2Key(user._id.toString(), "videos", filename);
 
     // 生成 Presigned URL
     const presignedUrl = generatePresignedUrl(key, contentType);
@@ -102,15 +102,15 @@ export async function POST(request) {
       publicUrl,
     });
 
-    return NextResponse.json({
-      success: true,
-      uploadUrl: presignedUrl,
-      publicUrl: publicUrl,
-      key: key,
-      metadata: metadata,
+    return NextResponse.json({ 
+      success: true, 
+      uploadUrl: presignedUrl, 
+      publicUrl,
+      key,
+      metadata 
     });
   } catch (error) {
-    console.error('Presigned URL 生成錯誤:', error);
-    return NextResponse.json({ error: '生成上傳 URL 失敗' }, { status: 500 });
+    console.error("Presigned URL error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
