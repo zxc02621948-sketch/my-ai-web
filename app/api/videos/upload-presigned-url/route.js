@@ -22,8 +22,8 @@ function generatePresignedUrl(key, contentType) {
   
   // URI 編碼 key，但保留 / 符號
   const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/');
-  // S3 path style: /bucket/key
-  const canonicalUri = `/${bucket}/${encodedKey}`;
+  // 注意：對於 R2，canonicalUri 只包含 key，不包含 bucket
+  const canonicalUri = `/${encodedKey}`;
   const canonicalQuerystring = '';
   const canonicalHeaders = `host:${endpointHost}\ncontent-type:${contentType}\n`;
   const signedHeaders = 'host;content-type';
@@ -62,8 +62,8 @@ function generatePresignedUrl(key, contentType) {
     'X-Amz-Signature': signature,
   });
   
-  // 返回 URL: endpoint/bucket/key
-  return `${endpointUrl}/${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}?${queryParams.toString()}`;
+  // 返回 URL: 對於 R2，URL 格式為 endpoint/key
+  return `${endpointUrl}/${encodeURIComponent(key).replace(/%2F/g, '/')}?${queryParams.toString()}`;
 }
 
 export async function POST(request) {
