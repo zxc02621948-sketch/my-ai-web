@@ -11,9 +11,9 @@ function generatePresignedUrl(key, contentType) {
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const region = 'auto';
   
-  // 使用公開開發 URL
-  const endpointUrl = 'https://pub-6cf7152c4b50428953a2b540d37346f.r2.dev';
-  const endpointHost = 'pub-6cf7152c4b50428953a2b540d37346f.r2.dev';
+  // 使用 S3 簽名端點
+  const endpointUrl = 'https://5c6250a0576aa4ca0bb9cdf32be0bee1.r2.cloudflarestorage.com';
+  const endpointHost = '5c6250a0576aa4ca0bb9cdf32be0bee1.r2.cloudflarestorage.com';
   
   const now = new Date();
   const dateTime = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -21,8 +21,9 @@ function generatePresignedUrl(key, contentType) {
   
   // URI 編碼 key，但保留 / 符號
   const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/');
-  // 注意：對於 R2，canonicalUri 只包含 key，不包含 bucket
-  const canonicalUri = `/${encodedKey}`;
+  // S3 路徑格式：/bucket/key
+  const bucket = process.env.R2_BUCKET_NAME;
+  const canonicalUri = `/${bucket}/${encodedKey}`;
   const canonicalQuerystring = '';
   const canonicalHeaders = `host:${endpointHost}\ncontent-type:${contentType}\n`;
   const signedHeaders = 'host;content-type';
@@ -61,8 +62,8 @@ function generatePresignedUrl(key, contentType) {
     'X-Amz-Signature': signature,
   });
   
-  // 返回 URL: 對於 R2，URL 格式為 endpoint/key
-  return `${endpointUrl}/${encodeURIComponent(key).replace(/%2F/g, '/')}?${queryParams.toString()}`;
+  // 返回 URL: S3 格式為 endpoint/bucket/key
+  return `${endpointUrl}/${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}?${queryParams.toString()}`;
 }
 
 export async function POST(request) {
