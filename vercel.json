@@ -19,8 +19,5 @@
       "memory": 1024
     }
   },
-  "regions": ["hkg1"],
-  "env": {
-    "VERCEL_MAX_BODY_SIZE": "104857600"
-  }
+  "regions": ["hkg1"]
 }
