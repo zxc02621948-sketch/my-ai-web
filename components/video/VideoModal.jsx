@@ -129,23 +129,13 @@ const VideoModal = ({
                 onError={(e) => {
                   console.error('影片載入失敗:', e);
                   console.log('影片 URL:', video.videoUrl);
-                  console.log('請檢查：');
-                  console.log('1. R2 Bucket 是否設定公開存取');
-                  console.log('2. 自訂域名是否正確設定');
-                  console.log('3. 直接在新分頁開啟 URL 測試：', video.videoUrl);
-                  
-                  // 測試檔案是否存在
-                  fetch(video.videoUrl, {method: 'HEAD'})
-                    .then(response => {
-                      console.log('檔案狀態:', response.status);
-                      console.log('檔案存在:', response.ok);
-                      if (!response.ok) {
-                        console.error('檔案不存在或無法存取！');
-                      }
-                    })
-                    .catch(error => {
-                      console.error('檔案測試失敗:', error);
-                    });
+                  console.log('影片類型:', video.videoUrl?.includes('r2.dev') ? 'R2 影片' : '其他');
+                }}
+                onLoadStart={() => {
+                  console.log('開始載入影片:', video.videoUrl);
+                }}
+                onCanPlay={() => {
+                  console.log('影片可以播放:', video.videoUrl);
                 }}
               />
             )}

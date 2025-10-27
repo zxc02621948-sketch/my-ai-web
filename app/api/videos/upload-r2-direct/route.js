@@ -1,18 +1,21 @@
-import { NextResponse } from 'next/server';
-import { getCurrentUserFromRequest } from '@/lib/auth/getCurrentUserFromRequest';
-import { dbConnect } from '@/lib/db';
-import Video from '@/models/Video';
-import { computeVideoCompleteness, computeVideoInitialBoostFromTop, computeVideoPopScore } from '@/utils/scoreVideo';
-import { generateR2Key, R2_PUBLIC_URL } from '@/lib/r2';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { NextResponse } from "next/server";
+import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
+import { generateR2Key, R2_PUBLIC_URL } from "@/lib/r2";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { dbConnect } from "@/lib/db";
+import Video from "@/models/Video";
 
-export const dynamic = 'force-dynamic';
-export const maxDuration = 300; // 增加到 5 分鐘
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
-// 直接創建 S3Client for streaming
+// ✅ 使用 AWS SDK S3 簽章上傳
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+const R2_ENDPOINT = process.env.R2_ENDPOINT;
+
+// 初始化 S3 客戶端
 const s3Client = new S3Client({
-  region: 'auto',
-  endpoint: process.env.R2_ENDPOINT,
+  region: "auto",
+  endpoint: R2_ENDPOINT,
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
@@ -23,124 +26,137 @@ export async function POST(request) {
   try {
     const user = await getCurrentUserFromRequest(request);
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // ✅ 直接處理檔案上傳（使用 R2 API Token）
     const formData = await request.formData();
     const file = formData.get('file');
-    const title = formData.get('title') || '未命名影片';
-    const description = formData.get('description') || '';
-    const tags = formData.get('tags') || '';
-    const category = formData.get('category') || 'general';
-    const rating = formData.get('rating') || 'sfw';
-    const platform = formData.get('platform') || '';
-    const prompt = formData.get('prompt') || '';
-    const negativePrompt = formData.get('negativePrompt') || '';
-    const fps = formData.get('fps') || null;
-    const resolution = formData.get('resolution') || '';
-    const steps = formData.get('steps') || null;
-    const cfgScale = formData.get('cfgScale') || null;
-    const seed = formData.get('seed') || '';
-    const videoWidth = formData.get('width') || null;
-    const videoHeight = formData.get('height') || null;
-    const duration = formData.get('duration') || null;
+    const metadata = JSON.parse(formData.get('metadata') || '{}');
 
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      return NextResponse.json(
+        { error: "No file provided" },
+        { status: 400 }
+      );
     }
 
-    const validTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/webm', 'video/quicktime'];
-    if (!validTypes.includes(file.type)) {
-      return NextResponse.json({ error: '不支援的影片格式' }, { status: 400 });
-    }
-
-    const maxSize = 100 * 1024 * 1024; // 100MB
-    if (file.size > maxSize) {
-      return NextResponse.json({ error: '影片檔案過大，請選擇小於 100MB 的檔案' }, { status: 400 });
-    }
-
-    // 使用 Streaming 上傳到 R2
-    const key = generateR2Key(user._id.toString(), 'videos', file.name);
+    // ✅ 生成檔案路徑
+    const key = generateR2Key(user._id.toString(), "videos", file.name);
     
-    console.log('Starting streaming upload to R2:', { key, size: file.size });
+    // ✅ 關鍵修正：將 File 轉換為 Buffer
+    const arrayBuffer = await file.arrayBuffer();
+    
+    console.log("📦 準備上傳至 R2:", "size:", file.size, "key:", key);
+    
+    try {
+      console.log("🚀 使用 AWS SDK S3 簽章上傳到 R2...");
 
-    // Stream the file directly to R2
-    const command = new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: key,
-      Body: file.stream(), // 使用 stream() 而不是 arrayBuffer()
-      ContentType: file.type,
+      // ✅ 使用 AWS SDK S3 簽章上傳
+      const command = new PutObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: key,
+        Body: Buffer.from(arrayBuffer),
+        ContentType: file.type,
+        // R2 不支援 S3 ACL，需要在 Bucket 層級設定公開存取
+      });
+
+      const result = await s3Client.send(command);
+      console.log("✅ R2 上傳成功:", result);
+    } catch (err) {
+      console.error("❌ R2 上傳失敗:", err);
+      throw new Error(`R2 upload failed: ${err.message}`);
+    }
+
+    const publicUrl = `${R2_PUBLIC_URL}/${key}`;
+
+    console.log('✅ R2 AWS SDK upload successful:', {
+      key,
+      fileType: file.type,
+      fileSize: file.size,
+      publicUrl,
     });
 
-    await s3Client.send(command);
-    
-    const publicUrl = `${R2_PUBLIC_URL}/${key}`;
-    console.log('Upload completed:', publicUrl);
-
+    // ✅ 確保資料庫連線
     await dbConnect();
 
-    const video = new Video({
-      title,
-      description,
-      category,
-      rating,
+    // ✅ 寫入資料庫並計算分數
+    const { computeVideoCompleteness, computeVideoPopScore } = await import('@/utils/scoreVideo');
+    
+    // 計算完整度分數
+    const completenessScore = computeVideoCompleteness(metadata);
+    
+    // 建立影片記錄
+    const video = await Video.create({
+      title: metadata.title,
+      description: metadata.description,
+      category: metadata.category,
+      rating: metadata.rating,
+      tags: metadata.tags || [],
+      videoUrl: publicUrl,
+      videoKey: key,
+      platform: metadata.platform,
+      prompt: metadata.prompt,
+      negativePrompt: metadata.negativePrompt,
+      fps: metadata.fps,
+      resolution: metadata.resolution,
+      steps: metadata.steps,
+      cfgScale: metadata.cfgScale,
+      seed: metadata.seed,
+      width: metadata.width,
+      height: metadata.height,
+      duration: metadata.duration,
       author: user._id,
       authorName: user.username || user.email,
-      authorAvatar: user.image || '',
-      videoUrl: publicUrl,
-      streamId: null,
-      previewUrl: '',
-      status: 'active',
-      width: videoWidth,
-      height: videoHeight,
-      duration,
-      tags: tags ? tags.split(/[,\s]+/).map(tag => tag.trim()).filter(t => t) : [],
-      platform,
-      prompt,
-      negativePrompt,
-      modelName: '',
-      modelLink: '',
-      fps,
-      resolution,
-      steps,
-      cfgScale,
-      seed,
-      likes: [],
-      likesCount: 0,
-      views: 0,
-      clicks: 0,
-      uploadDate: new Date(),
-      isPublic: true,
+      authorAvatar: user.avatar || '',
+      completenessScore,
+      popScore: 0, // 初始流行度分數
+      isHighQuality: completenessScore >= 80,
     });
 
-    await video.save();
-
-    // 計算分數
-    const completenessScore = computeVideoCompleteness(video);
-    const initialBoost = computeVideoInitialBoostFromTop(video);
-    const popScore = computeVideoPopScore(video, completenessScore, initialBoost);
-
-    video.completenessScore = completenessScore;
-    video.initialBoost = initialBoost;
+    // 計算流行度分數
+    const popScore = await computeVideoPopScore(video._id);
     video.popScore = popScore;
     await video.save();
 
+    // 檢查每日上傳配額
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayUploads = await Video.countDocuments({
+      uploader: user._id,
+      createdAt: { $gte: today, $lt: tomorrow }
+    });
+
+    const dailyLimit = 10; // 每日上傳限制
+    const remaining = Math.max(0, dailyLimit - todayUploads);
+
+    // ✅ 返回完整的上傳結果
     return NextResponse.json({
       success: true,
       video: {
-        id: video._id,
+        _id: video._id,
         title: video.title,
         videoUrl: video.videoUrl,
         completenessScore: video.completenessScore,
         popScore: video.popScore,
+      },
+      videoUrl: publicUrl,
+      videoKey: key,
+      completenessScore,
+      dailyUploads: {
+        current: todayUploads,
+        limit: dailyLimit,
+        remaining: remaining
       }
     });
-
   } catch (error) {
-    console.error('Upload error:', error);
-    return NextResponse.json({ 
-      error: 'Failed to upload video', 
-      details: error.message 
-    }, { status: 500 });
+    console.error("R2 API Token upload error:", error);
+    return NextResponse.json(
+      { error: "Upload failed", details: error.message },
+      { status: 500 }
+    );
   }
 }

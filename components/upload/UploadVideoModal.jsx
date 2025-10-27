@@ -188,121 +188,79 @@ export default function UploadVideoModal() {
     setUploading(true);
 
     try {
-      // Step 1️⃣ 取得預簽名 URL
-      const presignRes = await fetch('/api/videos/upload-presigned-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type,
-          fileSize: file.size,
-          title,
-          description,
-          tags,
-          category,
-          rating,
-          platform,
-          prompt,
-          negativePrompt,
-          fps,
-          resolution,
-          steps,
-          cfgScale,
-          seed,
-          width: videoWidth,
-          height: videoHeight,
-          duration,
-        }),
-        credentials: 'include',
-      });
+      // ✅ 使用新的 R2 API Token 方法：直接上傳到後端
+      console.log('✅ 開始使用 R2 API Token 上傳...');
 
-      if (!presignRes.ok) throw new Error('預簽名 URL 取得失敗');
-      const presignData = await presignRes.json();
+      // 準備 metadata
+      const metadata = {
+        title,
+        description,
+        tags,
+        category,
+        rating,
+        platform,
+        prompt,
+        negativePrompt,
+        fps,
+        resolution,
+        steps,
+        cfgScale,
+        seed,
+        width: videoWidth,
+        height: videoHeight,
+        duration,
+      };
 
-      if (!presignData.success || !presignData.uploadUrl) {
-        throw new Error('R2 預簽名 URL 無效');
-      }
+      // 建立 FormData
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('metadata', JSON.stringify(metadata));
 
-      console.log('✅ 預簽名 URL 已取得，開始直傳 R2...');
-
-      // Step 2️⃣ 直接 PUT 到 R2 S3 端點
-      console.log('🔍 調試信息:', {
-        uploadUrl: presignData.uploadUrl,
+      console.log('🔍 上傳信息:', {
+        fileName: file.name,
         fileSize: file.size,
         fileType: file.type,
-        fileName: file.name
+        metadata
       });
 
-      const uploadRes = await fetch(presignData.uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': file.type,
-        },
-        body: file,
+      // 直接上傳到後端 API（後端會使用 R2 API Token 上傳到 R2）
+      const uploadRes = await fetch('/api/videos/upload-r2-direct', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
       });
 
       console.log('🔍 上傳回應:', {
         status: uploadRes.status,
         statusText: uploadRes.statusText,
         ok: uploadRes.ok,
-        headers: Object.fromEntries(uploadRes.headers.entries())
       });
 
       if (!uploadRes.ok) {
-        const errorText = await uploadRes.text();
-        console.error('R2 直傳失敗詳情:', {
-          status: uploadRes.status,
-          statusText: uploadRes.statusText,
-          errorText
-        });
-        throw new Error(`R2 直傳失敗 (${uploadRes.status}): ${errorText}`);
+        const errorData = await uploadRes.json();
+        console.error('R2 API Token 上傳失敗:', errorData);
+        throw new Error(errorData.error || `上傳失敗 (${uploadRes.status})`);
       }
 
-      console.log('✅ 成功直傳 R2:', presignData.publicUrl);
-
-      // Step 3️⃣ 通知後端寫入資料庫
-      const saveRes = await fetch('/api/videos/create-record', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          description,
-          category,
-          rating,
-          tags,
-          videoUrl: presignData.publicUrl,
-          videoKey: presignData.key,
-          platform,
-          prompt,
-          negativePrompt,
-          fps,
-          resolution,
-          steps,
-          cfgScale,
-          seed,
-          width: videoWidth,
-          height: videoHeight,
-          duration,
-        }),
-        credentials: 'include',
-      });
-
-      const saveData = await saveRes.json();
-      if (!saveRes.ok || !saveData.success) {
-        console.error('DB 寫入失敗:', saveData);
-        throw new Error(saveData.error || '資料儲存失敗');
+      const uploadData = await uploadRes.json();
+      
+      if (!uploadData.success) {
+        throw new Error(uploadData.error || '上傳失敗');
       }
 
-      const completeness = saveData.video?.completenessScore || 0;
+      console.log('✅ 成功上傳到 R2:', uploadData.videoUrl);
+
+      // ✅ 直接使用上傳結果，不需要額外的資料庫寫入
+      const completeness = uploadData.completenessScore || 0;
       
       // 更新每日配額顯示
-      if (saveData.dailyUploads) {
+      if (uploadData.dailyUploads) {
         setDailyQuota({
-          current: saveData.dailyUploads.current,
-          limit: saveData.dailyUploads.limit,
-          remaining: saveData.dailyUploads.remaining
+          current: uploadData.dailyUploads.current,
+          limit: uploadData.dailyUploads.limit,
+          remaining: uploadData.dailyUploads.remaining
         });
-        toast.success(`✅ 影片上傳成功！完整度：${completeness}分\n今日剩餘：${saveData.dailyUploads.remaining}/${saveData.dailyUploads.limit}`);
+        toast.success(`✅ 影片上傳成功！完整度：${completeness}分\n今日剩餘：${uploadData.dailyUploads.remaining}/${uploadData.dailyUploads.limit}`);
       } else {
         toast.success(`✅ 影片上傳成功！完整度：${completeness}分`);
       }
@@ -312,58 +270,7 @@ export default function UploadVideoModal() {
 
     } catch (error) {
       console.error('影片上傳失敗:', error);
-
-      // Step 4️⃣ fallback 到代理上傳（限 4.5MB）
-      if (file.size < 4.5 * 1024 * 1024) {
-        try {
-          console.log('⚠️ 嘗試使用後端代理上傳（小檔案）...');
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('title', title);
-          formData.append('description', description);
-          formData.append('tags', tags);
-          formData.append('category', category);
-          formData.append('rating', rating);
-          formData.append('platform', platform);
-          formData.append('prompt', prompt);
-          formData.append('negativePrompt', negativePrompt);
-          formData.append('fps', fps);
-          formData.append('resolution', resolution);
-          formData.append('steps', steps);
-          formData.append('cfgScale', cfgScale);
-          formData.append('seed', seed);
-          formData.append('width', videoWidth);
-          formData.append('height', videoHeight);
-          formData.append('duration', duration);
-
-          const proxyRes = await fetch('/api/videos/upload-r2-direct', {
-            method: 'POST',
-            body: formData,
-            credentials: 'include',
-          });
-
-          const proxyData = await proxyRes.json();
-          if (proxyRes.ok && proxyData.success) {
-            const completeness = proxyData.video?.completenessScore || 0;
-            toast.success(`✅ 小檔案代理上傳成功！完整度：${completeness}分`);
-            setIsOpen(false);
-            window.location.href = '/videos';
-            return;
-          } else {
-            throw new Error(proxyData.error || '代理上傳失敗');
-          }
-        } catch (fallbackErr) {
-          console.error('Fallback 上傳失敗:', fallbackErr);
-          toast.error('❌ 上傳失敗：' + fallbackErr.message);
-        }
-      } else {
-        toast.error(
-          '❌ 上傳失敗：' +
-            (error.message.includes('CORS')
-              ? 'R2 CORS 配置可能未啟用 PUT，請檢查設定'
-              : error.message)
-        );
-      }
+      toast.error('❌ 上傳失敗：' + error.message);
     } finally {
       setUploading(false);
     }
