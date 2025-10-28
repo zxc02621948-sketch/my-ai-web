@@ -12,9 +12,9 @@ function generatePresignedUrl(key, contentType) {
   const region = 'auto';
   const bucket = process.env.R2_BUCKET_NAME;
   
-  // 使用 R2 原始端點（正確套用 CORS 設定）
-  const endpointUrl = `https://${bucket}.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
-  const endpointHost = `${bucket}.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+  // 使用自定義域名端點
+  const endpointUrl = 'https://media.aicreateaworld.com';
+  const endpointHost = 'media.aicreateaworld.com';
   
   const now = new Date();
   const dateTime = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
