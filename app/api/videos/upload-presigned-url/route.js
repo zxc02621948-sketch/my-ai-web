@@ -12,9 +12,9 @@ function generatePresignedUrl(key, contentType) {
   const region = 'auto';
   const bucket = process.env.R2_BUCKET_NAME;
   
-  // 使用自定義域名端點
-  const endpointUrl = 'https://media.aicreateaworld.com';
-  const endpointHost = 'media.aicreateaworld.com';
+  // 使用 R2 官方域名進行簽名（方案 A）
+  const endpointUrl = `https://${bucket}.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+  const endpointHost = `${bucket}.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
   
   const now = new Date();
   const dateTime = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
