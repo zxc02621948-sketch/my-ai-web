@@ -12,9 +12,9 @@ function generatePresignedUrl(key, contentType) {
   const region = 'auto';
   const bucket = process.env.R2_BUCKET_NAME;
   
-  // 使用 S3 簽名端點
-  const endpointUrl = 'https://5c6250a0576aa4ca0bb9cdf32be0bee1.r2.cloudflarestorage.com';
-  const endpointHost = '5c6250a0576aa4ca0bb9cdf32be0bee1.r2.cloudflarestorage.com';
+  // 使用 R2 原始端點（正確套用 CORS 設定）
+  const endpointUrl = `https://${bucket}.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+  const endpointHost = `${bucket}.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
   
   const now = new Date();
   const dateTime = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -22,8 +22,8 @@ function generatePresignedUrl(key, contentType) {
   
   // URI 編碼 key，但保留 / 符號
   const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/');
-  // S3 路徑格式：/bucket/key
-  const canonicalUri = `/${bucket}/${encodedKey}`;
+  // S3 virtual-hosted style：bucket 已在子網域中，路徑不需要再加 bucket
+  const canonicalUri = `/${encodedKey}`;
   const canonicalQuerystring = '';
   const canonicalHeaders = `host:${endpointHost}\ncontent-type:${contentType}\n`;
   const signedHeaders = 'host;content-type';
@@ -61,9 +61,18 @@ function generatePresignedUrl(key, contentType) {
     'X-Amz-SignedHeaders': signedHeaders,
     'X-Amz-Signature': signature,
   });
+
+  console.log('Debug presigned URL generation:', {
+    accessKeyId: accessKeyId ? 'SET' : 'MISSING',
+    secretAccessKey: secretAccessKey ? 'SET' : 'MISSING',
+    bucket,
+    accountId: process.env.R2_ACCOUNT_ID ? 'SET' : 'MISSING',
+    credentialScope,
+    signedHeaders,
+  });
   
-  // 返回 URL: S3 格式為 endpoint/bucket/key
-  return `${endpointUrl}/${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}?${queryParams.toString()}`;
+  // 返回 URL: S3 virtual-hosted style 為 endpoint/key（bucket 已在子網域中）
+  return `${endpointUrl}/${encodeURIComponent(key).replace(/%2F/g, '/')}?${queryParams.toString()}`;
 }
 
 export async function POST(request) {

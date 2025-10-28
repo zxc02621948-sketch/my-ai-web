@@ -223,44 +223,87 @@ export default function UploadVideoModal() {
         metadata
       });
 
-      // 直接上傳到後端 API（後端會使用 R2 API Token 上傳到 R2）
-      const uploadRes = await fetch('/api/videos/upload-r2-direct', {
+      // ✅ 真正的直傳 R2：先獲取 presigned URL
+      console.log('🚀 開始真正的直傳 R2 流程...');
+      
+      // 1. 獲取 presigned URL
+      const presignedRes = await fetch('/api/videos/upload-presigned-url', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+          ...metadata
+        }),
         credentials: 'include',
       });
 
-      console.log('🔍 上傳回應:', {
+      if (!presignedRes.ok) {
+        const errorData = await presignedRes.json();
+        console.error('獲取 presigned URL 失敗:', errorData);
+        throw new Error(errorData.error || `獲取上傳 URL 失敗 (${presignedRes.status})`);
+      }
+
+      const presignedData = await presignedRes.json();
+      console.log('✅ 獲取 presigned URL 成功:', presignedData.uploadUrl);
+
+      // 2. 直接上傳到 R2（完全繞過 Vercel）
+      const uploadRes = await fetch(presignedData.uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      });
+
+      console.log('🔍 直傳 R2 回應:', {
         status: uploadRes.status,
         statusText: uploadRes.statusText,
         ok: uploadRes.ok,
       });
 
       if (!uploadRes.ok) {
-        const errorData = await uploadRes.json();
-        console.error('R2 API Token 上傳失敗:', errorData);
-        throw new Error(errorData.error || `上傳失敗 (${uploadRes.status})`);
+        throw new Error(`直傳 R2 失敗 (${uploadRes.status})`);
       }
 
-      const uploadData = await uploadRes.json();
-      
-      if (!uploadData.success) {
-        throw new Error(uploadData.error || '上傳失敗');
+      console.log('✅ 直傳 R2 成功！');
+
+      // 3. 保存 metadata 到資料庫
+      const saveRes = await fetch('/api/videos/save-metadata', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoUrl: presignedData.publicUrl,
+          videoKey: presignedData.key,
+          metadata
+        }),
+        credentials: 'include',
+      });
+
+      if (!saveRes.ok) {
+        const errorData = await saveRes.json();
+        console.error('保存 metadata 失敗:', errorData);
+        throw new Error(errorData.error || '保存影片資訊失敗');
       }
 
-      console.log('✅ 成功上傳到 R2:', uploadData.videoUrl);
+      const saveData = await saveRes.json();
+      console.log('✅ 保存 metadata 成功:', saveData);
 
-      // ✅ 直接使用上傳結果，不需要額外的資料庫寫入
-      const completeness = uploadData.completenessScore || 0;
+      const completeness = saveData.completenessScore || 0;
       
       // 更新每日配額顯示
-      if (uploadData.dailyUploads) {
+      if (saveData.dailyUploads) {
         setDailyQuota({
-          current: uploadData.dailyUploads.current,
-          limit: uploadData.dailyUploads.limit,
-          remaining: uploadData.dailyUploads.remaining
+          current: saveData.dailyUploads.current,
+          limit: saveData.dailyUploads.limit,
+          remaining: saveData.dailyUploads.remaining
         });
-        toast.success(`✅ 影片上傳成功！完整度：${completeness}分\n今日剩餘：${uploadData.dailyUploads.remaining}/${uploadData.dailyUploads.limit}`);
+        toast.success(`✅ 影片上傳成功！完整度：${completeness}分\n今日剩餘：${saveData.dailyUploads.remaining}/${saveData.dailyUploads.limit}`);
       } else {
         toast.success(`✅ 影片上傳成功！完整度：${completeness}分`);
       }
