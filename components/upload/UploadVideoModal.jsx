@@ -223,76 +223,30 @@ export default function UploadVideoModal() {
         metadata
       });
 
-      // ✅ 真正的直傳 R2：先獲取 presigned URL
-      console.log('🚀 開始真正的直傳 R2 流程...');
+      // ✅ 簡化的後端代理上傳流程
+      console.log('🚀 開始後端代理上傳流程...');
       
-      // 1. 獲取 presigned URL
-      const presignedRes = await fetch('/api/videos/upload-presigned-url', {
+      // 直接上傳到後端，讓後端處理 R2 上傳
+      const uploadRes = await fetch('/api/videos/upload-r2-direct', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type,
-          fileSize: file.size,
-          ...metadata
-        }),
+        body: formData,
         credentials: 'include',
       });
 
-      if (!presignedRes.ok) {
-        const errorData = await presignedRes.json();
-        console.error('獲取 presigned URL 失敗:', errorData);
-        throw new Error(errorData.error || `獲取上傳 URL 失敗 (${presignedRes.status})`);
-      }
-
-      const presignedData = await presignedRes.json();
-      console.log('✅ 獲取 presigned URL 成功:', presignedData.uploadUrl);
-
-      // 2. 直接上傳到 R2（完全繞過 Vercel）
-      const uploadRes = await fetch(presignedData.uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': file.type,
-        },
-        body: file,
-      });
-
-      console.log('🔍 直傳 R2 回應:', {
+      console.log('🔍 後端代理上傳回應:', {
         status: uploadRes.status,
         statusText: uploadRes.statusText,
         ok: uploadRes.ok,
       });
 
       if (!uploadRes.ok) {
-        throw new Error(`直傳 R2 失敗 (${uploadRes.status})`);
+        const errorData = await uploadRes.json();
+        console.error('後端代理上傳失敗:', errorData);
+        throw new Error(errorData.error || `上傳失敗 (${uploadRes.status})`);
       }
 
-      console.log('✅ 直傳 R2 成功！');
-
-      // 3. 保存 metadata 到資料庫
-      const saveRes = await fetch('/api/videos/save-metadata', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          videoUrl: presignedData.publicUrl,
-          videoKey: presignedData.key,
-          metadata
-        }),
-        credentials: 'include',
-      });
-
-      if (!saveRes.ok) {
-        const errorData = await saveRes.json();
-        console.error('保存 metadata 失敗:', errorData);
-        throw new Error(errorData.error || '保存影片資訊失敗');
-      }
-
-      const saveData = await saveRes.json();
-      console.log('✅ 保存 metadata 成功:', saveData);
+      const saveData = await uploadRes.json();
+      console.log('✅ 後端代理上傳成功:', saveData);
 
       const completeness = saveData.completenessScore || 0;
       
@@ -319,52 +273,6 @@ export default function UploadVideoModal() {
     }
   };
 
-  // 直接上傳到 Cloudflare Stream 的函數
-  const uploadDirectlyToStream = async (file, title) => {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('name', title);
-
-      console.log('Uploading directly to Cloudflare Stream...');
-
-      // 注意：這裡需要你填入實際的 Account ID 和 API Token
-      const ACCOUNT_ID = '5c6250a0576aa4ca0bb9cdf32be0bee1';
-      const API_TOKEN = 'FDh62HwIzm31AhAY05nuaGfsF4B4z1q61onBT4-s';
-      
-      const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/stream`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${API_TOKEN}`,
-          },
-          body: formData,
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Stream API error response:', errorData);
-        throw new Error(`Stream API error: ${errorData.errors?.[0]?.message || 'Unknown error'}`);
-      }
-
-      const data = await response.json();
-      console.log('Stream API success:', data);
-      
-      return {
-        success: true,
-        streamId: data.result.uid,
-        playbackUrl: data.result.playback.hls,
-      };
-    } catch (error) {
-      console.error('Direct Stream upload error:', error);
-      return {
-        success: false,
-        error: error.message,
-      };
-    }
-  };
 
   const getRatingColor = () => {
     if (rating === '18') return 'bg-red-600';
