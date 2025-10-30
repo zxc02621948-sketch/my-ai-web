@@ -262,6 +262,48 @@ VideoSchema.index({ lastInteractionAt: -1 });
 VideoSchema.index({ isPinned: 1, author: 1 });
 VideoSchema.index({ isHighQuality: 1 });
 
+// ===== 新圖加成邏輯（引用圖片模型的邏輯） =====
+import { computeVideoPopScore, computeVideoInitialBoostFromTop, ensureVideoLikesCount } from '@/utils/scoreVideo';
+
+// 目前最高分（取 popScore）
+async function fetchCurrentMaxPopScore(model) {
+  const top = await model.findOne({}, { popScore: 1 }).sort({ popScore: -1 }).lean();
+  return Number.isFinite(top?.popScore) ? Number(top.popScore) : 0;
+}
+
+// 新影片：建立 initialBoost 與 popScore
+VideoSchema.pre("save", async function (next) {
+  try {
+    if (this.isNew) {
+      this.likesCount = ensureVideoLikesCount(this);
+      const max = await fetchCurrentMaxPopScore(this.constructor);
+      this.initialBoost = Math.max(0, Math.floor(max * 0.8)); // 80% of top score
+      this.popScore = computeVideoPopScore(this);
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// insertMany 也補
+VideoSchema.pre("insertMany", async function (next, docs) {
+  try {
+    if (!Array.isArray(docs) || docs.length === 0) return next();
+    const model = mongoose.models.Video || this.model || mongoose.model("Video");
+    const max = await fetchCurrentMaxPopScore(model);
+
+    for (const d of docs) {
+      d.likesCount = ensureVideoLikesCount(d);
+      d.initialBoost = Math.max(0, Math.floor(max * 0.8)); // 80% of top score
+      d.popScore = computeVideoPopScore(d);
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
+
 const Video = mongoose.models.Video || mongoose.model('Video', VideoSchema);
 
 export default Video;

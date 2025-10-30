@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect, useState, memo } from 'react';
 import { Heart } from 'lucide-react';
+import NewBadge from '@/components/image/NewBadge';
 
 const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLiked, onToggleLike, onLikeUpdate }) => {
   const videoRef = useRef(null);
@@ -181,6 +182,18 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     ? `${video.width} / ${video.height}`
     : '16 / 9'; // 預設 16:9
 
+  // ✅ NEW 圖示判斷（< 10 小時）
+  const getCreatedMsFromObjectId = (id) => {
+    if (typeof id === "string" && id.length === 24) {
+      const sec = parseInt(id.slice(0, 8), 16);
+      if (!Number.isNaN(sec)) return sec * 1000;
+    }
+    return Date.now();
+  };
+  
+  const createdMs = video?.createdAt ? new Date(video.createdAt).getTime() : getCreatedMsFromObjectId(video?._id);
+  const isNew = (Date.now() - createdMs) / 36e5 < 10;
+
   return (
     <div 
       className={`bg-zinc-700 relative overflow-hidden ${className}`}
@@ -273,6 +286,13 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
           </svg>
         </div>
       </div>
+
+      {/* NEW 徽章（左上角） */}
+      {isNew && (
+        <div className="absolute left-2 top-2 z-20 pointer-events-none">
+          <NewBadge animated />
+        </div>
+      )}
 
       {/* 預覽指示器 - 中間上方 */}
       {isPlaying && (

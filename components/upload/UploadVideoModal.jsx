@@ -250,6 +250,16 @@ export default function UploadVideoModal() {
 
       const completeness = saveData.completenessScore || 0;
       
+      // ✅ 根據完整度分數顯示不同的質量加成提示
+      let qualityMessage = '';
+      if (completeness >= 80) {
+        qualityMessage = `\n\n⭐ 此影片已標記為「優質影片」\n✨ 將獲得更多曝光機會\n🎓 其他用戶可以學習您的高質量生成參數`;
+      } else if (completeness >= 60) {
+        qualityMessage = `\n\n✓ 此影片已標記為「標準影片」\n✨ 將獲得適中的曝光機會\n📚 其他用戶可以參考您的生成參數`;
+      } else {
+        qualityMessage = `\n\n🎨 此影片已標記為「展示影片」\n📸 將出現在影片列表中供欣賞\n💡 建議填寫有意義的參數以獲得更多曝光`;
+      }
+      
       // 更新每日配額顯示
       if (saveData.dailyUploads) {
         setDailyQuota({
@@ -257,9 +267,9 @@ export default function UploadVideoModal() {
           limit: saveData.dailyUploads.limit,
           remaining: saveData.dailyUploads.remaining
         });
-        toast.success(`✅ 影片上傳成功！完整度：${completeness}分\n今日剩餘：${saveData.dailyUploads.remaining}/${saveData.dailyUploads.limit}`);
+        toast.success(`✅ 影片上傳成功！完整度：${completeness}分${qualityMessage}\n\n今日剩餘：${saveData.dailyUploads.remaining}/${saveData.dailyUploads.limit}`);
       } else {
-        toast.success(`✅ 影片上傳成功！完整度：${completeness}分`);
+        toast.success(`✅ 影片上傳成功！完整度：${completeness}分${qualityMessage}`);
       }
       
       setIsOpen(false);
