@@ -1,14 +1,73 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { usePlayer } from "@/components/context/PlayerContext";
 
 export default function InstallGuide() {
   const { currentUser } = useCurrentUser(); // 使用 Context
+  const player = usePlayer(); // 使用 Player Context
   const [isLoginOpen, setLoginOpen] = useState(false);
   const [isRegisterOpen, setRegisterOpen] = useState(false);
 
-  // 釘選播放器邏輯已由 ConditionalPlayer 統一處理，這裡不需要重複調用
+  // 教學區播放器控制邏輯（參考首頁）
+  useEffect(() => {
+    // 等待 currentUser 載入完成
+    if (currentUser === undefined) {
+      return;
+    }
+    
+    // 檢查是否有釘選播放器
+    const pinnedPlayer = currentUser?.user?.pinnedPlayer || currentUser?.pinnedPlayer;
+    const hasPinnedPlayer = pinnedPlayer?.userId && 
+      pinnedPlayer?.expiresAt && 
+      new Date(pinnedPlayer.expiresAt) > new Date();
+    
+    if (hasPinnedPlayer) {
+      // 有釘選播放器：恢復播放清單與狀態（與首頁一致，允許空播放清單時也顯示）
+      const playlist = pinnedPlayer.playlist || [];
+      const currentIndex = pinnedPlayer.currentIndex || 0;
+      const currentTrack = playlist[currentIndex];
+
+      if (playlist.length > 0) {
+        player?.setPlaylist?.(playlist);
+        player?.setActiveIndex?.(currentIndex);
+        if (currentTrack) {
+          player?.setSrc?.(currentTrack.url);
+          player?.setOriginUrl?.(currentTrack.url);
+          player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
+        }
+      }
+
+      // 設置擁有者與模式，並確保顯示
+      player?.setPlayerOwner?.({ userId: pinnedPlayer.userId, username: pinnedPlayer.username });
+      player?.setShareMode?.("global");
+      player?.setMiniPlayerEnabled?.(true);
+
+      // 通知全域（確保 MiniPlayer 的 isPinned 立即同步）
+      try {
+        window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', {
+          detail: { isPinned: true, pinnedPlayer }
+        }));
+      } catch {}
+    } else {
+      // 沒有釘選播放器，禁用 MiniPlayer（教學區不應該顯示播放器）
+      player?.setMiniPlayerEnabled?.(false);
+    }
+  }, [currentUser]);
+
+  // 即時響應釘選變更事件（取消釘選時立即關閉，不需重整）
+  useEffect(() => {
+    const handlePinnedChange = (e) => {
+      if (e?.detail?.isPinned) {
+        player?.setMiniPlayerEnabled?.(true);
+      } else {
+        player?.setMiniPlayerEnabled?.(false);
+      }
+    };
+    window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
+    return () => window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
+  }, []);
 
   const guides = [
     {
@@ -54,7 +113,7 @@ export default function InstallGuide() {
       pros: "效能穩定、省顯存\n工作流邏輯清楚，可視化每一步\n支援批量、差分、影片生成等進階功能\n可完全自訂創作流程",
       cons: "學習曲線高，需要理解節點邏輯\n初期會覺得像在看電路圖\n僅限 PC 使用",
       recommended: "熟悉 WebUI、追求自動化與高控制力的進階使用者",
-      url: "https://www.youtube.com/watch?v=g0xYOVybAVc",
+      url: "https://www.youtube.com/watch?v=7WZCvVrw7To",
       duration: "約 60 分鐘",
       steps: [
         { step: 1, action: "安裝 Python 環境", time: "10 分鐘", detail: "設定 Python 3.10 和 pip" },

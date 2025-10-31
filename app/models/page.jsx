@@ -1,17 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { usePlayer } from "@/components/context/PlayerContext";
 
 export default function ModelInfoPage() {
   const { currentUser } = useCurrentUser(); // 使用 Context
+  const player = usePlayer();
   
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false); // ✅ 控制上傳圖片 modal
 
-  // 釘選播放器邏輯已由 ConditionalPlayer 統一處理，這裡不需要重複調用
+  // 教學區頁面：依釘選狀態恢復或關閉 MiniPlayer（與首頁/教學指南一致）
+  useEffect(() => {
+    if (currentUser === undefined) return;
+    const pinnedPlayer = currentUser?.user?.pinnedPlayer || currentUser?.pinnedPlayer;
+    const hasPinnedPlayer = pinnedPlayer?.userId && pinnedPlayer?.expiresAt && new Date(pinnedPlayer.expiresAt) > new Date();
+
+    if (hasPinnedPlayer) {
+      const playlist = pinnedPlayer.playlist || [];
+      const currentIndex = pinnedPlayer.currentIndex || 0;
+      const currentTrack = playlist[currentIndex];
+
+      if (playlist.length > 0) {
+        player?.setPlaylist?.(playlist);
+        player?.setActiveIndex?.(currentIndex);
+        if (currentTrack) {
+          player?.setSrc?.(currentTrack.url);
+          player?.setOriginUrl?.(currentTrack.url);
+          player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
+        }
+      }
+
+      player?.setPlayerOwner?.({ userId: pinnedPlayer.userId, username: pinnedPlayer.username });
+      player?.setShareMode?.("global");
+      player?.setMiniPlayerEnabled?.(true);
+      try {
+        window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { detail: { isPinned: true, pinnedPlayer } }));
+      } catch {}
+    } else {
+      player?.setMiniPlayerEnabled?.(false);
+    }
+  }, [currentUser]);
+
+  // 即時響應釘選變更
+  useEffect(() => {
+    const handlePinnedChange = (e) => {
+      if (e?.detail?.isPinned) {
+        player?.setMiniPlayerEnabled?.(true);
+      } else {
+        player?.setMiniPlayerEnabled?.(false);
+      }
+    };
+    window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
+    return () => window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
+  }, []);
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">

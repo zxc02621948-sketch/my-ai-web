@@ -2,17 +2,22 @@
 
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
+import { usePlayer } from "@/components/context/PlayerContext";
 import MiniPlayer from "./MiniPlayer";
 import GlobalYouTubeBridge from "@/components/player/GlobalYouTubeBridge";
 
 export default function ConditionalPlayer() {
   const pathname = usePathname();
+  const player = usePlayer();
   const [isPinned, setIsPinned] = useState(false);
   
   // 只監聽事件，不做 API 調用（由 MiniPlayer 負責）
   useEffect(() => {
     const handlePinnedChange = (e) => {
-      setIsPinned(e.detail.isPinned);
+      const pinned = !!e?.detail?.isPinned;
+      setIsPinned(pinned);
+      // 全域同步 MiniPlayer 顯示開關，避免各頁面需各自處理
+      player?.setMiniPlayerEnabled?.(pinned);
     };
     
     window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
@@ -20,7 +25,7 @@ export default function ConditionalPlayer() {
     return () => {
       window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
     };
-  }, []);
+  }, [player]);
   
   // 检查当前路径是否匹配用户页面
   const isUserPage = pathname.startsWith("/user/") && pathname !== "/user/following";

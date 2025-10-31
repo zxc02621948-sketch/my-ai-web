@@ -13,7 +13,7 @@ import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function MiniPlayer() {
   const player = usePlayer();
-  const { currentUser, hasValidSubscription } = useCurrentUser(); // 使用 Context
+  const { currentUser, hasValidSubscription, setCurrentUser } = useCurrentUser(); // 使用 Context
   const pathname = usePathname(); // 獲取當前路徑
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState(null); // ✅ 初始為 null，等待從 localStorage 載入
@@ -142,10 +142,13 @@ export default function MiniPlayer() {
   
   // 顯示邏輯：
   // 1. currentUser 載入中 (undefined) → 不顯示（避免閃爍）
-  // 2. 如果釘選了 → 全站顯示 ✅
-  // 3. 如果在用戶頁面 AND player.miniPlayerEnabled → 顯示（由頁面主人控制）✅
-  // 4. 如果不在用戶頁面 AND player.miniPlayerEnabled → 需要自己有播放器權限才顯示
-  const showMini = currentUser !== undefined && player?.miniPlayerEnabled && (isPinned || isUserPage || hasPlayerFeature);
+  // 2. 如果 player.miniPlayerEnabled 為 false → 不顯示
+  // 3. 如果釘選了 → 全站顯示 ✅
+  // 4. 如果在用戶頁面 → 顯示（由頁面主人控制）✅
+  // 5. 如果不在用戶頁面 → 需要自己有播放器權限才顯示
+  const showMini = currentUser !== undefined && 
+    player?.miniPlayerEnabled && 
+    (isPinned || isUserPage || hasPlayerFeature);
   
   // 確保所有值都是有效數字後才計算進度
   const currentTime = typeof player?.currentTime === 'number' && isFinite(player.currentTime) ? player.currentTime : 0;
@@ -503,8 +506,8 @@ export default function MiniPlayer() {
       try {
         const userData = currentUser;
         
-        if (userData?.pinnedPlayer?.userId) {
-          const pinned = userData.pinnedPlayer;
+        if (userData?.user?.pinnedPlayer?.userId || userData?.pinnedPlayer?.userId) {
+          const pinned = userData?.user?.pinnedPlayer || userData.pinnedPlayer;
           // 檢查是否過期
           const now = new Date();
           const expiresAt = pinned.expiresAt ? new Date(pinned.expiresAt) : null;
@@ -555,6 +558,9 @@ export default function MiniPlayer() {
             setPinnedPlayerData(null);
           }
         } else {
+          // 沒有釘選播放器，確保狀態為 false
+          setIsPinned(false);
+          setPinnedPlayerData(null);
         }
       } catch (error) {
         console.error('❌ [MiniPlayer] 載入釘選播放器失敗:', error);
@@ -700,12 +706,25 @@ export default function MiniPlayer() {
                     setIsPinned(false);
                     setPinnedPlayerData(null);
                     
-                    // ✅ 暫停播放器並清除狀態，讓當前頁面重新載入播放清單
+                    // 同步 CurrentUserContext：移除 pinnedPlayer，避免頁面效果又啟用播放器（兩層都要移除）
+                    setCurrentUser?.((prev) => {
+                      if (!prev) return prev;
+                      // 移除根層級的 pinnedPlayer
+                      const { pinnedPlayer, ...rest } = prev;
+                      // 如果還有 user 層級，也要移除
+                      if (rest.user && rest.user.pinnedPlayer) {
+                        const { pinnedPlayer: userPinnedPlayer, ...userRest } = rest.user;
+                        return { ...rest, user: userRest };
+                      }
+                      return rest;
+                    });
+                    
+                    // 暫停播放器並清除狀態，讓當前頁面重新載入播放清單
                     if (playerRef.current) {
                       playerRef.current.pause?.();
                       // 清除 src，強制重新載入
                       playerRef.current.setSrcWithAudio?.('', [], 0, '');
-                      // ✅ 禁用播放器，確保 MiniPlayer 消失
+                      // 禁用播放器，確保 MiniPlayer 消失
                       playerRef.current.setMiniPlayerEnabled?.(false);
                     }
                     

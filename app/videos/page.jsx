@@ -32,6 +32,7 @@ const VideosPage = () => {
   const {
     levelFilters,
     categoryFilters,
+    isInitialized, // 確保 FilterContext 已從 localStorage 恢復
   } = useFilterContext();
   
   // Refs for infinite scroll
@@ -116,6 +117,9 @@ const VideosPage = () => {
 
   // 監聽搜尋、排序或篩選變化
   useEffect(() => {
+    // ✅ 等待 FilterContext 從 localStorage 恢復完成
+    if (!isInitialized) return;
+    
     const searchQuery = (searchParams.get('search') || '').trim();
     
     // 檢查參數是否與上次相同
@@ -138,7 +142,7 @@ const VideosPage = () => {
     setPage(1);
     setHasMore(true);
     fetchVideos(1, searchQuery, sort);
-  }, [searchParams, sort, fetchVideos, categoryFilters, levelFilters]);
+  }, [searchParams, sort, fetchVideos, categoryFilters, levelFilters, isInitialized]);
 
   // 無限滾動
   useEffect(() => {

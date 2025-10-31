@@ -1,10 +1,57 @@
 // app/qa/QAContent.jsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { usePlayer } from "@/components/context/PlayerContext";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export default function QAContent() {
   const [query, setQuery] = useState("");
+  const player = usePlayer();
+  const { currentUser } = useCurrentUser();
+
+  // 教學區頁面：依釘選狀態恢復或關閉 MiniPlayer
+  useEffect(() => {
+    if (currentUser === undefined) return;
+    const pinnedPlayer = currentUser?.user?.pinnedPlayer || currentUser?.pinnedPlayer;
+    const hasPinnedPlayer = pinnedPlayer?.userId && pinnedPlayer?.expiresAt && new Date(pinnedPlayer.expiresAt) > new Date();
+
+    if (hasPinnedPlayer) {
+      const playlist = pinnedPlayer.playlist || [];
+      const currentIndex = pinnedPlayer.currentIndex || 0;
+      const currentTrack = playlist[currentIndex];
+      if (playlist.length > 0) {
+        player?.setPlaylist?.(playlist);
+        player?.setActiveIndex?.(currentIndex);
+        if (currentTrack) {
+          player?.setSrc?.(currentTrack.url);
+          player?.setOriginUrl?.(currentTrack.url);
+          player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
+        }
+      }
+      player?.setPlayerOwner?.({ userId: pinnedPlayer.userId, username: pinnedPlayer.username });
+      player?.setShareMode?.("global");
+      player?.setMiniPlayerEnabled?.(true);
+      try {
+        window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { detail: { isPinned: true, pinnedPlayer } }));
+      } catch {}
+    } else {
+      player?.setMiniPlayerEnabled?.(false);
+    }
+  }, [currentUser]);
+
+  // 即時響應釘選變更
+  useEffect(() => {
+    const handlePinnedChange = (e) => {
+      if (e?.detail?.isPinned) {
+        player?.setMiniPlayerEnabled?.(true);
+      } else {
+        player?.setMiniPlayerEnabled?.(false);
+      }
+    };
+    window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
+    return () => window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
+  }, []);
 
   // 術語小詞典
   const glossary = {

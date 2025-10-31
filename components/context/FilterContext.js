@@ -59,6 +59,7 @@ export function FilterProvider({ children }) {
   const [levelFilters, setLevelFilters] = useState(DEFAULT_LEVEL_FILTERS);
   const [categoryFilters, setCategoryFilters] = useState(DEFAULT_CATEGORY_FILTERS);
   const [viewMode, setViewMode] = useState(DEFAULT_VIEW_MODE);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Mount 後復原上次狀態
   useEffect(() => {
@@ -71,6 +72,7 @@ export function FilterProvider({ children }) {
     setLevelFilters(lv.length ? lv : DEFAULT_LEVEL_FILTERS);
     setCategoryFilters(ct);
     setViewMode(vm === "default" || vm === "compact" ? vm : DEFAULT_VIEW_MODE);
+    setIsInitialized(true); // 標記為已從 localStorage 恢復
   }, []);
 
   // 變更時持久化
@@ -123,12 +125,13 @@ export function FilterProvider({ children }) {
       levelFilters,
       categoryFilters,
       viewMode,
+      isInitialized, // 新增：標記是否已從 localStorage 恢復
       setViewMode,
       toggleLevelFilter,
       toggleCategoryFilter,
       resetFilters,
     }),
-    [levelFilters, categoryFilters, viewMode, toggleLevelFilter, toggleCategoryFilter, resetFilters]
+    [levelFilters, categoryFilters, viewMode, isInitialized, toggleLevelFilter, toggleCategoryFilter, resetFilters]
   );
 
   return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>;

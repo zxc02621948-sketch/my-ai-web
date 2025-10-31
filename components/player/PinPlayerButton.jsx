@@ -199,11 +199,17 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         setIsPinned(false);
         notify.success("已解除釘選", '已解除釘選播放器');
         
-        // 更新 CurrentUserContext，移除釘選數據
+        // 更新 CurrentUserContext，移除釘選數據（兩層都要移除）
         if (setCurrentUser) {
           setCurrentUser(prevUser => {
             if (!prevUser) return prevUser;
+            // 移除根層級的 pinnedPlayer
             const { pinnedPlayer, ...rest } = prevUser;
+            // 如果還有 user 層級，也要移除
+            if (rest.user && rest.user.pinnedPlayer) {
+              const { pinnedPlayer: userPinnedPlayer, ...userRest } = rest.user;
+              return { ...rest, user: userRest };
+            }
             return rest;
           });
         }

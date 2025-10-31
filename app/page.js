@@ -231,6 +231,7 @@ export default function HomePage() {
       new Date(pinnedPlayer.expiresAt) > new Date();
     
     
+    
     if (hasPinnedPlayer) {
       // 刷新頁面時恢復釘選播放器
       const playlist = pinnedPlayer.playlist || [];

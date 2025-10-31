@@ -91,7 +91,7 @@ export default async function RootLayout({ children }) {
       <body className={`antialiased min-h-screen bg-zinc-950 text-white`}>
         <CurrentUserProvider>
           <FilterProvider>
-            <PlayerProvider defaultShareMode="global" defaultMiniPlayerEnabled={true} defaultSeekable={false}>
+            <PlayerProvider defaultShareMode="global" defaultMiniPlayerEnabled={false} defaultSeekable={false}>
               <ClientHeaderWrapper currentUser={currentUser} />
 
               <UploadModal />
