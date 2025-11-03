@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 function computePopScore(img) {
   const W_CLICK = 1.0;
   const W_LIKE = 2.0;
-  const W_COMPLETE = 0.05;
+  const W_COMPLETE = 0.25;
   const TIMEBOOST_MAX = 10;
 
   const now = Date.now();

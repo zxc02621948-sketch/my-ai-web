@@ -48,7 +48,7 @@ const toNum = (v, d) => {
 export const POP_W_CLICK = toNum(process.env.POP_W_CLICK, 1.0);
 export const POP_W_LIKE = toNum(process.env.POP_W_LIKE, 8.0);
 export const POP_W_COMMENT = toNum(process.env.POP_W_COMMENT, 2.0);  // ✅ 新增：留言權重
-export const POP_W_COMPLETE = toNum(process.env.POP_W_COMPLETE, 0.05);
+export const POP_W_COMPLETE = toNum(process.env.POP_W_COMPLETE, 0.25);
 
 // 🆕 新圖種子（建立新圖時計算並寫入 image.initialBoost）
 export const POP_NEW_BASE_RATIO = toNum(process.env.POP_NEW_BASE_RATIO, 0.8); // 初始加乘 = 當前最高分 * 0.8

@@ -15,7 +15,7 @@ export function computeMusicCompleteness(music = {}) {
   if (hasText(music.prompt)) score += 15;
 
   // 音樂屬性
-  if (hasText(music.genre)) score += 10;
+  if (Array.isArray(music.genre) && music.genre.length > 0) score += 10;
   if (hasText(music.mood)) score += 5;
   if (isNum(music.tempo)) score += 5;
   if (hasText(music.key)) score += 5;
@@ -44,24 +44,28 @@ export function computeMusicCompleteness(music = {}) {
 
 /** 計算音樂熱門度分數 */
 export function computeMusicPopScore(music = {}) {
-  const W_CLICK = 1.0;
   const W_LIKE = 8.0;
-  const W_PLAY = 0.3;
-  const W_COMPLETE = 0.05;
+  const W_PLAY = 1.0; // 播放分與點擊分合併：播放計數 = 1次 = 1分
+  const W_COMPLETE = 0.25;
 
-  const clicks = toNum(music.clicks, 0);
+  // clicks 不再計分（因為必須點開才能播放，已包含在 plays 中）
   const likesCount = ensureMusicLikesCount(music);
   const plays = toNum(music.plays, 0);
   const comp = toNum(music.completenessScore, 0);
   const decayedBoost = computeMusicInitialBoostDecay(music);
 
-  return clicks * W_CLICK + likesCount * W_LIKE + plays * W_PLAY + comp * W_COMPLETE + decayedBoost;
+  return (
+    likesCount * W_LIKE +
+    plays * W_PLAY +
+    comp * W_COMPLETE +
+    decayedBoost
+  );
 }
 
 /** 確保 likesCount */
 export function ensureMusicLikesCount(music = {}) {
   if (Array.isArray(music.likes)) return music.likes.length;
-  if (typeof music.likesCount === 'number') return music.likesCount;
+  if (typeof music.likesCount === "number") return music.likesCount;
   const n = Number(music.likes || 0);
   return Number.isFinite(n) ? n : 0;
 }
@@ -92,11 +96,11 @@ export function computeMusicInitialBoostFromTop(topScore = 0) {
 // ===== 工具函數 =====
 
 function hasText(s) {
-  return typeof s === 'string' && s.trim().length > 0;
+  return typeof s === "string" && s.trim().length > 0;
 }
 
 function isNum(n) {
-  return typeof n === 'number' && Number.isFinite(n);
+  return typeof n === "number" && Number.isFinite(n);
 }
 
 function toNum(v, d) {
@@ -108,8 +112,9 @@ function getCreatedMs(obj = {}) {
   // 1) uploadDate or createdAt
   if (obj?.uploadDate instanceof Date) return obj.uploadDate.getTime();
   if (obj?.createdAt instanceof Date) return obj.createdAt.getTime();
-  if (typeof obj?.createdAt === 'number' && Number.isFinite(obj.createdAt)) return obj.createdAt;
-  if (typeof obj?.createdAt === 'string') {
+  if (typeof obj?.createdAt === "number" && Number.isFinite(obj.createdAt))
+    return obj.createdAt;
+  if (typeof obj?.createdAt === "string") {
     const t = Date.parse(obj.createdAt);
     if (Number.isFinite(t)) return t;
   }
@@ -117,15 +122,11 @@ function getCreatedMs(obj = {}) {
   try {
     const id = obj?._id;
     if (id?.getTimestamp) return id.getTimestamp().getTime();
-    if (typeof id === 'string' && id.length === 24) {
-      const { Types } = require('mongoose');
+    if (typeof id === "string" && id.length === 24) {
+      const { Types } = require("mongoose");
       return new Types.ObjectId(id).getTimestamp().getTime();
     }
   } catch {}
   // 3) fallback
   return Date.now();
 }
-
-
-
-

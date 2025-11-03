@@ -106,7 +106,7 @@ export async function POST(req) {
     image.powerExpiry = new Date(Date.now() + 10 * 60 * 60 * 1000); // 10小時後過期
     // 保存原始權力券類型
     image.powerType = coupon.type; // 直接保存 '7day', '30day', 'rare'
-    image.popScore = image.clicks * 1.0 + image.likesCount * 8.0 + image.completenessScore * 0.05 + newInitialBoost;
+    image.popScore = image.clicks * 1.0 + image.likesCount * 8.0 + image.completenessScore * 0.25 + newInitialBoost;
     
     await image.save();
     

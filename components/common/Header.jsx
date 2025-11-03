@@ -6,13 +6,20 @@ import dynamic from "next/dynamic";
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import FilterPanel from "@/components/common/FilterPanel";
+import MusicFilterPanel from "@/components/common/MusicFilterPanel";
 import axios from "axios";
 import NotificationBell from "@/components/common/NotificationBell";
 import { usePortalContainer } from "@/components/common/usePortal";
 import { createPortal } from "react-dom";
 import { useFilterContext } from "@/components/context/FilterContext";
 import toast from "react-hot-toast";
-import { Package2, Wrench, CircleHelp, Upload, MessageSquare } from "lucide-react";
+import {
+  Package2,
+  Wrench,
+  CircleHelp,
+  Upload,
+  MessageSquare,
+} from "lucide-react";
 import InboxButton from "@/components/common/InboxButton";
 import TutorialMenu from "@/components/common/TutorialMenu";
 import UploadDropdown from "@/components/common/UploadDropdown";
@@ -30,7 +37,8 @@ export default function Header({
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const safeCall = (fn, ...args) => (typeof fn === "function" ? fn(...args) : undefined);
+  const safeCall = (fn, ...args) =>
+    typeof fn === "function" ? fn(...args) : undefined;
 
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -79,6 +87,10 @@ export default function Header({
     toggleLevelFilter,
     categoryFilters,
     toggleCategoryFilter,
+    typeFilters,
+    languageFilters,
+    toggleTypeFilter,
+    toggleLanguageFilter,
     viewMode,
     setViewMode,
     resetFilters,
@@ -90,14 +102,15 @@ export default function Header({
 
   // ==== 新增：哪些路由支援「就地搜尋」 ====
   const LOCAL_SEARCH_PATHS = [
-    /^\/$/,             // 首頁（圖片搜尋）
-    /^\/videos$/,       // 影片頁
-    /^\/music$/,        // 音樂頁（如有）
-    /^\/user\//,        // 個人頁
-    /^\/tag\//,         // 標籤頁（如有）
-    /^\/collection\//,  // 收藏/清單頁（如有）
+    /^\/$/, // 首頁（圖片搜尋）
+    /^\/videos$/, // 影片頁
+    /^\/music$/, // 音樂頁（如有）
+    /^\/user\//, // 個人頁
+    /^\/tag\//, // 標籤頁（如有）
+    /^\/collection\//, // 收藏/清單頁（如有）
   ];
-  const supportsLocalSearch = (p) => LOCAL_SEARCH_PATHS.some((re) => re.test(p || ""));
+  const supportsLocalSearch = (p) =>
+    LOCAL_SEARCH_PATHS.some((re) => re.test(p || ""));
 
   // ⬇️ 改成「就地或首頁」二選一
   const buildHref = (term, path = pathname || "/") => {
@@ -121,7 +134,7 @@ export default function Header({
     debounceTimerRef.current = setTimeout(() => {
       const target = buildHref(searchQuery, pathname);
       const currentQuery = searchParams.toString();
-      const currentHref = `${(typeof window !== "undefined" ? window.location.pathname : "/")}${currentQuery ? `?${currentQuery}` : ""}`;
+      const currentHref = `${typeof window !== "undefined" ? window.location.pathname : "/"}${currentQuery ? `?${currentQuery}` : ""}`;
       if (currentHref === target) return;
       router.replace(target);
     }, 200);
@@ -150,7 +163,12 @@ export default function Header({
       if (filterMenuOpen) {
         const panel = filterPanelRef.current;
         const btn = filterButtonRef.current;
-        if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
+        if (
+          panel &&
+          !panel.contains(e.target) &&
+          btn &&
+          !btn.contains(e.target)
+        ) {
           setFilterMenuOpen(false);
         }
       }
@@ -184,7 +202,10 @@ export default function Header({
       return;
     }
     const list = (liveSuggestions || [])
-      .filter((s) => typeof s === "string" && s.toLowerCase().includes(q.toLowerCase()))
+      .filter(
+        (s) =>
+          typeof s === "string" && s.toLowerCase().includes(q.toLowerCase()),
+      )
       .slice(0, 8);
     setFilteredSuggestions(list);
     setShowDropdown(list.length > 0);
@@ -232,7 +253,9 @@ export default function Header({
       const base = supportsLocalSearch(pathname) ? pathname : "/";
       if (base === "/") {
         sessionStorage.setItem("homepageShowAll", "1");
-        window.dispatchEvent(new CustomEvent("homepage-show-all", { detail: { ts: Date.now() } }));
+        window.dispatchEvent(
+          new CustomEvent("homepage-show-all", { detail: { ts: Date.now() } }),
+        );
       }
       router.replace(base);
     }
@@ -251,7 +274,9 @@ export default function Header({
       setSearchQuery("");
       if (base === "/") {
         sessionStorage.setItem("homepageShowAll", "1");
-        window.dispatchEvent(new CustomEvent("homepage-show-all", { detail: { ts: Date.now() } }));
+        window.dispatchEvent(
+          new CustomEvent("homepage-show-all", { detail: { ts: Date.now() } }),
+        );
       }
       router.push(base);
       return;
@@ -284,11 +309,15 @@ export default function Header({
               safeCall(setSort, "popular");
 
               sessionStorage.setItem("homepageShowAll", "1");
-              window.dispatchEvent(new CustomEvent("homepage-show-all", { detail: { ts: Date.now() } }));
+              window.dispatchEvent(
+                new CustomEvent("homepage-show-all", {
+                  detail: { ts: Date.now() },
+                }),
+              );
 
               clearTimeout(debounceTimerRef.current);
               setSearchQuery("");
-      
+
               router.push("/");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
@@ -326,7 +355,10 @@ export default function Header({
               </div>
 
               {/* 桌機搜尋列 */}
-              <div className="relative flex-1 min-w-0 hidden md:block" ref={searchBoxRefDesktop}>
+              <div
+                className="relative flex-1 min-w-0 hidden md:block"
+                ref={searchBoxRefDesktop}
+              >
                 <form
                   onSubmit={handleSubmit}
                   className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
@@ -354,7 +386,10 @@ export default function Header({
                     {filteredSuggestions.map((s, i) => (
                       <li
                         key={i}
-                        onMouseDown={(e) => { e.preventDefault(); handleSuggestionClick(s); }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleSuggestionClick(s);
+                        }}
                         className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
                       >
                         {s}
@@ -382,22 +417,38 @@ export default function Header({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-3 md:p-4">
-                    <FilterPanel
-                      currentUser={currentUser}
-                      filterMenuOpen={filterMenuOpen}
-                      setFilterMenuOpen={setFilterMenuOpen}
-                      levelFilters={levelFilters}
-                      categoryFilters={categoryFilters}
-                      viewMode={viewMode}
-                      toggleLevelFilter={toggleLevelFilter}
-                      toggleCategoryFilter={toggleCategoryFilter}
-                      onToggleLevel={toggleLevelFilter}
-                      onToggleCategory={toggleCategoryFilter}
-                      setViewMode={setViewMode}
-                    />
+                    {pathname === "/music" ? (
+                      <MusicFilterPanel
+                        currentUser={currentUser}
+                        filterMenuOpen={filterMenuOpen}
+                        setFilterMenuOpen={setFilterMenuOpen}
+                        levelFilters={levelFilters}
+                        categoryFilters={categoryFilters}
+                        viewMode={viewMode}
+                        toggleLevelFilter={toggleLevelFilter}
+                        toggleCategoryFilter={toggleCategoryFilter}
+                        onToggleLevel={toggleLevelFilter}
+                        onToggleCategory={toggleCategoryFilter}
+                        setViewMode={setViewMode}
+                      />
+                    ) : (
+                      <FilterPanel
+                        currentUser={currentUser}
+                        filterMenuOpen={filterMenuOpen}
+                        setFilterMenuOpen={setFilterMenuOpen}
+                        levelFilters={levelFilters}
+                        categoryFilters={categoryFilters}
+                        viewMode={viewMode}
+                        toggleLevelFilter={toggleLevelFilter}
+                        toggleCategoryFilter={toggleCategoryFilter}
+                        onToggleLevel={toggleLevelFilter}
+                        onToggleCategory={toggleCategoryFilter}
+                        setViewMode={setViewMode}
+                      />
+                    )}
                   </div>
                 </div>,
-                portalContainer || document.body
+                portalContainer || document.body,
               )}
           </div>
 
@@ -419,7 +470,9 @@ export default function Header({
             {/* 使用者選單 */}
             <div className="relative" ref={userMenuRef}>
               {currentUser === undefined ? (
-                <div className="px-3 md:px-4 py-2 bg-zinc-800 text-gray-400 rounded text-sm">🔄</div>
+                <div className="px-3 md:px-4 py-2 bg-zinc-800 text-gray-400 rounded text-sm">
+                  🔄
+                </div>
               ) : (
                 <>
                   <button
@@ -429,9 +482,13 @@ export default function Header({
                     aria-expanded={userMenuOpen}
                     title={currentUser?.username || "登入 / 註冊"}
                   >
-                    <span className="md:hidden" aria-hidden>👤</span>
+                    <span className="md:hidden" aria-hidden>
+                      👤
+                    </span>
                     <span className="hidden md:inline">
-                      {currentUser?.username ? `👤 ${currentUser.username} ▼` : "🔑 登入 / 註冊 ▼"}
+                      {currentUser?.username
+                        ? `👤 ${currentUser.username} ▼`
+                        : "🔑 登入 / 註冊 ▼"}
                     </span>
                   </button>
 
@@ -475,7 +532,11 @@ export default function Header({
                             onClick={async () => {
                               setUserMenuOpen(false);
                               localStorage.clear();
-                              await axios.post("/api/auth/logout", {}, { withCredentials: true });
+                              await axios.post(
+                                "/api/auth/logout",
+                                {},
+                                { withCredentials: true },
+                              );
                               location.reload();
                             }}
                             className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-red-400"
@@ -517,9 +578,15 @@ export default function Header({
         </div>
 
         {/* 第二列：📱 手機搜尋專用 */}
-        <div className="md:hidden px-3 pb-1.5 pt-1 border-t border-zinc-700" ref={searchBoxRefMobile}>
+        <div
+          className="md:hidden px-3 pb-1.5 pt-1 border-t border-zinc-700"
+          ref={searchBoxRefMobile}
+        >
           <form
-            onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit(e);
+            }}
             className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
           >
             <input
@@ -544,7 +611,10 @@ export default function Header({
               {filteredSuggestions.map((s, i) => (
                 <li
                   key={i}
-                  onMouseDown={(e) => { e.preventDefault(); handleSuggestionClick(s); }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSuggestionClick(s);
+                  }}
                   className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
                 >
                   {s}
@@ -556,7 +626,10 @@ export default function Header({
 
         {/* 第三列：📱 手機常用功能 */}
         <div className="md:hidden px-3 pb-2">
-          <div className="flex gap-2 overflow-x-auto overflow-y-hidden" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div
+            className="flex gap-2 overflow-x-auto overflow-y-hidden"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
             <TutorialMenu onGuideClick={onGuideClick} />
 
             <ContentMenuDropdown />

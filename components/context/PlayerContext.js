@@ -1,21 +1,34 @@
 "use client";
 
-import { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 
 const PlayerContext = createContext();
 
-export function PlayerProvider({ children, defaultShareMode = "global", defaultMiniPlayerEnabled = true, defaultSeekable = false }) {
+export function PlayerProvider({
+  children,
+  defaultShareMode = "global",
+  defaultMiniPlayerEnabled = true,
+  defaultSeekable = false,
+}) {
   const [src, setSrc] = useState("");
-  
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  
+
   // ✅ 修复：从 localStorage 读取音量，默认 1.0 (100%)
   const [volume, setVolumeState] = useState(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       try {
-        const saved = localStorage.getItem('playerVolume');
+        const saved = localStorage.getItem("playerVolume");
         if (saved) {
           const vol = parseFloat(saved);
           if (!isNaN(vol) && vol >= 0 && vol <= 1) {
@@ -23,47 +36,54 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           }
         }
       } catch (e) {
-        console.warn('读取音量失败:', e);
+        console.warn("读取音量失败:", e);
       }
     }
     return 1.0; // 默认 100%（符合 YouTube 默认值）
   });
   // 初始化时就标记为已同步（因为已从 localStorage 加载）
   const [volumeSynced, setVolumeSynced] = useState(true);
-  
+
   // 真正的音量控制函數
   const setVolume = useCallback((newVolume) => {
     // 確保音量值是有效的數字
-    if (typeof newVolume !== 'number' || isNaN(newVolume) || !isFinite(newVolume)) {
+    if (
+      typeof newVolume !== "number" ||
+      isNaN(newVolume) ||
+      !isFinite(newVolume)
+    ) {
       console.warn("🔧 無效的音量值:", newVolume);
       return;
     }
-    
+
     // 確保音量值在有效範圍內 (0-1)
     const validVolume = Math.max(0, Math.min(1, newVolume));
-    
+
     // 更新狀態
     setVolumeState(validVolume);
-    
+
     // ✅ 修复：保存到 localStorage
     try {
-      localStorage.setItem('playerVolume', validVolume.toString());
+      localStorage.setItem("playerVolume", validVolume.toString());
     } catch (e) {
       console.warn("🔧 保存音量失敗:", e);
     }
-    
+
     // 標記音量已同步
     setVolumeSynced(true);
-    
+
     // 控制外部播放器音量
-    if (externalControlsRef.current && typeof externalControlsRef.current.setVolume === 'function') {
+    if (
+      externalControlsRef.current &&
+      typeof externalControlsRef.current.setVolume === "function"
+    ) {
       try {
         externalControlsRef.current.setVolume(validVolume);
       } catch (error) {
         console.warn("🔧 外部播放器音量設置失敗:", error.message);
       }
     }
-    
+
     // 控制本地音頻播放器音量
     if (audioRef.current) {
       try {
@@ -79,7 +99,9 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
   }, []);
   const [trackTitle, setTrackTitle] = useState("");
   const [shareMode, setShareMode] = useState(defaultShareMode);
-  const [miniPlayerEnabled, setMiniPlayerEnabled] = useState(defaultMiniPlayerEnabled);
+  const [miniPlayerEnabled, setMiniPlayerEnabled] = useState(
+    defaultMiniPlayerEnabled,
+  );
   const [seekable, setSeekable] = useState(defaultSeekable);
   const [autoPlayAfterBridge, setAutoPlayAfterBridge] = useState(false);
   const [playlist, setPlaylist] = useState([]);
@@ -87,7 +109,7 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
 
   // 播放器擁有者資訊（用於釘選功能）
   const [playerOwner, setPlayerOwner] = useState(null); // { userId, username }
-  
+
   // 頁面主人的播放器造型信息（用於在別人頁面顯示他們的造型）
   const [pageOwnerSkin, setPageOwnerSkin] = useState(null); // { activePlayerSkin, playerSkinSettings, premiumPlayerSkin }
 
@@ -113,30 +135,74 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
   // 使用 useCallback 創建穩定的事件處理器
   const onLoaded = useCallback(() => {
     if (audioRef.current) {
-      setDuration(audioRef.current && audioRef.current.duration || 0);
+      setDuration((audioRef.current && audioRef.current.duration) || 0);
     }
   }, []);
 
   const onTime = useCallback(() => {
     if (!usingExternalPlayerRef.current && audioRef.current) {
-      const newTime = audioRef.current && audioRef.current.currentTime || 0;
+      const newTime = (audioRef.current && audioRef.current.currentTime) || 0;
       currentTimeRef.current = newTime;
-      
+
+      // 追蹤音樂播放進度，實際播放時長達到總時長的 10% 時計數
+      const audio = audioRef.current;
+      const duration = audio.duration;
+      if (duration > 0 && newTime > 0) {
+        const startTime = parseFloat(audio.dataset.startTime || "0");
+        // 計算實際播放的時長（當前位置 - 開始位置）
+        const playedDuration = Math.max(0, newTime - startTime);
+        // 計算實際播放的百分比
+        const playedPercent = (playedDuration / duration) * 100;
+        // 檢查是否為音樂 URL（格式：/api/music/stream/${id}）
+        if (src && src.includes("/api/music/stream/")) {
+          const musicId = src.match(/\/api\/music\/stream\/([^/?]+)/)?.[1];
+          if (musicId) {
+            // 如果實際播放時長達到總時長的 10% 以上，就計數
+            // 這樣無論從哪裡開始播放，只要播放了足夠長的內容就計數
+            if (playedPercent >= 10 && !audio.dataset.progressReported) {
+              audio.dataset.progressReported = "true";
+              // 調用進度追蹤 API
+              fetch(`/api/music/${musicId}/track-progress`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  progress: newTime,
+                  duration: duration,
+                  startTime: startTime,
+                  playedDuration: playedDuration,
+                }),
+              }).catch(() => {
+                // 忽略錯誤，不影響播放體驗
+              });
+            }
+          }
+        }
+      }
+
       // 完全移除 setCurrentTime 調用，避免無限循環
       // 時間更新將通過其他方式處理（如手動觸發或外部播放器）
     }
-  }, []);
+  }, [src]);
 
   const onPlay = useCallback(() => {
-    if (!isTransitioningRef.current) {
-      setIsPlaying(true);
+    // 若使用外部播放器（YouTube），避免本地 audio 事件覆蓋狀態
+    if (usingExternalPlayerRef.current) return;
+    setIsPlaying(true);
+
+    // 記錄播放開始時的絕對位置（秒）
+    if (audioRef.current) {
+      const startTime = audioRef.current.currentTime;
+      // 記錄開始播放時的絕對時間位置
+      audioRef.current.dataset.startTime = startTime.toString();
     }
   }, []);
 
   const onPause = useCallback(() => {
-    if (!isTransitioningRef.current) {
-      setIsPlaying(false);
-    }
+    // 若使用外部播放器（YouTube），避免本地 audio 事件覆蓋狀態
+    if (usingExternalPlayerRef.current) return;
+    setIsPlaying(false);
   }, []);
 
   const onEnded = useCallback(() => {
@@ -149,6 +215,19 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
   useEffect(() => {
     const audio = new Audio();
     audioRef.current = audio;
+
+    // ✅ 初始化音量
+    try {
+      const saved = localStorage.getItem("playerVolume");
+      if (saved) {
+        const vol = parseFloat(saved);
+        if (!isNaN(vol) && vol >= 0 && vol <= 1) {
+          audio.volume = vol;
+        }
+      }
+    } catch (e) {
+      console.warn("初始化音量失敗:", e);
+    }
 
     audio.addEventListener("loadedmetadata", onLoaded);
     audio.addEventListener("timeupdate", onTime);
@@ -168,123 +247,90 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
   }, []); // 只在組件掛載時執行一次
 
   useEffect(() => {
-    if (audioRef.current && typeof volume === 'number' && !isNaN(volume) && isFinite(volume)) {
+    if (
+      audioRef.current &&
+      typeof volume === "number" &&
+      !isNaN(volume) &&
+      isFinite(volume)
+    ) {
       // 確保音量值在有效範圍內 (0-1)
       const validVolume = Math.max(0, Math.min(1, volume));
       audioRef.current.volume = validVolume;
     }
   }, [volume]);
 
-  // 完全重寫的播放函數
+  // 完全重寫的播放函數（僅使用本地播放器）
   const play = async () => {
-    
     if (!src && !originUrl) {
-      console.warn('⚠️ [PlayerContext.play] 無音源，跳過');
+      console.warn("⚠️ [PlayerContext.play] 無音源，跳過");
       return false;
     }
-    
+
     // 如果正在轉換，等待轉換完成
     if (isTransitioningRef.current) {
-      console.warn('⚠️ [PlayerContext.play] 正在轉換中，跳過');
+      console.warn("⚠️ [PlayerContext.play] 正在轉換中，跳過");
       return false;
     }
-    
-    // 優先使用外部播放器（YouTube）
-    if (externalControlsRef.current && typeof externalControlsRef.current.play === 'function') {
-      try {
-        
-        // ✅ 新增：檢查播放器是否已經 ready
-        if (!window.__YT_READY__) {
-          console.warn('⚠️ [PlayerContext.play] 播放器尚未準備好，稍後重試');
-          // 等待播放器準備好後再嘗試
-          setTimeout(() => {
-            if (window.__YT_READY__ && externalControlsRef.current?.play) {
-              externalControlsRef.current.play();
-            }
-          }, 500);
-          return false;
-        }
-        
-        externalControlsRef.current.play();
-        // 等待一下檢查播放是否真的成功
-        setTimeout(() => {
-          // 這裡可以添加播放狀態檢查
-          // console.log("🔧 外部播放器播放調用完成");
-        }, 100);
-        setIsPlaying(true);
-        // console.log("🔧 外部播放器播放成功");
-        
-        // 觸發自定義事件，通知其他組件播放狀態已改變
-        window.dispatchEvent(new CustomEvent('playerStateChanged', { 
-          detail: { isPlaying: true, action: 'play' } 
-        }));
-        
-        return true;
-      } catch (error) {
-        console.error("🔧 外部播放器播放失敗:", error);
-      }
-    }
-    
-    // 回退到本地音頻播放器
+
+    // 在任何播放動作前，先確保沒有殘留的本地/其他媒體在播放
+    try {
+      const audioElements = document.querySelectorAll("audio");
+      audioElements.forEach((audio) => {
+        try {
+          if (!audio.paused) {
+            audio.pause();
+            audio.currentTime = 0;
+          }
+        } catch {}
+      });
+      const videoElements = document.querySelectorAll("video");
+      videoElements.forEach((video) => {
+        try {
+          if (video.dataset.videoPreview === "true") return; // 跳過縮圖預覽
+          if (!video.paused) {
+            video.pause();
+            video.currentTime = 0;
+          }
+        } catch {}
+      });
+    } catch {}
+
+    // 僅使用本地音頻播放器
     if (audioRef.current) {
       try {
         if (audioRef.current.readyState >= 2) {
           await audioRef.current.play();
           setIsPlaying(true);
-          // console.log("🔧 本地音頻播放成功");
-          
-          // 觸發自定義事件，通知其他組件播放狀態已改變
-          window.dispatchEvent(new CustomEvent('playerStateChanged', { 
-            detail: { isPlaying: true, action: 'play' } 
-          }));
-          
           return true;
         } else {
           return false;
         }
       } catch (error) {
-        if (error.name === 'AbortError') {
+        if (error.name === "AbortError") {
           console.warn("🔧 播放被中斷");
         } else {
           console.error("🔧 本地播放失敗:", error);
         }
       }
     }
-    
-    // console.log("🔧 所有播放器都無法播放");
+
     return false;
   };
 
-  // 完全重寫的暫停函數
+  // 完全重寫的暫停函數（僅使用本地播放器）
   const pause = () => {
-    
-    // 優先使用外部播放器（YouTube）
-    if (externalControlsRef.current && typeof externalControlsRef.current.pause === 'function') {
-      try {
-        externalControlsRef.current.pause();
-        // 等待一下檢查暫停是否真的成功
-        setTimeout(() => {
-          // console.log("🔧 外部播放器暫停調用完成");
-        }, 100);
-        // console.log("🔧 外部播放器暫停成功");
-      } catch (error) {
-        console.error("🔧 外部播放器暫停失敗:", error);
-      }
-    }
-    
-    // 回退到本地音頻播放器
+    // 僅使用本地音頻播放器
     if (audioRef.current && !audioRef.current.paused) {
       try {
         audioRef.current.pause();
-        // console.log("🔧 本地音頻播放器已暫停");
       } catch (error) {
         console.warn("🔧 本地音頻暫停失敗:", error);
       }
     }
-    
-    // 強制停止所有音頻和視頻元素，包括 YouTube iframe
+
+    // 強制停止所有音頻和視頻元素
     try {
-      const audioElements = document.querySelectorAll('audio');
+      const audioElements = document.querySelectorAll("audio");
       audioElements.forEach((audio, index) => {
         try {
           if (!audio.paused) {
@@ -296,15 +342,15 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           console.warn(`🔧 停止音頻元素 ${index} 失敗:`, error.message);
         }
       });
-      
-      const videoElements = document.querySelectorAll('video');
+
+      const videoElements = document.querySelectorAll("video");
       videoElements.forEach((video, index) => {
         try {
           // 跳過影片縮圖的 video 元素
-          if (video.dataset.videoPreview === 'true') {
+          if (video.dataset.videoPreview === "true") {
             return;
           }
-          
+
           if (!video.paused) {
             video.pause();
             video.currentTime = 0; // 重置播放位置
@@ -314,57 +360,25 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           console.warn(`🔧 停止視頻元素 ${index} 失敗:`, error.message);
         }
       });
-      
-      // 強制停止所有 YouTube iframe
-      const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
-      youtubeIframes.forEach((iframe, index) => {
-        try {
-          // 嘗試通過 iframe 的 contentWindow 停止播放
-          if (iframe.contentWindow) {
-            try {
-              iframe.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-            } catch (e) {
-              // console.log(`🔧 無法通過 postMessage 停止 iframe ${index}`);
-            }
-          }
-          // console.log(`🔧 嘗試停止 YouTube iframe ${index}`);
-        } catch (error) {
-          console.warn(`🔧 停止 iframe ${index} 失敗:`, error.message);
-        }
-      });
     } catch (error) {
       console.warn("🔧 強制停止失敗:", error);
     }
-    
+
     // 更新播放狀態
     setIsPlaying(false);
     // console.log("🔧 播放狀態已設為暫停");
-    
+
     // 觸發自定義事件，通知其他組件播放狀態已改變
-    window.dispatchEvent(new CustomEvent('playerStateChanged', { 
-      detail: { isPlaying: false, action: 'pause' } 
-    }));
+    window.dispatchEvent(
+      new CustomEvent("playerStateChanged", {
+        detail: { isPlaying: false, action: "pause" },
+      }),
+    );
   };
 
   const seekTo = (time) => {
-    // 優先使用外部播放器（YouTube）
-    if (externalControlsRef.current && typeof externalControlsRef.current.seekTo === 'function') {
-      try {
-        // ✅ 新增：檢查播放器是否已經 ready
-        if (!window.__YT_READY__) {
-          console.warn('⚠️ [PlayerContext.seekTo] 播放器尚未準備好，跳過');
-          return;
-        }
-        
-        externalControlsRef.current && externalControlsRef.current.seekTo(time);
-        return;
-      } catch (error) {
-        console.error("🔧 外部播放器跳轉失敗:", error);
-      }
-    }
-    
-    // 回退到本地音頻播放器
-          if (audioRef.current) {
+    // 僅使用本地音頻播放器
+    if (audioRef.current) {
       audioRef.current.currentTime = time;
     }
   };
@@ -376,10 +390,14 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
 
   const setExternalProgress = useCallback((currentTime, duration) => {
     // 確保值是有效數字
-    if (typeof currentTime === 'number' && isFinite(currentTime) && currentTime >= 0) {
+    if (
+      typeof currentTime === "number" &&
+      isFinite(currentTime) &&
+      currentTime >= 0
+    ) {
       setCurrentTime(currentTime);
     }
-    if (typeof duration === 'number' && isFinite(duration) && duration > 0) {
+    if (typeof duration === "number" && isFinite(duration) && duration > 0) {
       setDuration(duration);
     }
   }, []);
@@ -395,56 +413,68 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
   // 手動更新時間的方法
   const updateCurrentTime = useCallback(() => {
     if (audioRef.current && !usingExternalPlayerRef.current) {
-      const newTime = audioRef.current && audioRef.current.currentTime || 0;
+      const newTime = (audioRef.current && audioRef.current.currentTime) || 0;
       currentTimeRef.current = newTime;
       setCurrentTime(newTime);
     }
   }, []);
 
   // 完全重寫的下一首函數
-        const next = async () => {
-          if (playlist.length === 0) {
-            return;
-          }
-          
-          // 開始計時
-          const startTime = performance.now();
-          window.__NEXT_START_TIME__ = startTime;
-          
-          const nextIndex = (activeIndex + 1) % playlist.length;
-          const nextItem = playlist[nextIndex];
-          
-          // ✅ 監測循環播放
-          const isLooping = nextIndex === 0 && activeIndex === playlist.length - 1;
-          
-          // console.log("🔧 PlayerContext 下一首:", { nextIndex, nextItem });
-          
-          // 檢查當前播放的聲音數量
-          const audioElements = document.querySelectorAll('audio');
-          const videoElements = document.querySelectorAll('video');
-          const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
-          const playingAudio = Array.from(audioElements).filter(audio => !audio.paused);
-          const playingVideo = Array.from(videoElements).filter(video => !video.paused && video.dataset.videoPreview !== 'true');
-          
-          // 只在有問題時才輸出詳細日誌
-          if (youtubeIframes.length > 1 || playingAudio.length + playingVideo.length > 1) {
-          }
-    
+  const next = async () => {
+    if (playlist.length === 0) {
+      return;
+    }
+
+    // 開始計時
+    const startTime = performance.now();
+    window.__NEXT_START_TIME__ = startTime;
+
+    const nextIndex = (activeIndex + 1) % playlist.length;
+    const nextItem = playlist[nextIndex];
+
+    // ✅ 監測循環播放
+    const isLooping = nextIndex === 0 && activeIndex === playlist.length - 1;
+
+    // console.log("🔧 PlayerContext 下一首:", { nextIndex, nextItem });
+
+    // 檢查當前播放的聲音數量
+    const audioElements = document.querySelectorAll("audio");
+    const videoElements = document.querySelectorAll("video");
+    const youtubeIframes = document.querySelectorAll(
+      'iframe[src*="youtube.com"]',
+    );
+    const playingAudio = Array.from(audioElements).filter(
+      (audio) => !audio.paused,
+    );
+    const playingVideo = Array.from(videoElements).filter(
+      (video) => !video.paused && video.dataset.videoPreview !== "true",
+    );
+
+    // 只在有問題時才輸出詳細日誌
+    if (
+      youtubeIframes.length > 1 ||
+      playingAudio.length + playingVideo.length > 1
+    ) {
+    }
+
     // 設置轉換標記，防止雙重播放
     isTransitioningRef.current = true;
-    
+
     try {
       // 強制停止所有播放器
-      
+
       // 停止外部播放器
-      if (externalControlsRef.current && typeof externalControlsRef.current.pause === 'function') {
+      if (
+        externalControlsRef.current &&
+        typeof externalControlsRef.current.pause === "function"
+      ) {
         try {
           externalControlsRef.current.pause();
         } catch (error) {
           console.warn("🔧 外部播放器暫停失敗:", error);
         }
       }
-      
+
       // 停止本地音頻播放器
       if (audioRef.current && !audioRef.current.paused) {
         try {
@@ -454,10 +484,10 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           console.warn("🔧 本地音頻暫停失敗:", error);
         }
       }
-      
+
       // 強制停止所有可能的音頻源
       try {
-        const audioElements = document.querySelectorAll('audio');
+        const audioElements = document.querySelectorAll("audio");
         audioElements.forEach((audio, index) => {
           try {
             if (!audio.paused) {
@@ -469,15 +499,15 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
             console.warn(`🔧 停止音頻元素 ${index} 失敗:`, error.message);
           }
         });
-        
-        const videoElements = document.querySelectorAll('video');
+
+        const videoElements = document.querySelectorAll("video");
         videoElements.forEach((video, index) => {
           try {
             // 跳過影片縮圖的 video 元素
-            if (video.dataset.videoPreview === 'true') {
+            if (video.dataset.videoPreview === "true") {
               return;
             }
-            
+
             if (!video.paused) {
               video.pause();
               video.currentTime = 0;
@@ -487,96 +517,60 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
             console.warn(`🔧 停止視頻元素 ${index} 失敗:`, error.message);
           }
         });
-        
-      // 檢查是否在後台分頁
-      const isBackground = document.hidden;
-      
-      if (!isBackground) {
-        // 前台分頁：移除所有 YouTube iframe
-        const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
-        youtubeIframes.forEach((iframe, index) => {
-          try {
-            // 先嘗試停止播放
-            if (iframe.contentWindow) {
-              try {
-                iframe.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-                iframe.contentWindow.postMessage('{"event":"command","func":"stopVideo","args":""}', '*');
-              } catch (e) {
-                // console.log(`🔧 無法通過 postMessage 停止 iframe ${index}`);
-              }
-            }
-            // 然後移除 iframe
-            iframe.remove();
-          } catch (error) {
-            console.warn(`🔧 移除 iframe ${index} 失敗:`, error.message);
-          }
-        });
-        
-        // 清除外部播放器引用，強制重新初始化
-        externalControlsRef.current = null;
-        
-        // 等待 iframe 完全移除
-        await new Promise(resolve => setTimeout(resolve, 200));
-      } else {
-        // 後台分頁：不移除 iframe，只停止播放
-      }
-      
-      // 強制停止所有音頻和視頻元素
-      const audioVideoElements = document.querySelectorAll('audio, video');
-      audioVideoElements.forEach((element, index) => {
-        try {
-          // 跳過影片縮圖的 video 元素
-          if (element.tagName === 'VIDEO' && element.dataset.videoPreview === 'true') {
-            return;
-          }
-          
-          if (!element.paused) {
-            element.pause();
-            element.currentTime = 0;
-          }
-          element.remove();
-        } catch (error) {
-          console.warn(`🔧 移除媒體元素 ${index} 失敗:`, error.message);
-        }
-      });
+
+        // 檢查是否在後台分頁
+        const isBackground = document.hidden;
+
+        // 不再移除 YouTube iframe 與 DOM 媒體元素，改由橋接層管理
       } catch (error) {
         console.warn("🔧 強制停止失敗:", error);
       }
-      
-      // 等待更長時間確保所有播放器都停止
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // 更新索引
+
+      // 等待短暫時間確保播放器停止
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // 更新索引（提早）
       setActiveIndex(nextIndex);
-      
+      // 立即廣播切歌事件，避免後續步驟例外導致事件未發出
+      try {
+        window.dispatchEvent(
+          new CustomEvent("playerNext", { detail: { nextIndex, nextItem } }),
+        );
+      } catch {}
+
       // 先設置自動播放標記
       setAutoPlayAfterBridge(true);
       window.__AUTO_PLAY_TRIGGERED__ = true;
       window.__PERSISTENT_AUTO_PLAY__ = true; // 設置持久標記
       // console.log("🔧 設置自動播放標記");
-      
+
       // 等待狀態更新
-      await new Promise(resolve => setTimeout(resolve, 50));
-      
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // 若發生循環（回到第一首），強制重建 YouTube 播放器，避免第二輪卡死
+      try {
+        if (isLooping) {
+          window.__FORCE_RECREATE_PLAYER__ = true;
+        }
+      } catch {}
+
       // 設置新的播放內容
       setSrcWithAudio(nextItem.url);
       setOriginUrl(nextItem.url);
       setTrackTitle(nextItem.title);
-      
+
       // 等待新播放器初始化
-      await new Promise(resolve => setTimeout(resolve, 50));
-      
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       // 嘗試不重新創建播放器，只更換視頻源
       // window.__FORCE_RECREATE_PLAYER__ = true;
-      
-      // 觸發自定義事件，讓播放器頁面同步 UI
-      window.dispatchEvent(new CustomEvent('playerNext', { detail: { nextIndex, nextItem } }));
-      
+
+      // 事件已於前面廣播，這裡避免重複
     } finally {
-      // 延遲清除轉換標記，確保播放器有時間初始化
+      // 更快清除轉換標記，降低卡住風險
       setTimeout(() => {
         isTransitioningRef.current = false;
-      }, 3000);
+      }, 1000);
     }
   };
 
@@ -585,26 +579,28 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
     if (playlist.length === 0) {
       return;
     }
-    
+
     const prevIndex = activeIndex === 0 ? playlist.length - 1 : activeIndex - 1;
     const prevItem = playlist[prevIndex];
-    
-    
+
     // 設置轉換標記，防止雙重播放
     isTransitioningRef.current = true;
-    
+
     try {
       // 強制停止所有播放器
-      
+
       // 停止外部播放器
-      if (externalControlsRef.current && typeof externalControlsRef.current.pause === 'function') {
+      if (
+        externalControlsRef.current &&
+        typeof externalControlsRef.current.pause === "function"
+      ) {
         try {
           externalControlsRef.current.pause();
         } catch (error) {
           console.warn("🔧 外部播放器暫停失敗:", error);
         }
       }
-      
+
       // 停止本地音頻播放器
       if (audioRef.current && !audioRef.current.paused) {
         try {
@@ -614,10 +610,10 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
           console.warn("🔧 本地音頻暫停失敗:", error);
         }
       }
-      
+
       // 強制停止所有可能的音頻源
       try {
-        const audioElements = document.querySelectorAll('audio');
+        const audioElements = document.querySelectorAll("audio");
         audioElements.forEach((audio, index) => {
           try {
             if (!audio.paused) {
@@ -629,15 +625,15 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
             console.warn(`🔧 停止音頻元素 ${index} 失敗:`, error.message);
           }
         });
-        
-        const videoElements = document.querySelectorAll('video');
+
+        const videoElements = document.querySelectorAll("video");
         videoElements.forEach((video, index) => {
           try {
             // 跳過影片縮圖的 video 元素
-            if (video.dataset.videoPreview === 'true') {
+            if (video.dataset.videoPreview === "true") {
               return;
             }
-            
+
             if (!video.paused) {
               video.pause();
               video.currentTime = 0;
@@ -647,126 +643,127 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
             console.warn(`🔧 停止視頻元素 ${index} 失敗:`, error.message);
           }
         });
-        
-      // 檢查是否在後台分頁
-      const isBackground = document.hidden;
-      
-      if (!isBackground) {
-        // 前台分頁：移除所有 YouTube iframe
-        const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
-        youtubeIframes.forEach((iframe, index) => {
+
+        // 檢查是否在後台分頁
+        const isBackground = document.hidden;
+
+        // 不再移除 YouTube iframe，由橋接層管理
+
+        // 強制停止所有音頻和視頻元素
+        const audioVideoElements = document.querySelectorAll("audio, video");
+        audioVideoElements.forEach((element, index) => {
           try {
-            // 先嘗試停止播放
-            if (iframe.contentWindow) {
-              try {
-                iframe.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-                iframe.contentWindow.postMessage('{"event":"command","func":"stopVideo","args":""}', '*');
-              } catch (e) {
-                // console.log(`🔧 無法通過 postMessage 停止 iframe ${index}`);
-              }
+            // 跳過影片縮圖的 video 元素
+            if (
+              element.tagName === "VIDEO" &&
+              element.dataset.videoPreview === "true"
+            ) {
+              return;
             }
-            // 然後移除 iframe
-            iframe.remove();
+
+            if (!element.paused) {
+              element.pause();
+              element.currentTime = 0;
+            }
+            element.remove();
           } catch (error) {
-            console.warn(`🔧 移除 iframe ${index} 失敗:`, error.message);
+            console.warn(`🔧 移除媒體元素 ${index} 失敗:`, error.message);
           }
         });
-        
-        // 等待 iframe 完全移除
-        await new Promise(resolve => setTimeout(resolve, 200));
-      } else {
-        // 後台分頁：不移除 iframe，只停止播放
-      }
-      
-      // 強制停止所有音頻和視頻元素
-      const audioVideoElements = document.querySelectorAll('audio, video');
-      audioVideoElements.forEach((element, index) => {
-        try {
-          // 跳過影片縮圖的 video 元素
-          if (element.tagName === 'VIDEO' && element.dataset.videoPreview === 'true') {
-            return;
-          }
-          
-          if (!element.paused) {
-            element.pause();
-            element.currentTime = 0;
-          }
-          element.remove();
-        } catch (error) {
-          console.warn(`🔧 移除媒體元素 ${index} 失敗:`, error.message);
-        }
-      });
       } catch (error) {
         console.warn("🔧 強制停止失敗:", error);
       }
-      
-      // 等待一下確保所有播放器都停止
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+
+      // 等待短暫時間確保播放器停止
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
       // 更新索引
       setActiveIndex(prevIndex);
-      
+
       // 設置新的播放內容
       setSrcWithAudio(prevItem.url);
       setOriginUrl(prevItem.url);
       setTrackTitle(prevItem.title);
-      
+
       // 設置自動播放標記
       setAutoPlayAfterBridge(true);
       window.__AUTO_PLAY_TRIGGERED__ = true;
       // console.log("🔧 設置自動播放標記");
-      
+
       // 觸發自定義事件，讓播放器頁面同步 UI
-      window.dispatchEvent(new CustomEvent('playerPrevious', { detail: { prevIndex, prevItem } }));
-      
+      window.dispatchEvent(
+        new CustomEvent("playerPrevious", { detail: { prevIndex, prevItem } }),
+      );
     } finally {
-      // 延遲清除轉換標記，確保播放器有時間初始化
+      // 更快清除轉換標記，降低卡住風險
       setTimeout(() => {
         isTransitioningRef.current = false;
-      }, 3000);
+      }, 1000);
     }
   };
 
   // 簡化 setSrc 方法
   const setSrcWithAudio = (newSrc) => {
+    // 先重置進度，避免沿用上一首的滿格進度
+    setCurrentTime(0);
+    setDuration(0);
+
     setSrc(newSrc);
-    
+
     // 設置音頻源（如果存在本地音頻播放器）
-    if (audioRef.current && newSrc) {
+    if (audioRef.current) {
       try {
-        audioRef.current.src = newSrc;
+        // 重置進度報告標誌和開始位置，允許新音樂重新追蹤進度
+        audioRef.current.dataset.progressReported = "";
+        audioRef.current.dataset.startTime = "";
+        audioRef.current.src = newSrc || "";
+        audioRef.current.currentTime = 0;
       } catch (error) {
         console.warn("🔧 設置音頻源失敗:", error);
       }
     }
   };
 
+  // 以 ref 持有最新的 next，避免事件監聽器閉包使用到過期狀態
+  const nextRef = useRef(next);
+  useEffect(() => {
+    nextRef.current = next;
+  }, [next]);
+
   // 監聽 skipToNext 事件（添加防抖，避免重複觸發）
   useEffect(() => {
     let skipTimeout = null;
-    
+
     const handleSkipToNext = () => {
       // 防抖：避免短時間內重複觸發
       if (skipTimeout) {
         clearTimeout(skipTimeout);
       }
-      
+
       skipTimeout = setTimeout(() => {
-        console.warn("🔧 收到 skipToNext 事件，執行下一首");
-        next();
-        skipTimeout = null;
-      }, 500); // 500ms 防抖
+        try {
+          console.warn(
+            "🔧 收到 skipToNext 事件 -> next()，activeIndex=",
+            activeIndex,
+            "playlistLen=",
+            Array.isArray(playlist) ? playlist.length : 0,
+          );
+          nextRef.current && nextRef.current();
+        } finally {
+          skipTimeout = null;
+        }
+      }, 300); // 稍微縮短等待，加快自測反應
     };
 
-    window.addEventListener('skipToNext', handleSkipToNext);
-    
+    window.addEventListener("skipToNext", handleSkipToNext);
+
     return () => {
       if (skipTimeout) {
         clearTimeout(skipTimeout);
       }
-      window.removeEventListener('skipToNext', handleSkipToNext);
+      window.removeEventListener("skipToNext", handleSkipToNext);
     };
-  }, []); // 移除 next 依賴，避免無限循環
+  }, [activeIndex, playlist]);
 
   const contextValue = {
     src,
@@ -806,7 +803,7 @@ export function PlayerProvider({ children, defaultShareMode = "global", defaultM
     setPlayerOwner,
     pageOwnerSkin,
     setPageOwnerSkin,
-    externalControls: externalControlsRef.current
+    externalControls: externalControlsRef.current,
   };
 
   return (

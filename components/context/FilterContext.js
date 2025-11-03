@@ -1,27 +1,41 @@
 "use client";
 
-import { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+} from "react";
 
 /** 前端按鈕顯示用 → 後端查詢值 */
 export const labelToRating = {
-  "一般圖片": "sfw",
+  一般圖片: "sfw",
   "15+ 圖片": "15",
   "18+ 圖片": "18",
 };
 
+/** 音樂：前端按鈕顯示用 → 後端查詢值 */
+export const musicLabelToRating = {
+  一般音樂: "all",
+  "15+ 音樂": "15",
+  "18+ 音樂": "18",
+};
+
 /** 支援舊的 'all' 評級映射到 'sfw' */
 export const legacyRatingMap = {
-  "all": "sfw",
-  "sfw": "sfw",
-  "15": "15",
-  "18": "18",
+  all: "sfw",
+  sfw: "sfw",
+  15: "15",
+  18: "18",
 };
 
 /** 後端值 → 前端顯示用（有需要時可用） */
 export const ratingToLabel = {
   sfw: "一般圖片",
-  "15": "15+ 圖片",
-  "18": "18+ 圖片",
+  15: "15+ 圖片",
+  18: "18+ 圖片",
 };
 
 const VALID_LEVEL_LABELS = Object.keys(labelToRating);
@@ -31,6 +45,8 @@ const FilterContext = createContext(null);
 /** 預設：一開始就勾選「一般圖片、15+ 圖片」 */
 const DEFAULT_LEVEL_FILTERS = ["一般圖片", "15+ 圖片"];
 const DEFAULT_CATEGORY_FILTERS = [];
+const DEFAULT_TYPE_FILTERS = []; // 音樂類型：BGM、歌曲
+const DEFAULT_LANGUAGE_FILTERS = []; // 音樂語言：中文、英文、日文
 const DEFAULT_VIEW_MODE = "default"; // or "compact"
 
 /** 安全讀取 localStorage */
@@ -57,20 +73,40 @@ function uniqKeepOrder(arr) {
 export function FilterProvider({ children }) {
   // 先給預設，mount 後再從 localStorage 覆蓋
   const [levelFilters, setLevelFilters] = useState(DEFAULT_LEVEL_FILTERS);
-  const [categoryFilters, setCategoryFilters] = useState(DEFAULT_CATEGORY_FILTERS);
+  const [categoryFilters, setCategoryFilters] = useState(
+    DEFAULT_CATEGORY_FILTERS,
+  );
+  const [typeFilters, setTypeFilters] = useState(DEFAULT_TYPE_FILTERS); // 音樂類型
+  const [languageFilters, setLanguageFilters] = useState(
+    DEFAULT_LANGUAGE_FILTERS,
+  ); // 音樂語言
   const [viewMode, setViewMode] = useState(DEFAULT_VIEW_MODE);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Mount 後復原上次狀態
   useEffect(() => {
-    const lv = safeParse(localStorage.getItem("levelFilters"), DEFAULT_LEVEL_FILTERS)
-      .filter((l) => VALID_LEVEL_LABELS.includes(l));
-    const ct = safeParse(localStorage.getItem("categoryFilters"), DEFAULT_CATEGORY_FILTERS)
-      .filter((c) => typeof c === "string" && c.trim().length > 0);
+    const lv = safeParse(
+      localStorage.getItem("levelFilters"),
+      DEFAULT_LEVEL_FILTERS,
+    ).filter((l) => VALID_LEVEL_LABELS.includes(l));
+    const ct = safeParse(
+      localStorage.getItem("categoryFilters"),
+      DEFAULT_CATEGORY_FILTERS,
+    ).filter((c) => typeof c === "string" && c.trim().length > 0);
+    const tf = safeParse(
+      localStorage.getItem("typeFilters"),
+      DEFAULT_TYPE_FILTERS,
+    ).filter((t) => typeof t === "string" && t.trim().length > 0);
+    const lgf = safeParse(
+      localStorage.getItem("languageFilters"),
+      DEFAULT_LANGUAGE_FILTERS,
+    ).filter((l) => typeof l === "string" && l.trim().length > 0);
     const vm = localStorage.getItem("viewMode") || DEFAULT_VIEW_MODE;
 
     setLevelFilters(lv.length ? lv : DEFAULT_LEVEL_FILTERS);
     setCategoryFilters(ct);
+    setTypeFilters(tf);
+    setLanguageFilters(lgf);
     setViewMode(vm === "default" || vm === "compact" ? vm : DEFAULT_VIEW_MODE);
     setIsInitialized(true); // 標記為已從 localStorage 恢復
   }, []);
@@ -82,6 +118,12 @@ export function FilterProvider({ children }) {
   useEffect(() => {
     localStorage.setItem("categoryFilters", JSON.stringify(categoryFilters));
   }, [categoryFilters]);
+  useEffect(() => {
+    localStorage.setItem("typeFilters", JSON.stringify(typeFilters));
+  }, [typeFilters]);
+  useEffect(() => {
+    localStorage.setItem("languageFilters", JSON.stringify(languageFilters));
+  }, [languageFilters]);
   useEffect(() => {
     localStorage.setItem("viewMode", viewMode);
   }, [viewMode]);
@@ -108,7 +150,31 @@ export function FilterProvider({ children }) {
   const toggleCategoryFilter = useCallback((key) => {
     setCategoryFilters((prev) => {
       const exists = prev.includes(key);
-      const next = exists ? prev.filter((item) => item !== key) : [...prev, key];
+      const next = exists
+        ? prev.filter((item) => item !== key)
+        : [...prev, key];
+      return next;
+    });
+  }, []);
+
+  /** 音樂類型：一般切換 */
+  const toggleTypeFilter = useCallback((key) => {
+    setTypeFilters((prev) => {
+      const exists = prev.includes(key);
+      const next = exists
+        ? prev.filter((item) => item !== key)
+        : [...prev, key];
+      return next;
+    });
+  }, []);
+
+  /** 音樂語言：一般切換 */
+  const toggleLanguageFilter = useCallback((key) => {
+    setLanguageFilters((prev) => {
+      const exists = prev.includes(key);
+      const next = exists
+        ? prev.filter((item) => item !== key)
+        : [...prev, key];
       return next;
     });
   }, []);
@@ -117,6 +183,8 @@ export function FilterProvider({ children }) {
   const resetFilters = useCallback(() => {
     setLevelFilters(DEFAULT_LEVEL_FILTERS);
     setCategoryFilters(DEFAULT_CATEGORY_FILTERS);
+    setTypeFilters(DEFAULT_TYPE_FILTERS);
+    setLanguageFilters(DEFAULT_LANGUAGE_FILTERS);
     setViewMode(DEFAULT_VIEW_MODE);
   }, []);
 
@@ -124,17 +192,35 @@ export function FilterProvider({ children }) {
     () => ({
       levelFilters,
       categoryFilters,
+      typeFilters,
+      languageFilters,
       viewMode,
       isInitialized, // 新增：標記是否已從 localStorage 恢復
       setViewMode,
       toggleLevelFilter,
       toggleCategoryFilter,
+      toggleTypeFilter,
+      toggleLanguageFilter,
       resetFilters,
     }),
-    [levelFilters, categoryFilters, viewMode, isInitialized, toggleLevelFilter, toggleCategoryFilter, resetFilters]
+    [
+      levelFilters,
+      categoryFilters,
+      typeFilters,
+      languageFilters,
+      viewMode,
+      isInitialized,
+      toggleLevelFilter,
+      toggleCategoryFilter,
+      toggleTypeFilter,
+      toggleLanguageFilter,
+      resetFilters,
+    ],
   );
 
-  return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>;
+  return (
+    <FilterContext.Provider value={value}>{children}</FilterContext.Provider>
+  );
 }
 
 export function useFilterContext() {

@@ -7,7 +7,7 @@ import { VIDEO_AUTHOR_STAGES } from '@/utils/videoQuery';
 const POP_W_CLICK = 1.0;
 const POP_W_LIKE = 8.0;
 const POP_W_VIEW = 0.5;
-const POP_W_COMPLETE = 0.05;
+const POP_W_COMPLETE = 0.25;
 const POP_NEW_WINDOW_HOURS = 10;
 
 export async function GET(request) {

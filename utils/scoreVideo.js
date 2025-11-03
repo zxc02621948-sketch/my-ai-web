@@ -38,7 +38,7 @@ export function computeVideoPopScore(video = {}) {
   const W_CLICK = 1.0;
   const W_LIKE = 8.0;
   const W_VIEW = 0.5;
-  const W_COMPLETE = 0.05;
+  const W_COMPLETE = 0.25;
 
   const clicks = toNum(video.clicks, 0);
   const likesCount = ensureVideoLikesCount(video);

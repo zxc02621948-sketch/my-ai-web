@@ -14,6 +14,7 @@ export default function YoutubeFallback({ videoId, startSeconds = 0, onReady, on
   const opts = useMemo(() => ({
     height: "0",
     width: "0",
+    host: "https://www.youtube.com",
     playerVars: {
       autoplay: 0,
       mute: 0,
@@ -38,7 +39,6 @@ export default function YoutubeFallback({ videoId, startSeconds = 0, onReady, on
   return (
     <div style={{ position: "absolute", left: "-9999px", top: "-9999px" }} aria-hidden>
       <ReactYouTube
-        key={videoId} // 確保 videoId 變化時重新創建
         videoId={videoId}
         opts={opts}
         onReady={onReady}

@@ -4,7 +4,6 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { usePlayer } from "@/components/context/PlayerContext";
 import MiniPlayer from "./MiniPlayer";
-import GlobalYouTubeBridge from "@/components/player/GlobalYouTubeBridge";
 
 export default function ConditionalPlayer() {
   const pathname = usePathname();
@@ -37,10 +36,5 @@ export default function ConditionalPlayer() {
   
   // ✅ 總是渲染 MiniPlayer，讓它自己決定是否顯示
   // MiniPlayer 內部會根據 miniPlayerEnabled 和 isPinned 狀態來控制顯示
-  return (
-    <>
-      <MiniPlayer />
-      <GlobalYouTubeBridge />
-    </>
-  );
+  return <MiniPlayer />;
 }

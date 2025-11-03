@@ -21,7 +21,7 @@ const toNum = (v, d) => {
 };
 const POP_W_CLICK = toNum(process.env.POP_W_CLICK, 1.0);
 const POP_W_LIKE = toNum(process.env.POP_W_LIKE, 8.0);
-const POP_W_COMPLETE = toNum(process.env.POP_W_COMPLETE, 0.05);
+const POP_W_COMPLETE = toNum(process.env.POP_W_COMPLETE, 0.25);
 const POP_NEW_WINDOW_HOURS = toNum(process.env.POP_NEW_WINDOW_HOURS, 10);
 
 // ============== 一鍵遷移（原樣保留） ==============

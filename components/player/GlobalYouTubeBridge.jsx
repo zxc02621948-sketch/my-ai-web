@@ -89,27 +89,32 @@ export default function GlobalYouTubeBridge() {
       // 注意：由於瀏覽器的自動播放政策，後台分頁可能無法自動播放
       const shouldAutoPlay = player?.autoPlayAfterBridge || window.__AUTO_PLAY_TRIGGERED__ || window.__PERSISTENT_AUTO_PLAY__;
       
+      // ✅ 如果設定為強制重建，跳過快速切換
+      if (window.__FORCE_RECREATE_PLAYER__) {
+        return;
+      }
+      
       if (shouldAutoPlay && document.hidden) {
         // 使用 postMessage 嘗試切換視頻（可能被瀏覽器阻止）
         setTimeout(() => {
-          const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
-          if (youtubeIframes.length > 0) {
-            const iframe = youtubeIframes[youtubeIframes.length - 1];
-            if (iframe && iframe.contentWindow) {
-              try {
-                iframe.contentWindow.postMessage(JSON.stringify({
-                  event: 'command',
-                  func: 'loadVideoById',
-                  args: [videoId]
-                }), '*');
-                
-                // 清除自動播放標記
-                player?.setAutoPlayAfterBridge?.(false);
-                window.__AUTO_PLAY_TRIGGERED__ = false;
-                window.__PERSISTENT_AUTO_PLAY__ = false;
-              } catch (error) {
-                // 靜默處理錯誤
-              }
+          // 再次檢查是否仍在重建中
+          if (window.__FORCE_RECREATE_PLAYER__) {
+            return;
+          }
+          
+          const iframes = Array.from(document.querySelectorAll('iframe[src*="youtube.com"]'))
+            .filter((f) => f && f.isConnected && f.contentWindow && f.src && f.src.includes('youtube.com'));
+          const iframe = iframes.length > 0 ? iframes[iframes.length - 1] : null;
+          if (iframe && iframe.contentWindow) {
+            try {
+              iframe.contentWindow.postMessage(JSON.stringify({
+                event: 'command',
+                func: 'loadVideoById',
+                args: [videoId]
+              }), 'https://www.youtube.com');
+              // 不要在背景清除旗標，等回到前台再清
+            } catch (error) {
+              // 靜默處理錯誤
             }
           }
         }, 500);
@@ -120,28 +125,88 @@ export default function GlobalYouTubeBridge() {
   // 監聽分頁可見性變化，在分頁切換回前台時繼續播放
   useEffect(() => {
     const handleVisibilityChange = () => {
-      
-      if (!document.hidden && shouldResumeOnVisibleRef.current) {
+      if (!document.hidden && (shouldResumeOnVisibleRef.current || player?.autoPlayAfterBridge || window.__PERSISTENT_AUTO_PLAY__)) {
         // 分頁切換回前台，且需要繼續播放
         shouldResumeOnVisibleRef.current = false;
         
-        // 檢查播放器是否仍然有效
-        if (ytRef.current && typeof ytRef.current.playVideo === 'function') {
-          try {
-            // 直接使用 YouTube API 播放
-            ytRef.current.playVideo();
-          } catch (error) {
-            console.warn("⚠️ [分頁切換] 播放失敗:", error.message);
-            // 回退到 player.play()
-            setTimeout(() => {
-              player?.play?.();
-            }, 500);
+        try {
+          // 若播放器不存在，強制重建並標記自動播放
+          if (videoId && !ytRef.current) {
+            try { player?.setAutoPlayAfterBridge?.(true); } catch {}
+            try { window.__AUTO_PLAY_TRIGGERED__ = true; } catch {}
+            try { setPlayerKey((prev) => prev + 1); } catch {}
           }
-        } else {
-          // 播放器無效，使用 player.play()
+
+          // 稍等播放器建立後再嘗試播放（若剛剛重建）
           setTimeout(() => {
-            player?.play?.();
+            try {
+              // ✅ 先檢查播放器是否有效
+              if (ytRef.current && typeof ytRef.current.getPlayerState === 'function') {
+                try {
+                  const s = ytRef.current.getPlayerState();
+                  if (s !== null && s !== undefined) {
+                    // 播放器有效，嘗試播放
+                    if (typeof ytRef.current.playVideo === 'function') {
+                      ytRef.current.playVideo();
+                      // 播放成功後才標記進度
+                      if (progressStateRef.current) {
+                        progressStateRef.current.isPlaying = true;
+                        let base = 0;
+                        try {
+                          base = ytRef.current.getCurrentTime() || 0;
+                        } catch {}
+                        progressStateRef.current.startTime = Date.now() - (base * 1000);
+                        progressStateRef.current.pausedAt = 0;
+                      }
+                    }
+                  }
+                } catch (stateError) {
+                  console.warn("🔧 播放器狀態檢查失敗:", stateError.message);
+                }
+              } else {
+                player?.play?.();
+              }
+            } catch (playError) {
+              console.warn("🔧 visibilitychange 自動播放失敗:", playError.message);
+            }
+          }, ytRef.current ? 0 : 300);
+          
+          // 500ms 後再校準一次狀態
+          setTimeout(() => {
+            try {
+              if (ytRef.current && typeof ytRef.current.getPlayerState === 'function') {
+                const s = ytRef.current.getPlayerState();
+                if (s === 1) {
+                  player?.setExternalPlaying?.(true);
+                } else if (s === 2 || s === 0) {
+                  player?.setExternalPlaying?.(false);
+                }
+              }
+            } catch {}
           }, 500);
+          
+          // 再開一個短期輪詢 3 秒內每 500ms 校準一次，避免競態
+          try {
+            let elapsed = 0;
+            const poll = setInterval(() => {
+              elapsed += 500;
+              try {
+                if (ytRef.current && typeof ytRef.current.getPlayerState === 'function') {
+                  const s = ytRef.current.getPlayerState();
+                  if (s === 1) {
+                    player?.setExternalPlaying?.(true);
+                  } else if (s === 2 || s === 0) {
+                    player?.setExternalPlaying?.(false);
+                  }
+                }
+              } catch {}
+              if (elapsed >= 3000) clearInterval(poll);
+            }, 500);
+          } catch {}
+        } finally {
+          // 清除自動播放旗標
+          player?.setAutoPlayAfterBridge?.(false);
+          window.__PERSISTENT_AUTO_PLAY__ = false;
         }
       }
     };
@@ -150,13 +215,15 @@ export default function GlobalYouTubeBridge() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []); // 移除 player 依賴，避免無限循環
 
-  // 監聽播放狀態變化事件
+  // 監聽播放狀態變化事件（僅在沒有 YouTube 播放器時才採用）
   useEffect(() => {
     const handlePlayerStateChange = (event) => {
       const { isPlaying } = event.detail || {};
       
-      // 只有在播放器引用有效時才同步狀態
-      if (typeof isPlaying === 'boolean' && ytRef.current) {
+      // 若已使用外部 YouTube 播放器，由 YouTube onStateChange 負責權威同步
+      if (ytRef.current) return;
+      
+      if (typeof isPlaying === 'boolean') {
         player?.setExternalPlaying?.(isPlaying);
       }
     };
@@ -220,7 +287,8 @@ export default function GlobalYouTubeBridge() {
               const duration = p.getDuration() || 0;
               if (duration > 0) {
                 progressStateRef.current.duration = duration;
-                // console.log("🔧 播放器 duration 設置:", duration);
+                // 同步 0% 起點 + 正確 duration，避免顯示滿格
+                player?.setExternalProgress?.(0, duration);
               }
             }
             
@@ -323,7 +391,7 @@ export default function GlobalYouTubeBridge() {
                           event: 'command',
                           func: 'setVolume',
                           args: [volume]
-                        }), '*');
+                        }), 'https://www.youtube.com');
                       } catch (postError) {
                         console.warn('⚠️ [onReady音量同步] postMessage 失敗:', postError.message);
                       }
@@ -350,11 +418,8 @@ export default function GlobalYouTubeBridge() {
       // console.log("🔧 設置外部播放器控制器");
           player?.setExternalControls?.({
         play: () => {
-          // 嘗試播放
-          
           // 如果播放器引用為 null，嘗試重新初始化
           if (!ytRef.current) {
-            console.warn("🔧 播放器引用為 null，嘗試重新初始化");
             // 使用防抖機制避免過度重新初始化
             if (reinitTimeoutRef.current) {
               clearTimeout(reinitTimeoutRef.current);
@@ -369,13 +434,17 @@ export default function GlobalYouTubeBridge() {
           // 使用 DOM 操作來播放，避免直接調用 YouTube API
           try {
             // 找到 YouTube iframe 並使用 postMessage 來控制
-            const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
+            const youtubeIframes = Array.from(document.querySelectorAll('iframe[src*="youtube.com"]'))
+              .filter((f) => f && f.isConnected && f.src && f.src.includes('youtube.com'));
             if (youtubeIframes.length > 0) {
               const iframe = youtubeIframes[youtubeIframes.length - 1]; // 使用最後一個 iframe
               if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-                // console.log("🔧 使用 postMessage 播放成功");
-                return;
+                try {
+                  iframe.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', 'https://www.youtube.com');
+                  return;
+                } catch (postError) {
+                  console.warn("🔧 postMessage 播放失敗:", postError.message);
+                }
               }
             }
             
@@ -383,7 +452,6 @@ export default function GlobalYouTubeBridge() {
             try {
               // 先檢查播放器是否真的有效
               const playerState = ytRef.current.getPlayerState();
-              // console.log("🔧 播放器狀態檢查:", { playerState, ytRef: !!ytRef.current });
               
               if (playerState !== null && playerState !== undefined) {
                 // 添加延遲，確保播放器完全準備好
@@ -391,17 +459,14 @@ export default function GlobalYouTubeBridge() {
                   try {
                     if (ytRef.current && typeof ytRef.current.playVideo === 'function') {
                       ytRef.current.playVideo();
-                      // console.log("🔧 YouTube 直接播放成功");
                     }
                   } catch (playError) {
                     console.error("🔧 playVideo 調用失敗:", playError);
                   }
                 }, 100);
-              } else {
-                console.warn("🔧 播放器狀態無效，跳過播放");
               }
             } catch (directError) {
-              console.warn("🔧 直接播放失敗:", directError.message);
+              console.warn("🔧 播放失敗:", directError.message);
             }
           } catch (error) {
             console.warn("🔧 播放失敗:", error.message);
@@ -427,13 +492,18 @@ export default function GlobalYouTubeBridge() {
           // 使用 DOM 操作來暫停，避免直接調用 YouTube API
           try {
             // 找到 YouTube iframe 並使用 postMessage 來控制
-            const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
+            const youtubeIframes = Array.from(document.querySelectorAll('iframe[src*="youtube.com"]'))
+              .filter((f) => f && f.isConnected && f.src && f.src.includes('youtube.com'));
             if (youtubeIframes.length > 0) {
               const iframe = youtubeIframes[youtubeIframes.length - 1]; // 使用最後一個 iframe
               if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-                // console.log("🔧 使用 postMessage 暫停成功");
-                return;
+                try {
+                  iframe.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', 'https://www.youtube.com');
+                  // console.log("🔧 使用 postMessage 暫停成功");
+                  return;
+                } catch (postError) {
+                  console.warn("🔧 postMessage 暫停失敗:", postError.message);
+                }
               }
             }
             
@@ -522,7 +592,7 @@ export default function GlobalYouTubeBridge() {
                   event: 'command',
                   func: 'seekTo',
                   args: [time, true] // true = 允許在未緩衝區域跳轉
-                }), '*');
+                }), 'https://www.youtube.com');
                 return;
               }
             }
@@ -572,6 +642,11 @@ export default function GlobalYouTubeBridge() {
         // 增加延遲時間，確保播放器完全準備好
         setTimeout(() => {
           try {
+            // ✅ 檢查播放器是否有效
+            if (!ytRef.current) {
+              window.__PERSISTENT_AUTO_PLAY__ = false;
+              return;
+            }
             
             // 檢查播放器狀態
             if (ytRef.current && typeof ytRef.current.getPlayerState === 'function') {
@@ -585,6 +660,9 @@ export default function GlobalYouTubeBridge() {
                 }
               } catch (stateError) {
                 console.warn("🔧 獲取播放器狀態失敗:", stateError.message);
+                // 如果獲取狀態失敗，播放器可能已損毀，直接返回
+                window.__PERSISTENT_AUTO_PLAY__ = false;
+                return;
               }
             }
             
@@ -603,15 +681,14 @@ export default function GlobalYouTubeBridge() {
             
             // 方法2: postMessage 作為備用
             if (!playSuccess) {
-              const youtubeIframes = document.querySelectorAll('iframe[src*="youtube.com"]');
-              if (youtubeIframes.length > 0) {
-                const iframe = youtubeIframes[youtubeIframes.length - 1];
-                if (iframe && iframe.contentWindow) {
-                  try {
-                    iframe.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-                  } catch (error) {
-                    console.warn("🔧 postMessage 播放失敗:", error.message);
-                  }
+              const iframes = Array.from(document.querySelectorAll('iframe[src*="youtube.com"]'))
+                .filter((f) => f && f.isConnected && f.contentWindow && f.src && f.src.includes('youtube.com'));
+              const iframe = iframes.length > 0 ? iframes[iframes.length - 1] : null;
+              if (iframe && iframe.contentWindow) {
+                try {
+                  iframe.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', 'https://www.youtube.com');
+                } catch (error) {
+                  console.warn("🔧 postMessage 播放失敗:", error.message);
                 }
               }
             }
@@ -621,6 +698,8 @@ export default function GlobalYouTubeBridge() {
             
           } catch (playError) {
             console.warn("🔧 自動播放失敗:", playError.message);
+            // 發生錯誤時清除標記
+            window.__PERSISTENT_AUTO_PLAY__ = false;
           }
         }, 500); // 增加延遲到 500ms，確保播放器完全準備好
       
@@ -668,20 +747,29 @@ export default function GlobalYouTubeBridge() {
                   event: 'command',
                   func: 'setVolume',
                   args: [volume]
-                }), '*');
+                }), 'https://www.youtube.com');
               }
             }
           }
         }
         
-        // 記錄播放開始時間（從暫停位置繼續）
-        if (progressStateRef.current) {
-          progressStateRef.current.isPlaying = true;
-          progressStateRef.current.startTime = Date.now() - (progressStateRef.current.pausedAt * 1000);
-        }
+        // 記錄播放開始時間（從暫停位置繼續），盡量用 API 校準
+        try {
+          const apiTime = ytRef.current && typeof ytRef.current.getCurrentTime === 'function' ? ytRef.current.getCurrentTime() : 0;
+          const apiDur = ytRef.current && typeof ytRef.current.getDuration === 'function' ? ytRef.current.getDuration() : 0;
+          if (progressStateRef.current) {
+            progressStateRef.current.isPlaying = true;
+            if (apiDur > 0 && progressStateRef.current.duration === 0) {
+              progressStateRef.current.duration = apiDur;
+              player?.setExternalProgress?.(apiTime || 0, apiDur);
+            }
+            const base = (typeof apiTime === 'number' && apiTime > 0) ? apiTime : progressStateRef.current.pausedAt;
+            progressStateRef.current.startTime = Date.now() - (base * 1000);
+            progressStateRef.current.pausedAt = 0;
+          }
+        } catch {}
       } else if (code === 2) {
         // 暫停
-        
         player?.setExternalPlaying?.(false);
         
         // 保存暫停位置
@@ -692,7 +780,6 @@ export default function GlobalYouTubeBridge() {
         }
       } else if (code === 0) {
         // 播放結束
-        
         player?.setExternalPlaying?.(false);
         
         // 重置進度狀態
@@ -700,24 +787,30 @@ export default function GlobalYouTubeBridge() {
           progressStateRef.current.isPlaying = false;
           progressStateRef.current.startTime = null;
           progressStateRef.current.pausedAt = 0;
+          // 清空 duration，避免進度條卡在滿格
+          progressStateRef.current.duration = 0;
         }
         
+        // 立即重置外部進度，清除滿格 UI
+        try { player?.setExternalProgress?.(0, 0); } catch {}
+
         // 播放結束，觸發下一首
         
-        // 直接觸發下一首，不管是否在後台
-        // YouTube 允許用戶已互動過的頁面在後台自動播放下一首
-        player?.next?.();
-        
-        // 如果在後台分頁，標記需要在前台時確保播放
+        // 如果在後台分頁，標記需要在前台時自動續播
         if (document.hidden) {
           shouldResumeOnVisibleRef.current = true;
+          window.__PERSISTENT_AUTO_PLAY__ = true;
+          player?.setAutoPlayAfterBridge?.(true);
         }
+
+        // 直接觸發下一首（循環/索引邏輯由 PlayerContext.next 處理）
+        player?.next?.();
       } else if (code === 3) {
         // 緩衝中
-        // console.log("🔧 YouTube 緩衝中");
       } else if (code === 5) {
         // 視頻已載入
-        // console.log("🔧 YouTube 視頻已載入");
+      } else if (code === -1) {
+        // 未開始
       }
     } catch (error) {
       console.error("🔧 GlobalYouTubeBridge onStateChange 失敗:", error.message);
@@ -816,6 +909,10 @@ export default function GlobalYouTubeBridge() {
     }
     
     
+    // 看門狗狀態
+    const lastApiTimeRef = { value: 0 };
+    const lastChangeTsRef = { value: Date.now() };
+
     const updateProgress = () => {
       try {
         const state = progressStateRef.current;
@@ -828,6 +925,33 @@ export default function GlobalYouTubeBridge() {
           }
         }
         
+        // 以 YouTube 狀態為準校準 isPlaying/pausedAt
+        try {
+          if (ytRef.current && typeof ytRef.current.getPlayerState === 'function') {
+            const ps = ytRef.current.getPlayerState();
+            if (ps === 1) {
+              // PLAYING
+              if (!state.isPlaying) {
+                // 由非播放狀態轉為播放，重置起點
+                const apiTime = ytRef.current && typeof ytRef.current.getCurrentTime === 'function' ? (ytRef.current.getCurrentTime() || 0) : 0;
+                state.startTime = Date.now() - (apiTime * 1000);
+                state.pausedAt = 0;
+              }
+              state.isPlaying = true;
+              player?.setExternalPlaying?.(true);
+            } else if (ps === 2 || ps === 0) {
+              // 只有在明確 PAUSED/ENDED 時才標記為非播放，避免啟動過程被誤判
+              if (state.isPlaying) {
+                const apiTime = ytRef.current && typeof ytRef.current.getCurrentTime === 'function' ? (ytRef.current.getCurrentTime() || 0) : 0;
+                state.pausedAt = apiTime;
+              }
+              state.isPlaying = false;
+              state.startTime = null;
+              player?.setExternalPlaying?.(false);
+            }
+          }
+        } catch {}
+
         // 計算當前時間
         let currentTime = 0;
         if (state.isPlaying && state.startTime && state.duration > 0) {
@@ -846,10 +970,41 @@ export default function GlobalYouTubeBridge() {
         try {
           if (ytRef.current && typeof ytRef.current.getCurrentTime === 'function') {
             const apiTime = ytRef.current.getCurrentTime();
-            if (apiTime > 0 && state.isPlaying) {
-              // API 返回有效時間，使用它來校準
-              state.startTime = Date.now() - (apiTime * 1000);
-              currentTime = apiTime;
+            if (state.isPlaying) {
+              if (apiTime > 0) {
+                state.startTime = Date.now() - (apiTime * 1000);
+                currentTime = apiTime;
+              }
+              // 看門狗：播放中但 2s 內未前進，嘗試恢復
+              if (apiTime !== lastApiTimeRef.value) {
+                lastApiTimeRef.value = apiTime;
+                lastChangeTsRef.value = Date.now();
+              } else if (Date.now() - lastChangeTsRef.value > 2000) {
+                // 嘗試恢復播放
+                try {
+                  if (ytRef.current && typeof ytRef.current.playVideo === 'function') {
+                    ytRef.current.playVideo();
+                  } else {
+                    player?.play?.();
+                  }
+                } catch {}
+                // 若仍無法前進，嘗試重新載入當前 videoId
+                try {
+                  const iframes = document.querySelectorAll('iframe[src*="youtube.com"]');
+                  if (iframes.length > 0) {
+                    const iframe = iframes[iframes.length - 1];
+                    if (iframe && iframe.contentWindow && videoId) {
+                      iframe.contentWindow.postMessage(JSON.stringify({
+                        event: 'command',
+                        func: 'loadVideoById',
+                        args: [videoId]
+                      }), '*');
+                    }
+                  }
+                } catch {}
+                // 重置時間戳，避免連續觸發
+                lastChangeTsRef.value = Date.now();
+              }
             }
           }
         } catch (e) {
@@ -858,42 +1013,8 @@ export default function GlobalYouTubeBridge() {
         
         // 只在有有效 duration 時才更新進度
         if (state.duration > 0) {
-          // 添加調試日誌（僅在數值異常時輸出）
-          if (currentTime === 0 && state.isPlaying) {
-          }
           player.setExternalProgress(currentTime, state.duration);
-          
-          // 檢查是否播放到最後（防止後台分頁時 onStateChange 不觸發）
-          // ✅ 加入防抖：避免進度條跳轉時誤觸發
-          const isNearEnd = currentTime >= state.duration - 0.5;
-          const shouldTriggerNext = state.isPlaying && isNearEnd && !isTransitioningRef.current;
-          
-          if (shouldTriggerNext) {
-            
-            // 設置轉換標記，防止重複觸發
-            isTransitioningRef.current = true;
-            
-            // 播放結束，觸發下一首
-            player?.setExternalPlaying?.(false);
-            
-            // 重置進度狀態
-            state.isPlaying = false;
-            state.startTime = null;
-            state.pausedAt = 0;
-            
-            // 如果在後台分頁，標記需要在前台時繼續播放
-            if (document.hidden) {
-              shouldResumeOnVisibleRef.current = true;
-            }
-            
-            // 觸發下一首
-            player?.next?.();
-            
-            // 1秒後重置轉換標記
-            setTimeout(() => {
-              isTransitioningRef.current = false;
-            }, 1000);
-          }
+          // 去除近結束輪詢觸發下一首，避免與 onStateChange(ENDED) 重複
         }
       } catch (error) {
         console.warn("🔧 進度更新失敗:", error);
@@ -925,8 +1046,10 @@ export default function GlobalYouTubeBridge() {
     }
   }, [player?.setExternalProgress]);
 
-  // 當 videoId 變化時，重置自動播放觸發標記
+  // 當 videoId 變化時，重置自動播放觸發標記 + 就緒超時保護
   useEffect(() => {
+    if (!videoId) return; // videoId 為 null 時不做任何事
+    
     autoPlayTriggeredRef.current = false;
     // 不要重置 window.__AUTO_PLAY_TRIGGERED__，讓它保持到播放器初始化
         // console.log("🔧 重置自動播放觸發標記");
@@ -936,27 +1059,7 @@ export default function GlobalYouTubeBridge() {
       player.setSrc(player.originUrl);
     }
     
-    // 如果播放器已經存在，嘗試快速切換視頻
-    if (ytRef.current && typeof ytRef.current.loadVideoById === 'function') {
-      // console.log("🔧 嘗試快速切換視頻:", videoId);
-      try {
-        ytRef.current.loadVideoById(videoId);
-        // 設置自動播放
-        if (window.__AUTO_PLAY_TRIGGERED__ || window.__PERSISTENT_AUTO_PLAY__) {
-          setTimeout(() => {
-            if (ytRef.current && typeof ytRef.current.playVideo === 'function') {
-              ytRef.current.playVideo();
-              // console.log("🔧 快速切換後自動播放");
-            }
-          }, 500);
-        }
-        return; // 如果快速切換成功，不需要重新創建播放器
-      } catch (error) {
-        // console.warn("🔧 快速切換失敗，重新創建播放器:", error.message);
-      }
-    }
-    
-    // 檢查是否需要強制重新創建播放器
+    // 檢查是否需要強制重新創建播放器（優先處理）
     if (window.__FORCE_RECREATE_PLAYER__) {
       window.__FORCE_RECREATE_PLAYER__ = false;
       
@@ -965,9 +1068,43 @@ export default function GlobalYouTubeBridge() {
       
       // 強制重新創建播放器
       setPlayerKey(prev => prev + 1);
+      return; // 提前返回，避免執行快速切換邏輯
+    }
+    
+    // 如果播放器已經存在，嘗試快速切換視頻
+    if (ytRef.current && typeof ytRef.current.loadVideoById === 'function') {
+      try {
+        // ✅ 先驗證播放器是否有效
+        let playerState = null;
+        try {
+          playerState = ytRef.current.getPlayerState();
+        } catch (stateError) {
+          console.warn("🔧 無法獲取播放器狀態，跳過快速切換");
+        }
+        
+        if (playerState === null || playerState === undefined) {
+          console.warn("🔧 播放器狀態無效，跳過快速切換");
+        } else {
+          ytRef.current.loadVideoById(videoId);
+          // 設置自動播放
+          if (window.__AUTO_PLAY_TRIGGERED__ || window.__PERSISTENT_AUTO_PLAY__) {
+            setTimeout(() => {
+              if (ytRef.current && typeof ytRef.current.playVideo === 'function') {
+                ytRef.current.playVideo();
+              }
+            }, 500);
+          }
+          return; // 如果快速切換成功，不需要重新創建播放器
+        }
+      } catch (error) {
+        console.warn("🔧 快速切換失敗，重新創建播放器:", error.message);
+      }
     } else {
-      // 保存當前的播放器引用，避免清理新播放器
+      // 僅在已有播放器存在時重建，避免第一次 videoId 變化就重建
       const oldPlayerRef = ytRef.current;
+      if (!oldPlayerRef) {
+        return;
+      }
       
       // 延遲清理舊播放器，避免在初始化過程中清理
       const cleanupTimer = setTimeout(() => {
@@ -1000,26 +1137,15 @@ export default function GlobalYouTubeBridge() {
       // 強制重新創建播放器
       setPlayerKey(prev => prev + 1);
       
+      // 移除就緒超時邏輯，避免剛播放就被重建毀掉播放器
+
       return () => {
         clearTimeout(cleanupTimer);
       };
     }
   }, [videoId]);
 
-  // 監聽 originUrl 變化，確保播放器能正確初始化
-  useEffect(() => {
-    if (player?.originUrl && videoId) {
-      // console.log("🔧 GlobalYouTubeBridge 檢測到 originUrl 變化:", {
-      //   originUrl: player.originUrl,
-      //   videoId,
-      //   hasPlayer: !!player,
-      //   hasSetExternalControls: typeof player.setExternalControls === 'function'
-      // });
-      
-      // 重置播放器狀態，確保能正確初始化
-      setPlayerKey(prev => prev + 1);
-    }
-  }, [videoId]); // 移除 player 依賴，避免無限循環
+  // 移除因 originUrl 變動而強制重建播放器的邏輯，避免剛播放就被重建中斷
 
   // 組件卸載時的清理
   useEffect(() => {

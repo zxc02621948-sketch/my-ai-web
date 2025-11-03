@@ -36,32 +36,22 @@ export default function PlaylistModal({
   };
 
   const addItem = async () => {
-    console.log("🔧 PlaylistModal addItem 被調用");
     const raw = String(inputUrl || "").trim();
-    console.log("🔧 輸入的 URL:", raw);
     if (!raw) {
-      console.log("🔧 URL 為空，返回");
       return;
     }
     if (!isYouTubeUrl(raw)) {
-      console.log("🔧 不是 YouTube URL，返回");
       return;
     }
     if (!canAddMore) {
-      console.log("🔧 已達上限，返回");
       return;
     }
-    console.log("🔧 開始添加歌曲...");
     setAdding(true);
     const title = (await fetchTitle(raw)) || raw;
-    console.log("🔧 獲取到的標題:", title);
     const next = [...(playlist || []), { url: raw, title }];
-    console.log("🔧 新的播放清單:", next);
-    console.log("🔧 調用 onChangePlaylist...");
     onChangePlaylist?.(next);
     setInputUrl("");
     setAdding(false);
-    console.log("🔧 addItem 完成");
   };
 
   const removeItem = (idx) => {
