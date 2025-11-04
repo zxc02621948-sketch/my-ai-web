@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
-import { X, Trash2, Clipboard } from "lucide-react";
+import { useRef, useState, useEffect } from "react";
+import { X, Trash2, Clipboard, Plus } from "lucide-react";
+import axios from "axios";
 import { GENRE_MAP } from "@/constants/musicCategories";
 
 export default function MusicInfoBox({
@@ -14,6 +15,12 @@ export default function MusicInfoBox({
   const [copiedField, setCopiedField] = useState(null);
   const [copyTip, setCopyTip] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  
+  // 播放清單相關狀態
+  const [playlist, setPlaylist] = useState([]);
+  const [playlistMaxSize, setPlaylistMaxSize] = useState(5);
+  const [isInPlaylist, setIsInPlaylist] = useState(false);
+  const [addingToPlaylist, setAddingToPlaylist] = useState(false);
 
   // —— 1 秒冷卻（前端）——
   const [cooling, setCooling] = useState({});
@@ -62,6 +69,86 @@ export default function MusicInfoBox({
 
   // 檢查是否可以刪除（擁有者或管理員）
   const canDeleteMusic = (isOwner || isAdmin) && onDelete;
+
+  // 獲取播放清單信息
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const fetchPlaylistInfo = async () => {
+      try {
+        const response = await axios.get("/api/user-info", {
+          params: { id: currentUser._id },
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        
+        if (response.data) {
+          const userPlaylist = response.data.playlist || [];
+          const maxSize = response.data.playlistMaxSize || 5;
+          
+          setPlaylist(userPlaylist);
+          setPlaylistMaxSize(maxSize);
+          
+          // 檢查音樂是否已在播放清單中
+          const musicUrl = music?.musicUrl;
+          if (musicUrl) {
+            const exists = userPlaylist.some(item => item.url === musicUrl);
+            setIsInPlaylist(exists);
+          }
+        }
+      } catch (error) {
+        console.error("獲取播放清單信息失敗:", error);
+      }
+    };
+    
+    fetchPlaylistInfo();
+  }, [currentUser, music?.musicUrl]);
+
+  // 加入播放清單
+  const handleAddToPlaylist = async () => {
+    if (!currentUser || !music?.musicUrl) {
+      alert("無法添加：缺少必要信息");
+      return;
+    }
+
+    // 檢查是否已達上限
+    if (playlist.length >= playlistMaxSize) {
+      alert(`播放清單已達上限（${playlistMaxSize} 首），請前往積分商店擴充`);
+      return;
+    }
+
+    // 檢查是否已在播放清單中
+    if (isInPlaylist) {
+      alert("此音樂已在播放清單中");
+      return;
+    }
+
+    setAddingToPlaylist(true);
+    try {
+      const newItem = {
+        url: music.musicUrl,
+        title: music.title || "未命名音樂",
+      };
+      
+      const newPlaylist = [...playlist, newItem];
+      
+      const response = await axios.post("/api/user/save-playlist", {
+        playlist: newPlaylist,
+      });
+
+      if (response.data.success) {
+        setPlaylist(newPlaylist);
+        setIsInPlaylist(true);
+        alert("✅ 已加入播放清單！");
+      } else {
+        alert(response.data.message || "加入播放清單失敗");
+      }
+    } catch (error) {
+      console.error("加入播放清單失敗:", error);
+      alert(error.response?.data?.message || "加入播放清單失敗，請重試");
+    } finally {
+      setAddingToPlaylist(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -193,6 +280,41 @@ export default function MusicInfoBox({
               </span>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* 加入播放清單按鈕 */}
+      {currentUser && music?.musicUrl && (
+        <div className="border-t border-white/10 pt-4">
+          {isInPlaylist ? (
+            <div className="px-4 py-2 bg-green-600/20 border border-green-600/30 rounded-lg text-center">
+              <span className="text-sm text-green-300">✅ 已在播放清單中</span>
+            </div>
+          ) : (
+            <button
+              onClick={handleAddToPlaylist}
+              disabled={addingToPlaylist || playlist.length >= playlistMaxSize}
+              className={`w-full px-4 py-2 rounded-lg font-medium transition-all ${
+                playlist.length >= playlistMaxSize
+                  ? "bg-gray-600/50 text-gray-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700 text-white"
+              }`}
+              title={
+                playlist.length >= playlistMaxSize
+                  ? `播放清單已達上限（${playlistMaxSize} 首）`
+                  : "加入我的播放清單"
+              }
+            >
+              {addingToPlaylist ? (
+                "加入中..."
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  <Plus size={18} />
+                  加入播放清單 ({playlist.length} / {playlistMaxSize})
+                </span>
+              )}
+            </button>
+          )}
         </div>
       )}
 

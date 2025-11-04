@@ -188,25 +188,35 @@ const VideosPage = () => {
         const pinnedPlayer = e.detail.pinnedPlayer;
         const playlist = pinnedPlayer?.playlist || [];
         
+        // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
+        player?.setPlayerOwner?.({ 
+          userId: pinnedPlayer.userId, 
+          username: pinnedPlayer.username 
+        });
+        
+        // ✅ 設置播放清單（即使是空的）
+        player?.setPlaylist?.(playlist);
+        
         if (playlist.length > 0) {
           const currentIndex = pinnedPlayer.currentIndex || 0;
           const currentTrack = playlist[currentIndex];
           
-          player?.setPlaylist?.(playlist);
           player?.setActiveIndex?.(currentIndex);
-          player?.setPlayerOwner?.({ 
-            userId: pinnedPlayer.userId, 
-            username: pinnedPlayer.username 
-          });
           
           if (currentTrack) {
             player?.setSrc?.(currentTrack.url);
             player?.setOriginUrl?.(currentTrack.url);
             player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
           }
-          
-          player?.setMiniPlayerEnabled?.(true);
+        } else {
+          // ✅ 播放清單為空時，清空當前曲目
+          player?.setSrc?.('');
+          player?.setOriginUrl?.('');
+          player?.setTrackTitle?.('');
+          player?.setActiveIndex?.(0);
         }
+        
+        player?.setMiniPlayerEnabled?.(true);
         
         player?.setShareMode?.("global");
       } else {
@@ -235,25 +245,36 @@ const VideosPage = () => {
     if (hasPinnedPlayer) {
       // 恢復釘選播放器
       const playlist = pinnedPlayer.playlist || [];
+      
+      // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
+      player?.setPlayerOwner?.({ 
+        userId: pinnedPlayer.userId, 
+        username: pinnedPlayer.username 
+      });
+      
+      // ✅ 設置播放清單（即使是空的）
+      player?.setPlaylist?.(playlist);
+      
       if (playlist.length > 0) {
         const currentIndex = pinnedPlayer.currentIndex || 0;
         const currentTrack = playlist[currentIndex];
         
-        player?.setPlaylist?.(playlist);
         player?.setActiveIndex?.(currentIndex);
-        player?.setPlayerOwner?.({ 
-          userId: pinnedPlayer.userId, 
-          username: pinnedPlayer.username 
-        });
         
         if (currentTrack) {
           player?.setSrc?.(currentTrack.url);
           player?.setOriginUrl?.(currentTrack.url);
           player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
         }
-        
-        player?.setMiniPlayerEnabled?.(true);
+      } else {
+        // ✅ 播放清單為空時，清空當前曲目
+        player?.setSrc?.('');
+        player?.setOriginUrl?.('');
+        player?.setTrackTitle?.('');
+        player?.setActiveIndex?.(0);
       }
+      
+      player?.setMiniPlayerEnabled?.(true);
     } else {
       // 沒有釘選數據，設定為全局模式但不顯示播放器
       player?.setShareMode?.("global");

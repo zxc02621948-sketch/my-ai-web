@@ -14,8 +14,6 @@ import ClientToaster from "@/components/common/ClientToaster";
 import { PlayerProvider } from "@/components/context/PlayerContext";
 import ConditionalPlayer from "@/components/common/ConditionalPlayer";
 import AdFooterPlaceholder from "@/components/common/AdFooterPlaceholder";
-import YouTubeErrorToast from "@/components/player/YouTubeErrorToast";
-import GlobalYouTubeBridgeWrapper from "@/components/player/GlobalYouTubeBridgeWrapper";
 import GlobalNotificationManager from "@/components/common/GlobalNotificationManager";
 // 移除全域 MiniPlayer / YouTubeBridge 與字型變數，恢復到較乾淨的版型
 
@@ -85,7 +83,6 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="zh-TW">
       <head>
-        <script src="https://www.youtube.com/iframe_api" async></script>
       </head>
 
       <body className={`antialiased min-h-screen bg-zinc-950 text-white`}>
@@ -107,11 +104,7 @@ export default async function RootLayout({ children }) {
 
               <FeedbackButton />
               <ClientToaster />
-              <YouTubeErrorToast />
               <AdFooterPlaceholder />
-
-              {/* 全域 YouTube 橋接（在所有頁面持續運行） */}
-              <GlobalYouTubeBridgeWrapper />
 
               {/* 全域通知管理器 */}
               <GlobalNotificationManager />

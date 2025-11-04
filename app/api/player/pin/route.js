@@ -16,7 +16,8 @@ export async function POST(request) {
 
     const { targetUserId, targetUsername, playlist } = await request.json();
 
-    if (!targetUserId || !playlist || playlist.length === 0) {
+    // ✅ 允許播放清單為空（用戶可能想釘選空播放清單，等待用戶添加音樂）
+    if (!targetUserId || !Array.isArray(playlist)) {
       return NextResponse.json({ error: '參數錯誤' }, { status: 400 });
     }
 

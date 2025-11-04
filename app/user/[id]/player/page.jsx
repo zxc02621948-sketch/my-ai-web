@@ -14,8 +14,6 @@ import CatHeadphoneCanvas from "@/components/player/CatHeadphoneCanvas";
 import CassettePlayerCanvas from "@/components/player/CassettePlayerCanvas";
 import { notify } from "@/components/common/GlobalNotificationManager";
 
-// GlobalYouTubeBridge 已移至全域 layout.js，不需要在此重複渲染
-
 export default function UserPlayerPage() {
   const { id } = useParams();
   const player = usePlayer();
@@ -351,61 +349,78 @@ export default function UserPlayerPage() {
           </div>
         ) : (
           <div>
-            <div className="text-xs text-gray-400 mb-4">
-              調試信息: 播放清單長度: {playlist.length}, 用戶ID: {id}
-            </div>
-            
           <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white flex flex-col items-center justify-center p-8">
             <div className="max-w-lg mx-auto text-center">
               
               {/* 播放清單設定入口 */}
               <div className="mb-8 w-full max-w-lg mx-auto">
-                <label className="block text-sm text-gray-300 mb-2">播放清單</label>
-                <div className="flex items-center justify-between mb-2">
-                    <div className="text-xs text-gray-400">目前曲目：{playlist.length} 首</div>
-                    {playlist.length > 0 && (
-                        <button
-                          onClick={() => {
-                          console.log("🔧 點擊編輯播放清單按鈕");
-                          setModalOpen(true);
-                        }}
-                        className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 border-2 border-blue-500 text-white font-semibold transition-colors shadow-lg"
-                      >
-                        ✏️ 編輯清單
-                      </button>
-                    )}
-                    </div>
-                
-                {playlist.length > 0 ? (
-                  <div className="text-xs text-gray-400 mb-2">
-                    目前播放：{playlist[activeIndex]?.title || "未知曲目"}
-                </div>
-              ) : (
-                  <div className="text-xs text-yellow-400 mb-2">
-                    ⚠️ 請先建立播放清單才能播放
-                </div>
-              )}
-
-                <p className="text-xs text-gray-400 mt-2 break-all">目前來源：{player.originUrl || "未設定"}</p>
-                
-                {/* 備用建立播放清單按鈕 */}
-                {playlist.length === 0 && (
-                  <div className="mt-6">
+                <div className="flex items-start justify-center mb-4">
+                  <div className="w-full flex flex-col items-center">
+                    {/* 編輯播放清單按鈕 */}
                     <button
                       onClick={() => {
-                        console.log("🔧 點擊備用建立播放清單按鈕");
-                        console.log("🔧 當前 modalOpen 狀態:", modalOpen);
+                        console.log("🔧 點擊編輯播放清單按鈕");
                         setModalOpen(true);
-                        console.log("🔧 設置 modalOpen 為 true");
                       }}
-                      className="w-full px-6 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold text-lg transition-all duration-300 shadow-xl border-2 border-blue-400"
-                      style={{ display: 'block', visibility: 'visible' }}
+                      className="mb-3 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm font-medium transition-all transform hover:scale-105 shadow-lg border border-blue-400/30 flex items-center gap-2"
+                      title="編輯播放清單"
                     >
-                      🎵 立即建立播放清單 🎵
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      <span>編輯播放清單</span>
                     </button>
-                    <p className="text-xs text-gray-500 mt-2">點擊上方按鈕開始設定你的音樂播放清單</p>
+                    
+                    {playlist.length > 0 ? (
+                      <div className="space-y-1 flex flex-col items-center">
+                        <div className="text-xs text-gray-400">
+                          目前曲目：<span className="text-white font-medium">{playlist.length}</span> 首
+                        </div>
+                        <div className="text-xs text-gray-400 flex items-center gap-2">
+                          <span>目前播放：<span className="text-white font-medium">{playlist[activeIndex]?.title || "未知曲目"}</span></span>
+                          {player.originUrl && (
+                            <span className="px-2 py-0.5 bg-gray-700/50 rounded text-gray-300 text-[10px]">
+                              {(() => {
+                                // 簡化來源顯示
+                                const url = player.originUrl || "";
+                                // 判斷是否為音樂區的公開音樂（R2 URL 或包含音樂 ID）
+                                if (url.includes("imagedelivery.net") || url.includes("pub-") || url.includes("/api/music/")) {
+                                  return "音樂區";
+                                }
+                                // 判斷是否為本地上傳的 MP3（包含 /music/ 路徑或 .mp3 後綴）
+                                if (url.includes("/music/") && !url.includes("imagedelivery.net")) {
+                                  return "MP3";
+                                }
+                                // 如果是 .mp3 後綴但不在 /music/ 路徑下，也可能是 MP3
+                                if (url.endsWith(".mp3") || url.includes(".mp3?")) {
+                                  return "MP3";
+                                }
+                                // 其他情況顯示簡化的狀態
+                                return url ? "已載入" : "未設定";
+                              })()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="text-xs text-yellow-400">
+                          ⚠️ 請先建立播放清單才能播放
+                        </div>
+                        <button
+                          onClick={() => {
+                            console.log("🔧 點擊備用建立播放清單按鈕");
+                            setModalOpen(true);
+                          }}
+                          className="w-full px-6 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold text-lg transition-all duration-300 shadow-xl border-2 border-blue-400"
+                        >
+                          🎵 立即建立播放清單 🎵
+                        </button>
+                        <p className="text-xs text-gray-500 text-center">點擊上方按鈕開始設定你的音樂播放清單</p>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               {/* 主視覺：根據造型切換顯示 */}
@@ -762,10 +777,8 @@ export default function UserPlayerPage() {
               }}
             />
           </div>
-        )}
+                  )}
 
-        {/* 全域 YouTube 橋接 */}
-        {/* GlobalYouTubeBridge 已移至全域 layout.js */}
       </div>
     </main>
   );

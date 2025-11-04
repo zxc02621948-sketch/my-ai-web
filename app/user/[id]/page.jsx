@@ -439,40 +439,46 @@ export default function UserProfilePage() {
       // 播放清單應該維持釘選的播放清單，不應該重新載入
     }
     // ✅ 如果沒有釘選 OR 釘選的就是當前頁面 → 載入當前頁面的播放清單
-    else if (hasPlayer && userPlaylist.length > 0) {
-      // ✅ 更新 playerOwner（只在沒有釘選或釘選自己時）
+    else if (hasPlayer) {
+      // ✅ 無論是否有播放清單，都設置 playerOwner（用於顯示釘選按鈕）
       if (picked?.username) {
         player?.setPlayerOwner?.({ userId: id, username: picked.username });
       }
-      // 有播放清單：載入第一首
-      const firstItem = userPlaylist[0];
-      const firstUrl = String(firstItem.url || "");
-      const firstTitle = String(firstItem.title || firstUrl);
       
-      if (firstUrl) {
-        // ✅ 必須同時設置 src 和 originUrl 確保 YouTube 播放器正確渲染
-        player?.setSrc?.(firstUrl);
-        player?.setOriginUrl?.(firstUrl);
-        player?.setTrackTitle?.(firstTitle);
-        player?.setPlaylist?.(userPlaylist);
-        player?.setActiveIndex?.(0);
-      }
-    } else if (!hasPinnedPlayer && hasPlayer) {
-      // 沒有播放清單，檢查是否有單首預設音樂（只在沒有釘選時載入）
-      const url = String(u.defaultMusicUrl || "");
-      if (url) {
-        player?.setSrc?.(url);
-        player?.setOriginUrl?.(url);
-        try {
-          const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
-          const t = o?.data?.title;
-          player?.setTrackTitle?.(t || url);
-          player?.setPlaylist?.([{ url, title: t || url }]);
+      if (userPlaylist.length > 0) {
+        // 有播放清單：載入第一首
+        const firstItem = userPlaylist[0];
+        const firstUrl = String(firstItem.url || "");
+        const firstTitle = String(firstItem.title || firstUrl);
+        
+        if (firstUrl) {
+          // ✅ 必須同時設置 src 和 originUrl 確保 YouTube 播放器正確渲染
+          player?.setSrc?.(firstUrl);
+          player?.setOriginUrl?.(firstUrl);
+          player?.setTrackTitle?.(firstTitle);
+          player?.setPlaylist?.(userPlaylist);
           player?.setActiveIndex?.(0);
-        } catch {
-          player?.setTrackTitle?.(url);
-          player?.setPlaylist?.([{ url, title: url }]);
-          player?.setActiveIndex?.(0);
+        }
+      } else {
+        // 沒有播放清單，檢查是否有單首預設音樂（只在沒有釘選時載入）
+        const url = String(u.defaultMusicUrl || "");
+        if (url) {
+          player?.setSrc?.(url);
+          player?.setOriginUrl?.(url);
+          try {
+            const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
+            const t = o?.data?.title;
+            player?.setTrackTitle?.(t || url);
+            player?.setPlaylist?.([{ url, title: t || url }]);
+            player?.setActiveIndex?.(0);
+          } catch {
+            player?.setTrackTitle?.(url);
+            player?.setPlaylist?.([{ url, title: url }]);
+            player?.setActiveIndex?.(0);
+          }
+        } else {
+          // ✅ 即使沒有播放清單和預設音樂，也設置空的播放清單，這樣釘選按鈕才能顯示
+          player?.setPlaylist?.([]);
         }
       }
     }
@@ -529,39 +535,45 @@ export default function UserProfilePage() {
                   // ✅ 什麼都不做，保持釘選的播放器狀態
                 }
                 // ✅ 如果沒有釘選 OR 釘選的就是當前頁面 → 載入當前頁面的播放清單
-                else if (hasPlayer2 && userPlaylist.length > 0) {
-                  // ✅ 更新 playerOwner（只在沒有釘選或釘選自己時）
+                else if (hasPlayer2) {
+                  // ✅ 無論是否有播放清單，都設置 playerOwner（用於顯示釘選按鈕）
                   if (backup?.username) {
                     player?.setPlayerOwner?.({ userId: id, username: backup.username });
                   }
-                  // 有播放清單：載入第一首
-                  const firstItem = userPlaylist[0];
-                  const firstUrl = String(firstItem.url || "");
-                  const firstTitle = String(firstItem.title || firstUrl);
                   
-                  if (firstUrl) {
-                    player?.setSrc?.(firstUrl);
-                    player?.setOriginUrl?.(firstUrl);
-                    player?.setTrackTitle?.(firstTitle);
-                    player?.setPlaylist?.(userPlaylist);
-                    player?.setActiveIndex?.(0);
-                  }
-                } else if (!hasPinnedPlayer && hasPlayer2) {
-                  // 沒有播放清單，檢查是否有單首預設音樂（只在沒有釘選時載入）
-                  const url = String(backup.defaultMusicUrl || "");
-                  if (url) {
-                    player?.setSrc?.(url);
-                    player?.setOriginUrl?.(url);
-                    try {
-                      const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
-                      const t = o?.data?.title;
-                      player?.setTrackTitle?.(t || url);
-                      player?.setPlaylist?.([{ url, title: t || url }]);
+                  if (userPlaylist.length > 0) {
+                    // 有播放清單：載入第一首
+                    const firstItem = userPlaylist[0];
+                    const firstUrl = String(firstItem.url || "");
+                    const firstTitle = String(firstItem.title || firstUrl);
+                    
+                    if (firstUrl) {
+                      player?.setSrc?.(firstUrl);
+                      player?.setOriginUrl?.(firstUrl);
+                      player?.setTrackTitle?.(firstTitle);
+                      player?.setPlaylist?.(userPlaylist);
                       player?.setActiveIndex?.(0);
-                    } catch {
-                      player?.setTrackTitle?.(url);
-                      player?.setPlaylist?.([{ url, title: url }]);
-                      player?.setActiveIndex?.(0);
+                    }
+                  } else {
+                    // 沒有播放清單，檢查是否有單首預設音樂（只在沒有釘選時載入）
+                    const url = String(backup.defaultMusicUrl || "");
+                    if (url) {
+                      player?.setSrc?.(url);
+                      player?.setOriginUrl?.(url);
+                      try {
+                        const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
+                        const t = o?.data?.title;
+                        player?.setTrackTitle?.(t || url);
+                        player?.setPlaylist?.([{ url, title: t || url }]);
+                        player?.setActiveIndex?.(0);
+                      } catch {
+                        player?.setTrackTitle?.(url);
+                        player?.setPlaylist?.([{ url, title: url }]);
+                        player?.setActiveIndex?.(0);
+                      }
+                    } else {
+                      // ✅ 即使沒有播放清單和預設音樂，也設置空的播放清單，這樣釘選按鈕才能顯示
+                      player?.setPlaylist?.([]);
                     }
                   }
                 }

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { X, Heart } from "lucide-react";
 import DesktopMusicRightPane from "./DesktopMusicRightPane";
+import MobileMusicSheet from "./MobileMusicSheet";
 
 const MusicModal = ({
   music,
@@ -28,6 +29,8 @@ const MusicModal = ({
   const totalPlayedDurationRef = useRef(0); // 累計實際播放時長（處理跳播）
   const lastPlayTimeRef = useRef(0); // 上次檢查時的 currentTime（用於檢測跳播）
   const isPlayingRef = useRef(false); // 當前是否在播放
+  const [isMobile, setIsMobile] = useState(false);
+  const audioSrcRef = useRef(null); // 保存當前播放的音頻源，用於組件切換時保持播放
 
   // ✅ 優化：封裝 dataset 操作，減少重複代碼
   const savePlayProgress = React.useCallback((totalPlayed, lastTime) => {
@@ -108,6 +111,32 @@ const MusicModal = ({
     },
     [music?._id],
   );
+
+  // 🔧 修復：檢測是否為行動裝置，在視窗大小改變時切換佈局
+  useEffect(() => {
+    const checkMobile = () => {
+      const newIsMobile = window.innerWidth <= 768;
+      
+      // 使用函數式更新，避免依賴 isMobile
+      setIsMobile((prevIsMobile) => {
+        // 如果切換了佈局（手機 ↔ 桌面），保存當前播放狀態
+        if (newIsMobile !== prevIsMobile && audioRef.current) {
+          const audio = audioRef.current;
+          audioSrcRef.current = {
+            currentTime: audio.currentTime,
+            paused: audio.paused,
+            volume: audio.volume,
+          };
+        }
+        return newIsMobile;
+      });
+    };
+    
+    // 初始化
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []); // 移除 isMobile 依賴，使用函數式更新
 
   useEffect(() => {
     setIsLikedLocal(isLiked);
@@ -311,9 +340,316 @@ const MusicModal = ({
       ref={modalRef}
       onClick={handleBackdropClick}
       className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[9999] flex items-center justify-center py-8 px-4 overflow-y-auto"
+      style={{
+        paddingTop: 'max(env(safe-area-inset-top), 80px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 80px)',
+      }}
     >
-      <div className="relative w-full max-w-5xl max-h-[75vh] bg-[#1a1a1a] rounded-lg shadow-2xl overflow-hidden flex flex-col">
-        <div className="flex flex-col md:flex-row flex-1 overflow-y-auto">
+      <div 
+        className="relative w-full max-w-5xl bg-[#1a1a1a] rounded-lg shadow-2xl overflow-hidden flex flex-col"
+        style={{
+          maxHeight: 'calc(100vh - 160px)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 手機版：使用 MobileMusicSheet - 使用條件渲染而非 CSS 隱藏 */}
+        {isMobile ? (
+          <div className="overflow-y-auto snap-y snap-mandatory" style={{ 
+            height: 'calc(100vh - 160px)',
+            maxHeight: 'calc(100vh - 160px)',
+            WebkitOverflowScrolling: 'touch'
+          }}>
+            <MobileMusicSheet
+            music={music}
+            audioRef={audioRef}
+            isMobile={isMobile}
+            currentUser={currentUser}
+            displayMode={displayMode}
+            isFollowing={isFollowing}
+            onFollowToggle={onFollowToggle}
+            onUserClick={onUserClick}
+            onClose={onClose}
+            onDelete={onDelete}
+            canEdit={canEdit}
+            onEdit={onEdit}
+            isLiked={isLiked}
+            onToggleLike={onToggleLike}
+            likeCount={likeCount}
+            isLikedLocal={isLikedLocal}
+            setIsLikedLocal={setIsLikedLocal}
+            setLikeCount={setLikeCount}
+            handleLikeClick={handleLikeClick}
+            onAudioError={(e) => {
+              console.error("音樂載入錯誤:", e);
+            }}
+            onAudioCanPlay={() => {
+              // 設定音量
+              if (audioRef.current) {
+                try {
+                  const saved = localStorage.getItem("playerVolume");
+                  if (saved) {
+                    const vol = parseFloat(saved);
+                    if (!isNaN(vol) && vol >= 0 && vol <= 1) {
+                      audioRef.current.volume = vol;
+                    }
+                  }
+                } catch (e) {
+                  console.warn("設定音量失敗:", e);
+                }
+
+                // 🔧 修復：如果組件切換時有保存的播放狀態，先恢復它
+                if (audioSrcRef.current) {
+                  const savedState = audioSrcRef.current;
+                  audioRef.current.currentTime = savedState.currentTime;
+                  audioRef.current.volume = savedState.volume || audioRef.current.volume;
+                  
+                  // 如果之前是播放狀態，繼續播放
+                  if (!savedState.paused) {
+                    audioRef.current.play().then(() => {
+                      isPlayingRef.current = true;
+                    }).catch((err) => {
+                      if (err.name !== "NotAllowedError") {
+                        console.warn("恢復播放失敗:", err);
+                      }
+                    });
+                  }
+                  
+                  // 清除保存的狀態
+                  audioSrcRef.current = null;
+                  return; // 已經恢復了狀態，不再執行自動播放
+                }
+
+                // ✅ 修復：檢查是否需要自動播放
+                // 如果瀏覽器上的 autoPlay 沒生效，嘗試手動觸發（手機和桌面都適用）
+                if (audioRef.current.paused && !audioRef.current.dataset.autoPlayAttempted) {
+                  audioRef.current.dataset.autoPlayAttempted = "true";
+                  // 由於用戶已經點擊打開了音樂彈窗，這算是用戶交互，應該可以自動播放
+                  audioRef.current.play().then(() => {
+                    // 播放成功，確保狀態正確
+                    isPlayingRef.current = true;
+                  }).catch((err) => {
+                    // 自動播放可能被拒絕（需要用戶交互），不是錯誤
+                    if (err.name !== "NotAllowedError") {
+                      console.warn("自動播放失敗:", err);
+                    }
+                  });
+                }
+              }
+            }}
+            onAudioVolumeChange={(e) => {
+              // 同步音量改變並保存到 localStorage
+              if (audioRef.current) {
+                try {
+                  localStorage.setItem(
+                    "playerVolume",
+                    audioRef.current.volume.toString(),
+                  );
+                } catch (e) {
+                  console.warn("保存音量失敗:", e);
+                }
+              }
+            }}
+            onAudioPlay={() => {
+              // 記錄播放開始時的狀態（用於計數）
+              if (audioRef.current) {
+                const audio = audioRef.current;
+                const startTime = audio.currentTime;
+                const duration = audio.duration;
+
+                // ✅ 關鍵：判斷是否為第一次播放
+                // 如果 dataset.startTime 不存在或為空，就是第一次播放
+                const hasStartTime =
+                  audio.dataset.startTime && audio.dataset.startTime !== "";
+
+                const firstPlay = !hasStartTime;
+
+                if (firstPlay) {
+                  // 第一次播放，重置累計播放時長和計數標記
+                  totalPlayedDurationRef.current = 0;
+                  audio.dataset.startTime = startTime.toString();
+                  savePlayProgress(0, startTime);
+                  // ✅ 重置計數標記，允許重新計數
+                  audio.dataset.progressReported = "";
+                } else {
+                  // 不是第一次播放，從 dataset 恢復累計值
+                  // 這樣可以處理暫停後繼續播放、重新載入等情況
+                  const saved = loadPlayProgress();
+                  totalPlayedDurationRef.current = saved.totalPlayed;
+                }
+
+                // 記錄開始播放時的位置（用於 API）
+                if (!audio.dataset.originalStartTime) {
+                  audio.dataset.originalStartTime = startTime.toString();
+                }
+
+                // 記錄當前播放位置（用於檢測跳播）
+                lastPlayTimeRef.current = startTime;
+                isPlayingRef.current = true;
+
+                // 清除定時器（如果存在）
+                if (progressCheckIntervalRef.current) {
+                  clearInterval(progressCheckIntervalRef.current);
+                }
+
+                // ✅ 優化：使用定時器，每2秒檢查一次進度（防止 onTimeUpdate 被節流）
+                progressCheckIntervalRef.current = setInterval(() => {
+                  // 在定時器中累計播放時長
+                  if (audioRef.current && isPlayingRef.current) {
+                    const audio = audioRef.current;
+                    const currentTime = audio.currentTime;
+                    const lastTime = lastPlayTimeRef.current;
+
+                    // 使用重用累計函數
+                    accumulatePlayDuration(currentTime, lastTime);
+
+                    // ✅ 關鍵：無論是否累計或位置改變，都保存當前累計值到 dataset
+                    // 這樣即使 F12 導致 onTimeUpdate 被節流，累計值也不會丟失
+                    savePlayProgress(
+                      totalPlayedDurationRef.current,
+                      currentTime,
+                    );
+                  }
+                  checkProgress();
+                }, 2000);
+              }
+            }}
+            onAudioPause={() => {
+              // ✅ 優化：暫停時累計播放時長
+              if (audioRef.current && isPlayingRef.current) {
+                const audio = audioRef.current;
+                const currentTime = audio.currentTime;
+                const lastTime = lastPlayTimeRef.current;
+
+                // 從 dataset 恢復累計值（確保使用最新值）
+                const saved = loadPlayProgress();
+                if (saved.totalPlayed > totalPlayedDurationRef.current) {
+                  totalPlayedDurationRef.current = saved.totalPlayed;
+                }
+
+                // 累計這段播放時長（處理跳播）
+                accumulatePlayDuration(currentTime, lastTime);
+                isPlayingRef.current = false;
+
+                // 立即保存累計值到 dataset
+                savePlayProgress(
+                  totalPlayedDurationRef.current,
+                  currentTime,
+                );
+              }
+
+              // 清除定時器
+              if (progressCheckIntervalRef.current) {
+                clearInterval(progressCheckIntervalRef.current);
+                progressCheckIntervalRef.current = null;
+              }
+              // 最後檢查一次進度（防止開發者控制台的 onTimeUpdate 不觸發）
+              checkProgress();
+            }}
+            onAudioSeeked={() => {
+              // ✅ 優化：跳播時，確保累計跳播前最後一段播放時長
+              if (audioRef.current) {
+                const audio = audioRef.current;
+                const currentTime = audio.currentTime;
+
+                // ✅ 修復：如果是跳播前的播放狀態，確保跳播後恢復播放
+                const wasPlaying = isPlayingRef.current;
+
+                // 從 dataset 恢復累計值和上次位置（確保使用最新值）
+                const saved = loadPlayProgress();
+                if (saved.totalPlayed > totalPlayedDurationRef.current) {
+                  totalPlayedDurationRef.current = saved.totalPlayed;
+                }
+
+                // 在跳播時，確保跳播前最後一段播放時長被累計
+                // 如果從 dataset 位置到 ref 位置是正常播放時間差，累計這段
+                const refLastTime = lastPlayTimeRef.current;
+                const diffFromSaved = refLastTime - saved.lastTime;
+
+                // 如果時間差在正常播放範圍內（0-3秒），且正在播放，累計這段
+                if (
+                  wasPlaying &&
+                  diffFromSaved > 0 &&
+                  diffFromSaved < 3 &&
+                  saved.lastTime > 0
+                ) {
+                  totalPlayedDurationRef.current += diffFromSaved;
+                }
+
+                // 更新 lastPlayTimeRef 到新位置，並保存進度
+                lastPlayTimeRef.current = currentTime;
+                savePlayProgress(
+                  totalPlayedDurationRef.current,
+                  currentTime,
+                );
+
+                // ✅ 修復：如果跳播前正在播放，跳播後繼續播放
+                // 這樣可以防止跳播後意外暫停
+                if (wasPlaying && audio.paused) {
+                  audio.play().catch((err) => {
+                    // 播放失敗可能是因為需要用戶交互，不是錯誤
+                    if (err.name !== "NotAllowedError") {
+                      console.warn("跳播後恢復播放失敗:", err);
+                    }
+                    // 如果播放失敗，更新狀態
+                    isPlayingRef.current = false;
+                  });
+                }
+              }
+            }}
+            onAudioEnded={() => {
+              // ✅ 優化：播放結束時累計最後一段播放時長
+              if (audioRef.current && isPlayingRef.current) {
+                const audio = audioRef.current;
+                const currentTime = audio.currentTime;
+                const lastTime = lastPlayTimeRef.current;
+
+                // 累計最後一段播放時長
+                accumulatePlayDuration(currentTime, lastTime);
+                isPlayingRef.current = false;
+
+                // 保存到 dataset
+                savePlayProgress(
+                  totalPlayedDurationRef.current,
+                  currentTime,
+                );
+              }
+
+              // 清除定時器
+              if (progressCheckIntervalRef.current) {
+                clearInterval(progressCheckIntervalRef.current);
+                progressCheckIntervalRef.current = null;
+              }
+              checkProgress();
+            }}
+            onAudioTimeUpdate={() => {
+              // ✅ 優化：在播放過程中持續累計播放時長
+              if (audioRef.current && isPlayingRef.current) {
+                const audio = audioRef.current;
+                const currentTime = audio.currentTime;
+                const lastTime = lastPlayTimeRef.current;
+
+                // 使用重用累計函數
+                const accumulated = accumulatePlayDuration(
+                  currentTime,
+                  lastTime,
+                );
+                // 如果成功累計或位置改變，保存進度
+                if (accumulated || currentTime !== lastTime) {
+                  savePlayProgress(
+                    totalPlayedDurationRef.current,
+                    lastPlayTimeRef.current,
+                  );
+                }
+              }
+
+              // 追蹤播放進度（主要檢查方式）
+              checkProgress();
+            }}
+          />
+          </div>
+        ) : (
+          /* 桌面版：保持原有佈局 */
+          <div className="flex flex-row flex-1 overflow-y-auto">
           {/* 左側：音樂播放器 */}
           <div className="flex-1 relative bg-black flex items-center justify-center p-4 md:p-6 min-h-0 overflow-y-auto">
             {/* 音樂封面與播放器 */}
@@ -370,11 +706,35 @@ const MusicModal = ({
                       console.warn("設定音量失敗:", e);
                     }
 
+                    // 🔧 修復：如果組件切換時有保存的播放狀態，先恢復它
+                    if (audioSrcRef.current) {
+                      const savedState = audioSrcRef.current;
+                      audioRef.current.currentTime = savedState.currentTime;
+                      audioRef.current.volume = savedState.volume || audioRef.current.volume;
+                      
+                      // 如果之前是播放狀態，繼續播放
+                      if (!savedState.paused) {
+                        audioRef.current.play().then(() => {
+                          isPlayingRef.current = true;
+                        }).catch((err) => {
+                          if (err.name !== "NotAllowedError") {
+                            console.warn("恢復播放失敗:", err);
+                          }
+                        });
+                      }
+                      
+                      // 清除保存的狀態
+                      audioSrcRef.current = null;
+                      return; // 已經恢復了狀態，不再執行自動播放
+                    }
+
                     // ✅ 修復：確保自動播放（處理瀏覽器自動播放策略）
                     // 如果音頻有 autoPlay 屬性但還沒播放，嘗試手動觸發
                     if (audioRef.current.paused && !audioRef.current.dataset.autoPlayAttempted) {
                       audioRef.current.dataset.autoPlayAttempted = "true";
-                      audioRef.current.play().catch((err) => {
+                      audioRef.current.play().then(() => {
+                        isPlayingRef.current = true;
+                      }).catch((err) => {
                         // 自動播放被阻止是正常的（需要用戶交互），不記錄錯誤
                         if (err.name !== "NotAllowedError") {
                           console.warn("自動播放失敗:", err);
@@ -644,6 +1004,7 @@ const MusicModal = ({
             onToggleLike={onToggleLike}
           />
         </div>
+        )}
       </div>
     </div>
   );

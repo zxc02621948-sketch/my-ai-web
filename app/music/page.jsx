@@ -118,25 +118,35 @@ const MusicPage = () => {
         const pinnedPlayer = e.detail.pinnedPlayer;
         const playlist = pinnedPlayer?.playlist || [];
 
+        // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
+        player?.setPlayerOwner?.({
+          userId: pinnedPlayer.userId,
+          username: pinnedPlayer.username,
+        });
+
+        // ✅ 設置播放清單（即使是空的）
+        player?.setPlaylist?.(playlist);
+
         if (playlist.length > 0) {
           const currentIndex = pinnedPlayer.currentIndex || 0;
           const currentTrack = playlist[currentIndex];
 
-          player?.setPlaylist?.(playlist);
           player?.setActiveIndex?.(currentIndex);
-          player?.setPlayerOwner?.({
-            userId: pinnedPlayer.userId,
-            username: pinnedPlayer.username,
-          });
 
           if (currentTrack) {
             player?.setSrc?.(currentTrack.url);
             player?.setOriginUrl?.(currentTrack.url);
             player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
           }
-
-          player?.setMiniPlayerEnabled?.(true);
+        } else {
+          // ✅ 播放清單為空時，清空當前曲目
+          player?.setSrc?.('');
+          player?.setOriginUrl?.('');
+          player?.setTrackTitle?.('');
+          player?.setActiveIndex?.(0);
         }
+
+        player?.setMiniPlayerEnabled?.(true);
 
         player?.setShareMode?.("global");
       } else {
@@ -167,25 +177,36 @@ const MusicPage = () => {
     if (hasPinnedPlayer) {
       // 恢復釘選播放器
       const playlist = pinnedPlayer.playlist || [];
+      
+      // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
+      player?.setPlayerOwner?.({
+        userId: pinnedPlayer.userId,
+        username: pinnedPlayer.username,
+      });
+
+      // ✅ 設置播放清單（即使是空的）
+      player?.setPlaylist?.(playlist);
+
       if (playlist.length > 0) {
         const currentIndex = pinnedPlayer.currentIndex || 0;
         const currentTrack = playlist[currentIndex];
 
-        player?.setPlaylist?.(playlist);
         player?.setActiveIndex?.(currentIndex);
-        player?.setPlayerOwner?.({
-          userId: pinnedPlayer.userId,
-          username: pinnedPlayer.username,
-        });
 
         if (currentTrack) {
           player?.setSrc?.(currentTrack.url);
           player?.setOriginUrl?.(currentTrack.url);
           player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
         }
-
-        player?.setMiniPlayerEnabled?.(true);
+      } else {
+        // ✅ 播放清單為空時，清空當前曲目
+        player?.setSrc?.('');
+        player?.setOriginUrl?.('');
+        player?.setTrackTitle?.('');
+        player?.setActiveIndex?.(0);
       }
+
+      player?.setMiniPlayerEnabled?.(true);
     } else {
       // 沒有釘選數據，設定為全局模式但不顯示播放器
       player?.setShareMode?.("global");
@@ -329,42 +350,10 @@ const MusicPage = () => {
           <MusicGrid
             music={music}
             onSelectMusic={(track) => {
-              // 打開 Modal
+              // ✅ 只打開 Modal，不設置播放器
+              // MusicModal 有自己的播放功能，不應該影響到網站播放器
               setSelectedMusic(track);
               setShowMusicModal(true);
-
-              // 同時設置播放清單（用於 mini player）
-              if (!track?.musicUrl) {
-                console.error("音樂 URL 為空");
-                return;
-              }
-
-              // 將所有音樂轉換為播放清單格式
-              const playlist = music.map((m) => ({
-                url: m.musicUrl,
-                title: m.title || "未命名音樂",
-                id: m._id,
-              }));
-
-              // 找到當前選中的音樂在清單中的索引
-              const currentIndex = playlist.findIndex(
-                (item) => item.id === track._id,
-              );
-
-              // 設置播放清單和當前索引
-              player?.setPlaylist?.(playlist);
-              player?.setActiveIndex?.(currentIndex !== -1 ? currentIndex : 0);
-
-              // 設置當前播放的音樂
-              const currentTrack =
-                playlist[currentIndex !== -1 ? currentIndex : 0];
-              player?.setSrc?.(currentTrack.url);
-              player?.setOriginUrl?.(currentTrack.url);
-              player?.setTrackTitle?.(currentTrack.title);
-
-              // 啟用播放器
-              player?.setMiniPlayerEnabled?.(true);
-              player?.setShareMode?.("global");
             }}
           />
         )}

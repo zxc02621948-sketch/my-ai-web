@@ -183,28 +183,36 @@ export default function HomePage() {
         const pinnedPlayer = e.detail.pinnedPlayer;
         const playlist = pinnedPlayer?.playlist || [];
         
+        // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
+        player?.setPlayerOwner?.({ 
+          userId: pinnedPlayer.userId, 
+          username: pinnedPlayer.username 
+        });
+        
+        // ✅ 設置播放清單（即使是空的）
+        player?.setPlaylist?.(playlist);
         
         if (playlist.length > 0) {
           const currentIndex = pinnedPlayer.currentIndex || 0;
           const currentTrack = playlist[currentIndex];
           
-          
-          player?.setPlaylist?.(playlist);
           player?.setActiveIndex?.(currentIndex);
-          player?.setPlayerOwner?.({ 
-            userId: pinnedPlayer.userId, 
-            username: pinnedPlayer.username 
-          });
           
           if (currentTrack) {
             player?.setSrc?.(currentTrack.url);
             player?.setOriginUrl?.(currentTrack.url);
             player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
           }
-          
-          // 確保 MiniPlayer 是啟用的
-          player?.setMiniPlayerEnabled?.(true);
+        } else {
+          // ✅ 播放清單為空時，清空當前曲目
+          player?.setSrc?.('');
+          player?.setOriginUrl?.('');
+          player?.setTrackTitle?.('');
+          player?.setActiveIndex?.(0);
         }
+        
+        // 確保 MiniPlayer 是啟用的
+        player?.setMiniPlayerEnabled?.(true);
         
         player?.setShareMode?.("global");
       } else {
@@ -226,7 +234,7 @@ export default function HomePage() {
     
     // ✅ 首頁載入時，檢查 currentUser 中是否已有釘選數據（刷新頁面的情況）
     const pinnedPlayer = currentUser?.user?.pinnedPlayer || currentUser?.pinnedPlayer;
-    const hasPinnedPlayer = pinnedPlayer?.userId && 
+    const hasPinnedPlayer = pinnedPlayer?.userId &&  
       pinnedPlayer?.expiresAt && 
       new Date(pinnedPlayer.expiresAt) > new Date();
     

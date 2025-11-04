@@ -527,29 +527,38 @@ export default function MiniPlayer() {
             }));
             
             // ✅ 刷新後恢復釘選播放器的播放清單
-            if (playerRef.current && pinned.playlist && pinned.playlist.length > 0) {
-              const currentIndex = pinned.currentIndex || 0;
-              const track = pinned.playlist[currentIndex];
+            if (playerRef.current) {
+              // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
+              playerRef.current.setPlayerOwner?.({ 
+                userId: pinned.userId, 
+                username: pinned.username 
+              });
               
-              if (track?.url) {
-                // 設置播放清單和當前索引
+              // ✅ 設置播放清單（即使是空的）
+              if (Array.isArray(pinned.playlist)) {
                 playerRef.current.setPlaylist?.(pinned.playlist);
-                playerRef.current.setActiveIndex?.(currentIndex);
                 
-                // 設置當前曲目
-                playerRef.current.setSrc?.(track.url);
-                playerRef.current.setOriginUrl?.(track.url);
-                playerRef.current.setTrackTitle?.(track.title || '');
-                
-                // 設置播放器擁有者
-                playerRef.current.setPlayerOwner?.({ 
-                  userId: pinned.userId, 
-                  username: pinned.username 
-                });
-                
+                // ✅ 只有當播放清單不為空時，才設置當前曲目
+                if (pinned.playlist.length > 0) {
+                  const currentIndex = pinned.currentIndex || 0;
+                  const track = pinned.playlist[currentIndex];
+                  
+                  if (track?.url) {
+                    playerRef.current.setActiveIndex?.(currentIndex);
+                    playerRef.current.setSrc?.(track.url);
+                    playerRef.current.setOriginUrl?.(track.url);
+                    playerRef.current.setTrackTitle?.(track.title || '');
+                  }
+                } else {
+                  // ✅ 播放清單為空時，清空當前曲目
+                  playerRef.current.setSrc?.('');
+                  playerRef.current.setOriginUrl?.('');
+                  playerRef.current.setTrackTitle?.('');
+                  playerRef.current.setActiveIndex?.(0);
+                }
               }
             } else {
-              console.warn('⚠️ [MiniPlayer] playerRef 或 playlist 不可用');
+              console.warn('⚠️ [MiniPlayer] playerRef 不可用');
             }
           } else if (expiresAt && expiresAt <= now) {
             // 已過期，自動解除釘選
@@ -587,29 +596,38 @@ export default function MiniPlayer() {
         
         
         // 當收到釘選事件時，也載入歌單
-        if (playerRef.current && pinnedData.playlist && pinnedData.playlist.length > 0) {
-          const currentIndex = pinnedData.currentIndex || 0;
-          const track = pinnedData.playlist[currentIndex];
+        if (playerRef.current) {
+          // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
+          playerRef.current.setPlayerOwner?.({ 
+            userId: pinnedData.userId, 
+            username: pinnedData.username 
+          });
           
-          if (track?.url) {
-            // 設置播放清單和當前索引
+          // ✅ 設置播放清單（即使是空的）
+          if (Array.isArray(pinnedData.playlist)) {
             playerRef.current.setPlaylist?.(pinnedData.playlist);
-            playerRef.current.setActiveIndex?.(currentIndex);
             
-            // 設置當前曲目
-            playerRef.current.setSrc?.(track.url);
-            playerRef.current.setOriginUrl?.(track.url);
-            playerRef.current.setTrackTitle?.(track.title || '');
-            
-            // 設置播放器擁有者
-            playerRef.current.setPlayerOwner?.({ 
-              userId: pinnedData.userId, 
-              username: pinnedData.username 
-            });
-            
+            // ✅ 只有當播放清單不為空時，才設置當前曲目
+            if (pinnedData.playlist.length > 0) {
+              const currentIndex = pinnedData.currentIndex || 0;
+              const track = pinnedData.playlist[currentIndex];
+              
+              if (track?.url) {
+                playerRef.current.setActiveIndex?.(currentIndex);
+                playerRef.current.setSrc?.(track.url);
+                playerRef.current.setOriginUrl?.(track.url);
+                playerRef.current.setTrackTitle?.(track.title || '');
+              }
+            } else {
+              // ✅ 播放清單為空時，清空當前曲目
+              playerRef.current.setSrc?.('');
+              playerRef.current.setOriginUrl?.('');
+              playerRef.current.setTrackTitle?.('');
+              playerRef.current.setActiveIndex?.(0);
+            }
           }
         } else {
-          console.warn('⚠️ [MiniPlayer-Event] playerRef 或 playlist 不可用');
+          console.warn('⚠️ [MiniPlayer-Event] playerRef 不可用');
         }
       } else {
         setIsPinned(false);
@@ -915,11 +933,12 @@ export default function MiniPlayer() {
           )}
           
           {/* 釘選按鈕 - 在播放器圖示左上方內部 */}
-          {player?.playerOwner && player?.playlist?.length > 0 && (
+          {/* ✅ 只要有 playerOwner 就顯示釘選按鈕，即使播放清單為空（用戶可能想釘選空播放清單） */}
+          {player?.playerOwner && (
             <div className="absolute top-2 left-2 z-10">
               <PinPlayerButton
                 targetUserId={player.playerOwner.userId}
-                targetUserPlaylist={player.playlist}
+                targetUserPlaylist={player.playlist || []}
                 targetUsername={player.playerOwner.username}
               />
             </div>
