@@ -2,16 +2,21 @@ import { useRef, useState, useEffect } from "react";
 import { X, Trash2, Clipboard, Plus } from "lucide-react";
 import axios from "axios";
 import { GENRE_MAP } from "@/constants/musicCategories";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export default function MusicInfoBox({
   music,
-  currentUser,
+  currentUser: propCurrentUser,
   displayMode = "gallery",
   onClose,
   onDelete,
   canEdit = false,
   onEdit,
 }) {
+  // ✅ 使用 Context 中的 currentUser 和 setCurrentUser（如果 prop 沒有提供）
+  const contextUser = useCurrentUser();
+  const { currentUser: contextCurrentUser, setCurrentUser } = contextUser || {};
+  const currentUser = propCurrentUser || contextCurrentUser;
   const [copiedField, setCopiedField] = useState(null);
   const [copyTip, setCopyTip] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -138,6 +143,32 @@ export default function MusicInfoBox({
       if (response.data.success) {
         setPlaylist(newPlaylist);
         setIsInPlaylist(true);
+        
+        // ✅ 如果用戶已釘選自己的播放器，更新 currentUser.pinnedPlayer.playlist
+        // 並觸發播放清單變更事件
+        if (currentUser && setCurrentUser) {
+          const pinnedUserId = currentUser?.pinnedPlayer?.userId;
+          const isPinnedOwnPlayer = pinnedUserId && String(pinnedUserId) === String(currentUser._id);
+          
+          if (isPinnedOwnPlayer && currentUser.pinnedPlayer) {
+            setCurrentUser(prevUser => {
+              if (!prevUser) return prevUser;
+              return {
+                ...prevUser,
+                pinnedPlayer: {
+                  ...prevUser.pinnedPlayer,
+                  playlist: newPlaylist // 使用最新的播放清單
+                }
+              };
+            });
+            console.log('✅ [MusicInfoBox] 已更新 currentUser.pinnedPlayer.playlist');
+          }
+        }
+        
+        // ✅ 觸發播放清單變更事件，通知 MiniPlayer 重新載入
+        window.dispatchEvent(new CustomEvent('playlistChanged'));
+        console.log('🔄 [MusicInfoBox] 已觸發播放清單變更事件');
+        
         alert("✅ 已加入播放清單！");
       } else {
         alert(response.data.message || "加入播放清單失敗");

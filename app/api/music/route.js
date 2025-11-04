@@ -378,9 +378,14 @@ export async function GET(request) {
           { $match: match },
           calcLive,
           {
-            $sort: useLive
-              ? { livePopScore: -1, createdAt: -1, _id: -1 }
-              : { popScoreDB: -1, createdAt: -1, _id: -1 },
+            // 使用數據庫中的 popScore 排序（已確保在播放和點讚時更新）
+            // 如果 useLive 為 true，仍然使用 livePopScore 作為備用（但主要還是 popScoreDB）
+            $sort: { 
+              popScoreDB: -1, 
+              livePopScore: -1,  // 備用排序（如果 popScoreDB 相同）
+              createdAt: -1, 
+              _id: -1 
+            },
           },
           { $skip: skip },
           { $limit: limit },

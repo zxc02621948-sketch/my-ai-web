@@ -35,6 +35,8 @@ export default function MiniPlayer() {
   const [pinnedPlayerData, setPinnedPlayerData] = useState(null);
   const [isPinned, setIsPinned] = useState(false);
   const playerRef = useRef(player); // 使用 ref 保存最新的 player 引用
+  // ✅ 本地狀態：追蹤是否正在載入播放清單（用於立即更新 UI，需要在 displayTitle 之前定義）
+  const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
   
   // ✅ 檢查當前路徑是否是用戶頁面（需要在 useMemo 之前定義）
   const isUserPage = pathname.startsWith("/user/") && pathname !== "/user/following";
@@ -165,6 +167,12 @@ export default function MiniPlayer() {
   
   // 使用 useMemo 緩存標題計算，避免無限循環
   const displayTitle = useMemo(() => {
+    // ✅ 如果正在載入播放清單，立即返回空標題（避免顯示舊標題）
+    // 無論播放清單是否為空，只要在載入中就不顯示標題
+    if (isLoadingPlaylist) {
+      return "";
+    }
+    
     const t = (player?.trackTitle || "").trim();
     const u = (player?.originUrl || player?.src || "").trim();
     
@@ -183,7 +191,7 @@ export default function MiniPlayer() {
     }
     
     return "未知音源";
-  }, [player?.trackTitle, player?.originUrl, player?.src]);
+  }, [player?.trackTitle, player?.originUrl, player?.src, isLoadingPlaylist, player?.playlist]);
   
   // 手動更新時間的定時器 - 移除會導致無限循環的依賴
   useEffect(() => {
@@ -495,6 +503,11 @@ export default function MiniPlayer() {
     player.setVolume(percentage);
   };
 
+  // ✅ 防抖：避免重複載入播放清單
+  const isLoadingRef = useRef(false);
+  const lastLoadTimeRef = useRef(0);
+  const lastPlaylistLengthRef = useRef(-1);
+
   // 檢查釘選狀態並載入釘選的播放清單（使用 Context 中的 currentUser）
   useEffect(() => {
     // 等待 currentUser 載入完成
@@ -514,6 +527,147 @@ export default function MiniPlayer() {
           
           
           if (expiresAt && expiresAt > now) {
+            // ✅ 檢查是否釘選的是自己的播放器（無論在哪個頁面）
+            // 如果是自己的播放器，應該從數據庫載入最新的播放清單
+            // 因為用戶可能已經編輯過播放清單，但 pinnedPlayer.playlist 還是舊的
+            const pinnedUserId = String(pinned.userId || '');
+            const isPinnedOwnPlayer = userData?._id && String(userData._id) === pinnedUserId;
+            
+            if (isPinnedOwnPlayer) {
+              // ✅ 防抖：避免重複載入（500ms 內只載入一次）
+              const now = Date.now();
+              if (isLoadingRef.current) {
+                console.log('⏸️ [MiniPlayer] 正在載入中，跳過重複載入');
+                // ✅ 如果正在載入，確保 isLoadingPlaylist 已設置（但不清除，因為正在載入中）
+                if (!isLoadingPlaylist) {
+                  setIsLoadingPlaylist(true);
+                }
+                return;
+              }
+              if (now - lastLoadTimeRef.current < 500) {
+                console.log('⏸️ [MiniPlayer] 載入過於頻繁，跳過');
+                // ✅ 如果載入過於頻繁，清除載入狀態（避免跑馬燈一直不顯示）
+                setIsLoadingPlaylist(false);
+                return;
+              }
+              
+              // ✅ 設置載入狀態，強制清空標題顯示（在確認要載入之後）
+              setIsLoadingPlaylist(true);
+              
+              isLoadingRef.current = true;
+              lastLoadTimeRef.current = now;
+              
+              console.log('👤 [MiniPlayer] 釘選的是自己的播放器，從數據庫載入最新播放清單');
+              // ✅ 如果釘選的是自己的播放器，從數據庫重新載入最新的播放清單
+              // 因為用戶可能已經編輯過播放清單，但 pinnedPlayer.playlist 還是舊的
+              
+              // ✅ 在載入前立即停止播放並清空播放清單和音頻源，避免顯示舊的歌曲
+              if (playerRef.current) {
+                playerRef.current.pause?.();
+                playerRef.current.setIsPlaying?.(false);
+                playerRef.current.setPlaylist?.([]); // 立即清空播放清單
+                playerRef.current.setSrc?.('');
+                playerRef.current.setOriginUrl?.('');
+                playerRef.current.setTrackTitle?.('');
+                playerRef.current.setActiveIndex?.(0);
+              }
+              
+              try {
+                const response = await axios.get(`/api/user-info?id=${pinnedUserId}`, {
+                  headers: { 'Cache-Control': 'no-cache' }
+                });
+                const latestPlaylist = response.data?.playlist || [];
+                console.log('📥 [MiniPlayer] 從數據庫載入自己的播放清單，長度:', latestPlaylist.length);
+                console.log('📥 [MiniPlayer] 播放清單內容:', JSON.stringify(latestPlaylist, null, 2));
+                
+                // ✅ 檢查播放清單是否真的改變了（避免重複設置）
+                if (latestPlaylist.length === lastPlaylistLengthRef.current && 
+                    playerRef.current?.playlist?.length === latestPlaylist.length) {
+                  console.log('⏸️ [MiniPlayer] 播放清單未改變，跳過設置');
+                  setIsLoadingPlaylist(false); // ✅ 清除載入狀態
+                  isLoadingRef.current = false;
+                  return;
+                }
+                lastPlaylistLengthRef.current = latestPlaylist.length;
+                
+                // 只設置 playerOwner，使用最新的播放清單
+                if (playerRef.current) {
+                  playerRef.current.setPlayerOwner?.({ 
+                    userId: pinned.userId, 
+                    username: pinned.username 
+                  });
+                  
+                  // ✅ 使用從數據庫載入的最新播放清單
+                  if (Array.isArray(latestPlaylist)) {
+                    playerRef.current.setPlaylist?.(latestPlaylist);
+                    
+                    // 設置當前曲目
+                    if (latestPlaylist.length > 0) {
+                      // ✅ 從數據庫載入的最新播放清單，應該從第一首開始（索引 0）
+                      // 不使用 pinned.currentIndex，因為那是舊的播放清單的索引
+                      const track = latestPlaylist[0];
+                      if (track?.url) {
+                        // ✅ 先停止當前播放（如果有）
+                        if (playerRef.current) {
+                          playerRef.current.pause?.();
+                          playerRef.current.setIsPlaying?.(false);
+                        }
+                        
+                        // ✅ 設置播放清單和曲目信息
+                        playerRef.current.setActiveIndex?.(0);
+                        playerRef.current.setOriginUrl?.(track.url);
+                        playerRef.current.setTrackTitle?.(track.title || '');
+                        
+                        // ✅ 最後設置 src（這會觸發音頻元素重新載入）
+                        playerRef.current.setSrc?.(track.url);
+                        
+                        console.log('🎵 [MiniPlayer] 設置當前曲目:', track.title || track.url, 'URL:', track.url);
+                      }
+                    } else {
+                      // ✅ 播放清單為空時，停止播放並清空音頻源
+                      playerRef.current.pause?.();
+                      playerRef.current.setIsPlaying?.(false);
+                      playerRef.current.setSrc?.('');
+                      playerRef.current.setOriginUrl?.('');
+                      playerRef.current.setTrackTitle?.('');
+                      playerRef.current.setActiveIndex?.(0);
+                    }
+                  }
+                }
+                // ✅ 載入成功，清除載入狀態
+                setIsLoadingPlaylist(false);
+              } catch (error) {
+                console.error('❌ [MiniPlayer] 載入自己的播放清單失敗，使用釘選記錄:', error);
+                // 如果載入失敗，回退到使用釘選記錄
+                if (playerRef.current) {
+                  playerRef.current.setPlayerOwner?.({ 
+                    userId: pinned.userId, 
+                    username: pinned.username 
+                  });
+                  if (Array.isArray(pinned.playlist)) {
+                    playerRef.current.setPlaylist?.(pinned.playlist);
+                    
+                    // ✅ 處理播放清單為空的情況
+                    if (pinned.playlist.length === 0) {
+                      playerRef.current.pause?.();
+                      playerRef.current.setIsPlaying?.(false);
+                      playerRef.current.setSrc?.('');
+                      playerRef.current.setOriginUrl?.('');
+                      playerRef.current.setTrackTitle?.('');
+                      playerRef.current.setActiveIndex?.(0);
+                    }
+                  }
+                }
+                // ✅ 載入失敗，清除載入狀態
+                setIsLoadingPlaylist(false);
+              }
+              
+              setIsPinned(true);
+              setPinnedPlayerData(pinned);
+              isLoadingRef.current = false;
+              return; // 已處理，不需要繼續
+            }
+            
             // 未過期，設置釘選狀態
             setIsPinned(true);
             setPinnedPlayerData(pinned);
@@ -526,7 +680,7 @@ export default function MiniPlayer() {
               } 
             }));
             
-            // ✅ 刷新後恢復釘選播放器的播放清單
+            // ✅ 刷新後恢復釘選播放器的播放清單（非自己的頁面）
             if (playerRef.current) {
               // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
               playerRef.current.setPlayerOwner?.({ 
@@ -550,7 +704,9 @@ export default function MiniPlayer() {
                     playerRef.current.setTrackTitle?.(track.title || '');
                   }
                 } else {
-                  // ✅ 播放清單為空時，清空當前曲目
+                  // ✅ 播放清單為空時，停止播放並清空音頻源
+                  playerRef.current.pause?.();
+                  playerRef.current.setIsPlaying?.(false);
                   playerRef.current.setSrc?.('');
                   playerRef.current.setOriginUrl?.('');
                   playerRef.current.setTrackTitle?.('');
@@ -570,14 +726,44 @@ export default function MiniPlayer() {
           // 沒有釘選播放器，確保狀態為 false
           setIsPinned(false);
           setPinnedPlayerData(null);
+          // ✅ 沒有釘選播放器時，清除載入狀態
+          setIsLoadingPlaylist(false);
         }
       } catch (error) {
         console.error('❌ [MiniPlayer] 載入釘選播放器失敗:', error);
+        // ✅ 載入失敗時也要清除載入狀態，避免跑馬燈一直不顯示
+        setIsLoadingPlaylist(false);
+      } finally {
+        isLoadingRef.current = false;
+        // ✅ 確保在所有情況下都清除載入狀態
+        // 如果已經有有效的音頻源或標題，就清除載入狀態（避免跑馬燈一直不顯示）
+        if (playerRef.current?.trackTitle || playerRef.current?.originUrl || playerRef.current?.src) {
+          setIsLoadingPlaylist(false);
+        }
       }
     };
     
+    // ✅ 監聽播放清單變更事件（當用戶編輯播放清單後觸發）
+    const handlePlaylistChanged = () => {
+      console.log('🔄 [MiniPlayer] 收到播放清單變更事件，重新載入播放清單');
+      // 重置防抖狀態，強制重新載入
+      isLoadingRef.current = false;
+      lastLoadTimeRef.current = 0;
+      lastPlaylistLengthRef.current = -1;
+      // 觸發重新載入
+      loadPinnedPlayer();
+    };
+    
+    window.addEventListener('playlistChanged', handlePlaylistChanged);
+    
+    // 初始載入
     loadPinnedPlayer();
-  }, [currentUser]); // 當 currentUser 變化時重新檢查
+    
+    // ✅ 清理事件監聽器
+    return () => {
+      window.removeEventListener('playlistChanged', handlePlaylistChanged);
+    };
+  }, [currentUser, pathname]); // ✅ 當 currentUser 或 pathname 變化時重新檢查
   
   // 監聽釘選變更事件（當用戶主動釘選/取消釘選時）
   useEffect(() => {
@@ -619,7 +805,9 @@ export default function MiniPlayer() {
                 playerRef.current.setTrackTitle?.(track.title || '');
               }
             } else {
-              // ✅ 播放清單為空時，清空當前曲目
+              // ✅ 播放清單為空時，停止播放並清空音頻源
+              playerRef.current.pause?.();
+              playerRef.current.setIsPlaying?.(false);
               playerRef.current.setSrc?.('');
               playerRef.current.setOriginUrl?.('');
               playerRef.current.setTrackTitle?.('');
@@ -764,25 +952,28 @@ export default function MiniPlayer() {
         )}
         
         {/* 黑色跑馬燈（曲名 + 可點連結） */}
-        <div
-          className="w-[140px] h-6 rounded bg-black/80 text-white text-xs overflow-hidden flex items-center px-2 cursor-pointer"
-          title={player.originUrl || player.src || "未設定來源"}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (justDraggedRef.current) return; // 如果剛拖動過，不要打開連結
-            const href = player.originUrl || player.src;
-            if (href) window.open(href, "_blank");
-          }}
-        >
+        {displayTitle && (
           <div
-            className="inline-block whitespace-nowrap"
-            style={{
-              animation: "miniMarquee 12s linear infinite",
+            className="w-[140px] h-6 rounded bg-black/80 text-white text-xs overflow-hidden flex items-center px-2 cursor-pointer"
+            title={player.originUrl || player.src || "未設定來源"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (justDraggedRef.current) return; // 如果剛拖動過，不要打開連結
+              const href = player.originUrl || player.src;
+              if (href) window.open(href, "_blank");
             }}
           >
-            {displayTitle}
+            <div
+              className="inline-block whitespace-nowrap"
+              style={{
+                animation: "miniMarquee 12s linear infinite",
+              }}
+              key={displayTitle} // ✅ 當標題變化時重新渲染跑馬燈
+            >
+              {displayTitle}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* 主體以 SVG 佈景為主視覺 */}
         <div 

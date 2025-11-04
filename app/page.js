@@ -181,6 +181,23 @@ export default function HomePage() {
       if (e.detail.isPinned) {
         // 用戶剛釘選播放器，使用事件中的數據
         const pinnedPlayer = e.detail.pinnedPlayer;
+        const pinnedUserId = String(pinnedPlayer?.userId || '');
+        const isPinnedOwnPlayer = currentUser?._id && String(currentUser._id) === pinnedUserId;
+        
+        // ✅ 如果釘選的是自己的播放器，跳過設置（MiniPlayer 會從數據庫載入最新播放清單）
+        if (isPinnedOwnPlayer) {
+          console.log('👤 [HomePage] 釘選的是自己的播放器，跳過設置（由 MiniPlayer 處理）');
+          // 只設置 playerOwner，不設置播放清單和曲目（MiniPlayer 會處理）
+          player?.setPlayerOwner?.({ 
+            userId: pinnedPlayer.userId, 
+            username: pinnedPlayer.username 
+          });
+          player?.setMiniPlayerEnabled?.(true);
+          player?.setShareMode?.("global");
+          return;
+        }
+        
+        // ✅ 如果不是自己的播放器，使用事件中的數據
         const playlist = pinnedPlayer?.playlist || [];
         
         // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
@@ -238,29 +255,42 @@ export default function HomePage() {
       pinnedPlayer?.expiresAt && 
       new Date(pinnedPlayer.expiresAt) > new Date();
     
-    
-    
     if (hasPinnedPlayer) {
-      // 刷新頁面時恢復釘選播放器
-      const playlist = pinnedPlayer.playlist || [];
-      if (playlist.length > 0) {
-        const currentIndex = pinnedPlayer.currentIndex || 0;
-        const currentTrack = playlist[currentIndex];
-        
-        player?.setPlaylist?.(playlist);
-        player?.setActiveIndex?.(currentIndex);
+      const pinnedUserId = String(pinnedPlayer?.userId || '');
+      const isPinnedOwnPlayer = currentUser?._id && String(currentUser._id) === pinnedUserId;
+      
+      // ✅ 如果釘選的是自己的播放器，跳過設置（MiniPlayer 會從數據庫載入最新播放清單）
+      if (isPinnedOwnPlayer) {
+        console.log('👤 [HomePage] 初始檢查：釘選的是自己的播放器，跳過設置（由 MiniPlayer 處理）');
+        // 只設置 playerOwner，不設置播放清單和曲目（MiniPlayer 會處理）
         player?.setPlayerOwner?.({ 
           userId: pinnedPlayer.userId, 
           username: pinnedPlayer.username 
         });
-        
-        if (currentTrack) {
-          player?.setSrc?.(currentTrack.url);
-          player?.setOriginUrl?.(currentTrack.url);
-          player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
-        }
-        
         player?.setMiniPlayerEnabled?.(true);
+        player?.setShareMode?.("global");
+      } else {
+        // ✅ 如果不是自己的播放器，使用釘選記錄中的播放清單
+        const playlist = pinnedPlayer.playlist || [];
+        if (playlist.length > 0) {
+          const currentIndex = pinnedPlayer.currentIndex || 0;
+          const currentTrack = playlist[currentIndex];
+          
+          player?.setPlaylist?.(playlist);
+          player?.setActiveIndex?.(currentIndex);
+          player?.setPlayerOwner?.({ 
+            userId: pinnedPlayer.userId, 
+            username: pinnedPlayer.username 
+          });
+          
+          if (currentTrack) {
+            player?.setSrc?.(currentTrack.url);
+            player?.setOriginUrl?.(currentTrack.url);
+            player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
+          }
+          
+          player?.setMiniPlayerEnabled?.(true);
+        }
       }
     } else {
       // 沒有釘選數據，但不主動清空（讓 MiniPlayer 自己決定是否顯示）

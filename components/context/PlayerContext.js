@@ -105,6 +105,9 @@ export function PlayerProvider({
   const lastUpdateTimeRef = useRef(0);
   const retryCountRef = useRef(0);
   const isTransitioningRef = useRef(false); // ✅ 追蹤是否正在切換歌曲
+  const playlistRef = useRef(playlist); // ✅ 保存播放清單引用
+  const activeIndexRef = useRef(activeIndex); // ✅ 保存當前索引引用
+  const wasPlayingBeforeHiddenRef = useRef(false); // ✅ 追蹤頁面隱藏前是否在播放
 
   // ✅ ready 標記清理 useEffect
   useEffect(() => {
@@ -185,11 +188,39 @@ export function PlayerProvider({
     setIsPlaying(false);
   }, []);
 
+  // ✅ 預先聲明 nextRef，將在 next 函數定義後設置
+  const nextRef = useRef(null);
+
+  // ✅ 更新 playlistRef 和 activeIndexRef
+  useEffect(() => {
+    playlistRef.current = playlist;
+    activeIndexRef.current = activeIndex;
+  }, [playlist, activeIndex]);
+
   const onEnded = useCallback(() => {
+    const currentPlaylist = playlistRef.current;
+    const currentIndex = activeIndexRef.current;
+    console.log('🎵 [onEnded] 播放完畢，playlist.length:', currentPlaylist.length, 'activeIndex:', currentIndex);
     setIsPlaying(false);
     setCurrentTime(0);
     currentTimeRef.current = 0;
-  }, []);
+
+    // ✅ 如果有播放清單且有多首歌曲，自動播放下一首
+    if (currentPlaylist.length > 1) {
+      console.log('🎵 [onEnded] 準備播放下一首');
+      // 使用 setTimeout 確保在 ended 事件處理完成後再切換
+      setTimeout(() => {
+        if (nextRef.current) {
+          console.log('🎵 [onEnded] 調用 next()');
+          nextRef.current();
+        } else {
+          console.warn('⚠️ [onEnded] nextRef.current 為 null');
+        }
+      }, 100);
+    } else {
+      console.log('🎵 [onEnded] 播放清單只有一首或為空，不自動播放下一首');
+    }
+  }, []); // ✅ 移除依賴項，使用 ref 獲取最新值
 
   // ✅ 創建 Audio - 只在組件掛載時創建一次
   useEffect(() => {
@@ -470,11 +501,41 @@ export function PlayerProvider({
       setSrcWithAudio(nextItem.url);
       setOriginUrl(nextItem.url);
       setTrackTitle(nextItem.title);
+      
+      // ✅ 清除轉換標記（在播放前清除，避免 play() 被跳過）
+      isTransitioningRef.current = false;
+      
+      // ✅ 自動播放下一首
+      setTimeout(async () => {
+        try {
+          // ✅ 直接使用 audioRef 播放，跳過 play() 的轉換檢查
+          if (audioRef.current) {
+            // 等待音頻載入完成
+            if (audioRef.current.readyState >= 2) {
+              await audioRef.current.play();
+              setIsPlaying(true);
+              console.log('🎵 [next] 下一首開始播放');
+            } else {
+              // 如果還沒載入完成，等待載入完成後播放
+              const handleCanPlay = async () => {
+                try {
+                  await audioRef.current.play();
+                  setIsPlaying(true);
+                  console.log('🎵 [next] 下一首開始播放（延遲載入）');
+                } catch (error) {
+                  console.warn('⚠️ [next] 自動播放失敗:', error);
+                }
+                audioRef.current.removeEventListener('canplay', handleCanPlay);
+              };
+              audioRef.current.addEventListener('canplay', handleCanPlay);
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ [next] 自動播放失敗:', error);
+        }
+      }, 300);
     } finally {
-      // ✅ 清除轉換標記
-      setTimeout(() => {
-        isTransitioningRef.current = false;
-      }, 1000);
+      // ✅ 不再需要延遲清除轉換標記，因為已經在上面的代碼中清除了
     }
   };
 
@@ -576,19 +637,120 @@ export function PlayerProvider({
         // ✅ 重置進度報告標記和開始時間
         audioRef.current.dataset.progressReported = "";
         audioRef.current.dataset.startTime = "";
-        audioRef.current.src = newSrc || "";
+        
+        // ✅ 先暫停並重置（確保舊音頻停止）
+        if (!audioRef.current.paused) {
+          audioRef.current.pause();
+        }
         audioRef.current.currentTime = 0;
+        
+        // ✅ 設置新的 src
+        audioRef.current.src = newSrc || "";
+        
+        // ✅ 強制觸發加載（確保音頻元素重新載入新的 URL）
+        audioRef.current.load();
+        
+        console.log('🎵 [setSrcWithAudio] 設置音頻源:', newSrc || '(空)');
       } catch (error) {
         console.warn("🔧 設置音頻源失敗", error);
       }
     }
   };
 
-  // ✅ 使用 ref 保存 next 函數引用，避免閉包問題
-  const nextRef = useRef(next);
+  // ✅ 更新 nextRef 引用，確保使用最新的 next 函數
   useEffect(() => {
     nextRef.current = next;
   }, [next]);
+
+  // ✅ 監聽頁面可見性變化，處理背景播放恢復
+  useEffect(() => {
+    let restoreTimeout = null;
+    
+    const handleVisibilityChange = async () => {
+      if (!audioRef.current || !src) return;
+
+      if (document.hidden) {
+        // 頁面隱藏時，記錄播放狀態（基於實際音頻元素狀態和 isPlaying 狀態）
+        wasPlayingBeforeHiddenRef.current = !audioRef.current.paused && isPlaying;
+        console.log('👁️ 頁面隱藏，記錄播放狀態:', wasPlayingBeforeHiddenRef.current);
+        
+        // 清除之前的恢復定時器
+        if (restoreTimeout) {
+          clearTimeout(restoreTimeout);
+          restoreTimeout = null;
+        }
+      } else {
+        // 頁面重新可見時，延遲檢查並恢復播放（避免與其他邏輯衝突）
+        restoreTimeout = setTimeout(async () => {
+          // ✅ 關鍵檢查：只有當音頻確實被暫停，且之前正在播放，且狀態顯示應該在播放時，才恢復
+          const audioPaused = audioRef.current.paused;
+          const shouldBePlaying = wasPlayingBeforeHiddenRef.current && isPlaying;
+          
+          // 如果音頻沒有暫停，說明還在播放，不需要恢復
+          if (!audioPaused) {
+            console.log('👁️ 頁面重新可見，音頻仍在播放，無需恢復');
+            wasPlayingBeforeHiddenRef.current = false; // 清除標記
+            return;
+          }
+          
+          // 如果之前沒有在播放，不需要恢復
+          if (!wasPlayingBeforeHiddenRef.current) {
+            console.log('👁️ 頁面重新可見，之前未在播放');
+            return;
+          }
+          
+          // 如果狀態顯示不應該在播放，不需要恢復
+          if (!isPlaying) {
+            console.log('👁️ 頁面重新可見，播放狀態為暫停');
+            wasPlayingBeforeHiddenRef.current = false; // 清除標記
+            return;
+          }
+          
+          // ✅ 只有當所有條件都滿足時才恢復播放
+          if (audioRef.current.readyState > 0) {
+            console.log('🔄 頁面重新可見，恢復播放（音頻確實被暫停）');
+            try {
+              // 確保音頻已載入
+              if (audioRef.current.readyState >= 2) {
+                await audioRef.current.play();
+                setIsPlaying(true);
+                console.log('✅ 播放已恢復');
+              } else {
+                // 等待音頻載入完成後播放
+                const handleCanPlay = async () => {
+                  try {
+                    // 再次檢查是否仍然需要恢復播放
+                    if (audioRef.current.paused && isPlaying) {
+                      await audioRef.current.play();
+                      setIsPlaying(true);
+                      console.log('✅ 播放已恢復（延遲載入）');
+                    }
+                  } catch (error) {
+                    console.warn('⚠️ 恢復播放失敗:', error);
+                  }
+                  audioRef.current.removeEventListener('canplay', handleCanPlay);
+                };
+                audioRef.current.addEventListener('canplay', handleCanPlay);
+              }
+            } catch (error) {
+              console.warn('⚠️ 恢復播放失敗:', error);
+              // 如果自動播放失敗，清除標記
+              wasPlayingBeforeHiddenRef.current = false;
+            }
+          }
+        }, 200); // ✅ 延遲 200ms 檢查，給其他邏輯時間完成
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (restoreTimeout) {
+        clearTimeout(restoreTimeout);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [src, isPlaying]); // ✅ 依賴 src 和 isPlaying，確保狀態正確
 
   // ✅ 監聽 skipToNext 事件，自動切換到下一首
   useEffect(() => {

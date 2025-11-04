@@ -6,6 +6,8 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import ImageModal from "@/components/image/ImageModal";
 import VideoModal from "@/components/video/VideoModal";
 import EditVideoModal from "@/components/video/EditVideoModal";
+import MusicModal from "@/components/music/MusicModal";
+import EditMusicModal from "@/components/music/EditMusicModal";
 import UserHeader from "@/components/user/UserHeader";
 import UserImageGrid from "@/components/user/UserImageGrid";
 import UserEditModal from "@/components/user/UserEditModal";
@@ -48,8 +50,10 @@ export default function UserProfilePage() {
   const [userData, setUserData] = useState(null);
   const [uploadedImages, setUploadedImages] = useState([]);
   const [uploadedVideos, setUploadedVideos] = useState([]);
+  const [uploadedMusic, setUploadedMusic] = useState([]);
   const [likedImages, setLikedImages] = useState([]);
   const [likedVideos, setLikedVideos] = useState([]);
+  const [likedMusic, setLikedMusic] = useState([]);
   const [pinnedPlayerData, setPinnedPlayerData] = useState(null);
   const playlistLoadedRef = useRef(null); // 追踪已載入的播放清單，避免重複載入
   const lastPageIdRef = useRef(id); // 追踪上次訪問的頁面 ID
@@ -67,8 +71,14 @@ export default function UserProfilePage() {
     params.get("tab") === "likes" ? "likes" : "uploads"
   );
 
+  // ✅ 上傳作品類型篩選（全部/圖片/影片/音樂）
+  const [contentTypeFilter, setContentTypeFilter] = useState("all");
+
   const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedMusic, setSelectedMusic] = useState(null);
   const [showEditVideoModal, setShowEditVideoModal] = useState(false);
+  const [showEditMusicModal, setShowEditMusicModal] = useState(false);
+  const [editingMusic, setEditingMusic] = useState(null);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [isPowerCouponModalOpen, setPowerCouponModalOpen] = useState(false);
   const [isPointsModalOpen, setPointsModalOpen] = useState(false);
@@ -279,12 +289,16 @@ export default function UserProfilePage() {
     if (Array.isArray(v?.images)) return v.images;
     if (Array.isArray(v?.uploads)) return v.uploads;
     if (Array.isArray(v?.likedImages)) return v.likedImages;
-    if (Array.isArray(v?.items)) return v.items;
+    if (Array.isArray(v?.items)) return v.items; // user-videos, user-music 使用 items
+    if (Array.isArray(v?.videos)) return v.videos;
+    if (Array.isArray(v?.music)) return v.music;
     if (Array.isArray(v?.data)) return v.data;
     if (Array.isArray(v?.data?.items)) return v.data.items;
     if (Array.isArray(v?.data?.images)) return v.data.images;
     if (Array.isArray(v?.data?.uploads)) return v.data.uploads;
     if (Array.isArray(v?.data?.likedImages)) return v.data.likedImages;
+    if (Array.isArray(v?.data?.videos)) return v.data.videos;
+    if (Array.isArray(v?.data?.music)) return v.data.music;
     return [];
   };
 
@@ -618,6 +632,18 @@ export default function UserProfilePage() {
           }
         });
 
+      // 抓取用戶上傳的音樂
+      getJSON(`/api/user-music?id=${uid}`)
+        .then((val) => {
+          const list = pickList(val);
+          if (list.length || uploadedMusic.length === 0) setUploadedMusic(list);
+        })
+        .catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.warn("[user-music] failed:", err);
+          }
+        });
+
       getJSON(`/api/user-liked-images?id=${uid}`)
         .then((val) => {
           const list = pickList(val);
@@ -640,6 +666,18 @@ export default function UserProfilePage() {
             console.warn("[user-liked-videos] failed:", err);
           }
         });
+
+      // 抓取用戶收藏的音樂
+      getJSON(`/api/user-liked-music?id=${uid}`)
+        .then((val) => {
+          const list = pickList(val);
+          if (list.length || likedMusic.length === 0) setLikedMusic(list);
+        })
+        .catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.warn("[user-liked-music] failed:", err);
+          }
+        });
     })();
 
     return () => {
@@ -656,8 +694,29 @@ export default function UserProfilePage() {
   const enrichImage = async (img) => {
     let full = img;
     
-    // 如果是影片，直接返回不需要 enrich
+    // 如果是影片，確保作者信息正確
     if (img.type === 'video') {
+      try {
+        // 確保作者信息完整
+        const authorId = typeof full.author === "string" ? full.author : full.author?._id || full.author?.id || full.user?._id || full.user;
+        if (authorId && (!full.author || typeof full.author === "string" || !full.author.username)) {
+          const u = await axios.get(`/api/user-info?id=${authorId}`);
+          if (u?.data) {
+            full = { 
+              ...full, 
+              author: u.data,
+              user: u.data // 保持兼容性
+            };
+          }
+        }
+      } catch {
+        // 靜默失敗
+      }
+      return full;
+    }
+    
+    // 如果是音樂，直接返回（音樂有自己的處理邏輯）
+    if (img.type === 'music') {
       return full;
     }
     
@@ -697,35 +756,126 @@ export default function UserProfilePage() {
   };
 
   const handleSelectImage = async (img) => {
+    // 如果是音樂類型，設置 selectedMusic
+    if (img.type === 'music') {
+      setSelectedMusic(img);
+      return;
+    }
+    
+    // 圖片和視頻使用原有邏輯
     const enriched = await enrichImage(img);
     setSelectedImage(enriched);
   };
 
-  // 畫面用的過濾清單（混合圖片和影片）
+  // 畫面用的過濾清單（混合圖片、影片和音樂）
   const filteredImages = useMemo(() => {
     let base = [];
     
     if (activeTab === "uploads") {
-      // 混合圖片和影片，按時間排序
-      const combinedItems = [
-        ...uploadedImages.map(img => ({ ...img, type: 'image' })),
-        ...uploadedVideos.map(video => ({ ...video, type: 'video' }))
-      ];
-      base = combinedItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      // 根據類型篩選
+      let combinedItems = [];
+      
+      if (contentTypeFilter === "all") {
+        // 全部：混合圖片、影片和音樂
+        combinedItems = [
+          ...uploadedImages.map(img => ({ ...img, type: 'image' })),
+          ...uploadedVideos.map(video => ({ ...video, type: 'video' })),
+          ...uploadedMusic.map(music => ({ ...music, type: 'music' }))
+        ];
+      } else if (contentTypeFilter === "image") {
+        // 只顯示圖片
+        combinedItems = uploadedImages.map(img => ({ ...img, type: 'image' }));
+      } else if (contentTypeFilter === "video") {
+        // 只顯示影片
+        combinedItems = uploadedVideos.map(video => ({ ...video, type: 'video' }));
+      } else if (contentTypeFilter === "music") {
+        // 只顯示音樂
+        combinedItems = uploadedMusic.map(music => ({ ...music, type: 'music' }));
+      }
+      
+      // 🔧 混合排序：前 3 張最新，其餘隨機排列（避免相似內容聚集）
+      if (combinedItems.length > 0) {
+        // 先按時間排序
+        combinedItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+        // 如果項目超過 3 個，將前 3 個保留，其餘隨機排列
+        if (combinedItems.length > 3) {
+          const pinnedItems = combinedItems.slice(0, 3);
+          const restItems = combinedItems.slice(3);
+          
+          // Fisher-Yates 洗牌算法（隨機排列）
+          for (let i = restItems.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [restItems[i], restItems[j]] = [restItems[j], restItems[i]];
+          }
+          
+          base = [...pinnedItems, ...restItems];
+        } else {
+          base = combinedItems;
+        }
+      } else {
+        base = combinedItems;
+      }
     } else {
-      // 收藏頁面混合顯示圖片和影片
-      const combinedLikedItems = [
-        ...likedImages.map(img => ({ ...img, type: 'image' })),
-        ...likedVideos.map(video => ({ ...video, type: 'video' }))
-      ];
-      base = combinedLikedItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      // 收藏頁面：根據類型篩選
+      let combinedLikedItems = [];
+      
+      if (contentTypeFilter === "all") {
+        // 全部：混合圖片、影片和音樂
+        combinedLikedItems = [
+          ...likedImages.map(img => ({ ...img, type: 'image' })),
+          ...likedVideos.map(video => ({ ...video, type: 'video' })),
+          ...likedMusic.map(music => ({ ...music, type: 'music' }))
+        ];
+      } else if (contentTypeFilter === "image") {
+        // 只顯示圖片
+        combinedLikedItems = likedImages.map(img => ({ ...img, type: 'image' }));
+      } else if (contentTypeFilter === "video") {
+        // 只顯示影片
+        combinedLikedItems = likedVideos.map(video => ({ ...video, type: 'video' }));
+      } else if (contentTypeFilter === "music") {
+        // 只顯示音樂
+        combinedLikedItems = likedMusic.map(music => ({ ...music, type: 'music' }));
+      }
+      
+      // 🔧 收藏頁面也使用混合排序：前 3 張最新，其餘隨機排列
+      if (combinedLikedItems.length > 0) {
+        // 先按時間排序
+        combinedLikedItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+        // 如果項目超過 3 個，將前 3 個保留，其餘隨機排列
+        if (combinedLikedItems.length > 3) {
+          const pinnedItems = combinedLikedItems.slice(0, 3);
+          const restItems = combinedLikedItems.slice(3);
+          
+          // Fisher-Yates 洗牌算法（隨機排列）
+          for (let i = restItems.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [restItems[i], restItems[j]] = [restItems[j], restItems[i]];
+          }
+          
+          base = [...pinnedItems, ...restItems];
+        } else {
+          base = combinedLikedItems;
+        }
+      } else {
+        base = combinedLikedItems;
+      }
     }
     
     const keyword = searchQuery.toLowerCase();
     const selectedRatings = levelFilters.map((label) => labelToRating[label]);
 
     return base.filter((item) => {
-      const rating = item.rating || "all";
+      // 視頻和音樂的評級系統可能不同，需要特殊處理
+      let rating = item.rating || "all";
+      
+      // 如果是視頻，將 sfw 映射到 all，nsfw 映射到 18
+      if (item.type === 'video') {
+        if (rating === 'sfw') rating = 'all';
+        else if (rating === 'nsfw') rating = '18';
+      }
+      
       const matchLevel =
         selectedRatings.length === 0 ? rating !== "18" : selectedRatings.includes(rating);
 
@@ -742,7 +892,7 @@ export default function UserProfilePage() {
 
       return matchLevel && matchCategory && matchSearch;
     });
-  }, [activeTab, uploadedImages, uploadedVideos, likedImages, likedVideos, levelFilters, categoryFilters, searchQuery]);
+  }, [activeTab, contentTypeFilter, uploadedImages, uploadedVideos, uploadedMusic, likedImages, likedVideos, likedMusic, levelFilters, categoryFilters, searchQuery]);
 
   // Like hook（共用）
   const { handleToggleLike, onLikeUpdate } = useLikeHandler({
@@ -862,7 +1012,10 @@ export default function UserProfilePage() {
                 ? "bg-white text-black shadow-md"
                 : "bg-zinc-700 text-white hover:bg-zinc-600"
             }`}
-            onClick={() => setActiveTab("uploads")}
+            onClick={() => {
+              setActiveTab("uploads");
+              setContentTypeFilter("all"); // 重置為全部
+            }}
           >
             <span className="hidden sm:inline">上傳作品</span>
             <span className="sm:hidden">作品</span>
@@ -873,10 +1026,57 @@ export default function UserProfilePage() {
                 ? "bg-white text-black shadow-md"
                 : "bg-zinc-700 text-white hover:bg-zinc-600"
             }`}
-            onClick={() => setActiveTab("likes")}
+            onClick={() => {
+              setActiveTab("likes");
+              setContentTypeFilter("all"); // 重置為全部
+            }}
           >
             <span className="hidden sm:inline">❤️ 收藏</span>
             <span className="sm:hidden">❤️ 收藏</span>
+          </button>
+        </div>
+
+        {/* 類型篩選（在上傳作品和收藏標籤頁都顯示） */}
+        <div className="flex gap-2 mb-4 md:mb-6 px-2 md:px-0 overflow-x-auto">
+          <button
+            className={`flex-shrink-0 px-3 py-2 rounded-lg font-medium transition text-sm ${
+              contentTypeFilter === "all"
+                ? "bg-blue-600 text-white"
+                : "bg-zinc-700 text-white hover:bg-zinc-600"
+            }`}
+            onClick={() => setContentTypeFilter("all")}
+          >
+            全部
+          </button>
+          <button
+            className={`flex-shrink-0 px-3 py-2 rounded-lg font-medium transition text-sm ${
+              contentTypeFilter === "image"
+                ? "bg-blue-600 text-white"
+                : "bg-zinc-700 text-white hover:bg-zinc-600"
+            }`}
+            onClick={() => setContentTypeFilter("image")}
+          >
+            圖片
+          </button>
+          <button
+            className={`flex-shrink-0 px-3 py-2 rounded-lg font-medium transition text-sm ${
+              contentTypeFilter === "video"
+                ? "bg-blue-600 text-white"
+                : "bg-zinc-700 text-white hover:bg-zinc-600"
+            }`}
+            onClick={() => setContentTypeFilter("video")}
+          >
+            影片
+          </button>
+          <button
+            className={`flex-shrink-0 px-3 py-2 rounded-lg font-medium transition text-sm ${
+              contentTypeFilter === "music"
+                ? "bg-blue-600 text-white"
+                : "bg-zinc-700 text-white hover:bg-zinc-600"
+            }`}
+            onClick={() => setContentTypeFilter("music")}
+          >
+            音樂
           </button>
         </div>
 
@@ -899,6 +1099,106 @@ export default function UserProfilePage() {
           setSelectedImage={setSelectedImage}
           onLikeUpdate={onLikeUpdate}
         />
+
+        {selectedMusic && (
+          <MusicModal
+            music={selectedMusic}
+            currentUser={currentUser}
+            displayMode="gallery"
+            onClose={() => setSelectedMusic(null)}
+            onUserClick={() => {
+              const authorId = selectedMusic?.author?._id || selectedMusic?.author;
+              if (authorId) {
+                router.push(`/user/${authorId}`);
+              }
+            }}
+            onDelete={async (musicId) => {
+              try {
+                const response = await fetch(`/api/music/${musicId}/delete`, {
+                  method: 'DELETE',
+                });
+
+                if (response.ok) {
+                  // 從列表中移除音樂
+                  setUploadedMusic(prev => prev.filter(m => m._id !== musicId));
+                  // 關閉 Modal
+                  setSelectedMusic(null);
+                  console.log('✅ 音樂刪除成功');
+                } else {
+                  const error = await response.json();
+                  console.error('❌ 刪除音樂失敗:', error);
+                  alert('刪除失敗：' + (error.error || '未知錯誤'));
+                }
+              } catch (error) {
+                console.error('❌ 刪除音樂錯誤:', error);
+                alert('刪除失敗，請稍後再試');
+              }
+            }}
+            canEdit={currentUser && selectedMusic?.author?._id && String(currentUser._id) === String(selectedMusic.author._id)}
+            onEdit={() => {
+              setEditingMusic(selectedMusic);
+              setShowEditMusicModal(true);
+            }}
+            isLiked={
+              Array.isArray(selectedMusic?.likes) && currentUser?._id
+                ? selectedMusic.likes.includes(currentUser._id)
+                : false
+            }
+            onToggleLike={async (musicId) => {
+              try {
+                const response = await fetch(`/api/music/${musicId}/like`, {
+                  method: "POST",
+                });
+                if (response.ok) {
+                  const data = await response.json();
+                  setSelectedMusic({
+                    ...selectedMusic,
+                    likes: data.likes,
+                    likesCount: data.likesCount,
+                  });
+                  
+                  // 更新上傳音樂列表
+                  setUploadedMusic(prev =>
+                    prev.map((m) =>
+                      m._id === musicId
+                        ? { ...m, likes: data.likes, likesCount: data.likesCount }
+                        : m
+                    )
+                  );
+                  
+                  // 更新收藏音樂列表
+                  const isLiked = Array.isArray(data.likes) && currentUser?._id
+                    ? data.likes.includes(currentUser._id)
+                    : false;
+                  
+                  if (isLiked) {
+                    // 如果已收藏，確保在收藏列表中
+                    setLikedMusic(prev => {
+                      const exists = prev.some(m => m._id === musicId);
+                      if (!exists && selectedMusic) {
+                        return [...prev, { ...selectedMusic, likes: data.likes, likesCount: data.likesCount }];
+                      }
+                      return prev.map((m) =>
+                        m._id === musicId
+                          ? { ...m, likes: data.likes, likesCount: data.likesCount }
+                          : m
+                      );
+                    });
+                  } else {
+                    // 如果取消收藏，從收藏列表中移除
+                    setLikedMusic(prev => prev.filter(m => m._id !== musicId));
+                    // 如果在收藏頁面且取消收藏，關閉 Modal
+                    if (activeTab === "likes") {
+                      setSelectedMusic(null);
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error("切換愛心失敗:", error);
+              }
+            }}
+          />
+        )}
 
         {selectedImage && (
           selectedImage.type === 'video' ? (
@@ -1030,6 +1330,29 @@ export default function UserProfilePage() {
             setSelectedImage(updatedVideo);
             // 關閉編輯 Modal
             setShowEditVideoModal(false);
+          }}
+        />
+      )}
+
+      {/* 編輯音樂 Modal */}
+      {showEditMusicModal && editingMusic && (
+        <EditMusicModal
+          music={editingMusic}
+          isOpen={showEditMusicModal}
+          onClose={() => {
+            setShowEditMusicModal(false);
+            setEditingMusic(null);
+          }}
+          onMusicUpdated={(updatedMusic) => {
+            // 更新音樂列表中的資料
+            setUploadedMusic(prev => prev.map(m => 
+              m._id === updatedMusic._id ? updatedMusic : m
+            ));
+            // 更新選中的音樂
+            setSelectedMusic(updatedMusic);
+            // 關閉編輯 Modal
+            setShowEditMusicModal(false);
+            setEditingMusic(null);
           }}
         />
       )}

@@ -186,6 +186,23 @@ const VideosPage = () => {
       if (e.detail.isPinned) {
         // 用戶剛釘選播放器，使用事件中的數據
         const pinnedPlayer = e.detail.pinnedPlayer;
+        const pinnedUserId = String(pinnedPlayer?.userId || '');
+        const isPinnedOwnPlayer = currentUser?._id && String(currentUser._id) === pinnedUserId;
+        
+        // ✅ 如果釘選的是自己的播放器，跳過設置（MiniPlayer 會從數據庫載入最新播放清單）
+        if (isPinnedOwnPlayer) {
+          console.log('👤 [VideosPage] 釘選的是自己的播放器，跳過設置（由 MiniPlayer 處理）');
+          // 只設置 playerOwner，不設置播放清單和曲目（MiniPlayer 會處理）
+          player?.setPlayerOwner?.({ 
+            userId: pinnedPlayer.userId, 
+            username: pinnedPlayer.username 
+          });
+          player?.setMiniPlayerEnabled?.(true);
+          player?.setShareMode?.("global");
+          return;
+        }
+        
+        // ✅ 如果不是自己的播放器，使用事件中的數據
         const playlist = pinnedPlayer?.playlist || [];
         
         // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
@@ -243,38 +260,54 @@ const VideosPage = () => {
       new Date(pinnedPlayer.expiresAt) > new Date();
     
     if (hasPinnedPlayer) {
-      // 恢復釘選播放器
-      const playlist = pinnedPlayer.playlist || [];
+      const pinnedUserId = String(pinnedPlayer?.userId || '');
+      const isPinnedOwnPlayer = currentUser?._id && String(currentUser._id) === pinnedUserId;
       
-      // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
-      player?.setPlayerOwner?.({ 
-        userId: pinnedPlayer.userId, 
-        username: pinnedPlayer.username 
-      });
-      
-      // ✅ 設置播放清單（即使是空的）
-      player?.setPlaylist?.(playlist);
-      
-      if (playlist.length > 0) {
-        const currentIndex = pinnedPlayer.currentIndex || 0;
-        const currentTrack = playlist[currentIndex];
-        
-        player?.setActiveIndex?.(currentIndex);
-        
-        if (currentTrack) {
-          player?.setSrc?.(currentTrack.url);
-          player?.setOriginUrl?.(currentTrack.url);
-          player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
-        }
+      // ✅ 如果釘選的是自己的播放器，跳過設置（MiniPlayer 會從數據庫載入最新播放清單）
+      if (isPinnedOwnPlayer) {
+        console.log('👤 [VideosPage] 初始檢查：釘選的是自己的播放器，跳過設置（由 MiniPlayer 處理）');
+        // 只設置 playerOwner，不設置播放清單和曲目（MiniPlayer 會處理）
+        player?.setPlayerOwner?.({ 
+          userId: pinnedPlayer.userId, 
+          username: pinnedPlayer.username 
+        });
+        player?.setMiniPlayerEnabled?.(true);
+        player?.setShareMode?.("global");
       } else {
-        // ✅ 播放清單為空時，清空當前曲目
-        player?.setSrc?.('');
-        player?.setOriginUrl?.('');
-        player?.setTrackTitle?.('');
-        player?.setActiveIndex?.(0);
+        // ✅ 如果不是自己的播放器，使用釘選記錄中的播放清單
+        const playlist = pinnedPlayer.playlist || [];
+        
+        // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
+        player?.setPlayerOwner?.({ 
+          userId: pinnedPlayer.userId, 
+          username: pinnedPlayer.username 
+        });
+        
+        // ✅ 設置播放清單（即使是空的）
+        player?.setPlaylist?.(playlist);
+        
+        if (playlist.length > 0) {
+          const currentIndex = pinnedPlayer.currentIndex || 0;
+          const currentTrack = playlist[currentIndex];
+          
+          player?.setActiveIndex?.(currentIndex);
+          
+          if (currentTrack) {
+            player?.setSrc?.(currentTrack.url);
+            player?.setOriginUrl?.(currentTrack.url);
+            player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
+          }
+        } else {
+          // ✅ 播放清單為空時，清空當前曲目
+          player?.setSrc?.('');
+          player?.setOriginUrl?.('');
+          player?.setTrackTitle?.('');
+          player?.setActiveIndex?.(0);
+        }
+        
+        player?.setMiniPlayerEnabled?.(true);
+        player?.setShareMode?.("global");
       }
-      
-      player?.setMiniPlayerEnabled?.(true);
     } else {
       // 沒有釘選數據，設定為全局模式但不顯示播放器
       player?.setShareMode?.("global");

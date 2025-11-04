@@ -17,7 +17,7 @@ import { notify } from "@/components/common/GlobalNotificationManager";
 export default function UserPlayerPage() {
   const { id } = useParams();
   const player = usePlayer();
-  const { currentUser } = useCurrentUser() || {};
+  const { currentUser, setCurrentUser } = useCurrentUser() || {};
   const isOwner = !!(currentUser && String(currentUser._id) === String(id));
   
   // 調試登入狀態
@@ -26,6 +26,11 @@ export default function UserPlayerPage() {
   const [userData, setUserData] = useState(null);
   // 使用 PlayerContext 的播放清單狀態
   const { playlist, setPlaylist, activeIndex, setActiveIndex } = player;
+  
+  // ✅ 防止並發保存請求相互覆蓋
+  const savingRef = useRef(false); // 是否正在保存
+  const pendingPlaylistRef = useRef(null); // 待保存的播放清單（最新版本）
+  const saveVersionRef = useRef(0); // 保存版本計數器
   
   // 使用 PlayerContext 的狀態作為主要狀態
   const currentTrack = playlist[activeIndex];
@@ -36,12 +41,22 @@ export default function UserPlayerPage() {
   useEffect(() => {
     const fetchPlaylist = async () => {
       try {
-        // ✅ 檢查是否有釘選的播放器
+        // ✅ 檢查是否有釘選的播放器，但只有在不是自己的頁面時才跳過
+        // 如果是自己的頁面（id === currentUser._id），應該載入自己的播放清單，不受釘選影響
+        const isOwnPage = currentUser && String(currentUser._id) === String(id);
         const hasPinnedPlayer = currentUser?.pinnedPlayer?.userId;
-        if (hasPinnedPlayer) {
-          console.log('📌 [UserPlayerPage] 檢測到釘選播放器，跳過加載本地播放清單');
+        const isPinnedThisPage = hasPinnedPlayer && String(currentUser.pinnedPlayer.userId) === String(id);
+        
+        // 只有在不是自己的頁面，且釘選的是其他用戶的播放器時，才跳過載入
+        if (hasPinnedPlayer && !isOwnPage && !isPinnedThisPage) {
+          console.log('📌 [UserPlayerPage] 檢測到其他用戶的釘選播放器，跳過加載本地播放清單');
           setLoading(false);
-          return; // 不覆蓋釘選的播放器
+          return; // 不覆蓋其他用戶的釘選播放器
+        }
+        
+        // ✅ 如果是自己的頁面，即使有釘選播放器也要載入自己的播放清單
+        if (isOwnPage) {
+          console.log('👤 [UserPlayerPage] 自己的播放器頁面，載入自己的播放清單');
         }
         
         // 啟用小播放器
@@ -87,19 +102,24 @@ export default function UserPlayerPage() {
              let finalPlaylist = [];
              
              // 1. 優先從數據庫載入播放清單（主要存儲）
-             if (userDataFetched.playlist && userDataFetched.playlist.length > 0) {
-               finalPlaylist = userDataFetched.playlist;
+             // ✅ 檢查數據庫中是否有播放清單（即使是空數組也要使用，表示用戶已清空）
+             if (userDataFetched.playlist !== undefined && userDataFetched.playlist !== null) {
+               // 數據庫中有播放清單（可能是空數組），使用它
+               finalPlaylist = Array.isArray(userDataFetched.playlist) ? userDataFetched.playlist : [];
+               console.log('📥 [fetchPlaylist] 從數據庫載入播放清單，長度:', finalPlaylist.length);
              } else {
-               // 2. 數據庫沒有，檢查 localStorage（備用存儲）
+               // 2. 數據庫沒有播放清單欄位，檢查 localStorage（備用存儲）
+               console.log('📥 [fetchPlaylist] 數據庫沒有播放清單，檢查 localStorage');
                const localPlaylist = localStorage.getItem(`playlist_${id}`);
                if (localPlaylist) {
                  try {
                    const parsedPlaylist = JSON.parse(localPlaylist);
-                   if (Array.isArray(parsedPlaylist) && parsedPlaylist.length > 0) {
+                   if (Array.isArray(parsedPlaylist)) {
                      finalPlaylist = parsedPlaylist;
+                     console.log('📥 [fetchPlaylist] 從 localStorage 載入播放清單，長度:', finalPlaylist.length);
                    }
                  } catch (error) {
-                   console.error("解析播放清單失敗:", error);
+                   console.error("❌ [fetchPlaylist] 解析播放清單失敗:", error);
                  }
                }
              }
@@ -162,9 +182,11 @@ export default function UserPlayerPage() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         console.log("🔧 頁面重新可見，檢查播放器狀態");
-        // 重新同步播放器狀態
-        if (playlist.length > 0 && player.originUrl) {
-          console.log("🔧 重新同步播放器狀態");
+        // ✅ 不再重新設置音頻源（避免重播），PlayerContext 會自動處理恢復播放
+        // 只檢查播放器狀態是否正確，不做任何重置操作
+        if (playlist.length > 0 && player.originUrl && !player.src) {
+          // 只有在音頻源確實丟失時才重新設置
+          console.log("🔧 音頻源丟失，重新設置");
           player.setSrc?.(player.originUrl);
         }
       }
@@ -707,43 +729,206 @@ export default function UserPlayerPage() {
           }}
           playlist={playlist}
           onChangePlaylist={async (newPlaylist) => {
+            console.log('📝 [onChangePlaylist] 開始保存播放清單，長度:', newPlaylist.length);
+            console.log('📝 [onChangePlaylist] 播放清單內容:', JSON.stringify(newPlaylist, null, 2));
+            
+            // ✅ 先更新本地狀態
             setPlaylist(newPlaylist);
             
-            // 🏗️ 理想架構：分工明確的保存邏輯
+            // ✅ 更新待保存的播放清單（始終保存最新版本）
+            pendingPlaylistRef.current = newPlaylist;
+            saveVersionRef.current += 1;
+            const currentVersion = saveVersionRef.current;
             
-            // 1. 保存播放清單到數據庫（主要存儲）
-            try {
-              const response = await axios.post('/api/user/save-playlist', {
-                playlist: newPlaylist
-              });
+            // ✅ 如果正在保存，只更新待保存版本，不立即執行（會在當前保存完成後繼續）
+            if (savingRef.current) {
+              console.log('⏸️ [onChangePlaylist] 正在保存中，已更新待保存版本:', currentVersion);
+              return; // 等待當前保存完成後，會在 finally 塊中繼續保存
+            }
+            
+            // ✅ 執行保存（確保只有一個保存請求在進行）
+            const performSave = async () => {
+              // 檢查是否仍是最新版本（使用最新的版本號）
+              const latestVersion = saveVersionRef.current;
+              if (currentVersion !== latestVersion) {
+                console.log('⏭️ [onChangePlaylist] 版本已過時 (', currentVersion, '->', latestVersion, ')，跳過保存（使用最新版本）');
+                // 使用最新版本重新調用
+                if (pendingPlaylistRef.current) {
+                  // 更新 currentVersion 為最新版本
+                  const newVersion = latestVersion;
+                  // 重新執行保存（使用最新版本）
+                  setTimeout(() => {
+                    const performSaveWithVersion = async () => {
+                      const playlistToSave = pendingPlaylistRef.current;
+                      if (!playlistToSave) {
+                        console.log('⚠️ [onChangePlaylist] 沒有待保存的播放清單');
+                        savingRef.current = false;
+                        return;
+                      }
+                      
+                      savingRef.current = true;
+                      console.log('💾 [onChangePlaylist] 開始保存播放清單到數據庫（最新版本）:', newVersion);
+                      
+                      try {
+                        const response = await axios.post('/api/user/save-playlist', {
+                          playlist: playlistToSave
+                        });
+                        
+                        if (response.data.success) {
+                          console.log('✅ [onChangePlaylist] 播放清單已保存到數據庫，版本:', newVersion, '長度:', response.data.playlist?.length || 0);
+                          
+                          if (currentUser && setCurrentUser) {
+                            const pinnedUserId = currentUser?.pinnedPlayer?.userId;
+                            const isPinnedOwnPlayer = pinnedUserId && String(pinnedUserId) === String(currentUser._id);
+                            
+                            if (isPinnedOwnPlayer && currentUser.pinnedPlayer) {
+                              setCurrentUser(prevUser => {
+                                if (!prevUser) return prevUser;
+                                return {
+                                  ...prevUser,
+                                  pinnedPlayer: {
+                                    ...prevUser.pinnedPlayer,
+                                    playlist: playlistToSave
+                                  }
+                                };
+                              });
+                            }
+                          }
+                          
+                          window.dispatchEvent(new CustomEvent('playlistChanged'));
+                        }
+                      } catch (error) {
+                        if (error.response?.status !== 401) {
+                          console.error("❌ [onChangePlaylist] 保存播放清單到數據庫失敗:", error.message);
+                          notify("保存播放清單失敗: " + (error.response?.data?.message || error.message), "error");
+                        }
+                      } finally {
+                        savingRef.current = false;
+                        
+                        if (saveVersionRef.current > newVersion && pendingPlaylistRef.current) {
+                          console.log('🔄 [onChangePlaylist] 檢測到更新的版本，繼續保存');
+                          setTimeout(() => performSaveWithVersion(), 50);
+                        }
+                      }
+                      
+                      try {
+                        localStorage.setItem(`playlist_${id}`, JSON.stringify(playlistToSave));
+                      } catch (error) {
+                        console.error("❌ [onChangePlaylist] 保存播放清單到本地存儲失敗:", error);
+                      }
+                      
+                      player.setPlaylist?.(playlistToSave);
+                      
+                      if (playlistToSave.length > 0) {
+                        const firstItem = playlistToSave[0];
+                        player.setSrc?.(firstItem.url);
+                        player.setOriginUrl?.(firstItem.url);
+                        player.setTrackTitle?.(firstItem.title);
+                        setActiveIndex(0);
+                      } else {
+                        player.setSrc?.("");
+                        player.setOriginUrl?.("");
+                        player.setTrackTitle?.("");
+                        setActiveIndex(0);
+                      }
+                    };
+                    performSaveWithVersion();
+                  }, 50);
+                }
+                return;
+              }
               
-              if (!response.data.success) {
-                console.error("保存播放清單失敗:", response.data.message);
+              const playlistToSave = pendingPlaylistRef.current;
+              if (!playlistToSave) {
+                console.log('⚠️ [onChangePlaylist] 沒有待保存的播放清單');
+                savingRef.current = false;
+                return;
               }
-            } catch (error) {
-              if (error.response?.status !== 401) {
-                console.error("保存播放清單到數據庫失敗:", error.message);
+              
+              savingRef.current = true;
+              console.log('💾 [onChangePlaylist] 開始保存播放清單到數據庫，版本:', currentVersion);
+              
+              try {
+                const response = await axios.post('/api/user/save-playlist', {
+                  playlist: playlistToSave
+                });
+              
+                if (response.data.success) {
+                  console.log('✅ [onChangePlaylist] 播放清單已保存到數據庫，版本:', currentVersion, '長度:', response.data.playlist?.length || 0);
+                  
+                  // ✅ 如果用戶已釘選自己的播放器，更新 currentUser.pinnedPlayer.playlist
+                  // 這樣可以避免使用舊的快照
+                  if (currentUser && setCurrentUser) {
+                    const pinnedUserId = currentUser?.pinnedPlayer?.userId;
+                    const isPinnedOwnPlayer = pinnedUserId && String(pinnedUserId) === String(currentUser._id);
+                    
+                    if (isPinnedOwnPlayer && currentUser.pinnedPlayer) {
+                      setCurrentUser(prevUser => {
+                        if (!prevUser) return prevUser;
+                        return {
+                          ...prevUser,
+                          pinnedPlayer: {
+                            ...prevUser.pinnedPlayer,
+                            playlist: playlistToSave // 使用最新的播放清單
+                          }
+                        };
+                      });
+                      console.log('✅ [onChangePlaylist] 已更新 currentUser.pinnedPlayer.playlist');
+                    }
+                  }
+                  
+                  // ✅ 觸發播放清單變更事件，通知 MiniPlayer 重新載入
+                  window.dispatchEvent(new CustomEvent('playlistChanged'));
+                  console.log('🔄 [onChangePlaylist] 已觸發播放清單變更事件');
+                } else {
+                  console.error("❌ [onChangePlaylist] 保存播放清單失敗:", response.data.message);
+                  notify("保存播放清單失敗: " + (response.data.message || "未知錯誤"), "error");
+                }
+              } catch (error) {
+                if (error.response?.status !== 401) {
+                  console.error("❌ [onChangePlaylist] 保存播放清單到數據庫失敗:", error.message);
+                  console.error("❌ [onChangePlaylist] 錯誤詳情:", error.response?.data);
+                  notify("保存播放清單失敗: " + (error.response?.data?.message || error.message), "error");
+                }
+              } finally {
+                savingRef.current = false;
+                
+                // ✅ 檢查是否有待保存的更新版本
+                if (saveVersionRef.current > currentVersion && pendingPlaylistRef.current) {
+                  console.log('🔄 [onChangePlaylist] 檢測到更新的版本，繼續保存');
+                  // 遞歸調用以保存最新版本
+                  setTimeout(() => performSave(), 50);
+                }
               }
-            }
+              
+              // 2. 保存播放清單到 localStorage（備用存儲）
+              try {
+                localStorage.setItem(`playlist_${id}`, JSON.stringify(playlistToSave));
+                console.log('✅ [onChangePlaylist] 播放清單已保存到 localStorage');
+              } catch (error) {
+                console.error("❌ [onChangePlaylist] 保存播放清單到本地存儲失敗:", error);
+              }
+              
+              // 3. 更新播放器狀態
+              // ✅ 無論是否已釘選自己的播放器，都更新 PlayerContext 的播放清單
+              player.setPlaylist?.(playlistToSave);
+              
+              if (playlistToSave.length > 0) {
+                const firstItem = playlistToSave[0];
+                player.setSrc?.(firstItem.url);
+                player.setOriginUrl?.(firstItem.url);
+                player.setTrackTitle?.(firstItem.title);
+                setActiveIndex(0);
+              } else {
+                player.setSrc?.("");
+                player.setOriginUrl?.("");
+                player.setTrackTitle?.("");
+                setActiveIndex(0);
+              }
+            };
             
-            // 2. 保存播放清單到 localStorage（備用存儲）
-            try {
-              localStorage.setItem(`playlist_${id}`, JSON.stringify(newPlaylist));
-            } catch (error) {
-              console.error("保存播放清單到本地存儲失敗:", error);
-            }
-            
-            if (newPlaylist.length > 0) {
-              const firstItem = newPlaylist[0];
-              player.setSrc?.(firstItem.url);
-              player.setOriginUrl?.(firstItem.url);
-              player.setTrackTitle?.(firstItem.title);
-              setActiveIndex(0);
-          } else {
-              player.setSrc?.("");
-              player.setOriginUrl?.("");
-              setActiveIndex(0);
-          }
+            // 執行保存
+            performSave();
         }}
           activeIndex={activeIndex}
             onSetActiveIndex={(index) => {

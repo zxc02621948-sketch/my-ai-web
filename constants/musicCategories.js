@@ -6,7 +6,7 @@ export const GENRE_MAP = {
   electronic: "電子 Electronic",
   classical: "古典 Classical",
   jazz: "爵士 Jazz",
-  folk: "民謠 Folk",
+  folk: "古風 Chinese Style",
   hiphop: "嘻哈 Hip-Hop",
   ambient: "氛圍 Ambient",
   acg: "動漫 / ACG",

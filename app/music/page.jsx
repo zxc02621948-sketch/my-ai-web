@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import MusicGrid from "@/components/music/MusicGrid";
 import MusicModal from "@/components/music/MusicModal";
+import EditMusicModal from "@/components/music/EditMusicModal";
 import SortSelect from "@/components/common/SortSelect";
 import { usePlayer } from "@/components/context/PlayerContext";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
@@ -22,6 +23,8 @@ const MusicPage = () => {
   const [loading, setLoading] = useState(true);
   const [selectedMusic, setSelectedMusic] = useState(null);
   const [showMusicModal, setShowMusicModal] = useState(false);
+  const [editingMusic, setEditingMusic] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [sort, setSort] = useState("popular");
   const player = usePlayer();
   const { currentUser } = useCurrentUser();
@@ -397,8 +400,9 @@ const MusicPage = () => {
             String(currentUser._id) === String(selectedMusic.author._id)
           }
           onEdit={() => {
-            // 編輯邏輯
-            console.log("編輯音樂:", selectedMusic._id);
+            // 打開編輯表單
+            setEditingMusic(selectedMusic);
+            setShowEditModal(true);
           }}
           isLiked={
             Array.isArray(selectedMusic?.likes) && currentUser?._id
@@ -429,6 +433,33 @@ const MusicPage = () => {
             } catch (error) {
               console.error("切換愛心失敗:", error);
             }
+          }}
+        />
+      )}
+
+      {/* 編輯音樂 Modal */}
+      {showEditModal && editingMusic && (
+        <EditMusicModal
+          music={editingMusic}
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingMusic(null);
+          }}
+          onMusicUpdated={(updatedMusic) => {
+            // 更新音樂列表
+            setMusic((prevMusic) =>
+              prevMusic.map((m) =>
+                m._id === updatedMusic._id ? updatedMusic : m
+              )
+            );
+            // 如果當前選中的音樂就是編輯的音樂，也更新它
+            if (selectedMusic && selectedMusic._id === updatedMusic._id) {
+              setSelectedMusic(updatedMusic);
+            }
+            // 關閉編輯表單
+            setShowEditModal(false);
+            setEditingMusic(null);
           }}
         />
       )}

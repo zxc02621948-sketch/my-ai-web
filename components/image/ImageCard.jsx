@@ -5,6 +5,7 @@ import { Heart } from "lucide-react";
 import NewBadge from "@/components/image/NewBadge";
 import FireEffect from "@/components/image/FireEffect";
 import VideoPreview from "@/components/video/VideoPreview";
+import MusicPreview from "@/components/music/MusicPreview";
 import { updateLikeCacheAndBroadcast } from "@/lib/likeSync"; 
 
 // ⬇️ 從 ObjectId 推回建立時間（備援）
@@ -148,8 +149,8 @@ export default function ImageCard({
       title={img?.title || "圖片"}
       aria-label={img?.title || "圖片"}
     >
-      {/* NEW 徽章（左上角） */}
-      {isNew && (
+      {/* NEW 徽章（左上角）- 音樂類型不顯示，因為 MusicPreview 會自己顯示 */}
+      {isNew && img?.type !== 'music' && (
         <div className="absolute left-2 top-2 z-20 pointer-events-none">
           <NewBadge animated />
         </div>
@@ -164,7 +165,7 @@ export default function ImageCard({
       )}
 
       {/* 愛心與數量（固定在卡片右上角）- 只在圖片時顯示 */}
-      {img?.type !== 'video' && (
+      {img?.type !== 'video' && img?.type !== 'music' && (
         <div 
           className={`absolute top-2 right-2 z-10 bg-black/60 rounded-full px-2 py-1 flex items-center space-x-1 ${
             canLike ? "hover:scale-110 cursor-pointer" : "opacity-70"
@@ -191,7 +192,7 @@ export default function ImageCard({
           </div>
         )}
         
-        {/* ✅ 根據類型顯示圖片或影片 */}
+        {/* ✅ 根據類型顯示圖片、影片或音樂 */}
         {img?.type === 'video' ? (
           /* 使用 VideoPreview 組件顯示影片 */
           <VideoPreview
@@ -201,6 +202,13 @@ export default function ImageCard({
             isLiked={isLiked}
             onToggleLike={onToggleLike}
             onLikeUpdate={onLikeUpdate}
+            className="w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg"
+          />
+        ) : img?.type === 'music' ? (
+          /* 使用 MusicPreview 組件顯示音樂 */
+          <MusicPreview
+            music={img}
+            onClick={onClick}
             className="w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg"
           />
         ) : (

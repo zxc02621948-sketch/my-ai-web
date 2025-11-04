@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import Music from "@/models/Music";
+import { computeMusicPopScore } from "@/utils/scoreMusic";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +87,16 @@ export async function POST(request, { params }) {
           { error: "音樂不存在或更新失敗" },
           { status: 404 },
         );
+      }
+
+      // ✅ 重新計算並更新 popScore
+      if (updateResult.modifiedCount > 0) {
+        // 重新獲取音樂數據以計算 popScore
+        const updatedMusic = await Music.findById(id);
+        if (updatedMusic) {
+          updatedMusic.popScore = computeMusicPopScore(updatedMusic);
+          await updatedMusic.save();
+        }
       }
 
       // 記錄到緩存，避免重複計數
