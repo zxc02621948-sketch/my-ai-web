@@ -338,7 +338,29 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   };
 
   const handlePlayButtonClick = (e) => {
+    e.preventDefault(); // 阻止默認行為
     e.stopPropagation(); // 阻止冒泡，避免觸發 handleClick
+    
+    // 如果當前正在播放，則停止
+    if (isPlaying) {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+        audioManager.release(audio);
+      }
+      setIsPlaying(false);
+      setPlayStartTime(null);
+      playEndTime.current = null;
+      hasInitializedRef.current = false;
+      
+      // 恢復播放器（如果之前有播放）
+      if (wasPlayerPlayingRef.current && player?.play) {
+        player.play();
+        wasPlayerPlayingRef.current = false;
+      }
+      return;
+    }
     
     // 停止所有其他預覽
     stopAllOtherPreviews();

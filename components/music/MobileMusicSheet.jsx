@@ -124,7 +124,19 @@ export default function MobileMusicSheet({
     if (!rect) return;
 
     // 支援觸摸事件和鼠標事件
-    const clientX = e.touches?.[0]?.clientX ?? e.clientX ?? 0;
+    // 對於 touch 事件，從 e.touches 獲取；對於 mouse 事件，從 e.clientX 獲取
+    // 對於 touchmove，也可能從 changedTouches 獲取
+    let clientX = 0;
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+    } else if (e.clientX !== undefined) {
+      clientX = e.clientX;
+    } else {
+      return; // 無法獲取位置
+    }
+    
     const clickX = clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, clickX / rect.width));
     const newTime = percentage * duration;
