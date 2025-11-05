@@ -19,7 +19,7 @@ export const labelToRating = {
 /** 音樂：前端按鈕顯示用 → 後端查詢值 */
 export const musicLabelToRating = {
   一般音樂: "all",
-  "15+ 音樂": "15",
+  "爭議音樂": "15",
   "18+ 音樂": "18",
 };
 
@@ -38,7 +38,11 @@ export const ratingToLabel = {
   18: "18+ 圖片",
 };
 
-const VALID_LEVEL_LABELS = Object.keys(labelToRating);
+// ✅ 合併圖片和音樂的標籤，用於驗證
+const VALID_LEVEL_LABELS = [
+  ...Object.keys(labelToRating),
+  ...Object.keys(musicLabelToRating),
+];
 
 const FilterContext = createContext(null);
 

@@ -9,6 +9,7 @@ import {
   useCallback,
   useMemo,
 } from "react";
+import { audioManager } from "@/utils/audioManager";
 
 const PlayerContext = createContext();
 
@@ -218,7 +219,6 @@ export function PlayerProvider({
         }
       }, 100);
     } else {
-      console.log('🎵 [onEnded] 播放清單只有一首或為空，不自動播放下一首');
     }
   }, []); // ✅ 移除依賴項，使用 ref 獲取最新值
 
@@ -282,17 +282,22 @@ export function PlayerProvider({
       return false;
     }
 
-    // ✅ 停止所有其他音頻和視頻元素（避免聲音混在一起）
+    // ✅ 請求播放權限（優先度 1 - 最低）
+    // AudioManager 會自動暫停低優先度的音頻，但不會暫停高優先度的音頻（音樂 Modal、預覽）
+    if (!audioRef.current) {
+      return false;
+    }
+
+    const canPlay = audioManager.requestPlay(audioRef.current, 1);
+    
+    // 如果優先度不夠（例如音樂 Modal 或預覽正在播放），不允許播放
+    if (!canPlay) {
+      console.warn("⚠️ [PlayerContext.play] 優先度不夠，無法播放");
+      return false;
+    }
+
+    // ✅ 停止所有視頻元素（視頻不受 AudioManager 管理）
     try {
-      const audioElements = document.querySelectorAll("audio");
-      audioElements.forEach((audio) => {
-        try {
-          if (!audio.paused) {
-            audio.pause();
-            audio.currentTime = 0;
-          }
-        } catch {}
-      });
       const videoElements = document.querySelectorAll("video");
       videoElements.forEach((video) => {
         try {
@@ -306,21 +311,19 @@ export function PlayerProvider({
     } catch {}
 
     // ✅ 播放本地音頻
-    if (audioRef.current) {
-      try {
-        if (audioRef.current.readyState >= 2) {
-          await audioRef.current.play();
-          setIsPlaying(true);
-          return true;
-        } else {
-          return false;
-        }
-      } catch (error) {
-        if (error.name === "AbortError") {
-          console.warn("播放被中止");
-        } else {
-          console.error("播放失敗:", error);
-        }
+    try {
+      if (audioRef.current.readyState >= 2) {
+        await audioRef.current.play();
+        setIsPlaying(true);
+        return true;
+      } else {
+        return false;
+      }
+    } catch (error) {
+      if (error.name === "AbortError") {
+        console.warn("播放被中止");
+      } else {
+        console.error("播放失敗:", error);
       }
     }
 
@@ -329,30 +332,31 @@ export function PlayerProvider({
 
   // ✅ 暫停播放 - 只使用本地音頻播放器
   const pause = () => {
+    console.log("🎵 [PlayerContext] pause() 被調用");
+    
+    // ✅ 更新播放狀態
+    setIsPlaying(false);
+    console.log("🎵 [PlayerContext] setIsPlaying(false) 已調用");
+    
     // ✅ 暫停本地音頻
     if (audioRef.current && !audioRef.current.paused) {
       try {
         audioRef.current.pause();
+        console.log("🎵 [PlayerContext] ✅ 播放器音頻元素已暫停");
       } catch (error) {
-        console.warn("暫停失敗:", error);
+        console.warn("🎵 [PlayerContext] ❌ 暫停失敗:", error);
       }
+    } else {
+      console.log("🎵 [PlayerContext] 播放器音頻元素未在播放或不存在");
     }
 
-    // ✅ 停止所有其他音頻和視頻元素
-    try {
-      const audioElements = document.querySelectorAll("audio");
-      audioElements.forEach((audio, index) => {
-        try {
-          if (!audio.paused) {
-            audio.pause();
-            audio.currentTime = 0; // 重置播放位置
-            // console.log(`🔧 強制停止音頻元素 ${index}`);
-          }
-        } catch (error) {
-          console.warn(`🔧 停止音頻元素 ${index} 失敗:`, error.message);
-        }
-      });
+    // ✅ 釋放播放權限（優先度 1）
+    if (audioRef.current) {
+      audioManager.release(audioRef.current);
+    }
 
+    // ✅ 停止所有視頻元素（視頻不受 AudioManager 管理）
+    try {
       const videoElements = document.querySelectorAll("video");
       videoElements.forEach((video, index) => {
         try {
@@ -364,14 +368,13 @@ export function PlayerProvider({
           if (!video.paused) {
             video.pause();
             video.currentTime = 0; // 重置播放位置
-            // console.log(`🔧 強制停止視頻元素 ${index}`);
           }
         } catch (error) {
           console.warn(`🔧 停止視頻元素 ${index} 失敗:`, error.message);
         }
       });
     } catch (error) {
-      console.warn("🔧 強制停止失敗:", error);
+      console.warn("🔧 停止視頻失敗:", error);
     }
 
     // ✅ 更新播放狀態
@@ -420,50 +423,29 @@ export function PlayerProvider({
 
     // console.log("🔧 PlayerContext 切換到下一首", { nextIndex, nextItem });
 
-    // ✅ 檢查是否有其他播放器正在播放
-    const audioElements = document.querySelectorAll("audio");
-    const videoElements = document.querySelectorAll("video");
-    const playingAudio = Array.from(audioElements).filter(
-      (audio) => !audio.paused,
-    );
-    const playingVideo = Array.from(videoElements).filter(
-      (video) => !video.paused && video.dataset.videoPreview !== "true",
-    );
-
-    // ✅ 停止所有其他播放器（如果需要）
-    // (已移除 YouTube iframe 相關邏輯)
+    // ✅ AudioManager 會自動處理單一音源，不需要手動檢查
 
     // ✅ 標記為轉換中
     isTransitioningRef.current = true;
 
     try {
       // ✅ 停止當前播放
-
-      // ✅ 暫停本地音頻
-      if (audioRef.current && !audioRef.current.paused) {
+      // ✅ 釋放播放權限（優先度 1）
+      if (audioRef.current) {
+        audioManager.release(audioRef.current);
         try {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
+          if (!audioRef.current.paused) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+          }
         } catch (error) {
           console.warn("🔧 暫停失敗:", error);
         }
       }
 
-      // ✅ 停止所有其他音頻和視頻元素
+      // ✅ AudioManager 會自動處理單一音源，不需要手動停止其他音頻
+      // ✅ 停止所有視頻元素（視頻不受 AudioManager 管理）
       try {
-        const audioElements = document.querySelectorAll("audio");
-        audioElements.forEach((audio, index) => {
-          try {
-            if (!audio.paused) {
-              audio.pause();
-              audio.currentTime = 0;
-              // console.log(`🔧 強制停止音頻元素 ${index}`);
-            }
-          } catch (error) {
-            console.warn(`🔧 停止音頻元素 ${index} 失敗:`, error.message);
-          }
-        });
-
         const videoElements = document.querySelectorAll("video");
         videoElements.forEach((video, index) => {
           try {
@@ -475,14 +457,13 @@ export function PlayerProvider({
             if (!video.paused) {
               video.pause();
               video.currentTime = 0;
-              // console.log(`🔧 強制停止視頻元素 ${index}`);
             }
           } catch (error) {
             console.warn(`🔧 停止視頻元素 ${index} 失敗:`, error.message);
           }
         });
       } catch (error) {
-        console.warn("🔧 強制停止失敗:", error);
+        console.warn("🔧 停止視頻失敗:", error);
       }
 
       // ✅ 等待短暫時間確保播放器停止
@@ -508,8 +489,16 @@ export function PlayerProvider({
       // ✅ 自動播放下一首
       setTimeout(async () => {
         try {
-          // ✅ 直接使用 audioRef 播放，跳過 play() 的轉換檢查
+          // ✅ 請求播放權限（優先度 1 - 最低）
           if (audioRef.current) {
+            const canPlay = audioManager.requestPlay(audioRef.current, 1);
+            
+            // 如果優先度不夠（例如音樂 Modal 或預覽正在播放），不允許播放
+            if (!canPlay) {
+              console.warn('⚠️ [next] 優先度不夠，無法播放下一首');
+              return;
+            }
+            
             // 等待音頻載入完成
             if (audioRef.current.readyState >= 2) {
               await audioRef.current.play();
@@ -553,32 +542,22 @@ export function PlayerProvider({
 
     try {
       // ✅ 停止當前播放
-
-      // ✅ 暫停本地音頻
-      if (audioRef.current && !audioRef.current.paused) {
+      // ✅ 釋放播放權限（優先度 1）
+      if (audioRef.current) {
+        audioManager.release(audioRef.current);
         try {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
+          if (!audioRef.current.paused) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+          }
         } catch (error) {
           console.warn("🔧 暫停失敗:", error);
         }
       }
 
-      // ✅ 停止所有其他音頻和視頻元素
+      // ✅ AudioManager 會自動處理單一音源，不需要手動停止其他音頻
+      // ✅ 停止所有視頻元素（視頻不受 AudioManager 管理）
       try {
-        const audioElements = document.querySelectorAll("audio");
-        audioElements.forEach((audio, index) => {
-          try {
-            if (!audio.paused) {
-              audio.pause();
-              audio.currentTime = 0;
-              // console.log(`🔧 強制停止音頻元素 ${index}`);
-            }
-          } catch (error) {
-            console.warn(`🔧 停止音頻元素 ${index} 失敗:`, error.message);
-          }
-        });
-
         const videoElements = document.querySelectorAll("video");
         videoElements.forEach((video, index) => {
           try {
@@ -590,14 +569,13 @@ export function PlayerProvider({
             if (!video.paused) {
               video.pause();
               video.currentTime = 0;
-              // console.log(`🔧 強制停止視頻元素 ${index}`);
             }
           } catch (error) {
             console.warn(`🔧 停止視頻元素 ${index} 失敗:`, error.message);
           }
         });
       } catch (error) {
-        console.warn("🔧 強制停止失敗:", error);
+        console.warn("🔧 停止視頻失敗:", error);
       }
 
       // ✅ 等待短暫時間確保播放器停止
@@ -610,6 +588,14 @@ export function PlayerProvider({
       setSrcWithAudio(prevItem.url);
       setOriginUrl(prevItem.url);
       setTrackTitle(prevItem.title);
+
+      // ✅ 請求播放權限（優先度 1 - 最低）
+      if (audioRef.current) {
+        const canPlay = audioManager.requestPlay(audioRef.current, 1);
+        if (!canPlay) {
+          console.warn('⚠️ [previous] 優先度不夠，無法播放上一首');
+        }
+      }
 
       // ✅ 觸發自定義事件更新 UI
       window.dispatchEvent(

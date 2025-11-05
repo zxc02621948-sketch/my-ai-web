@@ -49,14 +49,8 @@ export default function UserPlayerPage() {
         
         // 只有在不是自己的頁面，且釘選的是其他用戶的播放器時，才跳過載入
         if (hasPinnedPlayer && !isOwnPage && !isPinnedThisPage) {
-          console.log('📌 [UserPlayerPage] 檢測到其他用戶的釘選播放器，跳過加載本地播放清單');
           setLoading(false);
           return; // 不覆蓋其他用戶的釘選播放器
-        }
-        
-        // ✅ 如果是自己的頁面，即使有釘選播放器也要載入自己的播放清單
-        if (isOwnPage) {
-          console.log('👤 [UserPlayerPage] 自己的播放器頁面，載入自己的播放清單');
         }
         
         // 啟用小播放器
@@ -106,20 +100,17 @@ export default function UserPlayerPage() {
              if (userDataFetched.playlist !== undefined && userDataFetched.playlist !== null) {
                // 數據庫中有播放清單（可能是空數組），使用它
                finalPlaylist = Array.isArray(userDataFetched.playlist) ? userDataFetched.playlist : [];
-               console.log('📥 [fetchPlaylist] 從數據庫載入播放清單，長度:', finalPlaylist.length);
              } else {
                // 2. 數據庫沒有播放清單欄位，檢查 localStorage（備用存儲）
-               console.log('📥 [fetchPlaylist] 數據庫沒有播放清單，檢查 localStorage');
                const localPlaylist = localStorage.getItem(`playlist_${id}`);
                if (localPlaylist) {
                  try {
                    const parsedPlaylist = JSON.parse(localPlaylist);
                    if (Array.isArray(parsedPlaylist)) {
                      finalPlaylist = parsedPlaylist;
-                     console.log('📥 [fetchPlaylist] 從 localStorage 載入播放清單，長度:', finalPlaylist.length);
                    }
                  } catch (error) {
-                   console.error("❌ [fetchPlaylist] 解析播放清單失敗:", error);
+                   console.error("解析播放清單失敗:", error);
                  }
                }
              }
@@ -168,40 +159,34 @@ export default function UserPlayerPage() {
     fetchPlaylist();
   }, [id, currentUser?.pinnedPlayer]); // 依賴 currentUser 的釘選狀態
 
-  // 監聽播放狀態變化事件
-  useEffect(() => {
-    const handlePlayerStateChange = (event) => {
-      const { isPlaying, action } = event.detail || {};
-      console.log("🔧 播放器頁面收到狀態變化事件:", { isPlaying, action });
-      
-      // 這裡可以添加額外的 UI 更新邏輯
-      // 例如更新播放按鈕狀態等
-    };
+    // 監聽播放狀態變化事件
+    useEffect(() => {
+      const handlePlayerStateChange = (event) => {
+        const { isPlaying, action } = event.detail || {};
+        // 這裡可以添加額外的 UI 更新邏輯
+        // 例如更新播放按鈕狀態等
+      };
 
-    // 監聽頁面可見性變化，確保播放器狀態同步
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log("🔧 頁面重新可見，檢查播放器狀態");
-        // ✅ 不再重新設置音頻源（避免重播），PlayerContext 會自動處理恢復播放
-        // 只檢查播放器狀態是否正確，不做任何重置操作
-        if (playlist.length > 0 && player.originUrl && !player.src) {
-          // 只有在音頻源確實丟失時才重新設置
-          console.log("🔧 音頻源丟失，重新設置");
-          player.setSrc?.(player.originUrl);
+      // 監聽頁面可見性變化，確保播放器狀態同步
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          // ✅ 不再重新設置音頻源（避免重播），PlayerContext 會自動處理恢復播放
+          // 只檢查播放器狀態是否正確，不做任何重置操作
+          if (playlist.length > 0 && player.originUrl && !player.src) {
+            // 只有在音頻源確實丟失時才重新設置
+            player.setSrc?.(player.originUrl);
+          }
         }
-      }
-    };
-    
-    // 🔥 監聽積分更新事件，刷新用戶數據（用於播放清單擴充等）
-    const handlePointsUpdated = async () => {
-      console.log("🔧 收到積分更新事件，刷新用戶數據");
+      };
+      
+      // 🔥 監聽積分更新事件，刷新用戶數據（用於播放清單擴充等）
+      const handlePointsUpdated = async () => {
       try {
         const response = await axios.get(`/api/user-info?id=${id}`, {
           headers: { 'Cache-Control': 'no-cache' }
         });
         if (response.data) {
           setUserData(response.data);
-          console.log("✅ 用戶數據已刷新，新的播放清單上限:", response.data.playlistMaxSize);
         }
       } catch (error) {
         console.error("刷新用戶數據失敗:", error);
@@ -222,7 +207,6 @@ export default function UserPlayerPage() {
   // 組件卸載時的清理
   useEffect(() => {
     return () => {
-      console.log("🔧 播放器頁面卸載，清理狀態");
       // 清理自動播放標記
       if (window.__AUTO_PLAY_TRIGGERED__) {
         delete window.__AUTO_PLAY_TRIGGERED__;
@@ -242,7 +226,6 @@ export default function UserPlayerPage() {
     const nextIndex = (activeIndex + 1) % playlist.length;
     const nextItem = playlist[nextIndex];
     
-    console.log("🔧 下一首，直接使用 PlayerContext 方法");
     
     // 先暫停當前播放，避免雙重播放
     if (player.isPlaying) {
@@ -266,7 +249,6 @@ export default function UserPlayerPage() {
     const prevIndex = activeIndex === 0 ? playlist.length - 1 : activeIndex - 1;
     const prevItem = playlist[prevIndex];
     
-    console.log("🔧 上一首，直接使用 PlayerContext 方法");
     
     // 先暫停當前播放，避免雙重播放
     if (player.isPlaying) {
@@ -288,7 +270,6 @@ export default function UserPlayerPage() {
   // 監聽播放器事件 - 同步 UI 狀態
   useEffect(() => {
     const handleNext = (event) => {
-      console.log("🔧 收到下一首事件，同步 UI 狀態");
       const { nextIndex } = event.detail || {};
       if (nextIndex !== undefined) {
         setActiveIndex(nextIndex);
@@ -302,7 +283,6 @@ export default function UserPlayerPage() {
     };
     
     const handlePrevious = (event) => {
-      console.log("🔧 收到上一首事件，同步 UI 狀態");
       const { prevIndex } = event.detail || {};
       if (prevIndex !== undefined) {
         setActiveIndex(prevIndex);
@@ -330,15 +310,13 @@ export default function UserPlayerPage() {
     if (player.originUrl && playlist.length > 0) {
       // 如果 PlayerContext 的狀態與本地狀態不同步，更新本地狀態
       if (player.originUrl !== playlist[activeIndex]?.url) {
-        console.log("🔧 檢測到 PlayerContext 狀態不同步，尋找匹配的播放清單項目");
         const matchingIndex = playlist.findIndex(item => item.url === player.originUrl);
         if (matchingIndex !== -1) {
-          console.log("🔧 找到匹配的播放清單項目，更新索引:", matchingIndex);
           setActiveIndex(matchingIndex);
           try {
             localStorage.setItem(`playlist_${id}_activeIndex`, matchingIndex.toString());
           } catch (error) {
-            console.error("🔧 保存播放索引失敗:", error);
+            console.error("保存播放索引失敗:", error);
           }
         }
       }
@@ -361,7 +339,6 @@ export default function UserPlayerPage() {
             <div className="mb-4">{error}</div>
             <button
               onClick={() => {
-                console.log("🔧 點擊錯誤頁面的建立播放清單按鈕");
                 setModalOpen(true);
               }}
               className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
@@ -381,7 +358,6 @@ export default function UserPlayerPage() {
                     {/* 編輯播放清單按鈕 */}
                     <button
                       onClick={() => {
-                        console.log("🔧 點擊編輯播放清單按鈕");
                         setModalOpen(true);
                       }}
                       className="mb-3 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm font-medium transition-all transform hover:scale-105 shadow-lg border border-blue-400/30 flex items-center gap-2"
@@ -431,7 +407,6 @@ export default function UserPlayerPage() {
                         </div>
                         <button
                           onClick={() => {
-                            console.log("🔧 點擊備用建立播放清單按鈕");
                             setModalOpen(true);
                           }}
                           className="w-full px-6 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold text-lg transition-all duration-300 shadow-xl border-2 border-blue-400"
@@ -621,20 +596,15 @@ export default function UserPlayerPage() {
                     
                     if (player.isPlaying) {
                       try {
-                        console.log("🔧 暫停播放");
                         await player.pause();
                       } catch (error) {
-                        console.warn("🔧 暫停失敗:", error.message);
+                        console.warn("暫停失敗:", error.message);
                       }
                     } else {
                       try {
-                        console.log("🔧 開始播放");
-                        const ok = await player.play();
-                        if (!ok) {
-                          console.log("🔧 播放失敗，可能是播放器未準備好");
-                        }
+                        await player.play();
                       } catch (error) {
-                        console.warn("🔧 播放失敗:", error.message);
+                        console.warn("播放失敗:", error.message);
                       }
                     }
                   }}
@@ -729,9 +699,6 @@ export default function UserPlayerPage() {
           }}
           playlist={playlist}
           onChangePlaylist={async (newPlaylist) => {
-            console.log('📝 [onChangePlaylist] 開始保存播放清單，長度:', newPlaylist.length);
-            console.log('📝 [onChangePlaylist] 播放清單內容:', JSON.stringify(newPlaylist, null, 2));
-            
             // ✅ 先更新本地狀態
             setPlaylist(newPlaylist);
             
@@ -742,7 +709,6 @@ export default function UserPlayerPage() {
             
             // ✅ 如果正在保存，只更新待保存版本，不立即執行（會在當前保存完成後繼續）
             if (savingRef.current) {
-              console.log('⏸️ [onChangePlaylist] 正在保存中，已更新待保存版本:', currentVersion);
               return; // 等待當前保存完成後，會在 finally 塊中繼續保存
             }
             
@@ -751,7 +717,6 @@ export default function UserPlayerPage() {
               // 檢查是否仍是最新版本（使用最新的版本號）
               const latestVersion = saveVersionRef.current;
               if (currentVersion !== latestVersion) {
-                console.log('⏭️ [onChangePlaylist] 版本已過時 (', currentVersion, '->', latestVersion, ')，跳過保存（使用最新版本）');
                 // 使用最新版本重新調用
                 if (pendingPlaylistRef.current) {
                   // 更新 currentVersion 為最新版本
@@ -761,13 +726,11 @@ export default function UserPlayerPage() {
                     const performSaveWithVersion = async () => {
                       const playlistToSave = pendingPlaylistRef.current;
                       if (!playlistToSave) {
-                        console.log('⚠️ [onChangePlaylist] 沒有待保存的播放清單');
                         savingRef.current = false;
                         return;
                       }
                       
                       savingRef.current = true;
-                      console.log('💾 [onChangePlaylist] 開始保存播放清單到數據庫（最新版本）:', newVersion);
                       
                       try {
                         const response = await axios.post('/api/user/save-playlist', {
@@ -775,8 +738,6 @@ export default function UserPlayerPage() {
                         });
                         
                         if (response.data.success) {
-                          console.log('✅ [onChangePlaylist] 播放清單已保存到數據庫，版本:', newVersion, '長度:', response.data.playlist?.length || 0);
-                          
                           if (currentUser && setCurrentUser) {
                             const pinnedUserId = currentUser?.pinnedPlayer?.userId;
                             const isPinnedOwnPlayer = pinnedUserId && String(pinnedUserId) === String(currentUser._id);
@@ -799,14 +760,12 @@ export default function UserPlayerPage() {
                         }
                       } catch (error) {
                         if (error.response?.status !== 401) {
-                          console.error("❌ [onChangePlaylist] 保存播放清單到數據庫失敗:", error.message);
                           notify("保存播放清單失敗: " + (error.response?.data?.message || error.message), "error");
                         }
                       } finally {
                         savingRef.current = false;
                         
                         if (saveVersionRef.current > newVersion && pendingPlaylistRef.current) {
-                          console.log('🔄 [onChangePlaylist] 檢測到更新的版本，繼續保存');
                           setTimeout(() => performSaveWithVersion(), 50);
                         }
                       }
@@ -814,7 +773,7 @@ export default function UserPlayerPage() {
                       try {
                         localStorage.setItem(`playlist_${id}`, JSON.stringify(playlistToSave));
                       } catch (error) {
-                        console.error("❌ [onChangePlaylist] 保存播放清單到本地存儲失敗:", error);
+                        console.error("保存播放清單到本地存儲失敗:", error);
                       }
                       
                       player.setPlaylist?.(playlistToSave);
@@ -840,13 +799,11 @@ export default function UserPlayerPage() {
               
               const playlistToSave = pendingPlaylistRef.current;
               if (!playlistToSave) {
-                console.log('⚠️ [onChangePlaylist] 沒有待保存的播放清單');
                 savingRef.current = false;
                 return;
               }
               
               savingRef.current = true;
-              console.log('💾 [onChangePlaylist] 開始保存播放清單到數據庫，版本:', currentVersion);
               
               try {
                 const response = await axios.post('/api/user/save-playlist', {
@@ -854,8 +811,6 @@ export default function UserPlayerPage() {
                 });
               
                 if (response.data.success) {
-                  console.log('✅ [onChangePlaylist] 播放清單已保存到數據庫，版本:', currentVersion, '長度:', response.data.playlist?.length || 0);
-                  
                   // ✅ 如果用戶已釘選自己的播放器，更新 currentUser.pinnedPlayer.playlist
                   // 這樣可以避免使用舊的快照
                   if (currentUser && setCurrentUser) {
@@ -873,21 +828,16 @@ export default function UserPlayerPage() {
                           }
                         };
                       });
-                      console.log('✅ [onChangePlaylist] 已更新 currentUser.pinnedPlayer.playlist');
                     }
                   }
                   
                   // ✅ 觸發播放清單變更事件，通知 MiniPlayer 重新載入
                   window.dispatchEvent(new CustomEvent('playlistChanged'));
-                  console.log('🔄 [onChangePlaylist] 已觸發播放清單變更事件');
                 } else {
-                  console.error("❌ [onChangePlaylist] 保存播放清單失敗:", response.data.message);
                   notify("保存播放清單失敗: " + (response.data.message || "未知錯誤"), "error");
                 }
               } catch (error) {
                 if (error.response?.status !== 401) {
-                  console.error("❌ [onChangePlaylist] 保存播放清單到數據庫失敗:", error.message);
-                  console.error("❌ [onChangePlaylist] 錯誤詳情:", error.response?.data);
                   notify("保存播放清單失敗: " + (error.response?.data?.message || error.message), "error");
                 }
               } finally {
@@ -895,7 +845,6 @@ export default function UserPlayerPage() {
                 
                 // ✅ 檢查是否有待保存的更新版本
                 if (saveVersionRef.current > currentVersion && pendingPlaylistRef.current) {
-                  console.log('🔄 [onChangePlaylist] 檢測到更新的版本，繼續保存');
                   // 遞歸調用以保存最新版本
                   setTimeout(() => performSave(), 50);
                 }
@@ -904,9 +853,8 @@ export default function UserPlayerPage() {
               // 2. 保存播放清單到 localStorage（備用存儲）
               try {
                 localStorage.setItem(`playlist_${id}`, JSON.stringify(playlistToSave));
-                console.log('✅ [onChangePlaylist] 播放清單已保存到 localStorage');
               } catch (error) {
-                console.error("❌ [onChangePlaylist] 保存播放清單到本地存儲失敗:", error);
+                console.error("保存播放清單到本地存儲失敗:", error);
               }
               
               // 3. 更新播放器狀態

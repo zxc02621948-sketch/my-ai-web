@@ -161,13 +161,11 @@ export default function MusicInfoBox({
                 }
               };
             });
-            console.log('✅ [MusicInfoBox] 已更新 currentUser.pinnedPlayer.playlist');
           }
         }
         
         // ✅ 觸發播放清單變更事件，通知 MiniPlayer 重新載入
         window.dispatchEvent(new CustomEvent('playlistChanged'));
-        console.log('🔄 [MusicInfoBox] 已觸發播放清單變更事件');
         
         alert("✅ 已加入播放清單！");
       } else {

@@ -46,6 +46,7 @@ export default function UploadStep2({
   loraLink,
   setLoraLink,
   uploadLimits,
+  mobileSimple = false, // 手機簡化模式
 }) {
   // ====== Local state ======
   const [author, setAuthor] = useState("");
@@ -53,6 +54,13 @@ export default function UploadStep2({
   const [loraName, setLoraName] = useState("");
   const [originalSize, setOriginalSize] = useState(0);
   const [compressedSize, setCompressedSize] = useState(0);
+
+  // 手機簡化模式：設置默認 rating 為 "sfw"
+  useEffect(() => {
+    if (mobileSimple && !rating) {
+      setRating("sfw");
+    }
+  }, [mobileSimple, rating, setRating]);
 
   // 使用者是否改動過連結欄位（避免自動覆蓋）
   const [modelLinkTouched, setModelLinkTouched] = useState(false);
@@ -860,43 +868,44 @@ export default function UploadStep2({
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
 
+      // 手機簡化模式：模型名稱以下的欄位為空，確保 hasMetadata = false
       const metadataBase = {
         imageId,
         imageUrl,
-        title: title?.trim(),
-        author: author?.trim() || "",
-        category,
-        rating,
-        platform: platform?.trim() || "其他",
-        modelName: modelName?.trim() || "",
-        loraName: loraName?.trim() || "",
-        modelLink: modelLink?.trim() || "",
-        loraLink: loraLink?.trim() || "",
-        positivePrompt,
-        negativePrompt,
-        description,
+        title: title?.trim() || "",
+        author: mobileSimple ? "" : (author?.trim() || ""),
+        category: category || "",
+        rating: rating || "sfw",
+        platform: platform?.trim() || "",
+        modelName: mobileSimple ? "" : (modelName?.trim() || ""),
+        loraName: mobileSimple ? "" : (loraName?.trim() || ""),
+        modelLink: mobileSimple ? "" : (modelLink?.trim() || ""),
+        loraLink: mobileSimple ? "" : (loraLink?.trim() || ""),
+        positivePrompt: mobileSimple ? "" : (positivePrompt || ""),
+        negativePrompt: mobileSimple ? "" : (negativePrompt || ""),
+        description: description || "",
         tags: tagsArray,
         fileName: imageFile.name,
         likes: 0,
         userId,
         username,
-        steps: steps || undefined,
-        sampler: sampler || undefined,
-        cfgScale: cfgScale || undefined,
-        seed: seed || undefined,
-        clipSkip: clipSkip || undefined,
-        width: Number.isFinite(wNum) && wNum ? wNum : undefined,
-        height: Number.isFinite(hNum) && hNum ? hNum : undefined,
-        modelHash: modelHash || undefined,
+        steps: mobileSimple ? undefined : (steps || undefined),
+        sampler: mobileSimple ? "" : (sampler || undefined),
+        cfgScale: mobileSimple ? undefined : (cfgScale || undefined),
+        seed: mobileSimple ? "" : (seed || undefined),
+        clipSkip: mobileSimple ? undefined : (clipSkip || undefined),
+        width: mobileSimple ? undefined : (Number.isFinite(wNum) && wNum ? wNum : undefined),
+        height: mobileSimple ? undefined : (Number.isFinite(hNum) && hNum ? hNum : undefined),
+        modelHash: mobileSimple ? "" : (modelHash || undefined),
         adultDeclaration: rating === "18" ? true : undefined,
-        // ⬇️ 新增：若勾選分享 workflow，夾帶到後端
-        comfy: shareWorkflow
+        // ⬇️ 新增：若勾選分享 workflow，夾帶到後端（手機簡化模式不分享）
+        comfy: mobileSimple ? undefined : (shareWorkflow
           ? {
               workflowRaw: workflowRaw || undefined,
               promptRaw: promptRaw || undefined,
               allowShare: shareWorkflow, 
             }
-          : undefined,
+          : undefined),
       };
 
       // 以 hash 自動補 Civtai modelLink
@@ -1013,7 +1022,7 @@ export default function UploadStep2({
           >
             ← 返回
           </button>
-          <div className="text-center">
+          <div className="text-center flex-1">
             <div className="text-sm opacity-80">上傳圖片 · 填寫資訊</div>
             {uploadLimits && (
               <div className="text-xs text-zinc-400 mt-1">
@@ -1024,13 +1033,6 @@ export default function UploadStep2({
               </div>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="md:hidden px-3 py-1.5 rounded bg-white/10 hover:bg-white/15 text-sm"
-          >
-            關閉
-          </button>
         </div>
       </div>
 
@@ -1093,17 +1095,17 @@ export default function UploadStep2({
               });
             }}
           />
-          {metaStatus === "found" && (
+          {!mobileSimple && metaStatus === "found" && (
             <div className="text-xs text-emerald-400">
               ✅ 已自動讀取到生成參數（已預填於進階參數 / 並自動判斷平台）
             </div>
           )}
-          {metaStatus === "none" && (
+          {!mobileSimple && metaStatus === "none" && (
             <div className="text-xs text-zinc-400">
               ℹ️ 未偵測到 PNG Info，但不影響上傳。你可於下方「進階參數」手動補充或貼上。
             </div>
           )}
-          {metaStatus === "error" && (
+          {!mobileSimple && metaStatus === "error" && (
             <div className="text-xs text-red-400">
               ⚠️ 解析 PNG Info 失敗（格式或壓縮導致）。可於「進階參數」手動補充。
             </div>
@@ -1145,10 +1147,10 @@ export default function UploadStep2({
           </div>
         )}
 
-        {/* 分級 */}
+        {/* 分級 - 直式排列 */}
         <div className="space-y-3">
-          <div className="flex items-center gap-4">
-            <div className={`text-xl font-bold px-4 py-2 rounded text-white inline-block ${getRatingColor()}`}>
+          <div className="flex flex-col gap-3">
+            <div className={`text-xl font-bold px-4 py-2 rounded text-white inline-block ${getRatingColor()} self-start`}>
               目前選擇：{rating === "all" ? "一般 All" : rating === "15" ? "15+ 清涼" : "18+ 限制"}
             </div>
             <select className="p-2 rounded bg-zinc-700" value={rating} onChange={(e) => setRating(e.target.value)}>
@@ -1203,13 +1205,16 @@ export default function UploadStep2({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
-        <input
-          type="text"
-          placeholder="來源作者（選填）"
-          className="w-full p-2 rounded bg-zinc-700"
-          value={author}
-          onChange={(e) => setAuthor(e.target.value)}
-        />
+        {/* 來源作者 - 手機簡化模式隱藏 */}
+        {!mobileSimple && (
+          <input
+            type="text"
+            placeholder="來源作者（選填）"
+            className="w-full p-2 rounded bg-zinc-700"
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+          />
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -1248,8 +1253,8 @@ export default function UploadStep2({
                 <option value="其他">其他</option>
               </select>
 
-              {/* ComfyUI：上傳 workflow 按鈕 */}
-              {platform === "ComfyUI" && (
+              {/* ComfyUI：上傳 workflow 按鈕 - 手機簡化模式隱藏 */}
+              {!mobileSimple && platform === "ComfyUI" && (
                 <>
                   <input
                     ref={workflowInputRef}
@@ -1273,8 +1278,8 @@ export default function UploadStep2({
               )}
             </div>
 
-            {/* ComfyUI：是否附檔（移除上傳頁的下載按鈕） */}
-            {platform === "ComfyUI" && (
+            {/* ComfyUI：是否附檔（移除上傳頁的下載按鈕） - 手機簡化模式隱藏 */}
+            {!mobileSimple && platform === "ComfyUI" && (
               <div className="mt-2 text-xs text-zinc-300">
                 <label className="inline-flex items-center gap-2">
                   <input
@@ -1287,105 +1292,110 @@ export default function UploadStep2({
               </div>
             )}
 
-            {platform === "ComfyUI" && workflowName && (
+            {!mobileSimple && platform === "ComfyUI" && workflowName && (
               <div className="mt-1 text-xs text-zinc-400">已選擇：{workflowName}</div>
             )}
           </div>
         </div>
 
-        {/* 提詞 */}
-        <textarea
-          placeholder="正面提詞（Prompt）"
-          className="w-full p-2 rounded bg-zinc-700 h-20"
-          value={positivePrompt}
-          onChange={(e) => setPositivePrompt(e.target.value)}
-        />
-        <textarea
-          placeholder="負面提詞（Negative Prompt）"
-          className="w-full p-2 rounded bg-zinc-700 h-20"
-          value={negativePrompt}
-          onChange={(e) => setNegativePrompt(e.target.value)}
-        />
+        {/* 提詞 - 手機簡化模式隱藏 */}
+        {!mobileSimple && (
+          <>
+            <textarea
+              placeholder="正面提詞（Prompt）"
+              className="w-full p-2 rounded bg-zinc-700 h-20"
+              value={positivePrompt}
+              onChange={(e) => setPositivePrompt(e.target.value)}
+            />
+            <textarea
+              placeholder="負面提詞（Negative Prompt）"
+              className="w-full p-2 rounded bg-zinc-700 h-20"
+              value={negativePrompt}
+              onChange={(e) => setNegativePrompt(e.target.value)}
+            />
 
-        {/* 模型 / LoRA 與連結 */}
-        <input
-          type="text"
-          placeholder="模型名稱（選填）"
-          className="w-full p-2 rounded bg-zinc-700"
-          value={modelName}
-          onChange={(e) => setModelName(e.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="模型 civitai 連結（可選）"
-          className="w-full p-2 rounded bg-zinc-700"
-          value={modelLink}
-          onChange={(e) => {
-            setModelLink(e.target.value);
-            setModelLinkTouched(true); 
-          }}
-        />
-        {autoFilledModelLink && (
-            <div className="text-xs text-emerald-400 mt-1">
-              已自動偵測並填入 civitai 連結
-            </div>
-          )}
-        <input
-          type="text"
-          placeholder="LoRA 名稱（選填；可多個以逗號分隔）"
-          className="w-full p-2 rounded bg-zinc-700"
-          value={loraName}
-          onChange={(e) => setLoraName(e.target.value)}
-        />
-        {detectedLorasWithoutLinks.length > 0 && (
-          <div className="text-xs text-yellow-400 mt-1">
-            ⚠️ 检测到 LoRA 名称但无链接：{detectedLorasWithoutLinks.join(", ")}<br/>
-            如需填入，请手动复制粘贴到上方字段
-          </div>
+            {/* 模型 / LoRA 與連結 */}
+            <input
+              type="text"
+              placeholder="模型名稱（選填）"
+              className="w-full p-2 rounded bg-zinc-700"
+              value={modelName}
+              onChange={(e) => setModelName(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="模型 civitai 連結（可選）"
+              className="w-full p-2 rounded bg-zinc-700"
+              value={modelLink}
+              onChange={(e) => {
+                setModelLink(e.target.value);
+                setModelLinkTouched(true); 
+              }}
+            />
+            {autoFilledModelLink && (
+                <div className="text-xs text-emerald-400 mt-1">
+                  已自動偵測並填入 civitai 連結
+                </div>
+              )}
+            <input
+              type="text"
+              placeholder="LoRA 名稱（選填；可多個以逗號分隔）"
+              className="w-full p-2 rounded bg-zinc-700"
+              value={loraName}
+              onChange={(e) => setLoraName(e.target.value)}
+            />
+            {detectedLorasWithoutLinks.length > 0 && (
+              <div className="text-xs text-yellow-400 mt-1">
+                ⚠️ 检测到 LoRA 名称但无链接：{detectedLorasWithoutLinks.join(", ")}<br/>
+                如需填入，请手动复制粘贴到上方字段
+              </div>
+            )}
+            {autoFilledLoraLink && (
+              <div className="text-xs text-emerald-400 mt-1">
+                已自動偵測並填入 LoRA civitai 連結
+              </div>
+            )}
+            <textarea
+              placeholder="LoRA civitai 連結（可選；多筆請一行一條）"
+              className="w-full p-2 rounded bg-zinc-700 h-20 resize-y"
+              value={loraLink}
+              onChange={(e) => {
+                setLoraLink(e.target.value);
+                setLoraLinkTouched(true);
+              }}
+            />
+
+            {/* LoRA hashes（可選） */}
+            <input
+              type="text"
+              placeholder="LoRA hashes（可多個；以空格、逗號或換行分隔）"
+              className="w-full p-2 rounded bg-zinc-700"
+              value={(loraHashes || []).join(", ")}
+              onChange={(e) => {
+                const arr = String(e.target.value)
+                  .split(/[\s,，、]+/)
+                  .map((s) => s.trim().toLowerCase())
+                  .filter((s) => /^[0-9a-f]{8,64}$/.test(s));
+                setLoraHashes(arr);
+              }}
+            />
+
+            <p className="text-xs text-zinc-400">
+              只接受 <span className="underline">civitai.com</span> 的網址（可留白）。
+            </p>
+          </>
         )}
-        {autoFilledLoraLink && (
-          <div className="text-xs text-emerald-400 mt-1">
-            已自動偵測並填入 LoRA civitai 連結
-          </div>
-        )}
-        <textarea
-          placeholder="LoRA civitai 連結（可選；多筆請一行一條）"
-          className="w-full p-2 rounded bg-zinc-700 h-20 resize-y"
-          value={loraLink}
-          onChange={(e) => {
-            setLoraLink(e.target.value);
-            setLoraLinkTouched(true);
-          }}
-        />
 
-        {/* LoRA hashes（可選） */}
-        <input
-          type="text"
-          placeholder="LoRA hashes（可多個；以空格、逗號或換行分隔）"
-          className="w-full p-2 rounded bg-zinc-700"
-          value={(loraHashes || []).join(", ")}
-          onChange={(e) => {
-            const arr = String(e.target.value)
-              .split(/[\s,，、]+/)
-              .map((s) => s.trim().toLowerCase())
-              .filter((s) => /^[0-9a-f]{8,64}$/.test(s));
-            setLoraHashes(arr);
-          }}
-        />
-
-        <p className="text-xs text-zinc-400">
-          只接受 <span className="underline">civitai.com</span> 的網址（可留白）。
-        </p>
-
-        {/* 進階參數 */}
-        <div className="rounded-lg border border-white/10">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced((v) => !v)}
-            className="w-full text-left px-4 py-2 font-semibold bg-zinc-800 hover:bg-zinc-700 transition"
-          >
-            {showAdvanced ? "▼" : "►"} 進階參數（可選）
-          </button>
+        {/* 進階參數 - 手機簡化模式隱藏 */}
+        {!mobileSimple && (
+          <div className="rounded-lg border border-white/10">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="w-full text-left px-4 py-2 font-semibold bg-zinc-800 hover:bg-zinc-700 transition"
+            >
+              {showAdvanced ? "▼" : "►"} 進階參數（可選）
+            </button>
 
           {showAdvanced && (
             <div className="p-4 space-y-3 bg-zinc-900/60">
@@ -1643,7 +1653,8 @@ Steps: 30, Sampler: Euler a, CFG scale: 7, Seed: 12345, Size: 768x1024, Clip ski
               </div>
             </div>
           )}
-        </div>
+          </div>
+        )}
 
         {/* 尾端留白，避免被底部按鈕遮住 */}
         <div className="h-10 md:h-0" />

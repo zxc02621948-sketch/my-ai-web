@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { X, Heart } from "lucide-react";
 import DesktopMusicRightPane from "./DesktopMusicRightPane";
 import MobileMusicSheet from "./MobileMusicSheet";
+import { usePlayer } from "@/components/context/PlayerContext";
+import { audioManager } from "@/utils/audioManager";
 
 const MusicModal = ({
   music,
@@ -31,6 +33,9 @@ const MusicModal = ({
   const isPlayingRef = useRef(false); // 當前是否在播放
   const [isMobile, setIsMobile] = useState(false);
   const audioSrcRef = useRef(null); // 保存當前播放的音頻源，用於組件切換時保持播放
+  const player = usePlayer(); // 獲取播放器 Context
+  const wasPlayerPlayingRef = useRef(false); // 記錄打開音樂時播放器是否在播放
+  const currentMusicIdRef = useRef(null); // 追蹤當前音樂 ID，用於判斷是否應該釋放
 
   // ✅ 優化：封裝 dataset 操作，減少重複代碼
   const savePlayProgress = React.useCallback((totalPlayed, lastTime) => {
@@ -169,30 +174,97 @@ const MusicModal = ({
     }
   }, [music?._id]);
 
+  // ✅ 使用 AudioManager：當 Modal 打開時，請求播放權限（優先度 3）
+  useEffect(() => {
+    if (!music?._id) return;
+    
+    console.log("🎵 [MusicModal] 打開音樂 Modal, music._id:", music._id);
+    
+    // 更新當前音樂 ID
+    const previousMusicId = currentMusicIdRef.current;
+    
+    // ✅ 關鍵：在請求播放權限之前記錄播放器狀態
+    // 因為 AudioManager 會自動暫停低優先度的音頻，所以需要在暫停之前記錄
+    if (previousMusicId !== music._id) {
+      // 檢查 AudioManager 的狀態：如果當前優先度是 1（播放器），說明播放器正在播放
+      const currentPriority = audioManager.getCurrentPriority();
+      const currentAudio = audioManager.getCurrentAudio();
+      
+      // 如果 AudioManager 當前管理的是播放器（優先度 1），說明播放器正在播放或被剛剛暫停
+      // 即使音頻元素已經被暫停（paused），只要 AudioManager 的優先度是 1，就說明之前是在播放的
+      if (currentPriority === 1 && currentAudio) {
+        wasPlayerPlayingRef.current = true; // AudioManager 的優先度 1 表示播放器正在或剛剛在播放
+        console.log("🎵 [MusicModal] 記錄播放器狀態（從 AudioManager，優先度 1）: true");
+      } else if (currentPriority === 0) {
+        // AudioManager 沒有管理任何音頻（優先度 0）
+        // 這可能表示預覽剛結束，播放器應該恢復播放
+        // 關鍵：如果 player.isPlaying 為 true，說明播放器應該在播放（即使音頻元素可能還沒完全開始）
+        // 因為 player.play() 可能是異步的，需要一些時間才能真正開始播放
+        wasPlayerPlayingRef.current = player?.isPlaying || false;
+        const playerAudio = document.querySelector('audio:not([data-music-full-player]):not([data-music-preview])');
+        console.log("🎵 [MusicModal] 記錄播放器狀態（AudioManager 優先度 0）:", wasPlayerPlayingRef.current, "player.isPlaying:", player?.isPlaying, "playerAudio存在:", !!playerAudio, "playerAudio.paused:", playerAudio?.paused);
+      } else {
+        // 其他情況（優先度 2 或 3），說明有更高優先度的音頻在播放，播放器應該被暫停
+        // 但我們仍然需要檢查播放器是否"應該"在播放（如果沒有更高優先度的音頻）
+        // 在這種情況下，我們不記錄為 true，因為播放器確實被暫停了
+        wasPlayerPlayingRef.current = false;
+        console.log("🎵 [MusicModal] 記錄播放器狀態（其他優先度）: false，當前優先度:", currentPriority);
+      }
+    }
+    
+    currentMusicIdRef.current = music._id;
+    
+    // 使用 setTimeout 確保 audioRef.current 已經設置
+    const timer = setTimeout(() => {
+      if (!audioRef.current) {
+        console.warn("🎵 [MusicModal] audioRef.current 為 null，無法設置標記");
+        return;
+      }
+      
+      // 設置 audio 元素的標記
+      audioRef.current.dataset.musicFullPlayer = "true";
+      
+      // 請求播放權限（優先度 3 - 最高）
+      // AudioManager 會自動暫停低優先度的音頻
+      audioManager.requestPlay(audioRef.current, 3);
+      console.log("🎵 [MusicModal] ✅ 已請求播放權限（優先度 3）");
+    }, 10);
+    
+    return () => {
+      clearTimeout(timer);
+      // 只有在音樂 ID 真正改變時才釋放（而不是因為重新渲染）
+      // 如果清理函數執行時，music._id 已經改變，說明是切換音樂，不應該釋放
+      // 如果清理函數執行時，music._id 仍然是當前值，說明是關閉 Modal，應該釋放
+      if (currentMusicIdRef.current === previousMusicId && previousMusicId !== null) {
+        // 這表示 Modal 被關閉了（音樂 ID 沒有改變，但清理函數被執行）
+        // 但實際上，如果 music._id 為 null，currentMusicIdRef.current 也會被設置為 null
+        // 所以這個檢查可能不夠準確
+      }
+    };
+  }, [music?._id]); // 只依賴 music._id，避免播放器狀態改變時重新執行
+
   useEffect(() => {
     // 禁止背景滾動
     document.body.style.overflow = "hidden";
 
-    // ✅ 停止所有預覽播放（避免聲音混在一起）
-    const allAudioElements = document.querySelectorAll("audio");
-    allAudioElements.forEach((audio) => {
-      // 跳過完整的播放器（通過檢查是否有 controls 屬性或特定標記）
-      if (audio === audioRef.current) return;
-      // 暫停所有其他音頻（主要是預覽）
-      if (!audio.paused) {
-        audio.pause();
-      }
-    });
+    // ✅ AudioManager 會自動處理暫停低優先度的音頻，不需要手動停止預覽
 
     // ESC 鍵關閉
     const handleEsc = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        // 使用包裝的 handleClose
+        releaseAudioManager();
+        onClose();
+      }
     };
     document.addEventListener("keydown", handleEsc);
 
     return () => {
       document.body.style.overflow = "unset";
       document.removeEventListener("keydown", handleEsc);
+
+      // ✅ 注意：釋放邏輯移到 handleBackdropClick 和 onClose 中處理
+      // 這裡不做釋放，因為 useEffect 的清理函數可能在音樂切換時被觸發
 
       // 清除定時器
       if (progressCheckIntervalRef.current) {
@@ -285,10 +357,50 @@ const MusicModal = ({
     };
   }, [onClose, music?._id, checkProgress]);
 
+  // ✅ 封裝釋放邏輯，在 Modal 關閉時調用
+  const releaseAudioManager = () => {
+    if (audioManager.getCurrentPriority() === 3) {
+      if (audioRef.current) {
+        audioManager.release(audioRef.current);
+      }
+      audioManager.release(); // 強制釋放
+      console.log("🎵 [MusicModal] ✅ 已釋放播放權限（優先度 3）");
+      
+      // ✅ 恢復播放器播放（如果之前是在播放狀態）
+      if (wasPlayerPlayingRef.current) {
+        console.log("🎵 [MusicModal] 準備恢復播放器播放，之前狀態:", wasPlayerPlayingRef.current);
+        // 使用 setTimeout 確保 AudioManager 已經釋放，並且 DOM 已經更新
+        setTimeout(() => {
+          if (player?.play) {
+            console.log("🎵 [MusicModal] 調用 player.play() 恢復播放");
+            player.play().then(() => {
+              console.log("🎵 [MusicModal] ✅ 播放器已恢復播放");
+            }).catch((err) => {
+              console.warn("🎵 [MusicModal] 恢復播放器失敗:", err);
+            });
+          } else {
+            console.warn("🎵 [MusicModal] player.play 不存在，無法恢復播放");
+          }
+        }, 150);
+      } else {
+        console.log("🎵 [MusicModal] 不恢復播放器，之前狀態:", wasPlayerPlayingRef.current, "player存在:", !!player);
+      }
+      
+      // 重置當前音樂 ID
+      currentMusicIdRef.current = null;
+    }
+  };
+  
+  // ✅ 包裝 onClose，確保在關閉前釋放 AudioManager
+  const handleClose = () => {
+    releaseAudioManager();
+    onClose();
+  };
+  
   // 點擊背景關閉
   const handleBackdropClick = (e) => {
     if (e.target === modalRef.current) {
-      onClose();
+      handleClose();
     }
   };
 
@@ -368,7 +480,7 @@ const MusicModal = ({
             isFollowing={isFollowing}
             onFollowToggle={onFollowToggle}
             onUserClick={onUserClick}
-            onClose={onClose}
+            onClose={handleClose}
             onDelete={onDelete}
             canEdit={canEdit}
             onEdit={onEdit}
@@ -383,57 +495,65 @@ const MusicModal = ({
               console.error("音樂載入錯誤:", e);
             }}
             onAudioCanPlay={() => {
+              console.log("🎵 [MusicModal Mobile] onAudioCanPlay 觸發");
+              
+              if (!audioRef.current) return;
+              
+              // ✅ 設置標記
+              audioRef.current.dataset.musicFullPlayer = "true";
+              
+              // ✅ 請求播放權限（優先度 3 - 最高）
+              // AudioManager 會自動暫停低優先度的音頻
+              audioManager.requestPlay(audioRef.current, 3);
+              
               // 設定音量
-              if (audioRef.current) {
-                try {
-                  const saved = localStorage.getItem("playerVolume");
-                  if (saved) {
-                    const vol = parseFloat(saved);
-                    if (!isNaN(vol) && vol >= 0 && vol <= 1) {
-                      audioRef.current.volume = vol;
-                    }
+              try {
+                const saved = localStorage.getItem("playerVolume");
+                if (saved) {
+                  const vol = parseFloat(saved);
+                  if (!isNaN(vol) && vol >= 0 && vol <= 1) {
+                    audioRef.current.volume = vol;
                   }
-                } catch (e) {
-                  console.warn("設定音量失敗:", e);
                 }
+              } catch (e) {
+                console.warn("設定音量失敗:", e);
+              }
 
-                // 🔧 修復：如果組件切換時有保存的播放狀態，先恢復它
-                if (audioSrcRef.current) {
-                  const savedState = audioSrcRef.current;
-                  audioRef.current.currentTime = savedState.currentTime;
-                  audioRef.current.volume = savedState.volume || audioRef.current.volume;
-                  
-                  // 如果之前是播放狀態，繼續播放
-                  if (!savedState.paused) {
-                    audioRef.current.play().then(() => {
-                      isPlayingRef.current = true;
-                    }).catch((err) => {
-                      if (err.name !== "NotAllowedError") {
-                        console.warn("恢復播放失敗:", err);
-                      }
-                    });
-                  }
-                  
-                  // 清除保存的狀態
-                  audioSrcRef.current = null;
-                  return; // 已經恢復了狀態，不再執行自動播放
-                }
-
-                // ✅ 修復：檢查是否需要自動播放
-                // 如果瀏覽器上的 autoPlay 沒生效，嘗試手動觸發（手機和桌面都適用）
-                if (audioRef.current.paused && !audioRef.current.dataset.autoPlayAttempted) {
-                  audioRef.current.dataset.autoPlayAttempted = "true";
-                  // 由於用戶已經點擊打開了音樂彈窗，這算是用戶交互，應該可以自動播放
+              // 🔧 修復：如果組件切換時有保存的播放狀態，先恢復它
+              if (audioSrcRef.current) {
+                const savedState = audioSrcRef.current;
+                audioRef.current.currentTime = savedState.currentTime;
+                audioRef.current.volume = savedState.volume || audioRef.current.volume;
+                
+                // 如果之前是播放狀態，繼續播放
+                if (!savedState.paused) {
                   audioRef.current.play().then(() => {
-                    // 播放成功，確保狀態正確
                     isPlayingRef.current = true;
                   }).catch((err) => {
-                    // 自動播放可能被拒絕（需要用戶交互），不是錯誤
                     if (err.name !== "NotAllowedError") {
-                      console.warn("自動播放失敗:", err);
+                      console.warn("恢復播放失敗:", err);
                     }
                   });
                 }
+                
+                // 清除保存的狀態
+                audioSrcRef.current = null;
+                return; // 已經恢復了狀態，不再執行自動播放
+              }
+
+              // ✅ 檢查是否需要自動播放
+              if (audioRef.current.paused && !audioRef.current.dataset.autoPlayAttempted) {
+                audioRef.current.dataset.autoPlayAttempted = "true";
+                console.log("🎵 [MusicModal Mobile] 嘗試自動播放音樂");
+                audioRef.current.play().then(() => {
+                  isPlayingRef.current = true;
+                  console.log("🎵 [MusicModal Mobile] ✅ 音樂播放成功");
+                }).catch((err) => {
+                  console.warn("🎵 [MusicModal Mobile] ❌ 自動播放失敗:", err);
+                  if (err.name !== "NotAllowedError") {
+                    console.warn("自動播放失敗:", err);
+                  }
+                });
               }
             }}
             onAudioVolumeChange={(e) => {
@@ -450,6 +570,7 @@ const MusicModal = ({
               }
             }}
             onAudioPlay={() => {
+              console.log("🎵 [MusicModal Mobile] onAudioPlay 觸發 - 音樂開始播放");
               // 記錄播放開始時的狀態（用於計數）
               if (audioRef.current) {
                 const audio = audioRef.current;
@@ -514,6 +635,43 @@ const MusicModal = ({
               }
             }}
             onAudioPause={() => {
+              console.log("🎵 [MusicModal Mobile] onAudioPause 觸發 - 音樂被暫停", {
+                currentTime: audioRef.current?.currentTime,
+                paused: audioRef.current?.paused,
+                src: audioRef.current?.src?.substring(0, 50),
+                hasMusicFullPlayerTag: audioRef.current?.dataset.musicFullPlayer === "true"
+              });
+              
+              // ⚠️ 關鍵：檢查是否被意外暫停（不應該被暫停的情況）
+              const isUnexpectedPause = audioRef.current && 
+                  audioRef.current.dataset.musicFullPlayer === "true" && 
+                  audioRef.current.paused === true && // 確認確實被暫停了
+                  isPlayingRef.current; // 在設置為 false 之前檢查
+              
+              // 記錄詳細的暫停信息，用於調試
+              const stackTrace = new Error().stack;
+              console.log("🎵 [MusicModal Mobile] onPause 觸發", {
+                currentTime: audioRef.current?.currentTime,
+                paused: audioRef.current?.paused,
+                hasMusicFullPlayerTag: audioRef.current?.dataset.musicFullPlayer === "true",
+                isPlayingRef: isPlayingRef.current,
+                isUnexpectedPause: isUnexpectedPause,
+                stackTrace: stackTrace?.split('\n').slice(0, 10).join('\n')
+              });
+              
+              // ⚠️ 如果被意外暫停，記錄錯誤但不自動恢復（需要找出根本原因）
+              if (isUnexpectedPause) {
+                console.error("🎵 [MusicModal Mobile] ❌ 音樂 Modal 被意外暫停！這是一個 BUG，需要修復。", {
+                  audioElement: audioRef.current,
+                  allAudioElements: Array.from(document.querySelectorAll('audio')).map(a => ({
+                    src: a.src?.substring(0, 50),
+                    paused: a.paused,
+                    hasMusicFullPlayerTag: a.dataset.musicFullPlayer === "true",
+                    hasMusicPreviewTag: a.dataset.musicPreview === "true"
+                  }))
+                });
+              }
+              
               // ✅ 優化：暫停時累計播放時長
               if (audioRef.current && isPlayingRef.current) {
                 const audio = audioRef.current;
@@ -692,55 +850,66 @@ const MusicModal = ({
                   console.error("音樂載入失敗:", e);
                 }}
                 onCanPlay={() => {
+                  console.log("🎵 [MusicModal Desktop] onCanPlay 觸發");
+                  
+                  if (!audioRef.current) return;
+                  
+                  // ✅ 設置標記
+                  audioRef.current.dataset.musicFullPlayer = "true";
+                  
+                  // ✅ 請求播放權限（優先度 3 - 最高）
+                  // AudioManager 會自動暫停低優先度的音頻
+                  audioManager.requestPlay(audioRef.current, 3);
+                  
                   // 設定音量
-                  if (audioRef.current) {
-                    try {
-                      const saved = localStorage.getItem("playerVolume");
-                      if (saved) {
-                        const vol = parseFloat(saved);
-                        if (!isNaN(vol) && vol >= 0 && vol <= 1) {
-                          audioRef.current.volume = vol;
-                        }
+                  try {
+                    const saved = localStorage.getItem("playerVolume");
+                    if (saved) {
+                      const vol = parseFloat(saved);
+                      if (!isNaN(vol) && vol >= 0 && vol <= 1) {
+                        audioRef.current.volume = vol;
                       }
-                    } catch (e) {
-                      console.warn("設定音量失敗:", e);
                     }
+                  } catch (e) {
+                    console.warn("設定音量失敗:", e);
+                  }
 
-                    // 🔧 修復：如果組件切換時有保存的播放狀態，先恢復它
-                    if (audioSrcRef.current) {
-                      const savedState = audioSrcRef.current;
-                      audioRef.current.currentTime = savedState.currentTime;
-                      audioRef.current.volume = savedState.volume || audioRef.current.volume;
-                      
-                      // 如果之前是播放狀態，繼續播放
-                      if (!savedState.paused) {
-                        audioRef.current.play().then(() => {
-                          isPlayingRef.current = true;
-                        }).catch((err) => {
-                          if (err.name !== "NotAllowedError") {
-                            console.warn("恢復播放失敗:", err);
-                          }
-                        });
-                      }
-                      
-                      // 清除保存的狀態
-                      audioSrcRef.current = null;
-                      return; // 已經恢復了狀態，不再執行自動播放
-                    }
-
-                    // ✅ 修復：確保自動播放（處理瀏覽器自動播放策略）
-                    // 如果音頻有 autoPlay 屬性但還沒播放，嘗試手動觸發
-                    if (audioRef.current.paused && !audioRef.current.dataset.autoPlayAttempted) {
-                      audioRef.current.dataset.autoPlayAttempted = "true";
+                  // 🔧 修復：如果組件切換時有保存的播放狀態，先恢復它
+                  if (audioSrcRef.current) {
+                    const savedState = audioSrcRef.current;
+                    audioRef.current.currentTime = savedState.currentTime;
+                    audioRef.current.volume = savedState.volume || audioRef.current.volume;
+                    
+                    // 如果之前是播放狀態，繼續播放
+                    if (!savedState.paused) {
                       audioRef.current.play().then(() => {
                         isPlayingRef.current = true;
                       }).catch((err) => {
-                        // 自動播放被阻止是正常的（需要用戶交互），不記錄錯誤
                         if (err.name !== "NotAllowedError") {
-                          console.warn("自動播放失敗:", err);
+                          console.warn("恢復播放失敗:", err);
                         }
                       });
                     }
+                    
+                    // 清除保存的狀態
+                    audioSrcRef.current = null;
+                    return; // 已經恢復了狀態，不再執行自動播放
+                  }
+
+                  // ✅ 確保自動播放（處理瀏覽器自動播放策略）
+                  if (audioRef.current.paused && !audioRef.current.dataset.autoPlayAttempted) {
+                    audioRef.current.dataset.autoPlayAttempted = "true";
+                    console.log("🎵 [MusicModal Desktop] 嘗試自動播放音樂");
+                    audioRef.current.play().then(() => {
+                      isPlayingRef.current = true;
+                      console.log("🎵 [MusicModal Desktop] ✅ 音樂播放成功");
+                    }).catch((err) => {
+                      // 自動播放被阻止是正常的（需要用戶交互），不記錄錯誤
+                      console.warn("🎵 [MusicModal Desktop] ❌ 自動播放失敗:", err);
+                      if (err.name !== "NotAllowedError") {
+                        console.warn("自動播放失敗:", err);
+                      }
+                    });
                   }
                 }}
                 onVolumeChange={(e) => {
@@ -757,6 +926,7 @@ const MusicModal = ({
                   }
                 }}
                 onPlay={() => {
+                  console.log("🎵 [MusicModal Desktop] onPlay 觸發 - 音樂開始播放");
                   // 記錄播放開始時的絕對位置（秒）
                   if (audioRef.current) {
                     const audio = audioRef.current;
@@ -842,6 +1012,41 @@ const MusicModal = ({
                       totalPlayedDurationRef.current,
                       currentTime,
                     );
+                  } else {
+                    // 如果沒有在播放，也更新狀態
+                    if (audioRef.current) {
+                      isPlayingRef.current = false;
+                    }
+                  }
+                  
+                  // ⚠️ 關鍵：檢查是否被意外暫停（不應該被暫停的情況）
+                  // 只有在以下情況才認為是意外暫停：
+                  // 1. 音頻元素存在且有標記
+                  // 2. 音頻確實被暫停了
+                  // 3. 之前是在播放狀態
+                  // 4. AudioManager 中當前音頻是這個音頻（說明優先度正確）
+                  const isUnexpectedPause = audioRef.current && 
+                      audioRef.current.dataset.musicFullPlayer === "true" && 
+                      audioRef.current.paused === true &&
+                      audioManager.getCurrentAudio() === audioRef.current &&
+                      audioManager.getCurrentPriority() === 3;
+                  
+                  // 記錄詳細的暫停信息，用於調試
+                  if (isUnexpectedPause) {
+                    const stackTrace = new Error().stack;
+                    console.error("🎵 [MusicModal Desktop] ❌ 音樂 Modal 被意外暫停！這是一個 BUG，需要修復。", {
+                      audioElement: audioRef.current,
+                      audioManagerCurrentAudio: audioManager.getCurrentAudio(),
+                      audioManagerPriority: audioManager.getCurrentPriority(),
+                      allAudioElements: Array.from(document.querySelectorAll('audio')).map(a => ({
+                        src: a.src?.substring(0, 50),
+                        paused: a.paused,
+                        hasMusicFullPlayerTag: a.dataset.musicFullPlayer === "true",
+                        hasMusicPreviewTag: a.dataset.musicPreview === "true",
+                        isCurrentAudio: a === audioManager.getCurrentAudio()
+                      })),
+                      stackTrace: stackTrace?.split('\n').slice(0, 15).join('\n')
+                    });
                   }
 
                   // 清除定時器
@@ -996,7 +1201,7 @@ const MusicModal = ({
             isFollowing={isFollowing}
             onFollowToggle={onFollowToggle}
             onUserClick={onUserClick}
-            onClose={onClose}
+            onClose={handleClose}
             onDelete={onDelete}
             canEdit={canEdit}
             onEdit={onEdit}

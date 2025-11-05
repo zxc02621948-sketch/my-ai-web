@@ -4,15 +4,15 @@ import { GENRE_MAP, MUSIC_GENRES } from "@/constants/musicCategories";
 export default function MusicFilterPanel({
   levelFilters,
   categoryFilters,
-  viewMode,
   toggleLevelFilter,
   toggleCategoryFilter,
-  setViewMode,
   currentUser,
 }) {
-  const levelOptions = ["一般音樂", "15+ 音樂", "18+ 音樂"];
+  const levelOptions = ["一般音樂", "爭議音樂", "18+ 音樂"];
 
-  const handleLevelClick = (label) => {
+  const handleLevelClick = (e, label) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (label === "18+ 音樂" && !currentUser) {
       alert("請先登入才能查看 18+ 音樂");
       return;
@@ -31,7 +31,7 @@ export default function MusicFilterPanel({
           return (
             <button
               key={label}
-              onClick={() => handleLevelClick(label)}
+              onClick={(e) => handleLevelClick(e, label)}
               disabled={isDisabled}
               className={`px-3 py-1 rounded text-sm border transition-all
                 ${
@@ -64,30 +64,6 @@ export default function MusicFilterPanel({
             {GENRE_MAP[genre]}
           </button>
         ))}
-      </div>
-
-      <div className="font-bold text-sm text-gray-300 pt-2">顯示模式</div>
-      <div className="flex gap-2 flex-wrap">
-        <button
-          onClick={() => setViewMode("default")}
-          className={`px-3 py-1 rounded text-sm border ${
-            viewMode === "default"
-              ? "bg-green-600 text-white border-green-600"
-              : "bg-zinc-700 text-gray-300 border-zinc-600"
-          }`}
-        >
-          常駐標題
-        </button>
-        <button
-          onClick={() => setViewMode("compact")}
-          className={`px-3 py-1 rounded text-sm border ${
-            viewMode === "compact"
-              ? "bg-green-600 text-white border-green-600"
-              : "bg-zinc-700 text-gray-300 border-zinc-600"
-          }`}
-        >
-          hover 顯示
-        </button>
       </div>
     </div>
   );

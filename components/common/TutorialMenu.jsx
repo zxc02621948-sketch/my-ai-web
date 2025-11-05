@@ -60,8 +60,8 @@ export default function TutorialMenu({ onGuideClick }) {
                    transition-all active:translate-y-[1px] text-xs md:text-sm whitespace-nowrap"
       >
         <span className="w-4 h-4 shrink-0 transition-transform group-hover:-translate-y-0.5" aria-hidden>📚</span>
-        <span className="hidden lg:inline">教學</span>
-        <span aria-hidden className="hidden lg:inline">▼</span>
+        <span>教學</span>
+        <span aria-hidden>▼</span>
       </button>
 
       {open && typeof window !== 'undefined' && createPortal(

@@ -10,6 +10,7 @@ export default function UploadModal() {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState(1);
+  const [mobileSimple, setMobileSimple] = useState(false); // 手機簡化模式
 
   // 表單欄位
   const [rating, setRating] = useState("");
@@ -48,9 +49,13 @@ export default function UploadModal() {
     };
   }, []);
 
-  // 事件開啟（外部呼叫：window.dispatchEvent(new CustomEvent("openUploadModal", { detail: { user } }))）
+  // 事件開啟（外部呼叫：window.dispatchEvent(new CustomEvent("openUploadModal", { detail: { user, mobileSimple } }))）
   useEffect(() => {
     const open = async (e) => {
+      // 檢查是否為手機簡化模式
+      const isMobileSimple = e?.detail?.mobileSimple || false;
+      setMobileSimple(isMobileSimple);
+      
       if (e?.detail?.user) {
         setCurrentUser(e.detail.user);
         // 獲取上傳限制信息
@@ -64,6 +69,9 @@ export default function UploadModal() {
           console.error('獲取上傳限制失敗：', error);
         }
       }
+      
+      // 所有模式都需要先選擇分級（step 1）
+      setStep(1);
       setIsOpen(true);
     };
     window.addEventListener("openUploadModal", open);
@@ -76,6 +84,7 @@ export default function UploadModal() {
   useEffect(() => {
     if (!isOpen) {
       setStep(1);
+      setMobileSimple(false);
       setRating("");
       setPlatform("");
       setTitle("");
@@ -147,7 +156,7 @@ export default function UploadModal() {
                 </div>
                 <button
                   onClick={onClose}
-                  className="hidden md:inline-flex px-3 py-1.5 rounded bg-white/10 hover:bg-white/15 text-sm"
+                  className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/15 text-sm"
                 >
                   關閉
                 </button>
@@ -202,6 +211,7 @@ export default function UploadModal() {
                     loraLink={loraLink}
                     setLoraLink={setLoraLink}
                     uploadLimits={uploadLimits}
+                    mobileSimple={mobileSimple}
                   />
                 </div>
               )}

@@ -3,6 +3,8 @@
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { GENRE_MAP, GENRE_ICONS } from "@/constants/musicCategories";
 import NewBadge from "@/components/image/NewBadge";
+import { audioManager } from "@/utils/audioManager";
+import { usePlayer } from "@/components/context/PlayerContext";
 
 const MusicPreview = ({ music, className = "", onClick }) => {
   const audioRef = useRef(null);
@@ -19,6 +21,8 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   const playStartTimeRef = useRef(null); // 記錄播放開始時間（用於計算進度）
   const audioPlayStartTimeRef = useRef(null); // 記錄音頻播放開始的 currentTime
   const lastPlayTimeRef = useRef(0); // 記錄上次播放的累積時間（用於計算位置）
+  const player = usePlayer(); // 獲取播放器 Context
+  const wasPlayerPlayingRef = useRef(false); // 記錄開始預覽時播放器是否在播放
 
   useEffect(() => {
     // 檢測是否為行動裝置
@@ -90,14 +94,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       const safeVolume = Math.max(0, Math.min(1, calculatedVolume));
       audio.volume = safeVolume;
 
-      // ✅ 如果檢測到完整播放器正在播放，立即停止預覽
-      const fullPlayerAudio = document.querySelector('audio[data-music-full-player="true"]');
-      if (fullPlayerAudio && !fullPlayerAudio.paused) {
-        audio.volume = 0;
-        audio.pause();
-        setIsPlaying(false);
-        return;
-      }
+      // ✅ AudioManager 會自動處理優先度，不需要手動檢查
 
       // 如果播放超過目標結束時間，暫停播放（不重複）
       if (currentTime >= playEndTime.current) {
@@ -149,6 +146,8 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   }, [music.duration]);
 
 
+  // ✅ AudioManager 會自動處理單一音源，不需要手動監聽全局事件
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -180,15 +179,26 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       audio.currentTime = randomStart;
       // 開始播放時音量設為 0，讓淡入效果生效
       audio.volume = 0;
+      
+      // ✅ 在初始化時記錄播放器狀態（在開始預覽前記錄）
+      wasPlayerPlayingRef.current = player?.isPlaying || false;
+      console.log("🎵 [MusicPreview] 開始預覽，記錄播放器狀態:", wasPlayerPlayingRef.current);
+      
       hasInitializedRef.current = true;
       // 開始新播放時，不清除固定位置，讓動畫從凍結的位置繼續
       // 這樣符號會從上次停止的位置繼續前進
     }
 
     if (isPlaying) {
-      // ✅ 如果檢測到完整播放器正在播放，立即停止預覽
-      const fullPlayerAudio = document.querySelector('audio[data-music-full-player="true"]');
-      if (fullPlayerAudio && !fullPlayerAudio.paused) {
+      // ✅ 設置標記
+      audio.dataset.musicPreview = "true";
+      
+      // ✅ 請求播放權限（優先度 2 - 中等）
+      // AudioManager 會自動暫停低優先度的音頻（主播放器），但不會暫停高優先度的音頻（音樂 Modal）
+      const canPlay = audioManager.requestPlay(audio, 2);
+      
+      // 如果優先度不夠（例如音樂 Modal 正在播放），不允許播放
+      if (!canPlay) {
         audio.pause();
         setIsPlaying(false);
         return;
@@ -200,13 +210,16 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch((error) => {
-            // 播放被中斷或失敗，忽略錯誤
+          // 播放被中斷或失敗，忽略錯誤
           if (error.name !== "AbortError" && error.name !== "NotAllowedError") {
             console.error("音頻播放錯誤:", error);
-            }
-          });
+          }
+        });
       }
     } else {
+      // ✅ 釋放播放權限
+      audioManager.release(audio);
+      
       audio.pause();
       // 非播放時靜音（節省資源）
       audio.muted = true;
@@ -215,6 +228,14 @@ const MusicPreview = ({ music, className = "", onClick }) => {
         audio.volume = targetVolumeRef.current;
       }
       
+      // ✅ 恢復播放器播放（如果之前是在播放狀態）
+      if (wasPlayerPlayingRef.current && player?.play) {
+        console.log("🎵 [MusicPreview] 預覽結束，恢復播放器播放");
+        player.play();
+      }
+      
+      // 重置標記
+      wasPlayerPlayingRef.current = false;
       
       setPlayStartTime(null);
       audioPlayStartTimeRef.current = null; // 清除 ref
@@ -235,6 +256,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       
       // 延遲一小段時間再開始播放，避免快速滑過時觸發
       hoverTimeoutRef.current = setTimeout(() => {
+        // AudioManager 會自動處理單一音源
         setIsPlaying(true);
       }, 150); // 150ms 延遲
     }
@@ -254,6 +276,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
 
   const handlePlayButtonClick = (e) => {
     e.stopPropagation(); // 阻止冒泡，避免觸發 handleClick
+    // AudioManager 會自動處理單一音源
     setIsPlaying(true);
   };
 

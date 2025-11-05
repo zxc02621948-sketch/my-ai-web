@@ -6,20 +6,42 @@ import { Film } from 'lucide-react';
 
 const ContentMenuDropdown = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const dropdownRef = useRef(null);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      if (dropdownRef.current && menuRef.current && 
+          !dropdownRef.current.contains(event.target) && 
+          !menuRef.current.contains(event.target)) {
         setIsOpen(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
+
+  // 計算下拉選單位置（手機版使用 fixed 定位）
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      requestAnimationFrame(() => {
+        const rect = buttonRef.current.getBoundingClientRect();
+        setMenuPosition({
+          top: rect.bottom + 8,
+          left: Math.max(8, rect.right - 192),
+        });
+      });
+    }
+  }, [isOpen]);
 
   const handleNavigate = (path) => {
     setIsOpen(false);
@@ -48,6 +70,7 @@ const ContentMenuDropdown = () => {
     <div className="relative" ref={dropdownRef}>
       {/* Desktop 按鈕 */}
       <button
+        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className="group hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2
                    bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold
@@ -70,16 +93,21 @@ const ContentMenuDropdown = () => {
 
       {/* Mobile 按鈕 */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={buttonRef}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
         className="md:hidden flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold
                    bg-gradient-to-r from-purple-500 to-pink-500 text-white
                    shadow-[0_4px_12px_-4px_rgba(147,51,234,0.4)]
                    hover:shadow-[0_6px_16px_-4px_rgba(236,72,153,0.6)]
-                   transition-all active:translate-y-[1px] shrink-0"
+                   transition-all active:translate-y-[1px] shrink-0 whitespace-nowrap"
         title="內容專區"
       >
         <span className="text-sm">{currentItem.icon}</span>
-        <span>{currentItem.label.replace('專區', '')}</span>
+        <span>{currentItem.label}</span>
         <svg 
           className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} 
           fill="none" 
@@ -91,8 +119,15 @@ const ContentMenuDropdown = () => {
       </button>
 
       {/* 下拉選單 */}
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-48 bg-zinc-800 rounded-lg shadow-lg border border-zinc-600 py-2 z-50">
+      {isOpen && typeof window !== 'undefined' && (
+        <div 
+          ref={menuRef}
+          className={`${window.innerWidth < 768 ? 'fixed' : 'absolute top-full left-0'} mt-2 w-48 bg-zinc-800 rounded-lg shadow-lg border border-zinc-600 py-2 z-[9999]`}
+          style={window.innerWidth < 768 ? {
+            top: `${menuPosition.top}px`,
+            left: `${menuPosition.left}px`,
+          } : {}}
+        >
           {menuItems.map((item, index) => (
             <button
               key={item.path}

@@ -23,7 +23,7 @@ import {
 import InboxButton from "@/components/common/InboxButton";
 import TutorialMenu from "@/components/common/TutorialMenu";
 import UploadDropdown from "@/components/common/UploadDropdown";
-import ContentMenuDropdown from "@/components/common/ContentMenuDropdown";
+import ContentMenuButtons from "@/components/common/ContentMenuButtons";
 
 export default function Header({
   currentUser,
@@ -462,8 +462,6 @@ export default function Header({
               <TutorialMenu onGuideClick={onGuideClick} />
             </div>
 
-            <ContentMenuDropdown />
-
             {currentUser && <NotificationBell />}
             {currentUser && <InboxButton />}
 
@@ -577,6 +575,11 @@ export default function Header({
           </div>
         </div>
 
+        {/* 內容專區按鈕列（桌面版和手機版） */}
+        <div className="px-3 md:px-6 py-2 border-t border-zinc-700/50 bg-zinc-900/50">
+          <ContentMenuButtons />
+        </div>
+
         {/* 第二列：📱 手機搜尋專用 */}
         <div
           className="md:hidden px-3 pb-1.5 pt-1 border-t border-zinc-700"
@@ -625,16 +628,14 @@ export default function Header({
         </div>
 
         {/* 第三列：📱 手機常用功能 */}
-        <div className="md:hidden px-3 pb-2">
+        <div className="md:hidden px-3 pb-2 border-t border-zinc-700/50">
           <div
             className="flex gap-2 overflow-x-auto overflow-y-hidden"
-            style={{ WebkitOverflowScrolling: "touch" }}
+            style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}
           >
             <TutorialMenu onGuideClick={onGuideClick} />
 
-            <ContentMenuDropdown />
-
-            <div className="md:hidden">
+            <div className="md:hidden shrink-0">
               <UploadDropdown />
             </div>
           </div>

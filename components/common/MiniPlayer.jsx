@@ -537,7 +537,6 @@ export default function MiniPlayer() {
               // ✅ 防抖：避免重複載入（500ms 內只載入一次）
               const now = Date.now();
               if (isLoadingRef.current) {
-                console.log('⏸️ [MiniPlayer] 正在載入中，跳過重複載入');
                 // ✅ 如果正在載入，確保 isLoadingPlaylist 已設置（但不清除，因為正在載入中）
                 if (!isLoadingPlaylist) {
                   setIsLoadingPlaylist(true);
@@ -545,7 +544,6 @@ export default function MiniPlayer() {
                 return;
               }
               if (now - lastLoadTimeRef.current < 500) {
-                console.log('⏸️ [MiniPlayer] 載入過於頻繁，跳過');
                 // ✅ 如果載入過於頻繁，清除載入狀態（避免跑馬燈一直不顯示）
                 setIsLoadingPlaylist(false);
                 return;
@@ -557,7 +555,6 @@ export default function MiniPlayer() {
               isLoadingRef.current = true;
               lastLoadTimeRef.current = now;
               
-              console.log('👤 [MiniPlayer] 釘選的是自己的播放器，從數據庫載入最新播放清單');
               // ✅ 如果釘選的是自己的播放器，從數據庫重新載入最新的播放清單
               // 因為用戶可能已經編輯過播放清單，但 pinnedPlayer.playlist 還是舊的
               
@@ -577,13 +574,10 @@ export default function MiniPlayer() {
                   headers: { 'Cache-Control': 'no-cache' }
                 });
                 const latestPlaylist = response.data?.playlist || [];
-                console.log('📥 [MiniPlayer] 從數據庫載入自己的播放清單，長度:', latestPlaylist.length);
-                console.log('📥 [MiniPlayer] 播放清單內容:', JSON.stringify(latestPlaylist, null, 2));
                 
                 // ✅ 檢查播放清單是否真的改變了（避免重複設置）
                 if (latestPlaylist.length === lastPlaylistLengthRef.current && 
                     playerRef.current?.playlist?.length === latestPlaylist.length) {
-                  console.log('⏸️ [MiniPlayer] 播放清單未改變，跳過設置');
                   setIsLoadingPlaylist(false); // ✅ 清除載入狀態
                   isLoadingRef.current = false;
                   return;
@@ -620,8 +614,6 @@ export default function MiniPlayer() {
                         
                         // ✅ 最後設置 src（這會觸發音頻元素重新載入）
                         playerRef.current.setSrc?.(track.url);
-                        
-                        console.log('🎵 [MiniPlayer] 設置當前曲目:', track.title || track.url, 'URL:', track.url);
                       }
                     } else {
                       // ✅ 播放清單為空時，停止播放並清空音頻源
@@ -637,7 +629,7 @@ export default function MiniPlayer() {
                 // ✅ 載入成功，清除載入狀態
                 setIsLoadingPlaylist(false);
               } catch (error) {
-                console.error('❌ [MiniPlayer] 載入自己的播放清單失敗，使用釘選記錄:', error);
+                console.error('載入自己的播放清單失敗，使用釘選記錄:', error);
                 // 如果載入失敗，回退到使用釘選記錄
                 if (playerRef.current) {
                   playerRef.current.setPlayerOwner?.({ 
@@ -713,8 +705,6 @@ export default function MiniPlayer() {
                   playerRef.current.setActiveIndex?.(0);
                 }
               }
-            } else {
-              console.warn('⚠️ [MiniPlayer] playerRef 不可用');
             }
           } else if (expiresAt && expiresAt <= now) {
             // 已過期，自動解除釘選
@@ -730,7 +720,7 @@ export default function MiniPlayer() {
           setIsLoadingPlaylist(false);
         }
       } catch (error) {
-        console.error('❌ [MiniPlayer] 載入釘選播放器失敗:', error);
+        console.error('載入釘選播放器失敗:', error);
         // ✅ 載入失敗時也要清除載入狀態，避免跑馬燈一直不顯示
         setIsLoadingPlaylist(false);
       } finally {
@@ -745,7 +735,6 @@ export default function MiniPlayer() {
     
     // ✅ 監聽播放清單變更事件（當用戶編輯播放清單後觸發）
     const handlePlaylistChanged = () => {
-      console.log('🔄 [MiniPlayer] 收到播放清單變更事件，重新載入播放清單');
       // 重置防抖狀態，強制重新載入
       isLoadingRef.current = false;
       lastLoadTimeRef.current = 0;

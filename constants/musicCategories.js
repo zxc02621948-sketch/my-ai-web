@@ -5,7 +5,7 @@ export const GENRE_MAP = {
   rock: "搖滾 Rock",
   electronic: "電子 Electronic",
   classical: "古典 Classical",
-  jazz: "爵士 Jazz",
+  jazz: "抒情 Ballad",
   folk: "古風 Chinese Style",
   hiphop: "嘻哈 Hip-Hop",
   ambient: "氛圍 Ambient",
@@ -19,8 +19,8 @@ export const GENRE_ICONS = {
   rock: "🎸", // 吉他
   electronic: "🎹", // 鍵盤/電子音樂
   classical: "🎻", // 小提琴
-  jazz: "🎺", // 小號
-  folk: "🪕", // 班卓琴
+  jazz: "💕", // 愛心（抒情）
+  folk: "🏮", // 燈籠（古風）
   hiphop: "🎧", // 耳機
   ambient: "🌊", // 波浪（氛圍感）
   acg: "🎮", // 遊戲手把
@@ -31,13 +31,14 @@ export const GENRE_ICONS = {
 export const MUSIC_GENRES = Object.keys(GENRE_MAP);
 
 // 語言選項
-export const MUSIC_LANGUAGES = ["chinese", "english", "japanese"];
+export const MUSIC_LANGUAGES = ["chinese", "english", "japanese", "taiwanese"];
 
 // 語言映射表（英文儲存，中文顯示）
 export const LANGUAGE_MAP = {
   chinese: "中文",
   english: "English",
   japanese: "日本語",
+  taiwanese: "閩南語",
 };
 
 // 音樂類型（BGM/歌曲）
