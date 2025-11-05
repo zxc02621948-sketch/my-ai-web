@@ -117,6 +117,9 @@ export default function MobileMusicSheet({
 
   // 處理進度條點擊/拖動
   const handleProgressClick = useCallback((e) => {
+    // 如果正在拖曳，不處理點擊事件
+    if (isDraggingRef.current) return;
+    
     const audio = audioRef.current;
     if (!audio || !duration) return;
 
@@ -176,8 +179,11 @@ export default function MobileMusicSheet({
     const handleEnd = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      isDraggingRef.current = false;
-      setIsDraggingProgress(false);
+      // 延遲重置，避免立即觸發 onClick
+      setTimeout(() => {
+        isDraggingRef.current = false;
+        setIsDraggingProgress(false);
+      }, 100);
     };
 
     document.addEventListener("mousemove", handleMove, { passive: false });
@@ -378,12 +384,17 @@ export default function MobileMusicSheet({
                   <div
                     ref={progressBarRef}
                     className="relative h-2 bg-white/20 rounded-full cursor-pointer group"
-                    onClick={handleProgressClick}
                     onMouseDown={handleProgressMouseDown}
                     onMouseUp={handleProgressMouseUp}
                     onTouchStart={handleProgressMouseDown}
                     onTouchEnd={handleProgressMouseUp}
-                    style={{ touchAction: 'none' }}
+                    onClick={(e) => {
+                      // 只有在沒有拖曳的情況下才處理點擊
+                      if (!isDraggingRef.current) {
+                        handleProgressClick(e);
+                      }
+                    }}
+                    style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
                   >
                     {/* 已播放進度 */}
                     <div

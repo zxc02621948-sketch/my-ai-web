@@ -660,22 +660,38 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       />
 
       {/* 播放按鈕覆蓋層（在中間區域，z-index 高於符號） */}
-      {/* 懸停預聽時隱藏按鈕 */}
-      {!isPlaying && (
-        <div className="absolute inset-0 flex items-center justify-center z-30">
+      {/* 手機版：始終顯示播放/暫停按鈕；桌面版：懸停預聽時隱藏按鈕 */}
+      {(!isPlaying || isMobile) && (
+        <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
           <button
             onClick={handlePlayButtonClick}
-            className={`bg-black bg-opacity-60 hover:bg-opacity-80 rounded-full p-4 transition-all duration-300 ${
+            onTouchStart={(e) => {
+              e.stopPropagation();
+            }}
+            onTouchEnd={(e) => {
+              e.stopPropagation();
+            }}
+            className={`bg-black bg-opacity-60 hover:bg-opacity-80 rounded-full p-4 transition-all duration-300 pointer-events-auto ${
               isHovered ? "bg-opacity-40 scale-110" : "bg-opacity-60 scale-100"
             }`}
           >
-            <svg
-              className="w-8 h-8 text-white"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path d="M8 5v14l11-7z" />
-            </svg>
+            {isPlaying ? (
+              <svg
+                className="w-8 h-8 text-white"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+              </svg>
+            ) : (
+              <svg
+                className="w-8 h-8 text-white"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
           </button>
         </div>
       )}
