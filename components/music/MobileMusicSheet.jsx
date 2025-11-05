@@ -42,6 +42,11 @@ export default function MobileMusicSheet({
   const [isPlaying, setIsPlaying] = useState(false);
   const progressBarRef = useRef(null);
   const isDraggingRef = useRef(false);
+  const dragStartTimeRef = useRef(null);
+  const dragTimeoutRef = useRef(null);
+  const dragStartPosRef = useRef(null);
+  const DRAG_DELAY = 1000; // 1秒延遲
+  const DRAG_DISTANCE_THRESHOLD = 10; // 移動超過10px立即開始拖曳
 
   // 格式化時間 (秒數轉換為 MM:SS)
   const formatTime = (seconds) => {
@@ -153,15 +158,46 @@ export default function MobileMusicSheet({
   const handleProgressMouseDown = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    isDraggingRef.current = true;
-    setIsDraggingProgress(true);
+    
+    // 記錄開始時間和位置
+    dragStartTimeRef.current = Date.now();
+    const clientX = e.touches?.[0]?.clientX ?? e.clientX ?? 0;
+    const clientY = e.touches?.[0]?.clientY ?? e.clientY ?? 0;
+    dragStartPosRef.current = { x: clientX, y: clientY };
+    
+    isDraggingRef.current = false; // 先設為 false，等待延遲或移動
+    setIsDraggingProgress(true); // 立即設置，讓事件監聽器被添加
+    
+    // 設置延遲，如果按住超過1秒，才允許拖曳
+    if (dragTimeoutRef.current) {
+      clearTimeout(dragTimeoutRef.current);
+    }
+    
+    dragTimeoutRef.current = setTimeout(() => {
+      if (dragStartTimeRef.current) {
+        isDraggingRef.current = true;
+      }
+    }, DRAG_DELAY);
+    
+    // 立即處理點擊（如果很快放開，就是點擊）
     handleProgressClick(e);
   }, [handleProgressClick]);
 
   // 處理進度條拖動結束
   const handleProgressMouseUp = useCallback(() => {
-    isDraggingRef.current = false;
-    setIsDraggingProgress(false);
+    // 清除延遲
+    if (dragTimeoutRef.current) {
+      clearTimeout(dragTimeoutRef.current);
+      dragTimeoutRef.current = null;
+    }
+    
+    // 如果已經開始拖曳，保持拖曳狀態直到 touchend/mouseup
+    // 如果還沒開始拖曳，立即重置狀態
+    if (!isDraggingRef.current) {
+      dragStartTimeRef.current = null;
+      dragStartPosRef.current = null;
+      setIsDraggingProgress(false);
+    }
   }, []);
 
   // 處理進度條拖動
@@ -169,7 +205,29 @@ export default function MobileMusicSheet({
     if (!isDraggingProgress) return;
 
     const handleMove = (e) => {
+      // 如果還在延遲期間，檢查是否移動超過閾值
+      if (!isDraggingRef.current && dragStartPosRef.current) {
+        const clientX = e.touches?.[0]?.clientX ?? e.changedTouches?.[0]?.clientX ?? e.clientX ?? 0;
+        const clientY = e.touches?.[0]?.clientY ?? e.changedTouches?.[0]?.clientY ?? e.clientY ?? 0;
+        
+        const dx = Math.abs(clientX - dragStartPosRef.current.x);
+        const dy = Math.abs(clientY - dragStartPosRef.current.y);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // 如果移動距離超過閾值，立即開始拖曳
+        if (distance > DRAG_DISTANCE_THRESHOLD) {
+          isDraggingRef.current = true;
+          // 清除延遲
+          if (dragTimeoutRef.current) {
+            clearTimeout(dragTimeoutRef.current);
+            dragTimeoutRef.current = null;
+          }
+        }
+      }
+      
+      // 只有當拖曳已開始，才處理拖曳
       if (!isDraggingRef.current) return;
+      
       // 阻止默認行為，避免頁面滾動
       e.preventDefault();
       e.stopPropagation();
@@ -179,10 +237,19 @@ export default function MobileMusicSheet({
     const handleEnd = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      
+      // 清除延遲
+      if (dragTimeoutRef.current) {
+        clearTimeout(dragTimeoutRef.current);
+        dragTimeoutRef.current = null;
+      }
+      
       // 延遲重置，避免立即觸發 onClick
       setTimeout(() => {
         isDraggingRef.current = false;
         setIsDraggingProgress(false);
+        dragStartTimeRef.current = null;
+        dragStartPosRef.current = null;
       }, 100);
     };
 
