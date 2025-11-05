@@ -41,6 +41,7 @@ export default function MobileMusicSheet({
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const progressBarRef = useRef(null);
+  const isDraggingRef = useRef(false);
 
   // 格式化時間 (秒數轉換為 MM:SS)
   const formatTime = (seconds) => {
@@ -134,44 +135,53 @@ export default function MobileMusicSheet({
   }, [duration, onAudioSeeked]);
 
   // 處理進度條拖動開始
-  const handleProgressMouseDown = (e) => {
+  const handleProgressMouseDown = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingRef.current = true;
     setIsDraggingProgress(true);
     handleProgressClick(e);
-  };
+  }, [handleProgressClick]);
 
   // 處理進度條拖動結束
-  const handleProgressMouseUp = () => {
+  const handleProgressMouseUp = useCallback(() => {
+    isDraggingRef.current = false;
     setIsDraggingProgress(false);
-  };
+  }, []);
 
   // 處理進度條拖動
   useEffect(() => {
     if (!isDraggingProgress) return;
 
     const handleMove = (e) => {
-      if (!isDraggingProgress) return;
+      if (!isDraggingRef.current) return;
       // 阻止默認行為，避免頁面滾動
       e.preventDefault();
+      e.stopPropagation();
       handleProgressClick(e);
     };
 
     const handleEnd = (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      isDraggingRef.current = false;
       setIsDraggingProgress(false);
     };
 
-    document.addEventListener("mousemove", handleMove);
-    document.addEventListener("mouseup", handleEnd);
+    document.addEventListener("mousemove", handleMove, { passive: false });
+    document.addEventListener("mouseup", handleEnd, { passive: false });
     document.addEventListener("touchmove", handleMove, { passive: false });
     document.addEventListener("touchend", handleEnd, { passive: false });
+    document.addEventListener("touchcancel", handleEnd, { passive: false });
 
     return () => {
       document.removeEventListener("mousemove", handleMove);
       document.removeEventListener("mouseup", handleEnd);
       document.removeEventListener("touchmove", handleMove);
       document.removeEventListener("touchend", handleEnd);
+      document.removeEventListener("touchcancel", handleEnd);
     };
-  }, [isDraggingProgress, duration, handleProgressClick]);
+  }, [isDraggingProgress, handleProgressClick]);
 
   // --app-vh 修正
   useEffect(() => {
@@ -358,8 +368,10 @@ export default function MobileMusicSheet({
                     className="relative h-2 bg-white/20 rounded-full cursor-pointer group"
                     onClick={handleProgressClick}
                     onMouseDown={handleProgressMouseDown}
+                    onMouseUp={handleProgressMouseUp}
                     onTouchStart={handleProgressMouseDown}
                     onTouchEnd={handleProgressMouseUp}
+                    style={{ touchAction: 'none' }}
                   >
                     {/* 已播放進度 */}
                     <div

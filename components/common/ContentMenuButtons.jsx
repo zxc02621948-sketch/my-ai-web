@@ -85,7 +85,7 @@ const ContentMenuButtons = () => {
             }`}
           title={item.label}
         >
-          <span className="text-sm md:text-lg">{item.icon}</span>
+          <span className="hidden md:inline text-sm md:text-lg">{item.icon}</span>
           <span className="md:hidden">{item.label}</span>
           <span className="hidden md:inline lg:hidden">{item.label.replace('專區', '')}</span>
           <span className="hidden lg:inline">{item.label}</span>

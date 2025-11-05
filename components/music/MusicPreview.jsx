@@ -140,10 +140,50 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     };
   }, [isPlaying, playStartTime, music.duration]);
   
-  // 當 music 變化時，重置顯示時長
+  // 監聽強制停止事件
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleForceStop = () => {
+      setIsPlaying(false);
+      audio.pause();
+      audio.currentTime = 0;
+      audioManager.release(audio);
+      setPlayStartTime(null);
+      playEndTime.current = null;
+      hasInitializedRef.current = false;
+    };
+
+    audio.addEventListener('forceStopPreview', handleForceStop);
+
+    return () => {
+      audio.removeEventListener('forceStopPreview', handleForceStop);
+    };
+  }, []);
+
+  // 當 music 變化時，重置顯示時長並停止當前播放
   useEffect(() => {
     setDisplayDuration(music.duration || 0);
-  }, [music.duration]);
+    
+    // 如果音樂改變了，立即停止當前播放（允許切換到新音樂）
+    const audio = audioRef.current;
+    if (audio && isPlaying) {
+      audio.pause();
+      audio.currentTime = 0;
+      audioManager.release(audio);
+      setIsPlaying(false);
+      setPlayStartTime(null);
+      playEndTime.current = null;
+      hasInitializedRef.current = false;
+      
+      // 恢復播放器（如果之前有播放）
+      if (wasPlayerPlayingRef.current && player?.play) {
+        player.play();
+        wasPlayerPlayingRef.current = false;
+      }
+    }
+  }, [music._id, music.duration, isPlaying, player]);
 
 
   // ✅ AudioManager 會自動處理單一音源，不需要手動監聽全局事件
@@ -190,6 +230,9 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     }
 
     if (isPlaying) {
+      // ✅ 停止所有其他預覽
+      stopAllOtherPreviews();
+      
       // ✅ 設置標記
       audio.dataset.musicPreview = "true";
       
@@ -274,15 +317,56 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     }
   };
 
+  // 停止所有其他音樂預覽的函數
+  const stopAllOtherPreviews = () => {
+    try {
+      // 查找所有正在預覽的音樂音頻元素
+      const allPreviewAudios = document.querySelectorAll('audio[data-music-preview="true"]');
+      allPreviewAudios.forEach((audio) => {
+        // 跳過當前音樂的 audio
+        if (audio !== audioRef.current) {
+          audio.pause();
+          audio.currentTime = 0;
+          audioManager.release(audio);
+          // 觸發自定義事件通知對應的組件停止播放
+          audio.dispatchEvent(new CustomEvent('forceStopPreview'));
+        }
+      });
+    } catch (error) {
+      console.warn('停止其他預覽失敗:', error);
+    }
+  };
+
   const handlePlayButtonClick = (e) => {
     e.stopPropagation(); // 阻止冒泡，避免觸發 handleClick
+    
+    // 停止所有其他預覽
+    stopAllOtherPreviews();
+    
+    // 手機版和桌面版都支持預覽
     // AudioManager 會自動處理單一音源
     setIsPlaying(true);
   };
 
   const handleClick = () => {
-    // 暫停預覽音頻
+    // 點擊卡片時：停止當前預覽並打開 Modal
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audioManager.release(audio);
+    }
     setIsPlaying(false);
+    setPlayStartTime(null);
+    playEndTime.current = null;
+    hasInitializedRef.current = false;
+    
+    // 恢復播放器（如果之前有播放）
+    if (wasPlayerPlayingRef.current && player?.play) {
+      player.play();
+      wasPlayerPlayingRef.current = false;
+    }
+    
     if (onClick) onClick();
   };
 
@@ -547,7 +631,11 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       </div>
 
       {/* 音頻元素（隱藏） */}
-      <audio ref={audioRef} src={music.musicUrl} preload="metadata" />
+      <audio 
+        ref={audioRef} 
+        src={music.musicUrl} 
+        preload="metadata"
+      />
 
       {/* 播放按鈕覆蓋層（在中間區域，z-index 高於符號） */}
       {/* 懸停預聽時隱藏按鈕 */}
