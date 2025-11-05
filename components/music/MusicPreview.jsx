@@ -265,6 +265,40 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       hasInitializedRef.current = false;
     }
   }, [isPlaying, music.genre]);
+
+  // 監聽音頻被外部暫停（例如被其他預覽停止）
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handlePause = () => {
+      // 如果音頻被暫停，但 isPlaying 狀態還是 true，說明是被外部暫停的
+      // 需要同步狀態
+      try {
+        if (isPlaying && audio && audio.paused) {
+          setIsPlaying(false);
+        }
+      } catch (err) {
+        console.warn('處理暫停事件時出錯:', err);
+      }
+    };
+
+    try {
+      audio.addEventListener('pause', handlePause);
+    } catch (err) {
+      console.warn('添加暫停事件監聽器失敗:', err);
+    }
+
+    return () => {
+      try {
+        if (audio) {
+          audio.removeEventListener('pause', handlePause);
+        }
+      } catch (err) {
+        console.warn('移除暫停事件監聽器失敗:', err);
+      }
+    };
+  }, [isPlaying]);
   
 
   const handleMouseEnter = () => {
@@ -298,7 +332,31 @@ const MusicPreview = ({ music, className = "", onClick }) => {
 
   const handlePlayButtonClick = (e) => {
     e.stopPropagation(); // 阻止冒泡，避免觸發 handleClick
-    // AudioManager 會自動處理單一音源
+    
+    try {
+      // 先停止其他正在播放的預覽（手機版切換預覽時需要）
+      if (typeof document !== 'undefined') {
+        const allPreviews = document.querySelectorAll('audio[data-music-preview="true"]');
+        allPreviews.forEach((audioElement) => {
+          // 跳過當前的音頻元素
+          if (audioElement && audioElement !== audioRef.current && !audioElement.paused) {
+            try {
+              audioElement.pause();
+              audioElement.currentTime = 0;
+              if (audioManager && typeof audioManager.release === 'function') {
+                audioManager.release(audioElement);
+              }
+            } catch (err) {
+              console.warn('停止其他預覽失敗:', err);
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('處理預覽切換時出錯:', err);
+    }
+    
+    // 開始新的預覽
     setIsPlaying(true);
   };
 
