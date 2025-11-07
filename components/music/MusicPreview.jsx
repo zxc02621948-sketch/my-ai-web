@@ -12,7 +12,6 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [displayDuration, setDisplayDuration] = useState(music.duration || 0); // 顯示的時長
-  const hoverTimeoutRef = useRef(null);
   const [playStartTime, setPlayStartTime] = useState(null);
   const playEndTime = useRef(null);
   const hasInitializedRef = useRef(false);
@@ -24,6 +23,238 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   const player = usePlayer(); // 獲取播放器 Context
   const wasPlayerPlayingRef = useRef(false); // 記錄播放器被暫停前是否在播放
   const restoreTimerRef = useRef(null); // 恢復播放器的 debounce timer
+  const timeUpdateHandlerRef = useRef(null);
+  const isStartingRef = useRef(false);
+  const isPlayingRef = useRef(false);
+
+  const detachTimeUpdate = () => {
+    const audio = audioRef.current;
+    if (timeUpdateHandlerRef.current && audio) {
+      audio.removeEventListener("timeupdate", timeUpdateHandlerRef.current);
+      timeUpdateHandlerRef.current = null;
+    }
+  };
+
+  const stopPreview = ({ restore = true } = {}) => {
+    const audio = audioRef.current;
+
+    detachTimeUpdate();
+
+    if (restoreTimerRef.current) {
+      clearTimeout(restoreTimerRef.current);
+      restoreTimerRef.current = null;
+    }
+
+    if (audio) {
+      try {
+        audio.pause();
+      } catch (error) {
+        console.warn("🎵 [Preview] stopPreview: audio.pause 失敗", error);
+      }
+      audio.muted = true;
+      audio.volume = targetVolumeRef.current;
+      audio.removeAttribute?.("data-music-preview");
+      audioManager.release(audio);
+    }
+
+    playEndTime.current = null;
+    audioPlayStartTimeRef.current = null;
+    playStartTimeRef.current = null;
+    lastPlayTimeRef.current = 0;
+    hasInitializedRef.current = false;
+    setPlayStartTime(null);
+
+    if (restore && wasPlayerPlayingRef.current && player?.play) {
+      restoreTimerRef.current = window.setTimeout(() => {
+        const currentPriority = window.audioManager?.priority || 0;
+        if (currentPriority > 1) {
+          restoreTimerRef.current = null;
+          return;
+        }
+        if (player?.src || player?.originUrl) {
+          player.play();
+        }
+        wasPlayerPlayingRef.current = false;
+        restoreTimerRef.current = null;
+      }, 100);
+    } else {
+      wasPlayerPlayingRef.current = false;
+    }
+
+    if (isPlayingRef.current || isPlaying) {
+      setIsPlaying(false);
+    }
+    isPlayingRef.current = false;
+    isStartingRef.current = false;
+  };
+
+  const attachTimeUpdate = () => {
+    const audio = audioRef.current;
+    if (!audio || timeUpdateHandlerRef.current) {
+      return;
+    }
+
+    const handler = () => {
+      const startTime = audioPlayStartTimeRef.current;
+      const endTime = playEndTime.current;
+
+      if (startTime == null || endTime == null) {
+        return;
+      }
+
+      const currentTime = audio.currentTime;
+      const targetVolume = targetVolumeRef.current;
+      const fadeDuration = 1.0;
+
+      let calculatedVolume = targetVolume;
+
+      const fadeInEndTime = startTime + fadeDuration;
+      if (currentTime < fadeInEndTime) {
+        const fadeProgress = Math.max(
+          0,
+          Math.min(1, (currentTime - startTime) / fadeDuration),
+        );
+        calculatedVolume = targetVolume * fadeProgress;
+      } else if (currentTime > endTime - fadeDuration) {
+        const fadeOutStartTime = endTime - fadeDuration;
+        const fadeProgress = Math.max(
+          0,
+          Math.min(1, (currentTime - fadeOutStartTime) / fadeDuration),
+        );
+        calculatedVolume = targetVolume * (1 - fadeProgress);
+      }
+
+      audio.volume = Math.max(0, Math.min(1, calculatedVolume));
+
+      if (currentTime >= endTime) {
+        console.log("🎵 [MusicPreview] 預覽結束（timeupdate）");
+        stopPreview({ restore: true });
+      } else {
+        lastPlayTimeRef.current = currentTime - startTime;
+      }
+    };
+
+    timeUpdateHandlerRef.current = handler;
+    audio.addEventListener("timeupdate", handler);
+  };
+
+  const waitForReadyState = (audio) => {
+    if (audio.readyState >= 2) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        audio.removeEventListener("canplaythrough", handleReady);
+        audio.removeEventListener("loadedmetadata", handleReady);
+        audio.removeEventListener("error", handleError);
+      };
+
+      const handleReady = () => {
+        cleanup();
+        resolve();
+      };
+
+      const handleError = (event) => {
+        cleanup();
+        reject(event);
+      };
+
+      audio.addEventListener("canplaythrough", handleReady, { once: true });
+      audio.addEventListener("loadedmetadata", handleReady, { once: true });
+      audio.addEventListener("error", handleError, { once: true });
+
+      try {
+        audio.load?.();
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
+    });
+  };
+
+  const computePreviewWindow = (durationSeconds) => {
+    const duration = Math.max(durationSeconds || 60, 8);
+    const minStartPercent = 0.3;
+    const maxStartPercent = 0.7;
+    const randomStartPercent =
+      minStartPercent + Math.random() * (maxStartPercent - minStartPercent);
+    const start = duration * randomStartPercent;
+    const end = Math.min(start + 8, duration);
+    return { start, end };
+  };
+
+  const startPreview = async () => {
+    const audio = audioRef.current;
+    if (!audio || isStartingRef.current) {
+      return;
+    }
+
+    if (isPlayingRef.current || isPlaying) {
+      stopPreview({ restore: false });
+    }
+
+    isStartingRef.current = true;
+
+    try {
+
+      try {
+        await waitForReadyState(audio);
+      } catch (error) {
+        console.warn("🎵 [Preview] waitForReadyState 發生錯誤", error);
+      }
+
+      const effectiveDuration =
+        audioDuration.current ||
+        (audio.duration && isFinite(audio.duration)
+          ? audio.duration
+          : music.duration || 60);
+
+      const { start, end } = computePreviewWindow(effectiveDuration);
+
+      playEndTime.current = end;
+      audioPlayStartTimeRef.current = start;
+      playStartTimeRef.current = Date.now();
+      lastPlayTimeRef.current = 0;
+      setPlayStartTime(start);
+
+      try {
+        audio.currentTime = start;
+      } catch (error) {
+        console.warn("🎵 [Preview] startPreview: 設置 currentTime 失敗", error);
+      }
+
+      audio.volume = 0;
+      audio.muted = false;
+      audio.dataset.musicPreview = "true";
+
+      const canPlay = audioManager.requestPlay(audio, 2);
+      if (!canPlay) {
+        console.log("🎵 [Preview] ❌ 優先度不夠，取消播放");
+        stopPreview({ restore: true });
+        return;
+      }
+
+      try {
+        await audio.play();
+      } catch (error) {
+        if (error.name === "AbortError" || error.name === "NotAllowedError") {
+          console.warn("🎵 [Preview] startPreview: 播放被瀏覽器拒絕", error);
+        } else {
+          console.error("音頻播放錯誤:", error);
+        }
+        stopPreview({ restore: false });
+        return;
+      }
+
+      hasInitializedRef.current = true;
+      attachTimeUpdate();
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+    } finally {
+      isStartingRef.current = false;
+    }
+  };
 
   useEffect(() => {
     // 檢測是否為行動裝置
@@ -34,6 +265,12 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     checkMobile();
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopPreview({ restore: false });
+    };
   }, []);
 
   // ✅ 監聽播放器播放狀態變化，記錄播放/暫停
@@ -79,278 +316,37 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handleTimeUpdate = () => {
-      // ✅ 如果 playEndTime 為 null，說明預覽已經被手動停止或已經結束
-      // 這種情況下，恢復邏輯應該在 useEffect else 分支中處理，這裡直接返回
-      if (!playStartTime || !playEndTime.current) {
-        // 調試：為什麼沒有 playStartTime 或 playEndTime
-        if (!playStartTime) {
-          console.log("🎵 [MusicPreview] handleTimeUpdate: playStartTime 為 null");
-        }
-        if (!playEndTime.current) {
-          console.log("🎵 [MusicPreview] handleTimeUpdate: playEndTime.current 為 null（預覽可能已被手動停止）");
-        }
-        return;
-      }
-
-      const currentTime = audio.currentTime;
-      const targetVolume = targetVolumeRef.current;
-      const fadeDuration = 1.0; // 淡入淡出持續時間（秒）
-
-      let calculatedVolume = 0;
-
-      // 計算淡入（開始播放的 1 秒內）
-      const fadeInEndTime = playStartTime + fadeDuration;
-      if (currentTime < fadeInEndTime) {
-        const fadeProgress = Math.max(
-          0,
-          Math.min(1, (currentTime - playStartTime) / fadeDuration),
-        );
-        calculatedVolume = targetVolume * fadeProgress;
-      }
-      // 計算淡出（結束前的 1 秒內）
-      else if (currentTime > playEndTime.current - fadeDuration) {
-        const fadeOutStartTime = playEndTime.current - fadeDuration;
-        const fadeProgress = Math.max(
-          0,
-          Math.min(1, (currentTime - fadeOutStartTime) / fadeDuration),
-        );
-        calculatedVolume = targetVolume * (1 - fadeProgress);
-      }
-      // 中間部分保持目標音量
-      else {
-        calculatedVolume = targetVolume;
-      }
-
-      // 確保音量值在 [0, 1] 範圍內
-      const safeVolume = Math.max(0, Math.min(1, calculatedVolume));
-      audio.volume = safeVolume;
-
-      // ✅ AudioManager 會自動處理優先度，不需要手動檢查
-
-      // 如果播放超過目標結束時間，暫停播放
-      if (currentTime >= playEndTime.current) {
-        if (playEndTime.current !== null) {
-          console.log("🎵 [MusicPreview] 預覽結束（timeupdate）");
-          
-          // 清除 playEndTime，防止重複執行
-          playEndTime.current = null;
-          
-          // 停止播放
-          audio.volume = 0;
-          audio.pause();
-          
-          // 清除標記
-          hasInitializedRef.current = false;
-          setPlayStartTime(null);
-          
-          // 移除事件監聽器
-          audio.removeEventListener("timeupdate", handleTimeUpdate);
-          
-          // 設置 isPlaying 為 false，觸發 useEffect 清理和恢復邏輯
-          setIsPlaying(false);
-        }
-      } else {
-        // 持續更新已播放時間
-        const elapsedTime = currentTime - playStartTime;
-        lastPlayTimeRef.current = elapsedTime;
-      }
-    };
-
-    // 獲取音頻實際時長
     const handleLoadedMetadata = () => {
       if (audio.duration && isFinite(audio.duration)) {
         const durationSeconds = Math.round(audio.duration);
         audioDuration.current = audio.duration;
-        // 如果資料庫中沒有時長，更新顯示的時長
         if (!music.duration || music.duration === 0) {
           setDisplayDuration(durationSeconds);
         }
       } else if (music.duration) {
-        // 如果 audio.duration 不可用，使用 music.duration（秒）
         audioDuration.current = music.duration;
         setDisplayDuration(music.duration);
       }
     };
 
-    if (isPlaying) {
-      audio.addEventListener("timeupdate", handleTimeUpdate);
-    }
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
 
     return () => {
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
     };
-  }, [isPlaying, playStartTime]); // ✅ 移除 music.duration 依賴，避免預覽重新初始化
+  }, [music.duration]);
   
   // 當 music 變化時，重置顯示時長並停止當前播放
   useEffect(() => {
     setDisplayDuration(music.duration || 0);
-    
-    // 如果音樂改變了，立即停止當前播放（允許切換到新音樂）
-    const audio = audioRef.current;
-    if (audio) {
-      // 檢查是否正在播放
-      const currentlyPlaying = !audio.paused;
-      if (currentlyPlaying) {
-        audio.pause();
-        audio.currentTime = 0;
-        audioManager.release(audio);
-        setIsPlaying(false);
-        setPlayStartTime(null);
-        playEndTime.current = null;
-        hasInitializedRef.current = false;
-        
-        // ✅ 不立即恢復播放器（避免在預覽開始播放時立即恢復）
-        // 只有在預覽完全結束後才恢復播放器
-        // 這裡只是音樂切換，不應該恢復播放器
-      }
-    }
-  }, [music._id, music.duration, player]);
+    stopPreview({ restore: false });
+  }, [music._id, music.duration]);
 
 
   // ✅ AudioManager 會自動處理單一音源，不需要手動監聽全局事件
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const musicId = music?._id?.substring(0, 8) || 'unknown';
-    
-    // ✅ 只在有意義的狀態變化時才輸出日誌（避免初始化時大量輸出）
-    if (isPlaying || hasInitializedRef.current) {
-      console.log(`🎵 [Preview] useEffect isPlaying [${musicId}]: ${isPlaying}, hasInit: ${hasInitializedRef.current}`);
-    }
-
-    if (isPlaying && !hasInitializedRef.current) {
-      console.log(`🎵 [Preview] 初始化播放 [${musicId}]`);
-      
-      // 獲取音頻實際時長（優先使用 audio.duration，其次使用 music.duration）
-      const duration =
-        audioDuration.current ||
-        (audio.duration && isFinite(audio.duration)
-          ? audio.duration
-          : music.duration || 60); // 默認 60 秒作為後備
-
-      // 基於總長度百分比計算隨機起點（30% ~ 70% 區間）
-      const minStartPercent = 0.3; // 最少從 30% 位置開始
-      const maxStartPercent = 0.7; // 最多從 70% 位置開始
-      const randomStartPercent =
-        minStartPercent + Math.random() * (maxStartPercent - minStartPercent);
-      const randomStart = duration * randomStartPercent;
-
-      // 播放約 8 秒
-      const previewLength = 8;
-      const endTime = Math.min(randomStart + previewLength, duration);
-
-      setPlayStartTime(randomStart);
-      audioPlayStartTimeRef.current = randomStart; // 保存到 ref，確保在 useEffect 中可以訪問
-      playEndTime.current = endTime;
-      playStartTimeRef.current = Date.now(); // 記錄播放開始的實際時間
-      lastPlayTimeRef.current = 0; // 重置累積播放時間
-      audio.currentTime = randomStart;
-      // 開始播放時音量設為 0，讓淡入效果生效
-      audio.volume = 0;
-      
-      hasInitializedRef.current = true;
-      // 開始新播放時，不清除固定位置，讓動畫從凍結的位置繼續
-      // 這樣符號會從上次停止的位置繼續前進
-    }
-
-    if (isPlaying) {
-      console.log(`🎵 [Preview] 執行播放邏輯 [${musicId}]`);
-      
-      // ✅ 設置標記
-      audio.dataset.musicPreview = "true";
-      
-      // ✅ 請求播放權限（優先度 2 - 中等）
-      // AudioManager 會自動暫停低優先度的音頻（主播放器），但不會暫停高優先度的音頻（音樂 Modal）
-      const canPlay = audioManager.requestPlay(audio, 2);
-      
-      // 如果優先度不夠（例如音樂 Modal 正在播放），不允許播放
-      if (!canPlay) {
-        console.log(`🎵 [Preview] ❌ 優先度不夠，取消播放 [${musicId}]`);
-        audio.pause();
-        setIsPlaying(false);
-        return;
-      }
-
-      // 播放時確保不被靜音，讓音量控制生效
-      audio.muted = false;
-      // 使用 Promise 來處理播放，避免中斷錯誤
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((error) => {
-          // 播放被中斷或失敗，忽略錯誤
-          if (error.name !== "AbortError" && error.name !== "NotAllowedError") {
-            console.error("音頻播放錯誤:", error);
-          }
-        });
-      }
-    } else if (hasInitializedRef.current) {
-      // ✅ 預覽停止時的清理邏輯（只在確實播放過後才執行）
-      const shouldRestorePlayer = wasPlayerPlayingRef.current;
-      
-      // 釋放播放權限
-      audioManager.release(audio);
-      
-      audio.pause();
-      audio.muted = true;
-      if (audio.volume === 0) {
-        audio.volume = targetVolumeRef.current;
-      }
-      
-      // ✅ 清除 hoverTimeout，避免觸發新預覽
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-        hoverTimeoutRef.current = null;
-      }
-      
-      const musicId = music?._id?.substring(0, 8) || 'unknown';
-      console.log(`🎵 [Preview] 預覽停止 [${musicId}], wasPlaying: ${wasPlayerPlayingRef.current}, shouldRestore: ${shouldRestorePlayer}`);
-      
-      // ✅ 使用 debounce：清除之前的恢復 timer，設置新的
-      if (restoreTimerRef.current) {
-        clearTimeout(restoreTimerRef.current);
-        console.log(`🎵 [Preview] 取消之前的恢復 timer`);
-      }
-      
-      if (shouldRestorePlayer && player?.play) {
-        console.log(`🎵 [Preview] 設置恢復 timer（100ms）`);
-        restoreTimerRef.current = setTimeout(() => {
-          // ✅ 檢查 AudioManager 當前優先度，避免在高優先度音頻播放時恢復
-          const currentPriority = window.audioManager?.priority || 0;
-          if (currentPriority > 1) {
-            console.log(`🎵 [Preview] ❌ 當前優先度 ${currentPriority} > 1，不恢復`);
-            wasPlayerPlayingRef.current = false;
-            restoreTimerRef.current = null;
-            return;
-          }
-          
-          // 確認播放器有音樂源才恢復
-          if (player?.src || player?.originUrl) {
-            console.log(`🎵 [Preview] ✅ 恢復播放器（優先度 1）`);
-            player.play();
-          } else {
-            console.log(`🎵 [Preview] ❌ 播放器無音樂源，不恢復`);
-          }
-          wasPlayerPlayingRef.current = false;
-          restoreTimerRef.current = null;
-        }, 100);
-      } else {
-        console.log(`🎵 [Preview] 不需要恢復，設置清除 timer（100ms）`);
-        restoreTimerRef.current = setTimeout(() => {
-          wasPlayerPlayingRef.current = false;
-          restoreTimerRef.current = null;
-        }, 100);
-      }
-      
-      setPlayStartTime(null);
-      audioPlayStartTimeRef.current = null;
-      playEndTime.current = null;
-      hasInitializedRef.current = false;
-    }
+    isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
   // ❌ 移除 pause 事件監聽器，避免在預覽播放時被錯誤觸發
@@ -362,32 +358,12 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     if (!isMobile) {
       const musicId = music?._id?.substring(0, 8) || 'unknown';
       console.log(`🎵 [Preview] Hover Enter [${musicId}]`);
-      
-      // 清除之前的 timeout
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-        console.log(`🎵 [Preview] Hover: 清除之前的 hoverTimeout [${musicId}]`);
-      }
-      
       setIsHovered(true);
-      
-      // ✅ 取消之前的恢復 timer（有新預覽，不恢復）
       if (restoreTimerRef.current) {
         clearTimeout(restoreTimerRef.current);
         restoreTimerRef.current = null;
         console.log(`🎵 [Preview] Hover: 取消恢復 timer（有新預覽）`);
       }
-      
-      // 延遲後開始播放
-      hoverTimeoutRef.current = setTimeout(() => {
-        // ✅ 防止重複觸發：檢查是否已經在播放或正在初始化
-        if (!audioRef.current?.paused || hasInitializedRef.current) {
-          console.log(`🎵 [Preview] Hover: 已在播放或已初始化，跳過 [${musicId}], paused: ${audioRef.current?.paused}, hasInit: ${hasInitializedRef.current}`);
-          return;
-        }
-        console.log(`🎵 [Preview] Hover: 觸發 setIsPlaying(true) [${musicId}]`);
-        setIsPlaying(true);
-      }, 150);
     }
   };
 
@@ -395,82 +371,60 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     if (!isMobile) {
       const musicId = music?._id?.substring(0, 8) || 'unknown';
       console.log(`🎵 [Preview] Hover Leave [${musicId}], isPlaying: ${isPlaying}`);
-      
-      // 清除 timeout
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-        console.log(`🎵 [Preview] Leave: 清除 hoverTimeout [${musicId}]`);
-      }
-      
       setIsHovered(false);
-      
-      // 只有在播放中才需要停止
-      if (isPlaying) {
-        console.log(`🎵 [Preview] Leave: 觸發 setIsPlaying(false) [${musicId}]`);
-        setIsPlaying(false);
+      if (isPlayingRef.current || isPlaying) {
+        stopPreview({ restore: true });
       }
     }
   };
 
-  const handlePlayButtonClick = (e) => {
+  const handlePlayButtonClick = async (e) => {
     e.stopPropagation();
-    
-    // 如果當前正在播放，點擊應該是暫停
-    if (isPlaying) {
-      setIsPlaying(false);
+
+    if (isStartingRef.current) {
       return;
     }
-    
-    // ✅ 取消之前的恢復 timer（有新預覽，不恢復）
+
+    if (isPlayingRef.current || isPlaying) {
+      stopPreview({ restore: true });
+      return;
+    }
+
     if (restoreTimerRef.current) {
       clearTimeout(restoreTimerRef.current);
       restoreTimerRef.current = null;
       console.log(`🎵 [Preview] Click: 取消恢復 timer（有新預覽）`);
     }
-    
+
     const musicId = music?._id?.substring(0, 8) || 'unknown';
     console.log(`🎵 [Preview] Click: 開始預覽 [${musicId}]`);
-    
-    // 停止其他正在播放的預覽（手機版切換預覽時需要）
+
     try {
-      if (typeof document !== 'undefined') {
-        const allPreviews = document.querySelectorAll('audio[data-music-preview="true"]');
+      if (typeof document !== "undefined") {
+        const allPreviews = document.querySelectorAll("audio[data-music-preview=\"true\"]");
         allPreviews.forEach((audioElement) => {
           if (audioElement && audioElement !== audioRef.current && !audioElement.paused) {
             try {
               audioElement.pause();
               audioElement.currentTime = 0;
-              if (audioManager && typeof audioManager.release === 'function') {
+              if (audioManager && typeof audioManager.release === "function") {
                 audioManager.release(audioElement);
               }
             } catch (err) {
-              console.warn('停止其他預覽失敗:', err);
+              console.warn("停止其他預覽失敗:", err);
             }
           }
         });
       }
     } catch (err) {
-      console.warn('處理預覽切換時出錯:', err);
+      console.warn("處理預覽切換時出錯:", err);
     }
-    
-    // 開始新的預覽
-    setIsPlaying(true);
+
+    await startPreview();
   };
 
   const handleClick = () => {
-    // 點擊卡片時：停止當前預覽並打開 Modal
-    // ✅ 不重置 wasPlayerPlayingRef，因為 Modal（優先度 3）關閉時也需要恢復播放器
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      audioManager.release(audio);
-    }
-    setIsPlaying(false);
-    setPlayStartTime(null);
-    playEndTime.current = null;
-    hasInitializedRef.current = false;
-    
+    stopPreview({ restore: false });
     if (onClick) onClick();
   };
 
@@ -762,13 +716,30 @@ const MusicPreview = ({ music, className = "", onClick }) => {
         </div>
       )}
 
-      {/* 預覽指示器 */}
-      {isPlaying && (
-        <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg z-30">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          播放中
-        </div>
-      )}
+      {/* 預覽控制按鈕（右上角） */}
+      <button
+        onClick={handlePlayButtonClick}
+        className={`absolute top-3 right-3 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40 ${
+          isPlaying ? "bg-emerald-500/90 text-white hover:bg-emerald-500" : "bg-black/70 text-white hover:bg-black/80"
+        }`}
+      >
+        {isPlaying ? (
+          <>
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white/70 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+            </span>
+            播放中
+          </>
+        ) : (
+          <>
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            預覽
+          </>
+        )}
+      </button>
 
       {/* 音樂時長標籤（左上角） */}
       {displayDuration > 0 && (
