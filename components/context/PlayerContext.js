@@ -24,6 +24,9 @@ export function PlayerProvider({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  
+  // ✅ 記錄播放器在被打斷前的播放狀態（用於高優先級音源關閉後恢復）
+  const wasPlayingBeforeInterruptionRef = useRef(false);
 
   // ✅ 從 localStorage 讀取音量，預設為 1.0 (100%)
   const [volume, setVolumeState] = useState(() => {
@@ -109,6 +112,7 @@ export function PlayerProvider({
   const playlistRef = useRef(playlist); // ✅ 保存播放清單引用
   const activeIndexRef = useRef(activeIndex); // ✅ 保存當前索引引用
   const wasPlayingBeforeHiddenRef = useRef(false); // ✅ 追蹤頁面隱藏前是否在播放
+  const wasPausedByAudioManagerRef = useRef(false); // ✅ 追蹤是否被 AudioManager 暫停（不應自動恢復）
 
   // ✅ ready 標記清理 useEffect
   useEffect(() => {
@@ -282,12 +286,15 @@ export function PlayerProvider({
       return false;
     }
 
-    // ✅ 請求播放權限（優先度 1 - 最低）
-    // AudioManager 會自動暫停低優先度的音頻，但不會暫停高優先度的音頻（音樂 Modal、預覽）
     if (!audioRef.current) {
       return false;
     }
 
+    // ✅ 清除 AudioManager 暫停標記（允許播放）
+    wasPausedByAudioManagerRef.current = false;
+
+    // ✅ 請求播放權限（優先度 1 - 最低）
+    // AudioManager 會自動暫停低優先度的音頻，但不會暫停高優先度的音頻（音樂 Modal、預覽）
     const canPlay = audioManager.requestPlay(audioRef.current, 1);
     
     // 如果優先度不夠（例如音樂 Modal 或預覽正在播放），不允許播放
@@ -315,6 +322,17 @@ export function PlayerProvider({
       if (audioRef.current.readyState >= 2) {
         await audioRef.current.play();
         setIsPlaying(true);
+        
+        // ✅ 記錄播放器在被打斷前的播放狀態
+        wasPlayingBeforeInterruptionRef.current = true;
+        
+        // ✅ 觸發自定義事件，通知其他組件播放狀態已改變
+        window.dispatchEvent(
+          new CustomEvent("playerStateChanged", {
+            detail: { isPlaying: true, action: "play" },
+          }),
+        );
+        
         return true;
       } else {
         return false;
@@ -337,6 +355,9 @@ export function PlayerProvider({
     // ✅ 更新播放狀態
     setIsPlaying(false);
     console.log("🎵 [PlayerContext] setIsPlaying(false) 已調用");
+    
+    // ✅ 記錄播放器被用戶暫停（而非被 AudioManager 打斷）
+    wasPlayingBeforeInterruptionRef.current = false;
     
     // ✅ 暫停本地音頻
     if (audioRef.current && !audioRef.current.paused) {
@@ -486,6 +507,9 @@ export function PlayerProvider({
       // ✅ 清除轉換標記（在播放前清除，避免 play() 被跳過）
       isTransitioningRef.current = false;
       
+      // ✅ 清除 AudioManager 暫停標記（用戶主動切歌）
+      wasPausedByAudioManagerRef.current = false;
+      
       // ✅ 自動播放下一首
       setTimeout(async () => {
         try {
@@ -588,6 +612,9 @@ export function PlayerProvider({
       setSrcWithAudio(prevItem.url);
       setOriginUrl(prevItem.url);
       setTrackTitle(prevItem.title);
+
+      // ✅ 清除 AudioManager 暫停標記（用戶主動切歌）
+      wasPausedByAudioManagerRef.current = false;
 
       // ✅ 請求播放權限（優先度 1 - 最低）
       if (audioRef.current) {
@@ -692,6 +719,13 @@ export function PlayerProvider({
             return;
           }
           
+          // ✅ 如果播放器是被 AudioManager 暫停的，不自動恢復播放
+          if (wasPausedByAudioManagerRef.current) {
+            console.log('👁️ 頁面重新可見，但播放器是被 AudioManager 暫停的，不自動恢復');
+            wasPlayingBeforeHiddenRef.current = false; // 清除標記
+            return;
+          }
+          
           // ✅ 只有當所有條件都滿足時才恢復播放
           if (audioRef.current.readyState > 0) {
             console.log('🔄 頁面重新可見，恢復播放（音頻確實被暫停）');
@@ -737,6 +771,34 @@ export function PlayerProvider({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [src, isPlaying]); // ✅ 依賴 src 和 isPlaying，確保狀態正確
+
+  // ✅ 監聽 AudioManager 暫停事件，確保播放器狀態同步
+  useEffect(() => {
+    const handleAudioManagerPaused = (event) => {
+      const { audio } = event.detail || {};
+      // 如果被暫停的是播放器的音頻元素，確保狀態同步
+      if (audio && audio === audioRef.current) {
+        // 音頻元素已經被 AudioManager 暫停，但需要確保 React 狀態也更新
+        if (isPlaying && audio.paused) {
+          console.log("🎵 [PlayerContext] AudioManager 暫停了播放器，同步狀態");
+          setIsPlaying(false);
+          // 標記播放器是被 AudioManager 暫停的
+          wasPausedByAudioManagerRef.current = true;
+          
+          // ✅ 不觸發 playerStateChanged 事件（不是用戶操作，不記錄）
+        }
+      }
+    };
+
+    window.addEventListener("audioManagerPaused", handleAudioManagerPaused);
+
+    return () => {
+      window.removeEventListener("audioManagerPaused", handleAudioManagerPaused);
+    };
+  }, [isPlaying]);
+
+  // ✅ 注意：wasPausedByAudioManagerRef 標記會在用戶手動播放時清除（在 play() 方法中）
+  // 當 AudioManager 釋放預覽音頻時，播放器不應自動恢復播放
 
   // ✅ 監聽 skipToNext 事件，自動切換到下一首
   useEffect(() => {
@@ -806,6 +868,9 @@ export function PlayerProvider({
     setPlayerOwner,
     pageOwnerSkin,
     setPageOwnerSkin,
+    // ✅ 播放器在被打斷前的播放狀態（用於高優先級音源關閉後恢復）
+    wasPlayingBeforeInterruption: wasPlayingBeforeInterruptionRef.current,
+    audioRef, // ✅ 提供 audioRef 用於檢查播放器的實際狀態
   };
 
   return (

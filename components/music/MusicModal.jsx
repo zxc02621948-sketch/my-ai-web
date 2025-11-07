@@ -178,39 +178,16 @@ const MusicModal = ({
   useEffect(() => {
     if (!music?._id) return;
     
+    const musicId = music._id.substring(0, 8) || 'unknown';
     console.log("🎵 [MusicModal] 打開音樂 Modal, music._id:", music._id);
+    
+    // ✅ 從 PlayerContext 獲取播放器在被打斷前的狀態（由播放器自己記錄，不受預覽等影響）
+    const wasPlaying = player?.wasPlayingBeforeInterruption || false;
+    wasPlayerPlayingRef.current = wasPlaying;
+    console.log(`🎵 [Modal] 從播放器獲取打斷前狀態 [${musicId}]: ${wasPlaying}`);
     
     // 更新當前音樂 ID
     const previousMusicId = currentMusicIdRef.current;
-    
-    // ✅ 關鍵：在請求播放權限之前記錄播放器狀態
-    // 因為 AudioManager 會自動暫停低優先度的音頻，所以需要在暫停之前記錄
-    if (previousMusicId !== music._id) {
-      // 檢查 AudioManager 的狀態：如果當前優先度是 1（播放器），說明播放器正在播放
-      const currentPriority = audioManager.getCurrentPriority();
-      const currentAudio = audioManager.getCurrentAudio();
-      
-      // 如果 AudioManager 當前管理的是播放器（優先度 1），說明播放器正在播放或被剛剛暫停
-      // 即使音頻元素已經被暫停（paused），只要 AudioManager 的優先度是 1，就說明之前是在播放的
-      if (currentPriority === 1 && currentAudio) {
-        wasPlayerPlayingRef.current = true; // AudioManager 的優先度 1 表示播放器正在或剛剛在播放
-        console.log("🎵 [MusicModal] 記錄播放器狀態（從 AudioManager，優先度 1）: true");
-      } else if (currentPriority === 0) {
-        // AudioManager 沒有管理任何音頻（優先度 0）
-        // 這可能表示預覽剛結束，播放器應該恢復播放
-        // 關鍵：如果 player.isPlaying 為 true，說明播放器應該在播放（即使音頻元素可能還沒完全開始）
-        // 因為 player.play() 可能是異步的，需要一些時間才能真正開始播放
-        wasPlayerPlayingRef.current = player?.isPlaying || false;
-        const playerAudio = document.querySelector('audio:not([data-music-full-player]):not([data-music-preview])');
-        console.log("🎵 [MusicModal] 記錄播放器狀態（AudioManager 優先度 0）:", wasPlayerPlayingRef.current, "player.isPlaying:", player?.isPlaying, "playerAudio存在:", !!playerAudio, "playerAudio.paused:", playerAudio?.paused);
-      } else {
-        // 其他情況（優先度 2 或 3），說明有更高優先度的音頻在播放，播放器應該被暫停
-        // 但我們仍然需要檢查播放器是否"應該"在播放（如果沒有更高優先度的音頻）
-        // 在這種情況下，我們不記錄為 true，因為播放器確實被暫停了
-        wasPlayerPlayingRef.current = false;
-        console.log("🎵 [MusicModal] 記錄播放器狀態（其他優先度）: false，當前優先度:", currentPriority);
-      }
-    }
     
     currentMusicIdRef.current = music._id;
     
@@ -359,36 +336,56 @@ const MusicModal = ({
 
   // ✅ 封裝釋放邏輯，在 Modal 關閉時調用
   const releaseAudioManager = () => {
-    if (audioManager.getCurrentPriority() === 3) {
-      if (audioRef.current) {
-        audioManager.release(audioRef.current);
-      }
-      audioManager.release(); // 強制釋放
-      console.log("🎵 [MusicModal] ✅ 已釋放播放權限（優先度 3）");
-      
-      // ✅ 恢復播放器播放（如果之前是在播放狀態）
-      if (wasPlayerPlayingRef.current) {
-        console.log("🎵 [MusicModal] 準備恢復播放器播放，之前狀態:", wasPlayerPlayingRef.current);
-        // 使用 setTimeout 確保 AudioManager 已經釋放，並且 DOM 已經更新
-        setTimeout(() => {
-          if (player?.play) {
-            console.log("🎵 [MusicModal] 調用 player.play() 恢復播放");
-            player.play().then(() => {
-              console.log("🎵 [MusicModal] ✅ 播放器已恢復播放");
-            }).catch((err) => {
-              console.warn("🎵 [MusicModal] 恢復播放器失敗:", err);
-            });
-          } else {
-            console.warn("🎵 [MusicModal] player.play 不存在，無法恢復播放");
-          }
-        }, 150);
-      } else {
-        console.log("🎵 [MusicModal] 不恢復播放器，之前狀態:", wasPlayerPlayingRef.current, "player存在:", !!player);
-      }
-      
-      // 重置當前音樂 ID
-      currentMusicIdRef.current = null;
+    const musicId = music?._id?.substring(0, 8) || 'unknown';
+    
+    // 釋放 AudioManager
+    if (audioRef.current) {
+      audioManager.release(audioRef.current);
     }
+    audioManager.release(); // 強制釋放
+    
+    const shouldRestorePlayer = wasPlayerPlayingRef.current;
+    console.log(`🎵 [Modal] 關閉 Modal [${musicId}], wasPlaying: ${wasPlayerPlayingRef.current}, shouldRestore: ${shouldRestorePlayer}`);
+    
+    if (shouldRestorePlayer && player?.play) {
+      console.log(`🎵 [Modal] 設置恢復 timer（100ms）- 使用全局 timer`);
+      
+      // ✅ 使用全局 timer，不保存到 ref，即使組件卸載也會執行
+      window.setTimeout(() => {
+        console.log(`🎵 [Modal] ⏰ 恢復 timer 執行`);
+        
+        // ✅ 檢查 AudioManager 當前優先度，避免在高優先度音頻播放時恢復
+        const currentPriority = window.audioManager?.priority || 0;
+        console.log(`🎵 [Modal] 檢查優先度: ${currentPriority}`);
+        
+        if (currentPriority > 1) {
+          console.log(`🎵 [Modal] ❌ 當前優先度 ${currentPriority} > 1，不恢復`);
+          return;
+        }
+        
+        // 檢查播放器狀態
+        console.log(`🎵 [Modal] 播放器狀態:`, {
+          hasSrc: !!player?.src,
+          hasOriginUrl: !!player?.originUrl,
+          hasPlay: !!player?.play,
+          src: player?.src?.substring(0, 50),
+          originUrl: player?.originUrl?.substring(0, 50)
+        });
+        
+        // 確認播放器有音樂源才恢復
+        if (player?.src || player?.originUrl) {
+          console.log(`🎵 [Modal] ✅ 調用 player.play()`);
+          player.play();
+        } else {
+          console.log(`🎵 [Modal] ❌ 播放器無音樂源，不恢復`);
+        }
+      }, 100);
+    } else {
+      console.log(`🎵 [Modal] 不需要恢復`);
+    }
+    
+    // 重置當前音樂 ID
+    currentMusicIdRef.current = null;
   };
   
   // ✅ 包裝 onClose，確保在關閉前釋放 AudioManager

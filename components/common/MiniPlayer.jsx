@@ -837,9 +837,11 @@ export default function MiniPlayer() {
     };
   }, [isDragging, isVolumeSliding]);
 
-  // ✅ 當播放器隱藏時（未釘選且離開用戶頁面），停止播放
+  // ✅ 當播放器隱藏時（未釘選且離開用戶頁面），停止播放並觸發暫停事件
   useEffect(() => {
     if (!showMini && !isPinned && player?.isPlaying) {
+      console.log("🎵 [MiniPlayer] 離開頁面且未釘選，暫停播放器");
+      
       // ✅ 先使用 postMessage 暫停 YouTube 播放器（在清空 originUrl 之前）
       try {
         const iframes = document.querySelectorAll('iframe[src*="youtube.com"]');
@@ -857,10 +859,10 @@ export default function MiniPlayer() {
         console.error('❌ [MiniPlayer] YouTube 暫停失敗:', error);
       }
       
-      // 然後設置 isPlaying 為 false
-      player?.setIsPlaying?.(false);
+      // 調用 player.pause()，觸發 playerStateChanged 事件（記錄為暫停狀態）
+      player?.pause?.();
     }
-  }, [showMini, isPinned, player?.isPlaying, player]);
+  }, [showMini, isPinned, player]);
 
   // 在所有 hooks 宣告之後再根據條件決定是否輸出 UI
   if (!showMini) return null;
