@@ -62,6 +62,9 @@ const userSchema = new mongoose.Schema(
       default: [] 
     },
     
+    // ✅ 播放清單是否允許隨機播放（主人控制訪客權限）
+    playlistAllowShuffle: { type: Boolean, default: false },
+    
     // ✅ 播放清單上限（可通過購買擴充）
     playlistMaxSize: { type: Number, default: 5 },
 

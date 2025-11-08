@@ -40,7 +40,7 @@ export default function InstallGuide() {
       }
 
       // 設置擁有者與模式，並確保顯示
-      player?.setPlayerOwner?.({ userId: pinnedPlayer.userId, username: pinnedPlayer.username });
+      player?.setPlayerOwner?.({ userId: pinnedPlayer.userId, username: pinnedPlayer.username, allowShuffle: !!pinnedPlayer.allowShuffle });
       player?.setShareMode?.("global");
       player?.setMiniPlayerEnabled?.(true);
 

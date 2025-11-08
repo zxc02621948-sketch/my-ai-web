@@ -66,6 +66,7 @@ export default function PlaylistModal({
       formData.append("rating", "all"); // 默認評級
       formData.append("description", ""); // 空描述
       formData.append("genres[]", "other"); // 默認曲風
+      formData.append("isPublic", "false"); // 標記為私人音樂
 
       // ✅ 上傳到臨時存儲（不公開）
       // 注意：這裡我們需要一個新的 API 端點來處理私人上傳

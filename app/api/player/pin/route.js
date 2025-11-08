@@ -28,7 +28,7 @@ export async function POST(request) {
     }
 
     // ✅ 獲取被釘選用戶的播放器設定
-    const targetUser = await User.findById(targetUserId).select('activePlayerSkin playerSkinSettings premiumPlayerSkin');
+    const targetUser = await User.findById(targetUserId).select('activePlayerSkin playerSkinSettings premiumPlayerSkin playlistAllowShuffle');
     const targetPlayerSkin = targetUser?.activePlayerSkin || 'default';
     const targetPlayerSettings = targetUser?.playerSkinSettings || {
       mode: 'rgb',
@@ -82,7 +82,8 @@ export async function POST(request) {
       isPlaying: true,
       activePlayerSkin: targetPlayerSkin,
       playerSkinSettings: targetPlayerSettings,
-      premiumPlayerSkin: targetHasPremiumSkin
+      premiumPlayerSkin: targetHasPremiumSkin,
+      allowShuffle: !!targetUser?.playlistAllowShuffle
     };
 
     // 使用 updateOne 直接更新，避免 Mongoose 模型緩存問題

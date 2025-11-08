@@ -35,9 +35,72 @@ export default function MiniPlayer() {
   const [pinnedPlayerData, setPinnedPlayerData] = useState(null);
   const [isPinned, setIsPinned] = useState(false);
   const playerRef = useRef(player); // 使用 ref 保存最新的 player 引用
+  const needsPinnedRefreshRef = useRef(true); // 控制是否需要重新載入釘選狀態
   // ✅ 本地狀態：追蹤是否正在載入播放清單（用於立即更新 UI，需要在 displayTitle 之前定義）
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
   
+  const {
+    shuffleAllowed: globalShuffleAllowed,
+    shuffleEnabled: globalShuffleEnabled,
+    setShuffleEnabled: setGlobalShuffleEnabled,
+    playerOwner: globalPlayerOwner,
+  } = player;
+  const currentPlaylistLength = player?.playlist?.length || 0;
+
+  const applyPinnedShufflePreference = useCallback((allow, ownerId) => {
+    if (!playerRef.current?.setShuffleEnabled) {
+      return;
+    }
+
+    if (!allow) {
+      playerRef.current.setShuffleEnabled(false);
+      if (ownerId) {
+        try {
+          localStorage.removeItem(`playlist_${ownerId}_shuffle`);
+        } catch (error) {
+          console.warn("移除釘選隨機播放設定失敗:", error);
+        }
+      }
+      return;
+    }
+
+    if (!ownerId) {
+      playerRef.current.setShuffleEnabled(false);
+      return;
+    }
+
+    let shouldEnable = false;
+    try {
+      shouldEnable = localStorage.getItem(`playlist_${ownerId}_shuffle`) === "1";
+    } catch (error) {
+      console.warn("讀取釘選隨機播放設定失敗:", error);
+    }
+
+    playerRef.current.setShuffleEnabled(shouldEnable);
+  }, []);
+
+  const handleShuffleButtonClick = useCallback(() => {
+    if (!globalShuffleAllowed || !setGlobalShuffleEnabled) {
+      return;
+    }
+    const ownerId = globalPlayerOwner?.userId;
+    const next = !globalShuffleEnabled;
+    setGlobalShuffleEnabled(next);
+    if (!ownerId) {
+      return;
+    }
+    try {
+      const storageKey = `playlist_${ownerId}_shuffle`;
+      if (next) {
+        localStorage.setItem(storageKey, "1");
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    } catch (error) {
+      console.warn("保存釘選隨機播放設定失敗:", error);
+    }
+  }, [globalShuffleAllowed, globalShuffleEnabled, setGlobalShuffleEnabled, globalPlayerOwner]);
+
   // ✅ 檢查當前路徑是否是用戶頁面（需要在 useMemo 之前定義）
   const isUserPage = pathname.startsWith("/user/") && pathname !== "/user/following";
   
@@ -118,6 +181,11 @@ export default function MiniPlayer() {
     playerRef.current = player;
   }, [player]);
   
+  useEffect(() => {
+    const ownerId = globalPlayerOwner?.userId;
+    applyPinnedShufflePreference(globalShuffleAllowed, ownerId);
+  }, [applyPinnedShufflePreference, globalShuffleAllowed, globalPlayerOwner]);
+
   // 依照 Hooks 規則：所有 hooks 必須在每次 render 都被呼叫，
   // 因此不在條件分支中提前 return；改用條件渲染控制輸出。
   
@@ -508,251 +576,264 @@ export default function MiniPlayer() {
   const lastLoadTimeRef = useRef(0);
   const lastPlaylistLengthRef = useRef(-1);
 
-  // 檢查釘選狀態並載入釘選的播放清單（使用 Context 中的 currentUser）
-  useEffect(() => {
-    // 等待 currentUser 載入完成
+  const loadPinnedPlayer = useCallback(async ({ force = false } = {}) => {
+    if (!force && !needsPinnedRefreshRef.current) {
+      return;
+    }
+
     if (currentUser === undefined) {
       return;
     }
-    
-    const loadPinnedPlayer = async () => {
-      try {
-        const userData = currentUser;
-        
-        if (userData?.user?.pinnedPlayer?.userId || userData?.pinnedPlayer?.userId) {
-          const pinned = userData?.user?.pinnedPlayer || userData.pinnedPlayer;
-          // 檢查是否過期
-          const now = new Date();
-          const expiresAt = pinned.expiresAt ? new Date(pinned.expiresAt) : null;
-          
-          
-          if (expiresAt && expiresAt > now) {
-            // ✅ 檢查是否釘選的是自己的播放器（無論在哪個頁面）
-            // 如果是自己的播放器，應該從數據庫載入最新的播放清單
-            // 因為用戶可能已經編輯過播放清單，但 pinnedPlayer.playlist 還是舊的
-            const pinnedUserId = String(pinned.userId || '');
-            const isPinnedOwnPlayer = userData?._id && String(userData._id) === pinnedUserId;
-            
-            if (isPinnedOwnPlayer) {
-              // ✅ 防抖：避免重複載入（500ms 內只載入一次）
-              const now = Date.now();
-              if (isLoadingRef.current) {
-                // ✅ 如果正在載入，確保 isLoadingPlaylist 已設置（但不清除，因為正在載入中）
-                if (!isLoadingPlaylist) {
-                  setIsLoadingPlaylist(true);
-                }
-                return;
+
+    try {
+      const userData = currentUser;
+
+      if (userData?.user?.pinnedPlayer?.userId || userData?.pinnedPlayer?.userId) {
+        const pinnedRaw = userData?.user?.pinnedPlayer || userData.pinnedPlayer;
+        const pinned =
+          pinnedRaw && typeof pinnedRaw === "object"
+            ? {
+                ...pinnedRaw,
+                allowShuffle: !!pinnedRaw.allowShuffle,
               }
-              if (now - lastLoadTimeRef.current < 500) {
-                // ✅ 如果載入過於頻繁，清除載入狀態（避免跑馬燈一直不顯示）
+            : null;
+        const now = new Date();
+        const expiresAt = pinned.expiresAt ? new Date(pinned.expiresAt) : null;
+
+        if (expiresAt && expiresAt > now) {
+          const pinnedUserId = String(pinned.userId || "");
+          const isPinnedOwnPlayer =
+            userData?._id && String(userData._id) === pinnedUserId;
+
+          if (isPinnedOwnPlayer) {
+            const nowTs = Date.now();
+            if (isLoadingRef.current) {
+              if (!isLoadingPlaylist) {
+                setIsLoadingPlaylist(true);
+              }
+              return;
+            }
+            if (!force && nowTs - lastLoadTimeRef.current < 500) {
+              setIsLoadingPlaylist(false);
+              return;
+            }
+
+            setIsLoadingPlaylist(true);
+            isLoadingRef.current = true;
+            lastLoadTimeRef.current = nowTs;
+
+            if (playerRef.current) {
+              playerRef.current.pause?.();
+              playerRef.current.setIsPlaying?.(false);
+              playerRef.current.setPlaylist?.([]);
+              playerRef.current.setSrc?.("");
+              playerRef.current.setOriginUrl?.("");
+              playerRef.current.setTrackTitle?.("");
+              playerRef.current.setActiveIndex?.(0);
+            }
+
+            try {
+              const response = await axios.get(
+                `/api/user-info?id=${pinnedUserId}`,
+                {
+                  headers: { "Cache-Control": "no-cache" },
+                },
+              );
+              const latestPlaylist = response.data?.playlist || [];
+              const allowShuffleLatest =
+                response.data?.playlistAllowShuffle ?? pinned.allowShuffle;
+              pinned.allowShuffle = !!allowShuffleLatest;
+
+              if (
+                latestPlaylist.length === lastPlaylistLengthRef.current &&
+                playerRef.current?.playlist?.length === latestPlaylist.length
+              ) {
                 setIsLoadingPlaylist(false);
+                isLoadingRef.current = false;
                 return;
               }
-              
-              // ✅ 設置載入狀態，強制清空標題顯示（在確認要載入之後）
-              setIsLoadingPlaylist(true);
-              
-              isLoadingRef.current = true;
-              lastLoadTimeRef.current = now;
-              
-              // ✅ 如果釘選的是自己的播放器，從數據庫重新載入最新的播放清單
-              // 因為用戶可能已經編輯過播放清單，但 pinnedPlayer.playlist 還是舊的
-              
-              // ✅ 在載入前立即停止播放並清空播放清單和音頻源，避免顯示舊的歌曲
+              lastPlaylistLengthRef.current = latestPlaylist.length;
+
               if (playerRef.current) {
+                playerRef.current.setPlayerOwner?.({
+                  userId: pinned.userId,
+                  username: pinned.username,
+                  allowShuffle: pinned.allowShuffle,
+                });
+
+                if (Array.isArray(latestPlaylist)) {
+                  playerRef.current.setPlaylist?.(latestPlaylist);
+
+                  if (latestPlaylist.length > 0) {
+                    const track = latestPlaylist[0];
+                    if (track?.url) {
+                      if (playerRef.current) {
+                        playerRef.current.pause?.();
+                        playerRef.current.setIsPlaying?.(false);
+                      }
+
+                      playerRef.current.setActiveIndex?.(0);
+                      playerRef.current.setOriginUrl?.(track.url);
+                      playerRef.current.setTrackTitle?.(track.title || "");
+                      playerRef.current.setSrc?.(track.url);
+                    }
+                  } else {
+                    playerRef.current.pause?.();
+                    playerRef.current.setIsPlaying?.(false);
+                    playerRef.current.setSrc?.("");
+                    playerRef.current.setOriginUrl?.("");
+                    playerRef.current.setTrackTitle?.("");
+                    playerRef.current.setActiveIndex?.(0);
+                  }
+                }
+                playerRef.current.setShuffleAllowed?.(pinned.allowShuffle);
+                applyPinnedShufflePreference(pinned.allowShuffle, pinned.userId);
+              }
+              setIsLoadingPlaylist(false);
+            } catch (error) {
+              console.error("載入自己的播放清單失敗，使用釘選記錄:", error);
+              if (playerRef.current) {
+                playerRef.current.setPlayerOwner?.({
+                  userId: pinned.userId,
+                  username: pinned.username,
+                  allowShuffle: pinned.allowShuffle,
+                });
+                if (Array.isArray(pinned.playlist)) {
+                  playerRef.current.setPlaylist?.(pinned.playlist);
+
+                  if (pinned.playlist.length === 0) {
+                    playerRef.current.pause?.();
+                    playerRef.current.setIsPlaying?.(false);
+                    playerRef.current.setSrc?.("");
+                    playerRef.current.setOriginUrl?.("");
+                    playerRef.current.setTrackTitle?.("");
+                    playerRef.current.setActiveIndex?.(0);
+                  }
+                }
+                playerRef.current.setShuffleAllowed?.(pinned.allowShuffle);
+                applyPinnedShufflePreference(pinned.allowShuffle, pinned.userId);
+              }
+              setIsLoadingPlaylist(false);
+            }
+
+            setIsPinned(true);
+            setPinnedPlayerData({ ...pinned });
+            isLoadingRef.current = false;
+            return;
+          }
+
+          setIsPinned(true);
+          setPinnedPlayerData({ ...pinned });
+
+          window.dispatchEvent(
+            new CustomEvent("pinnedPlayerChanged", {
+              detail: {
+                isPinned: true,
+                pinnedPlayer: pinned,
+              },
+            }),
+          );
+
+          if (playerRef.current) {
+            playerRef.current.setPlayerOwner?.({
+              userId: pinned.userId,
+              username: pinned.username,
+              allowShuffle: pinned.allowShuffle,
+            });
+
+            if (Array.isArray(pinned.playlist)) {
+              playerRef.current.setPlaylist?.(pinned.playlist);
+
+              if (pinned.playlist.length > 0) {
+                const currentIndex = pinned.currentIndex || 0;
+                const track = pinned.playlist[currentIndex];
+
+                if (track?.url) {
+                  playerRef.current.setActiveIndex?.(currentIndex);
+                  playerRef.current.setSrc?.(track.url);
+                  playerRef.current.setOriginUrl?.(track.url);
+                  playerRef.current.setTrackTitle?.(track.title || "");
+                }
+              } else {
                 playerRef.current.pause?.();
                 playerRef.current.setIsPlaying?.(false);
-                playerRef.current.setPlaylist?.([]); // 立即清空播放清單
-                playerRef.current.setSrc?.('');
-                playerRef.current.setOriginUrl?.('');
-                playerRef.current.setTrackTitle?.('');
+                playerRef.current.setSrc?.("");
+                playerRef.current.setOriginUrl?.("");
+                playerRef.current.setTrackTitle?.("");
                 playerRef.current.setActiveIndex?.(0);
               }
-              
-              try {
-                const response = await axios.get(`/api/user-info?id=${pinnedUserId}`, {
-                  headers: { 'Cache-Control': 'no-cache' }
-                });
-                const latestPlaylist = response.data?.playlist || [];
-                
-                // ✅ 檢查播放清單是否真的改變了（避免重複設置）
-                if (latestPlaylist.length === lastPlaylistLengthRef.current && 
-                    playerRef.current?.playlist?.length === latestPlaylist.length) {
-                  setIsLoadingPlaylist(false); // ✅ 清除載入狀態
-                  isLoadingRef.current = false;
-                  return;
-                }
-                lastPlaylistLengthRef.current = latestPlaylist.length;
-                
-                // 只設置 playerOwner，使用最新的播放清單
-                if (playerRef.current) {
-                  playerRef.current.setPlayerOwner?.({ 
-                    userId: pinned.userId, 
-                    username: pinned.username 
-                  });
-                  
-                  // ✅ 使用從數據庫載入的最新播放清單
-                  if (Array.isArray(latestPlaylist)) {
-                    playerRef.current.setPlaylist?.(latestPlaylist);
-                    
-                    // 設置當前曲目
-                    if (latestPlaylist.length > 0) {
-                      // ✅ 從數據庫載入的最新播放清單，應該從第一首開始（索引 0）
-                      // 不使用 pinned.currentIndex，因為那是舊的播放清單的索引
-                      const track = latestPlaylist[0];
-                      if (track?.url) {
-                        // ✅ 先停止當前播放（如果有）
-                        if (playerRef.current) {
-                          playerRef.current.pause?.();
-                          playerRef.current.setIsPlaying?.(false);
-                        }
-                        
-                        // ✅ 設置播放清單和曲目信息
-                        playerRef.current.setActiveIndex?.(0);
-                        playerRef.current.setOriginUrl?.(track.url);
-                        playerRef.current.setTrackTitle?.(track.title || '');
-                        
-                        // ✅ 最後設置 src（這會觸發音頻元素重新載入）
-                        playerRef.current.setSrc?.(track.url);
-                      }
-                    } else {
-                      // ✅ 播放清單為空時，停止播放並清空音頻源
-                      playerRef.current.pause?.();
-                      playerRef.current.setIsPlaying?.(false);
-                      playerRef.current.setSrc?.('');
-                      playerRef.current.setOriginUrl?.('');
-                      playerRef.current.setTrackTitle?.('');
-                      playerRef.current.setActiveIndex?.(0);
-                    }
-                  }
-                }
-                // ✅ 載入成功，清除載入狀態
-                setIsLoadingPlaylist(false);
-              } catch (error) {
-                console.error('載入自己的播放清單失敗，使用釘選記錄:', error);
-                // 如果載入失敗，回退到使用釘選記錄
-                if (playerRef.current) {
-                  playerRef.current.setPlayerOwner?.({ 
-                    userId: pinned.userId, 
-                    username: pinned.username 
-                  });
-                  if (Array.isArray(pinned.playlist)) {
-                    playerRef.current.setPlaylist?.(pinned.playlist);
-                    
-                    // ✅ 處理播放清單為空的情況
-                    if (pinned.playlist.length === 0) {
-                      playerRef.current.pause?.();
-                      playerRef.current.setIsPlaying?.(false);
-                      playerRef.current.setSrc?.('');
-                      playerRef.current.setOriginUrl?.('');
-                      playerRef.current.setTrackTitle?.('');
-                      playerRef.current.setActiveIndex?.(0);
-                    }
-                  }
-                }
-                // ✅ 載入失敗，清除載入狀態
-                setIsLoadingPlaylist(false);
-              }
-              
-              setIsPinned(true);
-              setPinnedPlayerData(pinned);
-              isLoadingRef.current = false;
-              return; // 已處理，不需要繼續
             }
-            
-            // 未過期，設置釘選狀態
-            setIsPinned(true);
-            setPinnedPlayerData(pinned);
-            
-            // 觸發全局事件，通知其他組件
-            window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
-              detail: { 
-                isPinned: true,
-                pinnedPlayer: pinned
-              } 
-            }));
-            
-            // ✅ 刷新後恢復釘選播放器的播放清單（非自己的頁面）
-            if (playerRef.current) {
-              // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
-              playerRef.current.setPlayerOwner?.({ 
-                userId: pinned.userId, 
-                username: pinned.username 
-              });
-              
-              // ✅ 設置播放清單（即使是空的）
-              if (Array.isArray(pinned.playlist)) {
-                playerRef.current.setPlaylist?.(pinned.playlist);
-                
-                // ✅ 只有當播放清單不為空時，才設置當前曲目
-                if (pinned.playlist.length > 0) {
-                  const currentIndex = pinned.currentIndex || 0;
-                  const track = pinned.playlist[currentIndex];
-                  
-                  if (track?.url) {
-                    playerRef.current.setActiveIndex?.(currentIndex);
-                    playerRef.current.setSrc?.(track.url);
-                    playerRef.current.setOriginUrl?.(track.url);
-                    playerRef.current.setTrackTitle?.(track.title || '');
-                  }
-                } else {
-                  // ✅ 播放清單為空時，停止播放並清空音頻源
-                  playerRef.current.pause?.();
-                  playerRef.current.setIsPlaying?.(false);
-                  playerRef.current.setSrc?.('');
-                  playerRef.current.setOriginUrl?.('');
-                  playerRef.current.setTrackTitle?.('');
-                  playerRef.current.setActiveIndex?.(0);
-                }
-              }
-            }
-          } else if (expiresAt && expiresAt <= now) {
-            // 已過期，自動解除釘選
-            await axios.delete('/api/player/pin');
-            setIsPinned(false);
-            setPinnedPlayerData(null);
+            playerRef.current.setShuffleAllowed?.(pinned.allowShuffle);
+            applyPinnedShufflePreference(pinned.allowShuffle, pinned.userId);
           }
-        } else {
-          // 沒有釘選播放器，確保狀態為 false
+        } else if (expiresAt && expiresAt <= now) {
+          await axios.delete("/api/player/pin");
           setIsPinned(false);
           setPinnedPlayerData(null);
-          // ✅ 沒有釘選播放器時，清除載入狀態
-          setIsLoadingPlaylist(false);
         }
-      } catch (error) {
-        console.error('載入釘選播放器失敗:', error);
-        // ✅ 載入失敗時也要清除載入狀態，避免跑馬燈一直不顯示
+      } else {
+        setIsPinned(false);
+        setPinnedPlayerData(null);
         setIsLoadingPlaylist(false);
-      } finally {
-        isLoadingRef.current = false;
-        // ✅ 確保在所有情況下都清除載入狀態
-        // 如果已經有有效的音頻源或標題，就清除載入狀態（避免跑馬燈一直不顯示）
-        if (playerRef.current?.trackTitle || playerRef.current?.originUrl || playerRef.current?.src) {
-          setIsLoadingPlaylist(false);
+        if (playerRef.current) {
+          playerRef.current.setShuffleAllowed?.(false);
+          playerRef.current.setShuffleEnabled?.(false);
         }
       }
-    };
-    
-    // ✅ 監聽播放清單變更事件（當用戶編輯播放清單後觸發）
+    } catch (error) {
+      console.error("載入釘選播放器失敗:", error);
+      setIsLoadingPlaylist(false);
+    } finally {
+      isLoadingRef.current = false;
+      if (
+        playerRef.current?.trackTitle ||
+        playerRef.current?.originUrl ||
+        playerRef.current?.src
+      ) {
+        setIsLoadingPlaylist(false);
+      }
+      needsPinnedRefreshRef.current = false;
+    }
+  }, [
+    currentUser,
+    isLoadingPlaylist,
+    setIsLoadingPlaylist,
+    playerRef,
+    setIsPinned,
+    setPinnedPlayerData,
+  ]);
+
+  useEffect(() => {
+    needsPinnedRefreshRef.current = true;
+  }, [currentUser?._id]);
+
+  useEffect(() => {
+    needsPinnedRefreshRef.current = true;
+  }, [pathname]);
+
+  // 檢查釘選狀態並載入釘選的播放清單（使用 Context 中的 currentUser）
+  useEffect(() => {
+    if (currentUser === undefined) {
+      return;
+    }
+
+    loadPinnedPlayer({ force: false });
+  }, [currentUser, pathname, loadPinnedPlayer]);
+
+  useEffect(() => {
     const handlePlaylistChanged = () => {
-      // 重置防抖狀態，強制重新載入
       isLoadingRef.current = false;
       lastLoadTimeRef.current = 0;
       lastPlaylistLengthRef.current = -1;
-      // 觸發重新載入
-      loadPinnedPlayer();
+      needsPinnedRefreshRef.current = true;
+      loadPinnedPlayer({ force: true });
     };
-    
-    window.addEventListener('playlistChanged', handlePlaylistChanged);
-    
-    // 初始載入
-    loadPinnedPlayer();
-    
-    // ✅ 清理事件監聽器
+
+    window.addEventListener("playlistChanged", handlePlaylistChanged);
     return () => {
-      window.removeEventListener('playlistChanged', handlePlaylistChanged);
+      window.removeEventListener("playlistChanged", handlePlaylistChanged);
     };
-  }, [currentUser, pathname]); // ✅ 當 currentUser 或 pathname 變化時重新檢查
+  }, [loadPinnedPlayer]);
   
   // 監聽釘選變更事件（當用戶主動釘選/取消釘選時）
   useEffect(() => {
@@ -765,9 +846,13 @@ export default function MiniPlayer() {
           username: e.detail.username,
           playlist: e.detail.playlist,
           currentIndex: 0,
-          expiresAt: e.detail.expiresAt
+          expiresAt: e.detail.expiresAt,
+          allowShuffle: !!e.detail.allowShuffle,
         };
-        setPinnedPlayerData(pinnedData);
+        pinnedData.allowShuffle = !!pinnedData.allowShuffle;
+        setPinnedPlayerData({ ...pinnedData });
+        const ownerId = pinnedData.userId;
+        const allowShuffle = pinnedData.allowShuffle;
         
         
         // 當收到釘選事件時，也載入歌單
@@ -775,7 +860,8 @@ export default function MiniPlayer() {
           // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
           playerRef.current.setPlayerOwner?.({ 
             userId: pinnedData.userId, 
-            username: pinnedData.username 
+            username: pinnedData.username,
+            allowShuffle,
           });
           
           // ✅ 設置播放清單（即使是空的）
@@ -803,12 +889,22 @@ export default function MiniPlayer() {
               playerRef.current.setActiveIndex?.(0);
             }
           }
+
+          playerRef.current.setShuffleAllowed?.(allowShuffle);
+          applyPinnedShufflePreference(allowShuffle, ownerId);
         } else {
           console.warn('⚠️ [MiniPlayer-Event] playerRef 不可用');
         }
+
+        needsPinnedRefreshRef.current = false;
       } else {
         setIsPinned(false);
         setPinnedPlayerData(null);
+        if (playerRef.current) {
+          playerRef.current.setShuffleAllowed?.(false);
+          playerRef.current.setShuffleEnabled?.(false);
+        }
+        needsPinnedRefreshRef.current = false;
       }
     };
     
@@ -1255,6 +1351,45 @@ export default function MiniPlayer() {
         >
           {/* 播放控制按鈕 */}
           <div className="flex justify-center items-center space-x-4">
+            {/* 隨機播放 */}
+            {globalShuffleAllowed && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleShuffleButtonClick();
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                }}
+                disabled={currentPlaylistLength === 0}
+                className={`w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 ${
+                  currentPlaylistLength === 0
+                    ? "text-gray-500 bg-black/30 border border-white/10 cursor-not-allowed"
+                    : globalShuffleEnabled
+                      ? "text-purple-300 bg-purple-700/70 border border-purple-400 hover:text-purple-100 hover:bg-purple-600/70 hover:scale-110"
+                      : "text-gray-300 bg-black/60 border border-white/10 hover:text-white hover:scale-110"
+                }`}
+                title={
+                  currentPlaylistLength === 0
+                    ? "請先建立播放清單"
+                    : globalShuffleEnabled
+                      ? "隨機播放：開（點擊以關閉）"
+                      : "隨機播放：關（點擊以啟用）"
+                }
+                style={{
+                  backdropFilter: 'blur(8px)',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="16 3 21 3 21 8"></polyline>
+                  <line x1="4" y1="20" x2="21" y2="3"></line>
+                  <polyline points="21 16 21 21 16 21"></polyline>
+                  <line x1="15" y1="15" x2="21" y2="21"></line>
+                  <line x1="4" y1="4" x2="9" y2="9"></line>
+                </svg>
+              </button>
+            )}
+
             {/* 上一首 */}
             <button
               onClick={(e) => {

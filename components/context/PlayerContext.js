@@ -95,14 +95,18 @@ export function PlayerProvider({
     defaultMiniPlayerEnabled,
   );
   const [seekable, setSeekable] = useState(defaultSeekable);
-  const [playlist, setPlaylist] = useState([]);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [playlistState, setPlaylistState] = useState([]);
+  const [activeIndexState, setActiveIndexState] = useState(0);
+  const [shuffleAllowedState, setShuffleAllowedState] = useState(false);
+  const [shuffleEnabledState, setShuffleEnabledState] = useState(false);
+  const playlist = playlistState;
+  const activeIndex = activeIndexState;
+  const shuffleAllowed = shuffleAllowedState;
+  const shuffleEnabled = shuffleEnabledState;
 
   // ✅ 播放器擁有者（用於顯示釘選按鈕等功能）
-  const [playerOwner, setPlayerOwner] = useState(null); // { userId, username }
-
-  // ✅ 頁面擁有者的播放器造型（用於顯示特定造型）
-  const [pageOwnerSkin, setPageOwnerSkin] = useState(null); // { activePlayerSkin, playerSkinSettings, premiumPlayerSkin }
+  const [playerOwnerState, setPlayerOwnerState] = useState(null); // { userId, username, allowShuffle? }
+  const playerOwner = playerOwnerState;
 
   const audioRef = useRef(null);
   const currentTimeRef = useRef(0);
@@ -111,8 +115,186 @@ export function PlayerProvider({
   const isTransitioningRef = useRef(false); // ✅ 追蹤是否正在切換歌曲
   const playlistRef = useRef(playlist); // ✅ 保存播放清單引用
   const activeIndexRef = useRef(activeIndex); // ✅ 保存當前索引引用
+  const shuffleQueueRef = useRef([]);
+  const shuffleHistoryRef = useRef([]);
+  const shuffleAllowedRef = useRef(shuffleAllowed);
+  const shuffleEnabledRef = useRef(shuffleEnabled);
   const wasPlayingBeforeHiddenRef = useRef(false); // ✅ 追蹤頁面隱藏前是否在播放
   const wasPausedByAudioManagerRef = useRef(false); // ✅ 追蹤是否被 AudioManager 暫停（不應自動恢復）
+
+  const regenerateShuffleQueue = useCallback((currentIdx) => {
+    const list = playlistRef.current || [];
+    if (!Array.isArray(list) || list.length <= 1) {
+      shuffleQueueRef.current = [];
+      return;
+    }
+
+    const indices = [];
+    for (let i = 0; i < list.length; i += 1) {
+      if (i !== currentIdx) {
+        indices.push(i);
+      }
+    }
+
+    for (let i = indices.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+
+    shuffleQueueRef.current = indices;
+  }, []);
+
+  const resetShuffleState = useCallback(
+    (currentIdx) => {
+      shuffleHistoryRef.current = [];
+      if (shuffleEnabledRef.current) {
+        regenerateShuffleQueue(
+          typeof currentIdx === "number" ? currentIdx : activeIndexRef.current,
+        );
+      } else {
+        shuffleQueueRef.current = [];
+      }
+    },
+    [regenerateShuffleQueue],
+  );
+
+  const setShuffleAllowed = useCallback((value) => {
+    const normalized = !!value;
+    setShuffleAllowedState(normalized);
+    shuffleAllowedRef.current = normalized;
+    if (!normalized) {
+      setShuffleEnabledState(false);
+      shuffleEnabledRef.current = false;
+      shuffleQueueRef.current = [];
+      shuffleHistoryRef.current = [];
+    }
+  }, []);
+
+  const setShuffleEnabled = useCallback(
+    (value) => {
+      const normalized = !!value;
+      if (normalized && !shuffleAllowedRef.current) {
+        setShuffleEnabledState(false);
+        shuffleEnabledRef.current = false;
+        return false;
+      }
+
+      setShuffleEnabledState((prev) => {
+        if (prev === normalized) {
+          return prev;
+        }
+        shuffleEnabledRef.current = normalized;
+        if (normalized) {
+          resetShuffleState(activeIndexRef.current);
+        } else {
+          shuffleQueueRef.current = [];
+          shuffleHistoryRef.current = [];
+        }
+        return normalized;
+      });
+
+      return normalized;
+    },
+    [resetShuffleState],
+  );
+
+  const setPlaylist = useCallback(
+    (nextPlaylist) => {
+      const normalized = Array.isArray(nextPlaylist)
+        ? nextPlaylist.map((item) => ({
+            title: item?.title ? String(item.title) : "",
+            url: item?.url ? String(item.url) : "",
+          }))
+        : [];
+
+      setPlaylistState(normalized);
+      playlistRef.current = normalized;
+
+      const listLength = normalized.length;
+      if (listLength === 0) {
+        setActiveIndexState(0);
+        activeIndexRef.current = 0;
+        shuffleQueueRef.current = [];
+        shuffleHistoryRef.current = [];
+        setIsPlaying(false);
+        if (audioRef.current) {
+          try {
+            audioRef.current.pause();
+          } catch {}
+        }
+        return;
+      }
+
+      if (activeIndexRef.current >= listLength) {
+        setActiveIndexState(0);
+        activeIndexRef.current = 0;
+      }
+
+      resetShuffleState(activeIndexRef.current);
+    },
+    [resetShuffleState],
+  );
+
+  const setActiveIndex = useCallback(
+    (index, options = {}) => {
+      const list = playlistRef.current || [];
+      const listLength = list.length;
+
+      if (listLength === 0) {
+        setActiveIndexState(0);
+        activeIndexRef.current = 0;
+        return;
+      }
+
+      const safeIndex = Math.max(0, Math.min(Number(index) || 0, listLength - 1));
+      setActiveIndexState(safeIndex);
+      activeIndexRef.current = safeIndex;
+
+      if (!options.skipShuffleReset) {
+        resetShuffleState(safeIndex);
+      }
+    },
+    [resetShuffleState],
+  );
+
+  const setPlayerOwner = useCallback(
+    (owner) => {
+      setPlayerOwnerState((prevOwner) => {
+        if (!owner) {
+          setShuffleAllowed(false);
+          return null;
+        }
+
+        const normalized = { ...owner };
+
+        if (typeof normalized.allowShuffle !== "boolean") {
+          if (
+            prevOwner &&
+            prevOwner.userId &&
+            prevOwner.userId === normalized.userId
+          ) {
+            normalized.allowShuffle =
+              typeof prevOwner.allowShuffle === "boolean"
+                ? prevOwner.allowShuffle
+                : false;
+          } else {
+            normalized.allowShuffle = false;
+            setShuffleAllowed(false);
+            return normalized;
+          }
+        }
+
+        setShuffleAllowed(!!normalized.allowShuffle);
+        normalized.allowShuffle = !!normalized.allowShuffle;
+
+        return normalized;
+      });
+    },
+    [setShuffleAllowed],
+  );
+
+  // ✅ 頁面擁有者的播放器造型（用於顯示特定造型）
+  const [pageOwnerSkin, setPageOwnerSkin] = useState(null); // { activePlayerSkin, playerSkinSettings, premiumPlayerSkin }
 
   // ✅ ready 標記清理 useEffect
   useEffect(() => {
@@ -201,6 +383,14 @@ export function PlayerProvider({
     playlistRef.current = playlist;
     activeIndexRef.current = activeIndex;
   }, [playlist, activeIndex]);
+
+  useEffect(() => {
+    shuffleAllowedRef.current = shuffleAllowed;
+  }, [shuffleAllowed]);
+
+  useEffect(() => {
+    shuffleEnabledRef.current = shuffleEnabled;
+  }, [shuffleEnabled]);
 
   const onEnded = useCallback(() => {
     const currentPlaylist = playlistRef.current;
@@ -428,19 +618,47 @@ export function PlayerProvider({
 
   // ✅ 下一首音樂
   const next = async () => {
-    if (playlist.length === 0) {
+    const list = playlistRef.current || [];
+    if (list.length === 0) {
+      return;
+    }
+
+    const computeNextIndex = () => {
+      if (!shuffleEnabledRef.current || list.length === 1) {
+        const idx = (activeIndexRef.current + 1) % list.length;
+        return {
+          index: idx,
+          isLooping: idx === 0 && activeIndexRef.current === list.length - 1,
+        };
+      }
+
+      if (shuffleQueueRef.current.length === 0) {
+        regenerateShuffleQueue(activeIndexRef.current);
+      }
+
+      if (shuffleQueueRef.current.length === 0) {
+        const idx = (activeIndexRef.current + 1) % list.length;
+        return {
+          index: idx,
+          isLooping: idx === 0 && activeIndexRef.current === list.length - 1,
+        };
+      }
+
+      const nextIdx = shuffleQueueRef.current.shift();
+      shuffleHistoryRef.current.push(activeIndexRef.current);
+      return { index: nextIdx, isLooping: false };
+    };
+
+    const { index: nextIndex, isLooping } = computeNextIndex();
+    const nextItem = list[nextIndex];
+
+    if (!nextItem) {
       return;
     }
 
     // ✅ 記錄開始時間
     const startTime = performance.now();
     window.__NEXT_START_TIME__ = startTime;
-
-    const nextIndex = (activeIndex + 1) % playlist.length;
-    const nextItem = playlist[nextIndex];
-
-    // ✅ 檢查是否循環
-    const isLooping = nextIndex === 0 && activeIndex === playlist.length - 1;
 
     // console.log("🔧 PlayerContext 切換到下一首", { nextIndex, nextItem });
 
@@ -491,7 +709,7 @@ export function PlayerProvider({
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       // ✅ 更新索引（提早）
-      setActiveIndex(nextIndex);
+      setActiveIndex(nextIndex, { skipShuffleReset: true });
       // ✅ 立即廣播切歌事件，避免後續步驟例外導致事件未發出
       try {
         window.dispatchEvent(
@@ -554,12 +772,35 @@ export function PlayerProvider({
 
   // ✅ 上一首音樂
   const previous = async () => {
-    if (playlist.length === 0) {
+    const list = playlistRef.current || [];
+    if (list.length === 0) {
       return;
     }
 
-    const prevIndex = activeIndex === 0 ? playlist.length - 1 : activeIndex - 1;
-    const prevItem = playlist[prevIndex];
+    const computePreviousIndex = () => {
+      if (!shuffleEnabledRef.current || list.length === 1) {
+        return activeIndexRef.current === 0
+          ? list.length - 1
+          : activeIndexRef.current - 1;
+      }
+
+      if (shuffleHistoryRef.current.length > 0) {
+        const prevIdx = shuffleHistoryRef.current.pop();
+        shuffleQueueRef.current.unshift(activeIndexRef.current);
+        return prevIdx;
+      }
+
+      return activeIndexRef.current === 0
+        ? list.length - 1
+        : activeIndexRef.current - 1;
+    };
+
+    const prevIndex = computePreviousIndex();
+    const prevItem = list[prevIndex];
+
+    if (!prevItem) {
+      return;
+    }
 
     // ✅ 標記為轉換中
     isTransitioningRef.current = true;
@@ -606,7 +847,7 @@ export function PlayerProvider({
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       // ✅ 更新索引
-      setActiveIndex(prevIndex);
+      setActiveIndex(prevIndex, { skipShuffleReset: true });
 
       // ✅ 設置新的音樂源
       setSrcWithAudio(prevItem.url);
@@ -638,35 +879,60 @@ export function PlayerProvider({
 
   // ✅ setSrc 的包裝函數
   const setSrcWithAudio = (newSrc) => {
-    // ✅ 重置進度和時長狀態
-    setCurrentTime(0);
-    setDuration(0);
+    const audio = audioRef.current;
+
+    const resolveSrc = (value) => {
+      if (typeof window === "undefined") {
+        return value || "";
+      }
+      if (!value) {
+        return "";
+      }
+      try {
+        return new URL(value, window.location.origin).href;
+      } catch {
+        return value;
+      }
+    };
+
+    const resolvedNewSrc = resolveSrc(newSrc);
+    const currentHref =
+      audio && (audio.currentSrc || audio.src)
+        ? audio.currentSrc || audio.src
+        : "";
+    const isSameSource =
+      !!audio && !!resolvedNewSrc && resolvedNewSrc === currentHref;
+
+    if (!isSameSource) {
+      setCurrentTime(0);
+      setDuration(0);
+    }
 
     setSrc(newSrc);
 
-    // ✅ 更新音頻元素的 src
-    if (audioRef.current) {
-      try {
-        // ✅ 重置進度報告標記和開始時間
-        audioRef.current.dataset.progressReported = "";
-        audioRef.current.dataset.startTime = "";
-        
-        // ✅ 先暫停並重置（確保舊音頻停止）
-        if (!audioRef.current.paused) {
-          audioRef.current.pause();
-        }
-        audioRef.current.currentTime = 0;
-        
-        // ✅ 設置新的 src
-        audioRef.current.src = newSrc || "";
-        
-        // ✅ 強制觸發加載（確保音頻元素重新載入新的 URL）
-        audioRef.current.load();
-        
-        console.log('🎵 [setSrcWithAudio] 設置音頻源:', newSrc || '(空)');
-      } catch (error) {
-        console.warn("🔧 設置音頻源失敗", error);
+    if (!audio) {
+      return;
+    }
+
+    try {
+      audio.dataset.progressReported = "";
+      audio.dataset.startTime = "";
+
+      if (isSameSource) {
+        console.log("🎵 [setSrcWithAudio] 保留現有音頻源:", newSrc || "(空)");
+        return;
       }
+
+      if (!audio.paused) {
+        audio.pause();
+      }
+      audio.currentTime = 0;
+      audio.src = newSrc || "";
+      audio.load();
+
+      console.log("🎵 [setSrcWithAudio] 設置音頻源:", newSrc || "(空)");
+    } catch (error) {
+      console.warn("🔧 設置音頻源失敗", error);
     }
   };
 
@@ -864,6 +1130,10 @@ export function PlayerProvider({
     setPlaylist,
     activeIndex,
     setActiveIndex,
+    shuffleAllowed,
+    setShuffleAllowed,
+    shuffleEnabled,
+    setShuffleEnabled,
     playerOwner,
     setPlayerOwner,
     pageOwnerSkin,

@@ -34,7 +34,7 @@ export default function ModelInfoPage() {
         }
       }
 
-      player?.setPlayerOwner?.({ userId: pinnedPlayer.userId, username: pinnedPlayer.username });
+      player?.setPlayerOwner?.({ userId: pinnedPlayer.userId, username: pinnedPlayer.username, allowShuffle: !!pinnedPlayer.allowShuffle });
       player?.setShareMode?.("global");
       player?.setMiniPlayerEnabled?.(true);
       try {

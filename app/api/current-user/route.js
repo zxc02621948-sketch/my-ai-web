@@ -56,7 +56,8 @@ export async function GET() {
         pinnedAt: user.pinnedPlayer.pinnedAt,
         expiresAt: user.pinnedPlayer.expiresAt,
         currentIndex: user.pinnedPlayer.currentIndex || 0,
-        isPlaying: user.pinnedPlayer.isPlaying || false
+        isPlaying: user.pinnedPlayer.isPlaying || false,
+        allowShuffle: !!user.pinnedPlayer.allowShuffle,
       } : null;
 
       return NextResponse.json({
@@ -91,6 +92,7 @@ export async function GET() {
         hue: 0,
         opacity: 0.7
       },
+      playlistAllowShuffle: !!user.playlistAllowShuffle,
     },
     // 兼容舊代碼（直接在根層級）
     _id: user._id,
@@ -124,5 +126,6 @@ export async function GET() {
       hue: 0,
       opacity: 0.7
     },
+    playlistAllowShuffle: !!user.playlistAllowShuffle,
   });
 }

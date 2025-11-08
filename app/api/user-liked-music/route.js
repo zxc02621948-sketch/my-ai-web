@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
 import Music from "@/models/Music";
+import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
 
 const noStore = { headers: { "Cache-Control": "no-store" } };
 
@@ -23,10 +24,18 @@ export async function GET(req) {
   }
 
   try {
+    const viewer = await getCurrentUserFromRequest(req);
+
     await dbConnect();
 
+    const query = { likes: id };
+    const isOwner = viewer && String(viewer._id) === String(id);
+    if (!isOwner) {
+      query.isPublic = true;
+    }
+
     // 查找該用戶收藏的所有音樂，並填充作者資訊
-    const items = await Music.find({ likes: id })
+    const items = await Music.find(query)
       .populate('author', '_id username avatar currentFrame frameSettings')
       .sort({ createdAt: -1 })
       .lean()

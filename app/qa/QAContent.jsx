@@ -29,7 +29,7 @@ export default function QAContent() {
           player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
         }
       }
-      player?.setPlayerOwner?.({ userId: pinnedPlayer.userId, username: pinnedPlayer.username });
+      player?.setPlayerOwner?.({ userId: pinnedPlayer.userId, username: pinnedPlayer.username, allowShuffle: !!pinnedPlayer.allowShuffle });
       player?.setShareMode?.("global");
       player?.setMiniPlayerEnabled?.(true);
       try {

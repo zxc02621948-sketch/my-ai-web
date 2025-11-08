@@ -148,7 +148,8 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
             username: targetUsername,
             playlist: targetUserPlaylist,
             pinnedPlayer: res.data.pinnedPlayer, // 傳遞完整的釘選數據
-            expiresAt: res.data.expiresAt
+            expiresAt: res.data.expiresAt,
+            allowShuffle: res.data.pinnedPlayer?.allowShuffle ?? false,
           } 
         }));
         

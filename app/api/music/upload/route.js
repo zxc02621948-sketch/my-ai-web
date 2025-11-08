@@ -62,6 +62,16 @@ export async function POST(request) {
     const rating = formData.get("rating") || "all";
     const category = formData.get("category") || "";
     const language = formData.get("language") || "";
+    const isPublicField = formData.get("isPublic");
+    let isPublic = true;
+    if (typeof isPublicField === "string") {
+      const normalized = isPublicField.trim().toLowerCase();
+      if (["false", "0", "no", "off", "private"].includes(normalized)) {
+        isPublic = false;
+      } else if (["true", "1", "yes", "on", "public"].includes(normalized)) {
+        isPublic = true;
+      }
+    }
 
     if (!file) {
       return NextResponse.json({ error: "請選擇音樂檔案" }, { status: 400 });
@@ -230,7 +240,7 @@ export async function POST(request) {
       initialBoost,
 
       uploadDate: new Date(),
-      isPublic: true,
+      isPublic,
     };
 
     // ✅ 計算完整度

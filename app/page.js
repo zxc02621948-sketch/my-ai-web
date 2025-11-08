@@ -190,7 +190,8 @@ export default function HomePage() {
           // 只設置 playerOwner，不設置播放清單和曲目（MiniPlayer 會處理）
           player?.setPlayerOwner?.({ 
             userId: pinnedPlayer.userId, 
-            username: pinnedPlayer.username 
+            username: pinnedPlayer.username,
+            allowShuffle: !!pinnedPlayer.allowShuffle,
           });
           player?.setMiniPlayerEnabled?.(true);
           player?.setShareMode?.("global");
@@ -203,7 +204,8 @@ export default function HomePage() {
         // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
         player?.setPlayerOwner?.({ 
           userId: pinnedPlayer.userId, 
-          username: pinnedPlayer.username 
+          username: pinnedPlayer.username,
+          allowShuffle: !!pinnedPlayer.allowShuffle,
         });
         
         // ✅ 設置播放清單（即使是空的）
@@ -265,7 +267,8 @@ export default function HomePage() {
         // 只設置 playerOwner，不設置播放清單和曲目（MiniPlayer 會處理）
         player?.setPlayerOwner?.({ 
           userId: pinnedPlayer.userId, 
-          username: pinnedPlayer.username 
+          username: pinnedPlayer.username,
+          allowShuffle: !!pinnedPlayer.allowShuffle,
         });
         player?.setMiniPlayerEnabled?.(true);
         player?.setShareMode?.("global");
@@ -280,7 +283,8 @@ export default function HomePage() {
           player?.setActiveIndex?.(currentIndex);
           player?.setPlayerOwner?.({ 
             userId: pinnedPlayer.userId, 
-            username: pinnedPlayer.username 
+            username: pinnedPlayer.username,
+            allowShuffle: !!pinnedPlayer.allowShuffle,
           });
           
           if (currentTrack) {

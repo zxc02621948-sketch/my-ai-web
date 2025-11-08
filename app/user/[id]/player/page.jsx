@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import axios from "axios";
 import { usePlayer } from "@/components/context/PlayerContext";
@@ -25,7 +25,17 @@ export default function UserPlayerPage() {
   const [error, setError] = useState("");
   const [userData, setUserData] = useState(null);
   // 使用 PlayerContext 的播放清單狀態
-  const { playlist, setPlaylist, activeIndex, setActiveIndex } = player;
+  const {
+    playlist,
+    setPlaylist,
+    activeIndex,
+    setActiveIndex,
+    shuffleAllowed,
+    setShuffleAllowed,
+    shuffleEnabled,
+    setShuffleEnabled,
+    playerOwner,
+  } = player;
   
   // ✅ 防止並發保存請求相互覆蓋
   const savingRef = useRef(false); // 是否正在保存
@@ -36,6 +46,112 @@ export default function UserPlayerPage() {
   const currentTrack = playlist[activeIndex];
   const isCurrentTrackPlaying = player.isPlaying && player.originUrl === currentTrack?.url;
   const [modalOpen, setModalOpen] = useState(false);
+  const [updatingShufflePermission, setUpdatingShufflePermission] = useState(false);
+  const shuffleStorageKey = id ? `playlist_${id}_shuffle` : null;
+
+  const applyShufflePreference = useCallback(
+    (allow) => {
+      if (!setShuffleEnabled) {
+        return;
+      }
+
+      if (!allow) {
+        setShuffleEnabled(false);
+        if (shuffleStorageKey) {
+          try {
+            localStorage.removeItem(shuffleStorageKey);
+          } catch (error) {
+            console.warn("移除隨機播放設定失敗:", error);
+          }
+        }
+        return;
+      }
+
+      if (!shuffleStorageKey) {
+        setShuffleEnabled(false);
+        return;
+      }
+
+      let shouldEnable = false;
+      try {
+        shouldEnable = localStorage.getItem(shuffleStorageKey) === "1";
+      } catch (error) {
+        console.warn("讀取隨機播放設定失敗:", error);
+      }
+
+      setShuffleEnabled(shouldEnable);
+    },
+    [setShuffleEnabled, shuffleStorageKey],
+  );
+
+  const handleShuffleToggle = useCallback(() => {
+    if (!shuffleAllowed || playlist.length === 0) {
+      return;
+    }
+    const next = !shuffleEnabled;
+    setShuffleEnabled(next);
+    if (!shuffleStorageKey) {
+      return;
+    }
+    try {
+      if (next) {
+        localStorage.setItem(shuffleStorageKey, "1");
+      } else {
+        localStorage.removeItem(shuffleStorageKey);
+      }
+    } catch (error) {
+      console.warn("保存隨機播放設定失敗:", error);
+    }
+  }, [shuffleAllowed, shuffleEnabled, setShuffleEnabled, shuffleStorageKey, playlist.length]);
+
+  const handleAllowShuffleToggle = useCallback(async () => {
+    if (!isOwner || updatingShufflePermission) {
+      return;
+    }
+
+    const next = !userData?.playlistAllowShuffle;
+    setUpdatingShufflePermission(true);
+
+    try {
+      await axios.patch("/api/player/shuffle-settings", { allowShuffle: next });
+
+      setUserData((prev) => (prev ? { ...prev, playlistAllowShuffle: next } : prev));
+      setCurrentUser?.((prev) => (prev ? { ...prev, playlistAllowShuffle: next } : prev));
+
+      const ownerUsername =
+        userData?.username ||
+        playerOwner?.username ||
+        currentUser?.username ||
+        "";
+
+      player.setPlayerOwner?.({
+        ...(playerOwner || {}),
+        userId: id,
+        username: ownerUsername,
+        allowShuffle: next,
+      });
+
+      applyShufflePreference(next);
+
+      notify.success(next ? "已允許訪客隨機播放歌單" : "已禁止訪客隨機播放歌單");
+    } catch (error) {
+      console.error("更新隨機播放權限失敗:", error);
+      notify.error("更新隨機播放權限失敗", error.response?.data?.error || error.message);
+    } finally {
+      setUpdatingShufflePermission(false);
+    }
+  }, [
+    applyShufflePreference,
+    currentUser?.username,
+    id,
+    isOwner,
+    player,
+    playerOwner,
+    setCurrentUser,
+    updatingShufflePermission,
+    userData?.playlistAllowShuffle,
+    userData?.username,
+  ]);
   
   // 從後端 API 載入用戶的播放清單
   useEffect(() => {
@@ -46,6 +162,7 @@ export default function UserPlayerPage() {
         const isOwnPage = currentUser && String(currentUser._id) === String(id);
         const hasPinnedPlayer = currentUser?.pinnedPlayer?.userId;
         const isPinnedThisPage = hasPinnedPlayer && String(currentUser.pinnedPlayer.userId) === String(id);
+        const shouldPreservePinnedPlayback = !isOwnPage && isPinnedThisPage;
         
         // 只有在不是自己的頁面，且釘選的是其他用戶的播放器時，才跳過載入
         if (hasPinnedPlayer && !isOwnPage && !isPinnedThisPage) {
@@ -65,13 +182,15 @@ export default function UserPlayerPage() {
         }
         
         // 重置播放器狀態，確保乾淨的開始
-        try {
-          player.setIsPlaying?.(false);
-          player.setSrc?.('');
-          player.setOriginUrl?.('');
-          player.setTrackTitle?.('');
-        } catch (error) {
-          console.error("重置播放器狀態失敗:", error);
+        if (!shouldPreservePinnedPlayback) {
+          try {
+            player.setIsPlaying?.(false);
+            player.setSrc?.('');
+            player.setOriginUrl?.('');
+            player.setTrackTitle?.('');
+          } catch (error) {
+            console.error("重置播放器狀態失敗:", error);
+          }
         }
         
         // 從 API 獲取該用戶的資料（包含播放清單）
@@ -83,10 +202,13 @@ export default function UserPlayerPage() {
           userDataFetched = response.data;
           setUserData(userDataFetched); // 保存用戶數據用於釘選按鈕
           
-          // ✅ 設置 playerOwner（用於顯示釘選按鈕）
+          const allowShuffle = !!userDataFetched.playlistAllowShuffle;
           if (userDataFetched.username) {
-            player.setPlayerOwner?.({ userId: id, username: userDataFetched.username });
+            player.setPlayerOwner?.({ userId: id, username: userDataFetched.username, allowShuffle });
+          } else {
+            setShuffleAllowed?.(allowShuffle);
           }
+          applyShufflePreference(allowShuffle);
         } catch (error) {
           console.error("獲取用戶資料失敗:", error.message);
           userDataFetched = {}; // 使用空物件作為備用
@@ -131,13 +253,15 @@ export default function UserPlayerPage() {
                const currentItem = finalPlaylist[activeIndex] || finalPlaylist[0];
                
                // 3. 同步到 PlayerContext（UI狀態管理）
-               player.setSrc?.(currentItem.url);
-               player.setOriginUrl?.(currentItem.url);
-               player.setTrackTitle?.(currentItem.title);
+               if (!shouldPreservePinnedPlayback && currentItem?.url) {
+                 player.setSrc?.(currentItem.url);
+                 player.setOriginUrl?.(currentItem.url);
+                 player.setTrackTitle?.(currentItem.title);
+               }
                setActiveIndex(activeIndex);
                
                // 4. 恢復用戶偏好（音量等）
-               if (savedVolume) {
+               if (!shouldPreservePinnedPlayback && savedVolume) {
                  try {
                    const volume = parseFloat(savedVolume);
                    if (!isNaN(volume) && volume >= 0 && volume <= 1) {
@@ -157,7 +281,7 @@ export default function UserPlayerPage() {
     };
     
     fetchPlaylist();
-  }, [id, currentUser?.pinnedPlayer]); // 依賴 currentUser 的釘選狀態
+  }, [id, currentUser?.pinnedPlayer, applyShufflePreference, setShuffleAllowed]);
 
     // 監聽播放狀態變化事件
     useEffect(() => {
@@ -187,6 +311,18 @@ export default function UserPlayerPage() {
         });
         if (response.data) {
           setUserData(response.data);
+          const allowShuffle = !!response.data.playlistAllowShuffle;
+          if (response.data.username) {
+            player.setPlayerOwner?.({
+              ...(playerOwner || {}),
+              userId: id,
+              username: response.data.username,
+              allowShuffle,
+            });
+          } else {
+            setShuffleAllowed?.(allowShuffle);
+          }
+          applyShufflePreference(allowShuffle);
         }
       } catch (error) {
         console.error("刷新用戶數據失敗:", error);
@@ -202,7 +338,7 @@ export default function UserPlayerPage() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('points-updated', handlePointsUpdated); // ✅ 清理監聽器
     };
-  }, [playlist, id]); // 移除 player 依賴，避免無限循環
+  }, [playlist, id, applyShufflePreference, playerOwner, setShuffleAllowed]);
 
   // 組件卸載時的清理
   useEffect(() => {
@@ -567,6 +703,60 @@ export default function UserPlayerPage() {
                   </div>
                 )}
               </div>
+
+              {/* 隨機播放相關設定 */}
+              {(isOwner || shuffleAllowed) && (
+                <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+                  {isOwner && (
+                    <button
+                      onClick={handleAllowShuffleToggle}
+                      disabled={updatingShufflePermission}
+                      className={`px-4 py-2 rounded-full border text-sm transition-all ${
+                        userData?.playlistAllowShuffle
+                          ? "bg-green-600/80 border-green-400 text-white hover:bg-green-500/80"
+                          : "bg-black/60 border-white/20 text-gray-300 hover:border-white/40 hover:text-white"
+                      } ${updatingShufflePermission ? "opacity-60 cursor-not-allowed" : ""}`}
+                    >
+                      {userData?.playlistAllowShuffle ? "已允許訪客隨機播放" : "允許訪客隨機播放"}
+                    </button>
+                  )}
+                  {shuffleAllowed && (
+                    <button
+                      onClick={handleShuffleToggle}
+                      disabled={playlist.length === 0}
+                      className={`px-4 py-2 rounded-full border text-sm flex items-center gap-2 transition-all ${
+                        shuffleEnabled
+                          ? "bg-purple-600/80 border-purple-400 text-white hover:bg-purple-500/80"
+                          : "bg-black/60 border-white/20 text-gray-300 hover:border-white/40 hover:text-white"
+                      } ${playlist.length === 0 ? "opacity-60 cursor-not-allowed" : ""}`}
+                      title={
+                        playlist.length === 0
+                          ? "請先建立播放清單"
+                          : shuffleEnabled
+                            ? "點擊可恢復循序播放"
+                            : "點擊切換為隨機播放"
+                      }
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="16 3 21 3 21 8"></polyline>
+                        <line x1="4" y1="20" x2="21" y2="3"></line>
+                        <polyline points="21 16 21 21 16 21"></polyline>
+                        <line x1="15" y1="15" x2="21" y2="21"></line>
+                        <line x1="4" y1="4" x2="9" y2="9"></line>
+                      </svg>
+                      <span>{shuffleEnabled ? "隨機播放：開" : "隨機播放：關"}</span>
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* 播放控制 - 美化版 */}
               <div className="flex items-center justify-center gap-4 mb-8">

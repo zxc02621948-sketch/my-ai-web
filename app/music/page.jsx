@@ -125,6 +125,7 @@ const MusicPage = () => {
         player?.setPlayerOwner?.({
           userId: pinnedPlayer.userId,
           username: pinnedPlayer.username,
+          allowShuffle: !!pinnedPlayer.allowShuffle,
         });
 
         // ✅ 設置播放清單（即使是空的）
@@ -185,6 +186,7 @@ const MusicPage = () => {
       player?.setPlayerOwner?.({
         userId: pinnedPlayer.userId,
         username: pinnedPlayer.username,
+        allowShuffle: !!pinnedPlayer.allowShuffle,
       });
 
       // ✅ 設置播放清單（即使是空的）
