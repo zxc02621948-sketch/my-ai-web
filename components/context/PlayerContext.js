@@ -121,6 +121,15 @@ export function PlayerProvider({
   const shuffleEnabledRef = useRef(shuffleEnabled);
   const wasPlayingBeforeHiddenRef = useRef(false); // ✅ 追蹤頁面隱藏前是否在播放
   const wasPausedByAudioManagerRef = useRef(false); // ✅ 追蹤是否被 AudioManager 暫停（不應自動恢復）
+  const playbackAttemptRef = useRef(null);
+
+  const cancelPlaybackAttempt = useCallback(() => {
+    const attempt = playbackAttemptRef.current;
+    if (attempt && typeof attempt.cancel === "function") {
+      attempt.cancel();
+    }
+    playbackAttemptRef.current = null;
+  }, []);
 
   const regenerateShuffleQueue = useCallback((currentIdx) => {
     const list = playlistRef.current || [];
@@ -450,6 +459,12 @@ export function PlayerProvider({
       audio.removeEventListener("ended", onEnded);
     };
   }, []); // ✅ 只在組件掛載時執行一次
+
+  useEffect(() => {
+    return () => {
+      cancelPlaybackAttempt();
+    };
+  }, [cancelPlaybackAttempt]);
   useEffect(() => {
     if (
       audioRef.current &&
@@ -469,6 +484,8 @@ export function PlayerProvider({
       console.warn("⚠️ [PlayerContext.play] 沒有設置音樂來源");
       return false;
     }
+
+    cancelPlaybackAttempt();
 
     // ✅ 檢查是否正在轉換中
     if (isTransitioningRef.current) {
@@ -541,6 +558,8 @@ export function PlayerProvider({
   // ✅ 暫停播放 - 只使用本地音頻播放器
   const pause = () => {
     console.log("🎵 [PlayerContext] pause() 被調用");
+
+    cancelPlaybackAttempt();
     
     // ✅ 更新播放狀態
     setIsPlaying(false);
@@ -616,12 +635,145 @@ export function PlayerProvider({
     }
   }, []);
 
+  const playCurrentWithRetry = useCallback(
+    ({
+      reason = "auto",
+      initialDelay = 0,
+      maxAttempts = 5,
+      retryDelay = 180,
+    } = {}) => {
+      const audio = audioRef.current;
+      if (!audio) {
+        cancelPlaybackAttempt();
+        return;
+      }
+
+      cancelPlaybackAttempt();
+
+      let attemptTimeoutId = null;
+      let cancelled = false;
+      let handleCanPlay = null;
+
+      const cancel = () => {
+        if (cancelled) {
+          return;
+        }
+        cancelled = true;
+        if (attemptTimeoutId) {
+          clearTimeout(attemptTimeoutId);
+          attemptTimeoutId = null;
+        }
+        if (handleCanPlay) {
+          audio.removeEventListener("canplay", handleCanPlay);
+          audio.removeEventListener("canplaythrough", handleCanPlay);
+        }
+      };
+
+      const attemptContext = { cancel };
+      playbackAttemptRef.current = attemptContext;
+
+      const cleanup = () => {
+        cancel();
+        if (playbackAttemptRef.current === attemptContext) {
+          playbackAttemptRef.current = null;
+        }
+      };
+
+      const attemptPlay = async (attempt) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (!audioRef.current || audioRef.current !== audio) {
+          cleanup();
+          return;
+        }
+
+        const allowed = audioManager.requestPlay(audio, 1);
+        if (!allowed) {
+          console.warn(`⚠️ [${reason}] 優先度不夠，無法播放`);
+          cleanup();
+          return;
+        }
+
+        try {
+          const playPromise = audio.play();
+          if (playPromise && typeof playPromise.then === "function") {
+            await playPromise;
+          }
+        } catch (error) {
+          if (attempt >= maxAttempts) {
+            console.warn(`⚠️ [${reason}] play() 失敗`, error);
+            cleanup();
+            return;
+          }
+          attemptTimeoutId = window.setTimeout(
+            () => attemptPlay(attempt + 1),
+            retryDelay,
+          );
+          return;
+        }
+
+        if (audio.paused) {
+          if (attempt >= maxAttempts) {
+            console.warn(`⚠️ [${reason}] 播放未開始 (paused)`);
+            cleanup();
+            return;
+          }
+          attemptTimeoutId = window.setTimeout(
+            () => attemptPlay(attempt + 1),
+            retryDelay,
+          );
+          return;
+        }
+
+        setIsPlaying(true);
+        wasPlayingBeforeInterruptionRef.current = true;
+        cleanup();
+      };
+
+      handleCanPlay = () => {
+        if (cancelled) {
+          return;
+        }
+        attemptPlay(0);
+      };
+
+      const start = () => {
+        if (cancelled) {
+          return;
+        }
+
+        if (!audioRef.current || audioRef.current !== audio) {
+          cleanup();
+          return;
+        }
+
+        if (audio.readyState >= 2) {
+          attemptPlay(0);
+        } else {
+          audio.addEventListener("canplay", handleCanPlay, { once: true });
+          audio.addEventListener("canplaythrough", handleCanPlay, { once: true });
+        }
+      };
+
+      if (initialDelay > 0) {
+        attemptTimeoutId = window.setTimeout(start, initialDelay);
+      } else {
+        start();
+      }
+    },
+    [cancelPlaybackAttempt, setIsPlaying],
+  );
+
   // ✅ 下一首音樂
   const next = async () => {
     const list = playlistRef.current || [];
     if (list.length === 0) {
       return;
     }
+
+    cancelPlaybackAttempt();
 
     const computeNextIndex = () => {
       if (!shuffleEnabledRef.current || list.length === 1) {
@@ -728,43 +880,7 @@ export function PlayerProvider({
       // ✅ 清除 AudioManager 暫停標記（用戶主動切歌）
       wasPausedByAudioManagerRef.current = false;
       
-      // ✅ 自動播放下一首
-      setTimeout(async () => {
-        try {
-          // ✅ 請求播放權限（優先度 1 - 最低）
-          if (audioRef.current) {
-            const canPlay = audioManager.requestPlay(audioRef.current, 1);
-            
-            // 如果優先度不夠（例如音樂 Modal 或預覽正在播放），不允許播放
-            if (!canPlay) {
-              console.warn('⚠️ [next] 優先度不夠，無法播放下一首');
-              return;
-            }
-            
-            // 等待音頻載入完成
-            if (audioRef.current.readyState >= 2) {
-              await audioRef.current.play();
-              setIsPlaying(true);
-              console.log('🎵 [next] 下一首開始播放');
-            } else {
-              // 如果還沒載入完成，等待載入完成後播放
-              const handleCanPlay = async () => {
-                try {
-                  await audioRef.current.play();
-                  setIsPlaying(true);
-                  console.log('🎵 [next] 下一首開始播放（延遲載入）');
-                } catch (error) {
-                  console.warn('⚠️ [next] 自動播放失敗:', error);
-                }
-                audioRef.current.removeEventListener('canplay', handleCanPlay);
-              };
-              audioRef.current.addEventListener('canplay', handleCanPlay);
-            }
-          }
-        } catch (error) {
-          console.warn('⚠️ [next] 自動播放失敗:', error);
-        }
-      }, 300);
+      playCurrentWithRetry({ reason: "next" });
     } finally {
       // ✅ 不再需要延遲清除轉換標記，因為已經在上面的代碼中清除了
     }
@@ -776,6 +892,8 @@ export function PlayerProvider({
     if (list.length === 0) {
       return;
     }
+
+    cancelPlaybackAttempt();
 
     const computePreviousIndex = () => {
       if (!shuffleEnabledRef.current || list.length === 1) {
@@ -857,18 +975,12 @@ export function PlayerProvider({
       // ✅ 清除 AudioManager 暫停標記（用戶主動切歌）
       wasPausedByAudioManagerRef.current = false;
 
-      // ✅ 請求播放權限（優先度 1 - 最低）
-      if (audioRef.current) {
-        const canPlay = audioManager.requestPlay(audioRef.current, 1);
-        if (!canPlay) {
-          console.warn('⚠️ [previous] 優先度不夠，無法播放上一首');
-        }
-      }
-
       // ✅ 觸發自定義事件更新 UI
       window.dispatchEvent(
         new CustomEvent("playerPrevious", { detail: { prevIndex, prevItem } }),
       );
+
+      playCurrentWithRetry({ reason: "previous" });
     } finally {
       // ✅ 清除轉換標記
       setTimeout(() => {
@@ -1050,6 +1162,7 @@ export function PlayerProvider({
           setIsPlaying(false);
           // 標記播放器是被 AudioManager 暫停的
           wasPausedByAudioManagerRef.current = true;
+          cancelPlaybackAttempt();
           
           // ✅ 不觸發 playerStateChanged 事件（不是用戶操作，不記錄）
         }
@@ -1061,7 +1174,7 @@ export function PlayerProvider({
     return () => {
       window.removeEventListener("audioManagerPaused", handleAudioManagerPaused);
     };
-  }, [isPlaying]);
+  }, [isPlaying, cancelPlaybackAttempt]);
 
   // ✅ 注意：wasPausedByAudioManagerRef 標記會在用戶手動播放時清除（在 play() 方法中）
   // 當 AudioManager 釋放預覽音頻時，播放器不應自動恢復播放
