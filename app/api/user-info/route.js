@@ -57,7 +57,10 @@ export async function GET(req) {
       // ✅ 播放清單：完整播放清單
       playlist: user.playlist || [],
       // ✅ 播放清單是否允許隨機播放
-      playlistAllowShuffle: !!user.playlistAllowShuffle,
+      playlistAllowShuffle:
+        typeof user.playlistAllowShuffle === "boolean"
+          ? user.playlistAllowShuffle
+          : null,
       // ✅ 播放清單上限
       playlistMaxSize: user.playlistMaxSize || 5,
       // ✅ 迷你播放器：購買與樣式

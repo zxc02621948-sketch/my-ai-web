@@ -12,6 +12,7 @@ import useLikeHandler from "@/hooks/useLikeHandler";
 import { usePlayer } from "@/components/context/PlayerContext";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import usePinnedPlayerBootstrap from "@/hooks/usePinnedPlayerBootstrap";
 
 
 /** ====== 超精簡資料流：去掉預覽/快取/一次性旗標，只保留 inFlightId ====== */
@@ -164,148 +165,7 @@ export default function HomePage() {
   const catsRef = useRef([]);
   const ratsRef = useRef([]);
   const sortRef = useRef("popular");
-  const hasReceivedPinEventRef = useRef(false); // ✅ 追踪是否已收到釘選事件
-
-
-  // 檢查釘選播放器（使用 Context 中的 currentUser，無需額外 API 調用）
-  // ✅ 首頁邏輯簡化：只監聽釘選事件，不在 mount 時主動清空
-  useEffect(() => {
-    // ✅ 等待 currentUser 載入完成
-    if (currentUser === undefined) {
-      return;
-    }
-    
-    // 監聽釘選事件
-    const handlePinnedChange = (e) => {
-      
-      if (e.detail.isPinned) {
-        // 用戶剛釘選播放器，使用事件中的數據
-        const pinnedPlayer = e.detail.pinnedPlayer;
-        const pinnedUserId = String(pinnedPlayer?.userId || '');
-        const isPinnedOwnPlayer = currentUser?._id && String(currentUser._id) === pinnedUserId;
-        
-        // ✅ 如果釘選的是自己的播放器，跳過設置（MiniPlayer 會從數據庫載入最新播放清單）
-        if (isPinnedOwnPlayer) {
-          console.log('👤 [HomePage] 釘選的是自己的播放器，跳過設置（由 MiniPlayer 處理）');
-          // 只設置 playerOwner，不設置播放清單和曲目（MiniPlayer 會處理）
-          player?.setPlayerOwner?.({ 
-            userId: pinnedPlayer.userId, 
-            username: pinnedPlayer.username,
-            allowShuffle: !!pinnedPlayer.allowShuffle,
-          });
-          player?.setMiniPlayerEnabled?.(true);
-          player?.setShareMode?.("global");
-          return;
-        }
-        
-        // ✅ 如果不是自己的播放器，使用事件中的數據
-        const playlist = pinnedPlayer?.playlist || [];
-        
-        // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
-        player?.setPlayerOwner?.({ 
-          userId: pinnedPlayer.userId, 
-          username: pinnedPlayer.username,
-          allowShuffle: !!pinnedPlayer.allowShuffle,
-        });
-        
-        // ✅ 設置播放清單（即使是空的）
-        player?.setPlaylist?.(playlist);
-        
-        if (playlist.length > 0) {
-          const currentIndex = pinnedPlayer.currentIndex || 0;
-          const currentTrack = playlist[currentIndex];
-          
-          player?.setActiveIndex?.(currentIndex);
-          
-          if (currentTrack) {
-            player?.setSrc?.(currentTrack.url);
-            player?.setOriginUrl?.(currentTrack.url);
-            player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
-          }
-        } else {
-          // ✅ 播放清單為空時，清空當前曲目
-          player?.setSrc?.('');
-          player?.setOriginUrl?.('');
-          player?.setTrackTitle?.('');
-          player?.setActiveIndex?.(0);
-        }
-        
-        // 確保 MiniPlayer 是啟用的
-        player?.setMiniPlayerEnabled?.(true);
-        
-        player?.setShareMode?.("global");
-      } else {
-        // 用戶取消釘選，清空播放器
-        player?.setMiniPlayerEnabled?.(false);
-        player?.pause?.();
-        player?.setExternalControls?.(null);
-        player?.setExternalPlaying?.(false);
-        player?.setSrc?.('');
-        player?.setOriginUrl?.('');
-        player?.setTrackTitle?.('');
-        player?.setPlaylist?.([]);
-        player?.setShareMode?.("global");
-      }
-    };
-    
-    // ✅ 註冊事件監聽器
-    window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
-    
-    // ✅ 首頁載入時，檢查 currentUser 中是否已有釘選數據（刷新頁面的情況）
-    const pinnedPlayer = currentUser?.user?.pinnedPlayer || currentUser?.pinnedPlayer;
-    const hasPinnedPlayer = pinnedPlayer?.userId &&  
-      pinnedPlayer?.expiresAt && 
-      new Date(pinnedPlayer.expiresAt) > new Date();
-    
-    if (hasPinnedPlayer) {
-      const pinnedUserId = String(pinnedPlayer?.userId || '');
-      const isPinnedOwnPlayer = currentUser?._id && String(currentUser._id) === pinnedUserId;
-      
-      // ✅ 如果釘選的是自己的播放器，跳過設置（MiniPlayer 會從數據庫載入最新播放清單）
-      if (isPinnedOwnPlayer) {
-        console.log('👤 [HomePage] 初始檢查：釘選的是自己的播放器，跳過設置（由 MiniPlayer 處理）');
-        // 只設置 playerOwner，不設置播放清單和曲目（MiniPlayer 會處理）
-        player?.setPlayerOwner?.({ 
-          userId: pinnedPlayer.userId, 
-          username: pinnedPlayer.username,
-          allowShuffle: !!pinnedPlayer.allowShuffle,
-        });
-        player?.setMiniPlayerEnabled?.(true);
-        player?.setShareMode?.("global");
-      } else {
-        // ✅ 如果不是自己的播放器，使用釘選記錄中的播放清單
-        const playlist = pinnedPlayer.playlist || [];
-        if (playlist.length > 0) {
-          const currentIndex = pinnedPlayer.currentIndex || 0;
-          const currentTrack = playlist[currentIndex];
-          
-          player?.setPlaylist?.(playlist);
-          player?.setActiveIndex?.(currentIndex);
-          player?.setPlayerOwner?.({ 
-            userId: pinnedPlayer.userId, 
-            username: pinnedPlayer.username,
-            allowShuffle: !!pinnedPlayer.allowShuffle,
-          });
-          
-          if (currentTrack) {
-            player?.setSrc?.(currentTrack.url);
-            player?.setOriginUrl?.(currentTrack.url);
-            player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
-          }
-          
-          player?.setMiniPlayerEnabled?.(true);
-        }
-      }
-    } else {
-      // 沒有釘選數據，但不主動清空（讓 MiniPlayer 自己決定是否顯示）
-      player?.setShareMode?.("global");
-      player?.setMiniPlayerEnabled?.(false);
-    }
-    
-    return () => {
-      window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
-    };
-  }, [currentUser]); // 當 currentUser 變化時重新檢查
+  usePinnedPlayerBootstrap({ player, currentUser });
 
   // 雙軌制訪問追蹤 - 同時記錄防刷量統計和廣告收益統計
   useEffect(() => {

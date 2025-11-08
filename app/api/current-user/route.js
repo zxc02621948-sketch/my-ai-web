@@ -57,7 +57,10 @@ export async function GET() {
         expiresAt: user.pinnedPlayer.expiresAt,
         currentIndex: user.pinnedPlayer.currentIndex || 0,
         isPlaying: user.pinnedPlayer.isPlaying || false,
-        allowShuffle: !!user.pinnedPlayer.allowShuffle,
+        allowShuffle:
+          typeof user.pinnedPlayer.allowShuffle === "boolean"
+            ? user.pinnedPlayer.allowShuffle
+            : null,
       } : null;
 
       return NextResponse.json({
@@ -92,7 +95,10 @@ export async function GET() {
         hue: 0,
         opacity: 0.7
       },
-      playlistAllowShuffle: !!user.playlistAllowShuffle,
+      playlistAllowShuffle:
+        typeof user.playlistAllowShuffle === "boolean"
+          ? user.playlistAllowShuffle
+          : null,
     },
     // 兼容舊代碼（直接在根層級）
     _id: user._id,
@@ -126,6 +132,9 @@ export async function GET() {
       hue: 0,
       opacity: 0.7
     },
-    playlistAllowShuffle: !!user.playlistAllowShuffle,
+    playlistAllowShuffle:
+      typeof user.playlistAllowShuffle === "boolean"
+        ? user.playlistAllowShuffle
+        : null,
   });
 }

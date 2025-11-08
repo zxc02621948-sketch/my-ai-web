@@ -119,6 +119,7 @@ export function PlayerProvider({
   const shuffleHistoryRef = useRef([]);
   const shuffleAllowedRef = useRef(shuffleAllowed);
   const shuffleEnabledRef = useRef(shuffleEnabled);
+  const pinnedOwnerRef = useRef(null);
   const wasPlayingBeforeHiddenRef = useRef(false); // ✅ 追蹤頁面隱藏前是否在播放
   const wasPausedByAudioManagerRef = useRef(false); // ✅ 追蹤是否被 AudioManager 暫停（不應自動恢復）
   const playbackAttemptRef = useRef(null);
@@ -270,7 +271,9 @@ export function PlayerProvider({
     (owner) => {
       setPlayerOwnerState((prevOwner) => {
         if (!owner) {
-          setShuffleAllowed(false);
+          if (shuffleAllowedRef.current) {
+            setShuffleAllowed(false);
+          }
           return null;
         }
 
@@ -288,19 +291,68 @@ export function PlayerProvider({
                 : false;
           } else {
             normalized.allowShuffle = false;
-            setShuffleAllowed(false);
+            if (shuffleAllowedRef.current) {
+              setShuffleAllowed(false);
+            }
             return normalized;
           }
         }
 
-        setShuffleAllowed(!!normalized.allowShuffle);
-        normalized.allowShuffle = !!normalized.allowShuffle;
+        const pinned = pinnedOwnerRef.current;
+        if (pinned && pinned.userId === normalized.userId) {
+          if (typeof pinned.allowShuffle === "boolean") {
+            normalized.allowShuffle = pinned.allowShuffle;
+          }
+        }
+
+        const normalizedAllow = !!normalized.allowShuffle;
+        normalized.allowShuffle = normalizedAllow;
+
+        const hasPrev = (() => {
+          if (!prevOwner) {
+            return false;
+          }
+          const prevKeys = Object.keys(prevOwner);
+          const nextKeys = Object.keys(normalized);
+          if (prevKeys.length !== nextKeys.length) {
+            return false;
+          }
+          for (const key of nextKeys) {
+            if (prevOwner[key] !== normalized[key]) {
+              return false;
+            }
+          }
+          return true;
+        })();
+
+        if (hasPrev) {
+          if (shuffleAllowedRef.current !== normalizedAllow) {
+            setShuffleAllowed(normalizedAllow);
+          }
+          return prevOwner;
+        }
+
+        if (shuffleAllowedRef.current !== normalizedAllow) {
+          setShuffleAllowed(normalizedAllow);
+        }
 
         return normalized;
       });
     },
     [setShuffleAllowed],
   );
+
+  const setPinnedOwnerInfo = useCallback((info) => {
+    if (info && info.userId) {
+      pinnedOwnerRef.current = {
+        userId: info.userId,
+        allowShuffle: typeof info.allowShuffle === "boolean" ? info.allowShuffle : null,
+        shuffleEnabled: typeof info.shuffleEnabled === "boolean" ? info.shuffleEnabled : null,
+      };
+    } else {
+      pinnedOwnerRef.current = null;
+    }
+  }, []);
 
   // ✅ 頁面擁有者的播放器造型（用於顯示特定造型）
   const [pageOwnerSkin, setPageOwnerSkin] = useState(null); // { activePlayerSkin, playerSkinSettings, premiumPlayerSkin }
@@ -1214,47 +1266,71 @@ export function PlayerProvider({
     };
   }, [activeIndex, playlist]);
 
-  const contextValue = {
-    src,
-    setSrc: setSrcWithAudio,
-    isPlaying,
-    currentTime,
-    duration,
-    volume,
-    setVolume,
-    volumeSynced,
-    originUrl,
-    setOriginUrl,
-    trackTitle,
-    setTrackTitle,
-    shareMode,
-    setShareMode,
-    miniPlayerEnabled,
-    setMiniPlayerEnabled,
-    seekable,
-    setSeekable,
-    play,
-    pause,
-    seekTo,
-    updateCurrentTime,
-    next,
-    previous,
-    playlist,
-    setPlaylist,
-    activeIndex,
-    setActiveIndex,
-    shuffleAllowed,
-    setShuffleAllowed,
-    shuffleEnabled,
-    setShuffleEnabled,
-    playerOwner,
-    setPlayerOwner,
-    pageOwnerSkin,
-    setPageOwnerSkin,
-    // ✅ 播放器在被打斷前的播放狀態（用於高優先級音源關閉後恢復）
-    wasPlayingBeforeInterruption: wasPlayingBeforeInterruptionRef.current,
-    audioRef, // ✅ 提供 audioRef 用於檢查播放器的實際狀態
-  };
+  const contextValue = useMemo(
+    () => ({
+      src,
+      setSrc: setSrcWithAudio,
+      isPlaying,
+      currentTime,
+      duration,
+      volume,
+      setVolume,
+      volumeSynced,
+      originUrl,
+      setOriginUrl,
+      trackTitle,
+      setTrackTitle,
+      shareMode,
+      setShareMode,
+      miniPlayerEnabled,
+      setMiniPlayerEnabled,
+      seekable,
+      setSeekable,
+      play,
+      pause,
+      seekTo,
+      updateCurrentTime,
+      next,
+      previous,
+      playlist,
+      setPlaylist,
+      activeIndex,
+      setActiveIndex,
+      shuffleAllowed,
+      setShuffleAllowed,
+      shuffleEnabled,
+      setShuffleEnabled,
+      playerOwner,
+      setPlayerOwner,
+      setPinnedOwnerInfo,
+      pageOwnerSkin,
+      setPageOwnerSkin,
+      // ✅ 播放器在被打斷前的播放狀態（用於高優先級音源關閉後恢復）
+      wasPlayingBeforeInterruption: wasPlayingBeforeInterruptionRef.current,
+      audioRef, // ✅ 提供 audioRef 用於檢查播放器的實際狀態
+    }),
+    [
+      src,
+      isPlaying,
+      currentTime,
+      duration,
+      volume,
+      volumeSynced,
+      originUrl,
+      trackTitle,
+      shareMode,
+      miniPlayerEnabled,
+      seekable,
+      next,
+      previous,
+      playlist,
+      activeIndex,
+      shuffleAllowed,
+      shuffleEnabled,
+      playerOwner,
+      pageOwnerSkin,
+    ],
+  );
 
   return (
     <PlayerContext.Provider value={contextValue}>

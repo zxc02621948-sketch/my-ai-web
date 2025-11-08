@@ -11,6 +11,8 @@ import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import axios from "axios";
 import { notify } from "@/components/common/GlobalNotificationManager";
 
+const PINNED_CACHE_KEY = "app_pinned_player_cache";
+
 export default function MiniPlayer() {
   const player = usePlayer();
   const { currentUser, hasValidSubscription, setCurrentUser } = useCurrentUser(); // 使用 Context
@@ -52,20 +54,12 @@ export default function MiniPlayer() {
       return;
     }
 
-    if (!allow) {
+    if (allow === false) {
       playerRef.current.setShuffleEnabled(false);
-      if (ownerId) {
-        try {
-          localStorage.removeItem(`playlist_${ownerId}_shuffle`);
-        } catch (error) {
-          console.warn("移除釘選隨機播放設定失敗:", error);
-        }
-      }
       return;
     }
 
-    if (!ownerId) {
-      playerRef.current.setShuffleEnabled(false);
+    if (allow !== true) {
       return;
     }
 
@@ -100,6 +94,27 @@ export default function MiniPlayer() {
       console.warn("保存釘選隨機播放設定失敗:", error);
     }
   }, [globalShuffleAllowed, globalShuffleEnabled, setGlobalShuffleEnabled, globalPlayerOwner]);
+
+  useEffect(() => {
+    const ref = playerRef.current;
+    if (!ref) {
+      return;
+    }
+
+    if (globalShuffleAllowed) {
+      return;
+    }
+
+    const allowPinned = pinnedPlayerData?.allowShuffle === true;
+    const allowOwner = globalPlayerOwner?.allowShuffle === true;
+    if (allowOwner || (allowPinned && globalPlayerOwner?.allowShuffle !== false)) {
+      ref.setShuffleAllowed?.(true);
+    }
+  }, [
+    globalShuffleAllowed,
+    pinnedPlayerData?.allowShuffle,
+    globalPlayerOwner?.allowShuffle,
+  ]);
 
   // ✅ 檢查當前路徑是否是用戶頁面（需要在 useMemo 之前定義）
   const isUserPage = pathname.startsWith("/user/") && pathname !== "/user/following";
@@ -180,6 +195,95 @@ export default function MiniPlayer() {
   useEffect(() => {
     playerRef.current = player;
   }, [player]);
+
+  useEffect(() => {
+    if (!isPinned || !pinnedPlayerData) {
+      return;
+    }
+
+    const ownerId = globalPlayerOwner?.userId;
+    if (!ownerId || String(ownerId) !== String(pinnedPlayerData.userId)) {
+      return;
+    }
+
+    const ownerAllow = globalPlayerOwner?.allowShuffle;
+    if (typeof ownerAllow !== "boolean") {
+      return;
+    }
+
+    if (pinnedPlayerData.allowShuffle === ownerAllow) {
+      return;
+    }
+
+    setPinnedPlayerData((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      const next = { ...prev, allowShuffle: ownerAllow };
+      try {
+        const cachedRaw = sessionStorage.getItem(PINNED_CACHE_KEY);
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw);
+          if (cached && String(cached.userId) === String(next.userId)) {
+            sessionStorage.setItem(
+              PINNED_CACHE_KEY,
+              JSON.stringify({ ...cached, allowShuffle: ownerAllow }),
+            );
+          }
+        }
+      } catch {}
+      return next;
+    });
+  }, [
+    globalPlayerOwner?.allowShuffle,
+    globalPlayerOwner?.userId,
+    isPinned,
+    pinnedPlayerData?.allowShuffle,
+    pinnedPlayerData?.userId,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const cachedRaw = sessionStorage.getItem(PINNED_CACHE_KEY);
+      if (!cachedRaw) {
+        return;
+      }
+      const cached = JSON.parse(cachedRaw);
+      if (!cached || !cached.userId) {
+        return;
+      }
+
+      setIsPinned(true);
+      setPinnedPlayerData((prev) => prev || cached);
+
+      const ref = playerRef.current;
+      if (ref) {
+        ref.setMiniPlayerEnabled?.(true);
+        ref.setPlayerOwner?.({
+          userId: cached.userId,
+          username: cached.username,
+          ...(typeof cached.allowShuffle === "boolean"
+            ? { allowShuffle: cached.allowShuffle }
+            : {}),
+        });
+      }
+
+      window.dispatchEvent(
+        new CustomEvent("pinnedPlayerChanged", {
+          detail: { isPinned: true, pinnedPlayer: cached },
+        }),
+      );
+    } catch (error) {
+      console.warn("[MiniPlayer] failed to restore pinned cache", error);
+      try {
+        sessionStorage.removeItem(PINNED_CACHE_KEY);
+      } catch {}
+    }
+  }, []);
   
   useEffect(() => {
     const ownerId = globalPlayerOwner?.userId;
@@ -216,9 +320,10 @@ export default function MiniPlayer() {
   // 3. 如果釘選了 → 全站顯示 ✅
   // 4. 如果在用戶頁面 → 顯示（由頁面主人控制）✅
   // 5. 如果不在用戶頁面 → 需要自己有播放器權限才顯示
+  const isPageModeActive = player?.shareMode === "page";
   const showMini = currentUser !== undefined && 
     player?.miniPlayerEnabled && 
-    (isPinned || isUserPage || hasPlayerFeature);
+    (isPinned || isUserPage || hasPlayerFeature || isPageModeActive);
   
   // 確保所有值都是有效數字後才計算進度
   const currentTime = typeof player?.currentTime === 'number' && isFinite(player.currentTime) ? player.currentTime : 0;
@@ -585,6 +690,10 @@ export default function MiniPlayer() {
       return;
     }
 
+    if (currentUser === null) {
+      return;
+    }
+
     try {
       const userData = currentUser;
 
@@ -594,7 +703,10 @@ export default function MiniPlayer() {
           pinnedRaw && typeof pinnedRaw === "object"
             ? {
                 ...pinnedRaw,
-                allowShuffle: !!pinnedRaw.allowShuffle,
+                allowShuffle:
+                  typeof pinnedRaw.allowShuffle === "boolean"
+                    ? pinnedRaw.allowShuffle
+                    : null,
               }
             : null;
         const now = new Date();
@@ -622,16 +734,6 @@ export default function MiniPlayer() {
             isLoadingRef.current = true;
             lastLoadTimeRef.current = nowTs;
 
-            if (playerRef.current) {
-              playerRef.current.pause?.();
-              playerRef.current.setIsPlaying?.(false);
-              playerRef.current.setPlaylist?.([]);
-              playerRef.current.setSrc?.("");
-              playerRef.current.setOriginUrl?.("");
-              playerRef.current.setTrackTitle?.("");
-              playerRef.current.setActiveIndex?.(0);
-            }
-
             try {
               const response = await axios.get(
                 `/api/user-info?id=${pinnedUserId}`,
@@ -642,7 +744,10 @@ export default function MiniPlayer() {
               const latestPlaylist = response.data?.playlist || [];
               const allowShuffleLatest =
                 response.data?.playlistAllowShuffle ?? pinned.allowShuffle;
-              pinned.allowShuffle = !!allowShuffleLatest;
+              pinned.allowShuffle =
+                typeof allowShuffleLatest === "boolean"
+                  ? allowShuffleLatest
+                  : pinned.allowShuffle;
 
               if (
                 latestPlaylist.length === lastPlaylistLengthRef.current &&
@@ -658,7 +763,9 @@ export default function MiniPlayer() {
                 playerRef.current.setPlayerOwner?.({
                   userId: pinned.userId,
                   username: pinned.username,
-                  allowShuffle: pinned.allowShuffle,
+                  ...(typeof pinned.allowShuffle === "boolean"
+                    ? { allowShuffle: pinned.allowShuffle }
+                    : {}),
                 });
 
                 if (Array.isArray(latestPlaylist)) {
@@ -667,11 +774,6 @@ export default function MiniPlayer() {
                   if (latestPlaylist.length > 0) {
                     const track = latestPlaylist[0];
                     if (track?.url) {
-                      if (playerRef.current) {
-                        playerRef.current.pause?.();
-                        playerRef.current.setIsPlaying?.(false);
-                      }
-
                       playerRef.current.setActiveIndex?.(0);
                       playerRef.current.setOriginUrl?.(track.url);
                       playerRef.current.setTrackTitle?.(track.title || "");
@@ -686,8 +788,10 @@ export default function MiniPlayer() {
                     playerRef.current.setActiveIndex?.(0);
                   }
                 }
-                playerRef.current.setShuffleAllowed?.(pinned.allowShuffle);
-                applyPinnedShufflePreference(pinned.allowShuffle, pinned.userId);
+                if (typeof pinned.allowShuffle === "boolean") {
+                  playerRef.current.setShuffleAllowed?.(pinned.allowShuffle);
+                  applyPinnedShufflePreference(pinned.allowShuffle, pinned.userId);
+                }
               }
               setIsLoadingPlaylist(false);
             } catch (error) {
@@ -696,7 +800,9 @@ export default function MiniPlayer() {
                 playerRef.current.setPlayerOwner?.({
                   userId: pinned.userId,
                   username: pinned.username,
-                  allowShuffle: pinned.allowShuffle,
+                  ...(typeof pinned.allowShuffle === "boolean"
+                    ? { allowShuffle: pinned.allowShuffle }
+                    : {}),
                 });
                 if (Array.isArray(pinned.playlist)) {
                   playerRef.current.setPlaylist?.(pinned.playlist);
@@ -710,8 +816,10 @@ export default function MiniPlayer() {
                     playerRef.current.setActiveIndex?.(0);
                   }
                 }
-                playerRef.current.setShuffleAllowed?.(pinned.allowShuffle);
-                applyPinnedShufflePreference(pinned.allowShuffle, pinned.userId);
+                if (typeof pinned.allowShuffle === "boolean") {
+                  playerRef.current.setShuffleAllowed?.(pinned.allowShuffle);
+                  applyPinnedShufflePreference(pinned.allowShuffle, pinned.userId);
+                }
               }
               setIsLoadingPlaylist(false);
             }
@@ -735,10 +843,13 @@ export default function MiniPlayer() {
           );
 
           if (playerRef.current) {
+            playerRef.current.setMiniPlayerEnabled?.(true);
             playerRef.current.setPlayerOwner?.({
               userId: pinned.userId,
               username: pinned.username,
-              allowShuffle: pinned.allowShuffle,
+              ...(typeof pinned.allowShuffle === "boolean"
+                ? { allowShuffle: pinned.allowShuffle }
+                : {}),
             });
 
             if (Array.isArray(pinned.playlist)) {
@@ -763,8 +874,10 @@ export default function MiniPlayer() {
                 playerRef.current.setActiveIndex?.(0);
               }
             }
-            playerRef.current.setShuffleAllowed?.(pinned.allowShuffle);
-            applyPinnedShufflePreference(pinned.allowShuffle, pinned.userId);
+            if (typeof pinned.allowShuffle === "boolean") {
+              playerRef.current.setShuffleAllowed?.(pinned.allowShuffle);
+              applyPinnedShufflePreference(pinned.allowShuffle, pinned.userId);
+            }
           }
         } else if (expiresAt && expiresAt <= now) {
           await axios.delete("/api/player/pin");
@@ -849,7 +962,9 @@ export default function MiniPlayer() {
           expiresAt: e.detail.expiresAt,
           allowShuffle: !!e.detail.allowShuffle,
         };
-        pinnedData.allowShuffle = !!pinnedData.allowShuffle;
+        if (typeof pinnedData.allowShuffle !== "boolean") {
+          pinnedData.allowShuffle = null;
+        }
         setPinnedPlayerData({ ...pinnedData });
         const ownerId = pinnedData.userId;
         const allowShuffle = pinnedData.allowShuffle;
@@ -857,11 +972,14 @@ export default function MiniPlayer() {
         
         // 當收到釘選事件時，也載入歌單
         if (playerRef.current) {
+          playerRef.current.setMiniPlayerEnabled?.(true);
           // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
           playerRef.current.setPlayerOwner?.({ 
             userId: pinnedData.userId, 
             username: pinnedData.username,
-            allowShuffle,
+            ...(typeof allowShuffle === "boolean"
+              ? { allowShuffle }
+              : {}),
           });
           
           // ✅ 設置播放清單（即使是空的）
@@ -890,8 +1008,10 @@ export default function MiniPlayer() {
             }
           }
 
-          playerRef.current.setShuffleAllowed?.(allowShuffle);
-          applyPinnedShufflePreference(allowShuffle, ownerId);
+          if (typeof allowShuffle === "boolean") {
+            playerRef.current.setShuffleAllowed?.(allowShuffle);
+            applyPinnedShufflePreference(allowShuffle, ownerId);
+          }
         } else {
           console.warn('⚠️ [MiniPlayer-Event] playerRef 不可用');
         }
@@ -935,8 +1055,7 @@ export default function MiniPlayer() {
 
   // ✅ 當播放器隱藏時（未釘選且離開用戶頁面），停止播放並觸發暫停事件
   useEffect(() => {
-    if (!showMini && !isPinned && player?.isPlaying) {
-      console.log("🎵 [MiniPlayer] 離開頁面且未釘選，暫停播放器");
+    if (!showMini && !isPinned && player?.shareMode !== "page" && player?.isPlaying) {
       
       // ✅ 先使用 postMessage 暫停 YouTube 播放器（在清空 originUrl 之前）
       try {
@@ -1221,8 +1340,47 @@ export default function MiniPlayer() {
               />
             </div>
           )}
-          
+ 
+          {globalShuffleAllowed && currentPlaylistLength > 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleShuffleButtonClick();
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+              }}
+              className={`absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-full border transition-all duration-200 backdrop-blur-sm shadow
+                ${globalShuffleEnabled
+                  ? "bg-purple-600/80 border-purple-300 text-white hover:bg-purple-500/80"
+                  : "bg-black/60 border-white/20 text-gray-200 hover:text-white hover:bg-black/70"}
+              `}
+              title={
+                globalShuffleEnabled
+                  ? "隨機播放：開（點擊關閉）"
+                  : "隨機播放：關（點擊啟用）"
+              }
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="16 3 21 3 21 8"></polyline>
+                <line x1="4" y1="20" x2="21" y2="3"></line>
+                <polyline points="21 16 21 21 16 21"></polyline>
+                <line x1="15" y1="15" x2="21" y2="21"></line>
+                <line x1="4" y1="4" x2="9" y2="9"></line>
+              </svg>
+            </button>
+          )}
 
+ 
           {/* 播放進度條：置於唱片下方居中顯示 */}
           {showProgressBar && (
             <div
@@ -1351,45 +1509,6 @@ export default function MiniPlayer() {
         >
           {/* 播放控制按鈕 */}
           <div className="flex justify-center items-center space-x-4">
-            {/* 隨機播放 */}
-            {globalShuffleAllowed && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleShuffleButtonClick();
-                }}
-                onMouseDown={(e) => {
-                  e.stopPropagation();
-                }}
-                disabled={currentPlaylistLength === 0}
-                className={`w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 ${
-                  currentPlaylistLength === 0
-                    ? "text-gray-500 bg-black/30 border border-white/10 cursor-not-allowed"
-                    : globalShuffleEnabled
-                      ? "text-purple-300 bg-purple-700/70 border border-purple-400 hover:text-purple-100 hover:bg-purple-600/70 hover:scale-110"
-                      : "text-gray-300 bg-black/60 border border-white/10 hover:text-white hover:scale-110"
-                }`}
-                title={
-                  currentPlaylistLength === 0
-                    ? "請先建立播放清單"
-                    : globalShuffleEnabled
-                      ? "隨機播放：開（點擊以關閉）"
-                      : "隨機播放：關（點擊以啟用）"
-                }
-                style={{
-                  backdropFilter: 'blur(8px)',
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="16 3 21 3 21 8"></polyline>
-                  <line x1="4" y1="20" x2="21" y2="3"></line>
-                  <polyline points="21 16 21 21 16 21"></polyline>
-                  <line x1="15" y1="15" x2="21" y2="21"></line>
-                  <line x1="4" y1="4" x2="9" y2="9"></line>
-                </svg>
-              </button>
-            )}
-
             {/* 上一首 */}
             <button
               onClick={(e) => {

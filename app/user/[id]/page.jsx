@@ -456,8 +456,15 @@ export default function UserProfilePage() {
     else if (hasPlayer) {
       // ✅ 無論是否有播放清單，都設置 playerOwner（用於顯示釘選按鈕）
       if (picked?.username) {
-        const allowShuffle = !!(picked?.playlistAllowShuffle ?? userData?.playlistAllowShuffle);
-        player?.setPlayerOwner?.({ userId: id, username: picked.username, allowShuffle });
+        const allowShuffleRaw =
+          picked?.playlistAllowShuffle ?? userData?.playlistAllowShuffle;
+        const allowShuffle =
+          typeof allowShuffleRaw === "boolean" ? allowShuffleRaw : null;
+        player?.setPlayerOwner?.({
+          userId: id,
+          username: picked.username,
+          ...(typeof allowShuffle === "boolean" ? { allowShuffle } : {}),
+        });
       }
       
       if (userPlaylist.length > 0) {
@@ -553,8 +560,17 @@ export default function UserProfilePage() {
                 else if (hasPlayer2) {
                   // ✅ 無論是否有播放清單，都設置 playerOwner（用於顯示釘選按鈕）
                   if (backup?.username) {
-                    const allowShuffle = !!(backup?.playlistAllowShuffle);
-                    player?.setPlayerOwner?.({ userId: id, username: backup.username, allowShuffle });
+                    const allowShuffle =
+                      typeof backup?.playlistAllowShuffle === "boolean"
+                        ? backup.playlistAllowShuffle
+                        : null;
+                    player?.setPlayerOwner?.({
+                      userId: id,
+                      username: backup.username,
+                      ...(typeof allowShuffle === "boolean"
+                        ? { allowShuffle }
+                        : {}),
+                    });
                   }
                   
                   if (userPlaylist.length > 0) {

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { usePlayer } from "@/components/context/PlayerContext";
+import usePinnedPlayerBootstrap from "@/hooks/usePinnedPlayerBootstrap";
 
 export default function InstallGuide() {
   const { currentUser } = useCurrentUser(); // 使用 Context
@@ -11,63 +12,11 @@ export default function InstallGuide() {
   const [isRegisterOpen, setRegisterOpen] = useState(false);
 
   // 教學區播放器控制邏輯（參考首頁）
-  useEffect(() => {
-    // 等待 currentUser 載入完成
-    if (currentUser === undefined) {
-      return;
-    }
-    
-    // 檢查是否有釘選播放器
-    const pinnedPlayer = currentUser?.user?.pinnedPlayer || currentUser?.pinnedPlayer;
-    const hasPinnedPlayer = pinnedPlayer?.userId && 
-      pinnedPlayer?.expiresAt && 
-      new Date(pinnedPlayer.expiresAt) > new Date();
-    
-    if (hasPinnedPlayer) {
-      // 有釘選播放器：恢復播放清單與狀態（與首頁一致，允許空播放清單時也顯示）
-      const playlist = pinnedPlayer.playlist || [];
-      const currentIndex = pinnedPlayer.currentIndex || 0;
-      const currentTrack = playlist[currentIndex];
-
-      if (playlist.length > 0) {
-        player?.setPlaylist?.(playlist);
-        player?.setActiveIndex?.(currentIndex);
-        if (currentTrack) {
-          player?.setSrc?.(currentTrack.url);
-          player?.setOriginUrl?.(currentTrack.url);
-          player?.setTrackTitle?.(currentTrack.title || currentTrack.url);
-        }
-      }
-
-      // 設置擁有者與模式，並確保顯示
-      player?.setPlayerOwner?.({ userId: pinnedPlayer.userId, username: pinnedPlayer.username, allowShuffle: !!pinnedPlayer.allowShuffle });
-      player?.setShareMode?.("global");
-      player?.setMiniPlayerEnabled?.(true);
-
-      // 通知全域（確保 MiniPlayer 的 isPinned 立即同步）
-      try {
-        window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', {
-          detail: { isPinned: true, pinnedPlayer }
-        }));
-      } catch {}
-    } else {
-      // 沒有釘選播放器，禁用 MiniPlayer（教學區不應該顯示播放器）
-      player?.setMiniPlayerEnabled?.(false);
-    }
-  }, [currentUser]);
-
-  // 即時響應釘選變更事件（取消釘選時立即關閉，不需重整）
-  useEffect(() => {
-    const handlePinnedChange = (e) => {
-      if (e?.detail?.isPinned) {
-        player?.setMiniPlayerEnabled?.(true);
-      } else {
-        player?.setMiniPlayerEnabled?.(false);
-      }
-    };
-    window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
-    return () => window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
-  }, []);
+  usePinnedPlayerBootstrap({
+    player,
+    currentUser,
+    shareMode: "global",
+  });
 
   const guides = [
     {

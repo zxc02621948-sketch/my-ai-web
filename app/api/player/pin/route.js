@@ -101,7 +101,8 @@ export async function POST(request) {
       isPlaying: true,
       activePlayerSkin: targetPlayerSkin,
       playerSkinSettings: targetPlayerSettings,
-      premiumPlayerSkin: targetHasPremiumSkin
+      premiumPlayerSkin: targetHasPremiumSkin,
+      allowShuffle: !!targetUser?.playlistAllowShuffle
     };
 
     // 使用 MongoDB 原生 collection 直接更新

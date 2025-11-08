@@ -55,7 +55,7 @@ export default function UserPlayerPage() {
         return;
       }
 
-      if (!allow) {
+      if (allow === false) {
         setShuffleEnabled(false);
         if (shuffleStorageKey) {
           try {
@@ -64,6 +64,10 @@ export default function UserPlayerPage() {
             console.warn("移除隨機播放設定失敗:", error);
           }
         }
+        return;
+      }
+
+      if (allow !== true) {
         return;
       }
 
@@ -128,7 +132,7 @@ export default function UserPlayerPage() {
         ...(playerOwner || {}),
         userId: id,
         username: ownerUsername,
-        allowShuffle: next,
+        ...(typeof next === "boolean" ? { allowShuffle: next } : {}),
       });
 
       applyShufflePreference(next);
@@ -162,7 +166,7 @@ export default function UserPlayerPage() {
         const isOwnPage = currentUser && String(currentUser._id) === String(id);
         const hasPinnedPlayer = currentUser?.pinnedPlayer?.userId;
         const isPinnedThisPage = hasPinnedPlayer && String(currentUser.pinnedPlayer.userId) === String(id);
-        const shouldPreservePinnedPlayback = !isOwnPage && isPinnedThisPage;
+        const preservePinnedPlayback = !isOwnPage && isPinnedThisPage;
         
         // 只有在不是自己的頁面，且釘選的是其他用戶的播放器時，才跳過載入
         if (hasPinnedPlayer && !isOwnPage && !isPinnedThisPage) {
@@ -182,17 +186,6 @@ export default function UserPlayerPage() {
         }
         
         // 重置播放器狀態，確保乾淨的開始
-        if (!shouldPreservePinnedPlayback) {
-          try {
-            player.setIsPlaying?.(false);
-            player.setSrc?.('');
-            player.setOriginUrl?.('');
-            player.setTrackTitle?.('');
-          } catch (error) {
-            console.error("重置播放器狀態失敗:", error);
-          }
-        }
-        
         // 從 API 獲取該用戶的資料（包含播放清單）
         let userDataFetched = {};
         try {
@@ -202,13 +195,20 @@ export default function UserPlayerPage() {
           userDataFetched = response.data;
           setUserData(userDataFetched); // 保存用戶數據用於釘選按鈕
           
-          const allowShuffle = !!userDataFetched.playlistAllowShuffle;
+          const allowShuffleValue = userDataFetched.playlistAllowShuffle;
+          const allowShuffleIsBoolean = typeof allowShuffleValue === "boolean";
           if (userDataFetched.username) {
-            player.setPlayerOwner?.({ userId: id, username: userDataFetched.username, allowShuffle });
-          } else {
-            setShuffleAllowed?.(allowShuffle);
+            player.setPlayerOwner?.({
+              userId: id,
+              username: userDataFetched.username,
+              ...(allowShuffleIsBoolean
+                ? { allowShuffle: allowShuffleValue }
+                : {}),
+            });
+          } else if (allowShuffleIsBoolean) {
+            setShuffleAllowed?.(allowShuffleValue);
           }
-          applyShufflePreference(allowShuffle);
+          applyShufflePreference(allowShuffleIsBoolean ? allowShuffleValue : null);
         } catch (error) {
           console.error("獲取用戶資料失敗:", error.message);
           userDataFetched = {}; // 使用空物件作為備用
@@ -251,9 +251,10 @@ export default function UserPlayerPage() {
                // 2. 從 localStorage 載入播放進度（用戶偏好）
                const activeIndex = savedActiveIndex ? parseInt(savedActiveIndex) : 0;
                const currentItem = finalPlaylist[activeIndex] || finalPlaylist[0];
+               const hasExistingSource = Boolean(player?.src || player?.originUrl);
                
                // 3. 同步到 PlayerContext（UI狀態管理）
-               if (!shouldPreservePinnedPlayback && currentItem?.url) {
+               if (!preservePinnedPlayback && currentItem?.url && !hasExistingSource) {
                  player.setSrc?.(currentItem.url);
                  player.setOriginUrl?.(currentItem.url);
                  player.setTrackTitle?.(currentItem.title);
@@ -261,7 +262,7 @@ export default function UserPlayerPage() {
                setActiveIndex(activeIndex);
                
                // 4. 恢復用戶偏好（音量等）
-               if (!shouldPreservePinnedPlayback && savedVolume) {
+               if (!preservePinnedPlayback && savedVolume) {
                  try {
                    const volume = parseFloat(savedVolume);
                    if (!isNaN(volume) && volume >= 0 && volume <= 1) {
@@ -311,16 +312,20 @@ export default function UserPlayerPage() {
         });
         if (response.data) {
           setUserData(response.data);
-          const allowShuffle = !!response.data.playlistAllowShuffle;
+          const allowShuffle =
+            typeof response.data.playlistAllowShuffle === "boolean"
+              ? response.data.playlistAllowShuffle
+              : null;
           if (response.data.username) {
             player.setPlayerOwner?.({
-              ...(playerOwner || {}),
               userId: id,
               username: response.data.username,
-              allowShuffle,
+              ...(typeof allowShuffle === "boolean" ? { allowShuffle } : {}),
             });
           } else {
-            setShuffleAllowed?.(allowShuffle);
+            if (typeof allowShuffle === "boolean") {
+              setShuffleAllowed?.(allowShuffle);
+            }
           }
           applyShufflePreference(allowShuffle);
         }
