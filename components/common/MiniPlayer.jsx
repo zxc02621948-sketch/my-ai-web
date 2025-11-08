@@ -10,8 +10,11 @@ import PinPlayerButton from "@/components/player/PinPlayerButton";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import axios from "axios";
 import { notify } from "@/components/common/GlobalNotificationManager";
-
-const PINNED_CACHE_KEY = "app_pinned_player_cache";
+import {
+  readPinnedPlayerCache,
+  writePinnedPlayerCache,
+  clearPinnedPlayerCache,
+} from "@/utils/pinnedPlayerCache";
 
 export default function MiniPlayer() {
   const player = usePlayer();
@@ -220,18 +223,10 @@ export default function MiniPlayer() {
         return prev;
       }
       const next = { ...prev, allowShuffle: ownerAllow };
-      try {
-        const cachedRaw = sessionStorage.getItem(PINNED_CACHE_KEY);
-        if (cachedRaw) {
-          const cached = JSON.parse(cachedRaw);
-          if (cached && String(cached.userId) === String(next.userId)) {
-            sessionStorage.setItem(
-              PINNED_CACHE_KEY,
-              JSON.stringify({ ...cached, allowShuffle: ownerAllow }),
-            );
-          }
-        }
-      } catch {}
+      const cached = readPinnedPlayerCache();
+      if (cached && String(cached.userId) === String(next.userId)) {
+        writePinnedPlayerCache({ ...cached, allowShuffle: ownerAllow });
+      }
       return next;
     });
   }, [
@@ -243,16 +238,8 @@ export default function MiniPlayer() {
   ]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
     try {
-      const cachedRaw = sessionStorage.getItem(PINNED_CACHE_KEY);
-      if (!cachedRaw) {
-        return;
-      }
-      const cached = JSON.parse(cachedRaw);
+      const cached = readPinnedPlayerCache();
       if (!cached || !cached.userId) {
         return;
       }
@@ -279,9 +266,7 @@ export default function MiniPlayer() {
       );
     } catch (error) {
       console.warn("[MiniPlayer] failed to restore pinned cache", error);
-      try {
-        sessionStorage.removeItem(PINNED_CACHE_KEY);
-      } catch {}
+      clearPinnedPlayerCache();
     }
   }, []);
   
@@ -294,36 +279,16 @@ export default function MiniPlayer() {
   // 因此不在條件分支中提前 return；改用條件渲染控制輸出。
   
   // 檢查用戶是否有播放器功能（LV3 或體驗券 或 購買過 或 有訂閱）
-  const hasPlayerFeature = useMemo(() => {
-    if (!currentUser) return false;
-    
-    // 檢查等級（LV3 = totalEarnedPoints >= 500）
-    const userLevel = (currentUser.totalEarnedPoints || 0) >= 500;
-    
-    // 檢查體驗券是否有效
-    const hasCoupon = currentUser.playerCouponUsed && 
-                      currentUser.miniPlayerExpiry && 
-                      new Date(currentUser.miniPlayerExpiry) > new Date();
-    
-    // 檢查是否購買過播放器
-    const hasPurchased = currentUser.miniPlayerPurchased;
-    
-    // 檢查是否有有效的釘選播放器訂閱
-    const hasSubscription = hasValidSubscription('pinPlayer') || hasValidSubscription('pinPlayerTest');
-    
-    return userLevel || hasCoupon || hasPurchased || hasSubscription;
-  }, [currentUser, hasValidSubscription]);
-  
   // 顯示邏輯：
   // 1. currentUser 載入中 (undefined) → 不顯示（避免閃爍）
   // 2. 如果 player.miniPlayerEnabled 為 false → 不顯示
   // 3. 如果釘選了 → 全站顯示 ✅
   // 4. 如果在用戶頁面 → 顯示（由頁面主人控制）✅
-  // 5. 如果不在用戶頁面 → 需要自己有播放器權限才顯示
+  // 5. shareMode === "page" 時顯示（用於分享頁）
   const isPageModeActive = player?.shareMode === "page";
   const showMini = currentUser !== undefined && 
     player?.miniPlayerEnabled && 
-    (isPinned || isUserPage || hasPlayerFeature || isPageModeActive);
+    (isPinned || isUserPage || isPageModeActive);
   
   // 確保所有值都是有效數字後才計算進度
   const currentTime = typeof player?.currentTime === 'number' && isFinite(player.currentTime) ? player.currentTime : 0;
@@ -973,14 +938,15 @@ export default function MiniPlayer() {
         // 當收到釘選事件時，也載入歌單
         if (playerRef.current) {
           playerRef.current.setMiniPlayerEnabled?.(true);
-          // ✅ 無論播放清單是否為空，都設置 playerOwner（用於顯示釘選按鈕）
-          playerRef.current.setPlayerOwner?.({ 
-            userId: pinnedData.userId, 
+          // ✅ 設置 playerOwner，帶上 allowShuffle（如有）
+          const ownerPayload = {
+            userId: pinnedData.userId,
             username: pinnedData.username,
-            ...(typeof allowShuffle === "boolean"
-              ? { allowShuffle }
-              : {}),
-          });
+          };
+          if (typeof allowShuffle === "boolean") {
+            ownerPayload.allowShuffle = allowShuffle;
+          }
+          playerRef.current.setPlayerOwner?.(ownerPayload);
           
           // ✅ 設置播放清單（即使是空的）
           if (Array.isArray(pinnedData.playlist)) {
@@ -1023,7 +989,9 @@ export default function MiniPlayer() {
         if (playerRef.current) {
           playerRef.current.setShuffleAllowed?.(false);
           playerRef.current.setShuffleEnabled?.(false);
+          playerRef.current.setPlayerOwner?.(null);
         }
+        clearPinnedPlayerCache();
         needsPinnedRefreshRef.current = false;
       }
     };

@@ -1,8 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-
-const PINNED_CACHE_KEY = "app_pinned_player_cache";
+import {
+  readPinnedPlayerCache,
+  writePinnedPlayerCache,
+  clearPinnedPlayerCache,
+  withPinnedSignature,
+} from "@/utils/pinnedPlayerCache";
 
 const debugLog = (...args) => {
   if (typeof window !== "undefined" && window.__PINNED_DEBUG__) {
@@ -57,11 +61,7 @@ const resetPlayerWhenUnpinned = (player, shareMode) => {
   player?.setExternalPlaying?.(false);
   player?.setShareMode?.(shareMode);
   player?.setPinnedOwnerInfo?.(null);
-  if (typeof window !== "undefined") {
-    try {
-      sessionStorage.removeItem(PINNED_CACHE_KEY);
-    } catch {}
-  }
+  clearPinnedPlayerCache();
 };
 
 export default function usePinnedPlayerBootstrap({
@@ -81,11 +81,7 @@ export default function usePinnedPlayerBootstrap({
       if (!player || !isPinnedActive(pinned)) {
         debugLog("inactive or missing pinned state");
         lastAppliedRef.current = null;
-        if (typeof window !== "undefined") {
-          try {
-            sessionStorage.removeItem(PINNED_CACHE_KEY);
-          } catch {}
-        }
+        clearPinnedPlayerCache();
         return;
       }
 
@@ -111,14 +107,7 @@ export default function usePinnedPlayerBootstrap({
         firstTrackUrl,
       ].join("|");
 
-      if (typeof window !== "undefined") {
-        try {
-          sessionStorage.setItem(
-            PINNED_CACHE_KEY,
-            JSON.stringify({ ...pinned, signature }),
-          );
-        } catch {}
-      }
+      writePinnedPlayerCache(withPinnedSignature(pinned, signature));
 
       if (lastAppliedRef.current === signature) {
         debugLog("signature unchanged", signature);
@@ -234,30 +223,22 @@ export default function usePinnedPlayerBootstrap({
       return;
     }
     if (currentUser === null) {
-      try {
-        sessionStorage.removeItem(PINNED_CACHE_KEY);
-      } catch {}
+      clearPinnedPlayerCache();
       return;
     }
     try {
-      const cachedRaw = sessionStorage.getItem(PINNED_CACHE_KEY);
-      if (!cachedRaw) {
+      const cached = readPinnedPlayerCache();
+      if (!cached) {
         return;
       }
-      const parsed = JSON.parse(cachedRaw);
-      if (!parsed) {
+      if (!isPinnedActive(cached)) {
+        clearPinnedPlayerCache();
         return;
       }
-      if (!isPinnedActive(parsed)) {
-        sessionStorage.removeItem(PINNED_CACHE_KEY);
-        return;
-      }
-      applyPinnedState(parsed);
+      applyPinnedState(cached);
     } catch (error) {
       debugLog("failed to bootstrap from cache", error);
-      try {
-        sessionStorage.removeItem(PINNED_CACHE_KEY);
-      } catch {}
+      clearPinnedPlayerCache();
     }
   }, [applyPinnedState, player, currentUser]);
 

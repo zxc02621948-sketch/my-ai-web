@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Heart } from "lucide-react";
 import DesktopMusicRightPane from "./DesktopMusicRightPane";
 import MobileMusicSheet from "./MobileMusicSheet";
 import { usePlayer } from "@/components/context/PlayerContext";
 import { audioManager } from "@/utils/audioManager";
+import { usePortalContainer } from "@/components/common/usePortal";
 
 const MusicModal = ({
   music,
@@ -36,6 +38,7 @@ const MusicModal = ({
   const player = usePlayer(); // 獲取播放器 Context
   const wasPlayerPlayingRef = useRef(false); // 記錄打開音樂時播放器是否在播放
   const currentMusicIdRef = useRef(null); // 追蹤當前音樂 ID，用於判斷是否應該釋放
+  const portalContainer = usePortalContainer();
 
   // ✅ 優化：封裝 dataset 操作，減少重複代碼
   const savePlayProgress = React.useCallback((totalPlayed, lastTime) => {
@@ -444,11 +447,15 @@ const MusicModal = ({
     setTimeout(restorePlayback, 10);
   };
 
-  return (
+  if (!portalContainer) {
+    return null;
+  }
+
+  return createPortal(
     <div
       ref={modalRef}
       onClick={handleBackdropClick}
-      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[9999] flex items-center justify-center py-8 px-4 overflow-y-auto"
+      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[1200] flex items-center justify-center py-8 px-4 overflow-y-auto"
       style={{
         paddingTop: 'max(env(safe-area-inset-top), 80px)',
         paddingBottom: 'max(env(safe-area-inset-bottom), 80px)',
@@ -1016,36 +1023,6 @@ const MusicModal = ({
                     }
                   }
                   
-                  // ⚠️ 關鍵：檢查是否被意外暫停（不應該被暫停的情況）
-                  // 只有在以下情況才認為是意外暫停：
-                  // 1. 音頻元素存在且有標記
-                  // 2. 音頻確實被暫停了
-                  // 3. 之前是在播放狀態
-                  // 4. AudioManager 中當前音頻是這個音頻（說明優先度正確）
-                  const isUnexpectedPause = audioRef.current && 
-                      audioRef.current.dataset.musicFullPlayer === "true" && 
-                      audioRef.current.paused === true &&
-                      audioManager.getCurrentAudio() === audioRef.current &&
-                      audioManager.getCurrentPriority() === 3;
-                  
-                  // 記錄詳細的暫停信息，用於調試
-                  if (isUnexpectedPause) {
-                    const stackTrace = new Error().stack;
-                    console.error("🎵 [MusicModal Desktop] ❌ 音樂 Modal 被意外暫停！這是一個 BUG，需要修復。", {
-                      audioElement: audioRef.current,
-                      audioManagerCurrentAudio: audioManager.getCurrentAudio(),
-                      audioManagerPriority: audioManager.getCurrentPriority(),
-                      allAudioElements: Array.from(document.querySelectorAll('audio')).map(a => ({
-                        src: a.src?.substring(0, 50),
-                        paused: a.paused,
-                        hasMusicFullPlayerTag: a.dataset.musicFullPlayer === "true",
-                        hasMusicPreviewTag: a.dataset.musicPreview === "true",
-                        isCurrentAudio: a === audioManager.getCurrentAudio()
-                      })),
-                      stackTrace: stackTrace?.split('\n').slice(0, 15).join('\n')
-                    });
-                  }
-
                   // 清除定時器
                   if (progressCheckIntervalRef.current) {
                     clearInterval(progressCheckIntervalRef.current);
@@ -1208,7 +1185,8 @@ const MusicModal = ({
         </div>
         )}
       </div>
-    </div>
+    </div>,
+    portalContainer,
   );
 };
 
