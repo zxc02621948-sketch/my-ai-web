@@ -402,7 +402,7 @@ export default function MiniPlayer() {
   })();
 
   const isInteractiveTarget = (target) => {
-    return target?.closest?.("[data-no-drag]");
+    return target?.closest?.('[data-no-drag="true"]');
   };
 
   const startDrag = (clientX, clientY) => {
@@ -1183,7 +1183,7 @@ export default function MiniPlayer() {
               </span>
             </div>
             <button
-              data-no-drag
+              data-no-drag="true"
               onClick={async (e) => {
                 e.stopPropagation();
                 if (confirm('確定要解除釘選嗎？')) {
@@ -1239,7 +1239,7 @@ export default function MiniPlayer() {
           <div
             className="w-[140px] h-6 rounded bg-black/80 text-white text-xs overflow-hidden flex items-center px-2 cursor-pointer"
             title={player.originUrl || player.src || "未設定來源"}
-            data-no-drag
+            data-no-drag="true"
             onClick={(e) => {
               e.stopPropagation();
               if (justDraggedRef.current) return; // 如果剛拖動過，不要打開連結
@@ -1413,7 +1413,7 @@ export default function MiniPlayer() {
           {/* 釘選按鈕 - 在播放器圖示左上方內部 */}
           {/* ✅ 只要有 playerOwner 就顯示釘選按鈕，即使播放清單為空（用戶可能想釘選空播放清單） */}
           {player?.playerOwner && (
-            <div className="absolute top-2 left-2 z-10" data-no-drag>
+            <div className="absolute top-2 left-2 z-10" data-no-drag="true">
               <PinPlayerButton
                 targetUserId={player.playerOwner.userId}
                 targetUserPlaylist={player.playlist || []}
@@ -1424,7 +1424,7 @@ export default function MiniPlayer() {
  
           {globalShuffleAllowed && currentPlaylistLength > 1 && (
             <button
-              data-no-drag
+              data-no-drag="true"
               onClick={(e) => {
                 e.stopPropagation();
                 handleShuffleButtonClick();
@@ -1481,7 +1481,7 @@ export default function MiniPlayer() {
                 boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.12)',
                 zIndex: 1
               }}
-              data-no-drag
+              data-no-drag="true"
               onMouseDown={handleButtonClick}
               onTouchStart={handleButtonClick}
               onTouchMove={handleButtonClick}
@@ -1518,7 +1518,7 @@ export default function MiniPlayer() {
                 cursor: 'pointer'
               }}
               ref={volumeWrapperRef}
-              data-no-drag
+              data-no-drag="true"
               title={`音量: ${Math.round(player.volume * 100)}%`}
               onMouseEnter={handleVolumeMouseEnter}
               onMouseLeave={handleVolumeMouseLeave}
@@ -1536,7 +1536,7 @@ export default function MiniPlayer() {
             >
               <div 
                 ref={volumeSliderRef}
-                data-no-drag
+                data-no-drag="true"
                 onMouseDown={handleVolumeMouseDown}
                 onTouchStart={handleVolumeTouchStart}
                 onTouchMove={handleVolumeTouchMove}
@@ -1611,7 +1611,7 @@ export default function MiniPlayer() {
           <div className="flex justify-center items-center space-x-4">
             {/* 上一首 */}
             <button
-              data-no-drag
+              data-no-drag="true"
               onClick={(e) => {
                 e.stopPropagation();
                 handlePrevious();
@@ -1633,7 +1633,7 @@ export default function MiniPlayer() {
 
             {/* 播放/暫停 */}
             <button
-              data-no-drag
+              data-no-drag="true"
               onClick={async (e) => {
                 e.stopPropagation();
                 if (player.isPlaying) {
@@ -1666,7 +1666,7 @@ export default function MiniPlayer() {
 
             {/* 下一首 */}
             <button
-              data-no-drag
+              data-no-drag="true"
               onClick={(e) => {
                 e.stopPropagation();
                 handleNext();
