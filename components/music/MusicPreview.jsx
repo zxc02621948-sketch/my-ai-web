@@ -692,7 +692,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       <audio 
         ref={audioRef} 
         src={music.musicUrl} 
-        preload="metadata"
+        preload="none"
       />
 
       {/* 播放按鈕覆蓋層（在中間區域，z-index 高於符號） */}

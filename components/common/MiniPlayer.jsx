@@ -401,65 +401,108 @@ export default function MiniPlayer() {
     }
   })();
 
-  const handleMouseDown = (e) => {
-    // ✅ 移除手機板拖動限制，允許所有設備拖動
-    e.preventDefault();
+  const startDrag = (clientX, clientY) => {
+    if (typeof clientX !== "number" || typeof clientY !== "number") {
+      return;
+    }
     setDragStartTime(Date.now());
     dragStartPosRef.current = { x: position.x, y: position.y };
+    const offsetX = clientX - position.x;
+    const offsetY = clientY - position.y;
     setDragOffset({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y
+      x: offsetX,
+      y: offsetY,
     });
-    // 以 ref 紀錄 offset，避免在 mouseup 時計算距離時受非同步 state 影響
-    dragOffsetRef.current = {
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
-    };
+    dragOffsetRef.current = { x: offsetX, y: offsetY };
     setIsDragging(true);
   };
 
-  const handleMouseMove = (e) => {
+  const updateDrag = (clientX, clientY) => {
     if (!isDragging) return;
+    if (typeof clientX !== "number" || typeof clientY !== "number") {
+      return;
+    }
     setPosition({
-      x: e.clientX - dragOffset.x,
-      y: e.clientY - dragOffset.y
+      x: clientX - dragOffset.x,
+      y: clientY - dragOffset.y,
     });
   };
 
-  const handleMouseUp = (e) => {
-    // 結束拖曳，取消任何展開/收起切換（僅由箭頭圖示控制）
+  const finishDrag = (clientX, clientY) => {
     setIsDragging(false);
-    // 若有明顯拖曳距離，視為拖曳而非點擊：短暫抑制點擊切換
     try {
-      // 使用當前滑鼠座標推算最後位置，避免取用可能未更新完成的 state
-      const finalX = e.clientX - (dragOffsetRef.current?.x || 0);
-      const finalY = e.clientY - (dragOffsetRef.current?.y || 0);
+      const hasClient = typeof clientX === "number" && typeof clientY === "number";
+      const finalX = hasClient
+        ? clientX - (dragOffsetRef.current?.x || 0)
+        : position.x;
+      const finalY = hasClient
+        ? clientY - (dragOffsetRef.current?.y || 0)
+        : position.y;
       const dx = finalX - dragStartPosRef.current.x;
       const dy = finalY - dragStartPosRef.current.y;
       const moved = Math.hypot(dx, dy);
       if (moved >= 8) {
         justDraggedRef.current = true;
-        setTimeout(() => { justDraggedRef.current = false; }, 250);
+        setTimeout(() => {
+          justDraggedRef.current = false;
+        }, 250);
       }
-      
-      // ✅ 拖動結束後，確保位置在安全範圍內
+
       const margin = 16;
       const width = 140;
-      const height = 200; // 考慮展開後的高度
+      const height = 200;
       const maxX = window.innerWidth - width - margin;
       const maxY = window.innerHeight - height - margin;
-      
+
       const safeX = Math.max(margin, Math.min(finalX, maxX));
       const safeY = Math.max(margin, Math.min(finalY, maxY));
-      
-      // 如果位置被調整，更新狀態
-      if (safeX !== finalX || safeY !== finalY) {
+
+      if (safeX !== position.x || safeY !== position.y) {
         setPosition({ x: safeX, y: safeY });
       }
-      
-      // 儲存調整後的位置
-      localStorage.setItem("miniPlayerPosition", JSON.stringify({ x: safeX, y: safeY }));
+
+      localStorage.setItem(
+        "miniPlayerPosition",
+        JSON.stringify({ x: safeX, y: safeY }),
+      );
     } catch {}
+  };
+
+  const handleMouseDown = (e) => {
+    e.preventDefault();
+    startDrag(e.clientX, e.clientY);
+  };
+
+  const handleMouseMove = (e) => {
+    updateDrag(e.clientX, e.clientY);
+  };
+
+  const handleMouseUp = (e) => {
+    finishDrag(e?.clientX, e?.clientY);
+  };
+
+  const handleTouchStart = (e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    e.preventDefault();
+    startDrag(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    e.preventDefault();
+    updateDrag(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchEnd = (e) => {
+    const touch =
+      (e.changedTouches && e.changedTouches[0]) ||
+      (e.touches && e.touches[0]) ||
+      null;
+    const clientX = touch ? touch.clientX : undefined;
+    const clientY = touch ? touch.clientY : undefined;
+    finishDrag(clientX, clientY);
   };
 
   // 保持展開狀態（避免因重新掛載而重置）
@@ -543,11 +586,20 @@ export default function MiniPlayer() {
   // 處理進度條點擊
   const handleButtonClick = (e) => {
     e.stopPropagation();
-    
-    // 如果是進度條點擊，計算點擊位置並跳轉
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+    const point =
+      (e.touches && e.touches[0]) ||
+      (e.changedTouches && e.changedTouches[0]) ||
+      e;
+    if (!point || typeof point.clientX !== "number") {
+      return;
+    }
+
     const target = e.currentTarget;
     const rect = target.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
+    const clickX = point.clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, clickX / rect.width));
     
     if (player.duration > 0) {
@@ -612,6 +664,33 @@ export default function MiniPlayer() {
   };
 
   const handleVolumeMouseUp = () => {
+    setIsVolumeSliding(false);
+  };
+
+  const handleVolumeTouchStart = (e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    e.stopPropagation();
+    e.preventDefault();
+    setIsVolumeSliding(true);
+    updateVolumeFromEvent(touch);
+  };
+
+  const handleVolumeTouchMove = (e) => {
+    if (!isVolumeSliding || !e.touches || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    e.preventDefault();
+    updateVolumeFromEvent(touch);
+  };
+
+  const handleVolumeTouchEnd = (e) => {
+    const touch =
+      (e.changedTouches && e.changedTouches[0]) ||
+      (e.touches && e.touches[0]) ||
+      null;
+    if (touch) {
+      updateVolumeFromEvent(touch);
+    }
     setIsVolumeSliding(false);
   };
 
@@ -1008,16 +1087,28 @@ export default function MiniPlayer() {
     if (isDragging) {
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
+      document.addEventListener("touchmove", handleTouchMove, { passive: false });
+      document.addEventListener("touchend", handleTouchEnd);
+      document.addEventListener("touchcancel", handleTouchEnd);
     }
     if (isVolumeSliding) {
       document.addEventListener("mousemove", handleVolumeMouseMove);
       document.addEventListener("mouseup", handleVolumeMouseUp);
+      document.addEventListener("touchmove", handleVolumeTouchMove, { passive: false });
+      document.addEventListener("touchend", handleVolumeTouchEnd);
+      document.addEventListener("touchcancel", handleVolumeTouchEnd);
     }
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
       document.removeEventListener("mousemove", handleVolumeMouseMove);
       document.removeEventListener("mouseup", handleVolumeMouseUp);
+      document.removeEventListener("touchmove", handleTouchMove);
+      document.removeEventListener("touchend", handleTouchEnd);
+      document.removeEventListener("touchcancel", handleTouchEnd);
+      document.removeEventListener("touchmove", handleVolumeTouchMove);
+      document.removeEventListener("touchend", handleVolumeTouchEnd);
+      document.removeEventListener("touchcancel", handleVolumeTouchEnd);
     };
   }, [isDragging, isVolumeSliding]);
 
@@ -1062,6 +1153,10 @@ export default function MiniPlayer() {
         cursor: 'default' // 不顯示十字符號
       }}
       onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       <div className="flex flex-col items-center space-y-3">
         {/* 釘選狀態提示（如果有釘選） */}
@@ -1117,6 +1212,9 @@ export default function MiniPlayer() {
                   }
                 }
               }}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
               className="ml-1 text-white/70 hover:text-white transition-colors flex-shrink-0"
               title="解除釘選"
             >
@@ -1135,6 +1233,9 @@ export default function MiniPlayer() {
               if (justDraggedRef.current) return; // 如果剛拖動過，不要打開連結
               const href = player.originUrl || player.src;
               if (href) window.open(href, "_blank");
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation();
             }}
           >
             <div
@@ -1318,6 +1419,9 @@ export default function MiniPlayer() {
               onMouseDown={(e) => {
                 e.stopPropagation();
               }}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
               className={`absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-full border transition-all duration-200 backdrop-blur-sm shadow
                 ${globalShuffleEnabled
                   ? "bg-purple-600/80 border-purple-300 text-white hover:bg-purple-500/80"
@@ -1365,6 +1469,8 @@ export default function MiniPlayer() {
                 zIndex: 1
               }}
               onMouseDown={handleButtonClick}
+              onTouchStart={handleButtonClick}
+              onTouchMove={handleButtonClick}
               aria-label="播放進度"
               title={`進度: ${Math.round(safePercentage)}%`}
             >
@@ -1406,10 +1512,20 @@ export default function MiniPlayer() {
                 e.preventDefault();
                 handleVolumeMouseDown(e);
               }}
+              onTouchStart={(e) => {
+                handleVolumeTouchStart(e);
+              }}
+              onTouchMove={handleVolumeTouchMove}
+              onTouchEnd={handleVolumeTouchEnd}
+              onTouchCancel={handleVolumeTouchEnd}
             >
               <div 
                 ref={volumeSliderRef}
                 onMouseDown={handleVolumeMouseDown}
+                onTouchStart={handleVolumeTouchStart}
+                onTouchMove={handleVolumeTouchMove}
+                onTouchEnd={handleVolumeTouchEnd}
+                onTouchCancel={handleVolumeTouchEnd}
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   width: '30px',
@@ -1484,6 +1600,7 @@ export default function MiniPlayer() {
                 handlePrevious();
               }}
               onMouseDown={(e) => { e.stopPropagation(); }}
+              onTouchStart={(e) => { e.stopPropagation(); }}
               className={`w-8 h-8 flex items-center justify-center text-gray-300 transition-all duration-200 rounded-full ${isDragging ? '' : 'hover:text-white hover:scale-110'}`}
               title="上一首"
               style={{
@@ -1508,6 +1625,7 @@ export default function MiniPlayer() {
                 }
               }}
               onMouseDown={(e) => { e.stopPropagation(); }}
+              onTouchStart={(e) => { e.stopPropagation(); }}
               className={`w-10 h-10 flex items-center justify-center text-orange-400 transition-all duration-200 ${isDragging ? '' : 'hover:text-orange-300 hover:scale-110'}`}
               title={player.isPlaying ? "暫停" : "播放"}
               style={{
@@ -1535,6 +1653,7 @@ export default function MiniPlayer() {
                 handleNext();
               }}
               onMouseDown={(e) => { e.stopPropagation(); }}
+              onTouchStart={(e) => { e.stopPropagation(); }}
               className={`w-8 h-8 flex items-center justify-center text-gray-300 transition-all duration-200 rounded-full ${isDragging ? '' : 'hover:text-white hover:scale-110'}`}
               title="下一首"
               style={{
