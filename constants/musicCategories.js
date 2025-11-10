@@ -31,13 +31,14 @@ export const GENRE_ICONS = {
 export const MUSIC_GENRES = Object.keys(GENRE_MAP);
 
 // 語言選項
-export const MUSIC_LANGUAGES = ["chinese", "english", "japanese", "taiwanese"];
+export const MUSIC_LANGUAGES = ["chinese", "english", "japanese", "korean", "taiwanese"];
 
 // 語言映射表（英文儲存，中文顯示）
 export const LANGUAGE_MAP = {
   chinese: "中文",
   english: "English",
   japanese: "日本語",
+  korean: "韓文",
   taiwanese: "閩南語",
 };
 

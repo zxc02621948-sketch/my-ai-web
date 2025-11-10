@@ -8,6 +8,7 @@ import {
   GENRE_MAP,
   MUSIC_GENRES,
   MUSIC_LANGUAGES,
+  LANGUAGE_MAP,
 } from "@/constants/musicCategories";
 
 export default function UploadMusicModal() {
@@ -407,9 +408,11 @@ export default function UploadMusicModal() {
                         onChange={(e) => setLanguage(e.target.value)}
                       >
                         <option value="">選擇語言（選填）</option>
-                        <option value="chinese">中文</option>
-                        <option value="english">英文</option>
-                        <option value="japanese">日文</option>
+                        {MUSIC_LANGUAGES.map((lang) => (
+                          <option key={lang} value={lang}>
+                            {LANGUAGE_MAP[lang] || lang}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   )}

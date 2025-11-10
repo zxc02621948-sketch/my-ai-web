@@ -46,7 +46,7 @@ export const metadata = {
     description: "探索 AI 生成藝術的無限可能。分享你的 Stable Diffusion、ComfyUI 創作，學習 Prompt 技巧，獲取模型參數。",
     images: [
       {
-        url: "/ai-logo.png",
+        url: "/api/og",
         width: 1200,
         height: 630,
         alt: "AI 創界",
@@ -57,7 +57,7 @@ export const metadata = {
     card: "summary_large_image",
     title: "AI 創界 - AI 圖像創作分享平台",
     description: "探索 AI 生成藝術的無限可能。分享創作，學習技巧，加入社群。",
-    images: ["/ai-logo.png"],
+    images: ["/api/og"],
   },
   robots: {
     index: true,
