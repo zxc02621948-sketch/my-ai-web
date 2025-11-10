@@ -479,8 +479,8 @@ export function PlayerProvider({
 
   // ✅ 創建 Audio - 只在組件掛載時創建一次
   useEffect(() => {
-    const audio = new Audio();
-    audioRef.current = audio;
+    const audio = audioRef.current;
+    if (!audio) return;
 
     // ✅ 從 localStorage 恢復音量
     try {
@@ -503,14 +503,14 @@ export function PlayerProvider({
 
     return () => {
       audio.pause();
-      audio.src = "";
       audio.removeEventListener("loadedmetadata", onLoaded);
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
     };
-  }, []); // ✅ 只在組件掛載時執行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioRef.current]); // audio 元素就緒後掛載事件
 
   useEffect(() => {
     return () => {
@@ -1473,6 +1473,12 @@ export function PlayerProvider({
   return (
     <PlayerContext.Provider value={contextValue}>
       {children}
+      <audio
+        ref={audioRef}
+        preload="metadata"
+        playsInline
+        style={{ display: "none" }}
+      />
     </PlayerContext.Provider>
   );
 }
