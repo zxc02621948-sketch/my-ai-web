@@ -354,11 +354,13 @@ export default function HomePage() {
   useEffect(() => { pageRef.current = page; }, [page]);
 
   // —— 核心資料抓取（只以 inFlightId 防舊回應） ——
-  const fetchImages = useCallback(async (pageToFetch, q, cats, rats) => {
+  const fetchImages = useCallback(async (pageToFetch, q, cats, rats, retryAttempt = 0, existingId = null) => {
     // 調試信息已移除
     
-    setIsLoading(true);
-    const myId = ++inFlightId.current;
+    if (retryAttempt === 0) {
+      setIsLoading(true);
+    }
+    const myId = existingId ?? ++inFlightId.current;
     
     try {
       const params = new URLSearchParams({
@@ -378,9 +380,10 @@ export default function HomePage() {
       const url = `/api/images?${params.toString()}`;
       // 調試信息已移除
 
-      // 添加超时控制
+      // 添加超時控制
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+      const timeoutMs = retryAttempt === 0 ? 15000 : 25000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const r = await fetch(url, { 
         cache: "no-store",
@@ -427,7 +430,11 @@ export default function HomePage() {
       
       // 如果是超時或網路錯誤，可以考慮重試
       if (e.name === 'AbortError') {
-        console.warn("⏰ [fetchImages] 請求超時");
+        console.warn("⏰ [fetchImages] 請求超時 (嘗試次數:", retryAttempt + 1, ")");
+        if (retryAttempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, retryAttempt === 0 ? 300 : 800));
+          return fetchImages(pageToFetch, q, cats, rats, retryAttempt + 1, myId);
+        }
       } else if (e.message?.includes('Failed to fetch')) {
         console.warn("🌐 [fetchImages] 網路連接失敗");
       }

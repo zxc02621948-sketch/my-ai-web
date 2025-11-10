@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
-export default function Modal({ isOpen, onClose, title, children, bottomOffset = 80 }) {
+export default function Modal({ isOpen, onClose, title, children, bottomOffset = 80, zIndex = 99999 }) {
+  const [mounted, setMounted] = useState(false);
+
   // ✅ 鎖住背景 scroll
   useEffect(() => {
     if (isOpen) {
@@ -15,10 +18,15 @@ export default function Modal({ isOpen, onClose, title, children, bottomOffset =
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
-  return (
-    <div className="fixed inset-0 z-[99999] overflow-hidden">
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 overflow-hidden" style={{ zIndex }}>
       {/* 背景遮罩 */}
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm"
@@ -52,6 +60,7 @@ export default function Modal({ isOpen, onClose, title, children, bottomOffset =
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

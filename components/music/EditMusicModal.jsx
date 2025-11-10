@@ -149,7 +149,7 @@ export default function EditMusicModal({
   if (!isOpen) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="編輯音樂">
+    <Modal isOpen={isOpen} onClose={onClose} title="編輯音樂" zIndex={100000}>
       <div className="space-y-4">
         {/* 基礎資訊 */}
         <div className="space-y-4">

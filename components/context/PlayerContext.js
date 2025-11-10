@@ -1332,6 +1332,144 @@ export function PlayerProvider({
     ],
   );
 
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+
+    const currentTrack =
+      Array.isArray(playlist) && playlist.length > 0 && activeIndex >= 0
+        ? playlist[activeIndex]
+        : null;
+
+    const metadataTitle =
+      (currentTrack && (currentTrack.title || currentTrack.trackTitle)) ||
+      trackTitle ||
+      (currentTrack && currentTrack.url) ||
+      "音樂作品";
+    const metadataArtist =
+      (currentTrack && (currentTrack.artist || currentTrack.authorName)) ||
+      playerOwner?.username ||
+      "未知創作者";
+    const metadataAlbum =
+      (currentTrack && currentTrack.album) || playerOwner?.username || "";
+
+    const artwork = [];
+    const coverCandidate =
+      currentTrack?.coverImageUrl ||
+      currentTrack?.cover ||
+      currentTrack?.imageUrl ||
+      currentTrack?.thumbnailUrl;
+    if (coverCandidate) {
+      artwork.push({
+        src: coverCandidate,
+        sizes: "512x512",
+        type: "image/png",
+      });
+    }
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: metadataTitle,
+        artist: metadataArtist,
+        album: metadataAlbum,
+        artwork,
+      });
+    } catch (error) {
+      console.warn("[MediaSession] 設定 metadata 失敗:", error);
+    }
+
+    try {
+      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+    } catch (error) {
+      // 某些瀏覽器可能不支援 playbackState，忽略即可
+    }
+
+    const handlePlayAction = async () => {
+      try {
+        await play();
+      } catch (error) {
+        console.warn("[MediaSession] play handler 失敗:", error);
+      }
+    };
+
+    const handlePauseAction = () => {
+      try {
+        pause();
+      } catch (error) {
+        console.warn("[MediaSession] pause handler 失敗:", error);
+      }
+    };
+
+    const handleNextAction = () => {
+      try {
+        if (typeof next === "function") {
+          next();
+        }
+      } catch (error) {
+        console.warn("[MediaSession] next handler 失敗:", error);
+      }
+    };
+
+    const handlePrevAction = () => {
+      try {
+        if (typeof previous === "function") {
+          previous();
+        }
+      } catch (error) {
+        console.warn("[MediaSession] previous handler 失敗:", error);
+      }
+    };
+
+    try {
+      navigator.mediaSession.setActionHandler("play", handlePlayAction);
+    } catch (error) {
+      console.warn("[MediaSession] 設定 play handler 失敗:", error);
+    }
+
+    try {
+      navigator.mediaSession.setActionHandler("pause", handlePauseAction);
+    } catch (error) {
+      console.warn("[MediaSession] 設定 pause handler 失敗:", error);
+    }
+
+    try {
+      if (Array.isArray(playlist) && playlist.length > 1) {
+        navigator.mediaSession.setActionHandler("nexttrack", handleNextAction);
+        navigator.mediaSession.setActionHandler(
+          "previoustrack",
+          handlePrevAction,
+        );
+      } else {
+        navigator.mediaSession.setActionHandler("nexttrack", null);
+        navigator.mediaSession.setActionHandler("previoustrack", null);
+      }
+    } catch (error) {
+      console.warn("[MediaSession] 設定 track handler 失敗:", error);
+    }
+
+    return () => {
+      try {
+        navigator.mediaSession.setActionHandler("play", null);
+        navigator.mediaSession.setActionHandler("pause", null);
+        navigator.mediaSession.setActionHandler("nexttrack", null);
+        navigator.mediaSession.setActionHandler("previoustrack", null);
+      } catch (error) {
+        // 忽略清理錯誤
+      }
+    };
+  }, [
+    playlist,
+    activeIndex,
+    trackTitle,
+    playerOwner?.username,
+    isPlaying,
+    play,
+    pause,
+    next,
+    previous,
+  ]);
+
   return (
     <PlayerContext.Provider value={contextValue}>
       {children}

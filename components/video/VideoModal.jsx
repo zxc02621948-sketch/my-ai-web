@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Heart } from 'lucide-react';
 import DesktopVideoRightPane from './DesktopVideoRightPane';
+import { usePortalContainer } from '@/components/common/usePortal';
 
 const VideoModal = ({ 
   video, 
@@ -23,6 +25,7 @@ const VideoModal = ({
   const [isLikedLocal, setIsLikedLocal] = useState(isLiked);
   const [likeCount, setLikeCount] = useState(video?.likes?.length || 0);
   const viewedRef = useRef(new Set());
+  const portalContainer = usePortalContainer();
 
   useEffect(() => {
     setIsLikedLocal(isLiked);
@@ -93,7 +96,9 @@ const VideoModal = ({
     }
   };
 
-  return (
+  if (!portalContainer) return null;
+
+  return createPortal(
     <div
       ref={modalRef}
       onClick={handleBackdropClick}
@@ -181,7 +186,8 @@ const VideoModal = ({
           />
         </div>
       </div>
-    </div>
+    </div>,
+    portalContainer
   );
 };
 

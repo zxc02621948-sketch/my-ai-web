@@ -116,12 +116,12 @@ export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
 
       {/* Modal 容器 */}
       <div className="fixed inset-0 flex items-center justify-center p-4 overflow-y-auto">
-        <Dialog.Panel className="relative w-full max-w-2xl bg-[#1a1a1a] rounded-lg shadow-2xl p-6 my-8">
+        <Dialog.Panel className="relative w-full max-w-3xl bg-[#1a1a1a] rounded-lg shadow-2xl p-6 my-8 md:max-h-[90vh]">
           <Dialog.Title className="text-2xl font-bold text-white mb-6">
             編輯影片
           </Dialog.Title>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6 grid gap-6 md:max-h-[70vh] md:overflow-y-auto md:pr-2">
             {/* 基本資訊 */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-white">基本資訊</h3>

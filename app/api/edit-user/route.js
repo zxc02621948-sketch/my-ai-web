@@ -1,6 +1,11 @@
 // app/api/edit-user/route.js
 import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
+import Image from "@/models/Image";
+import Music from "@/models/Music";
+import Video from "@/models/Video";
+import DiscussionPost from "@/models/DiscussionPost";
+import DiscussionComment from "@/models/DiscussionComment";
 import { requireAuth } from "@/lib/authUtils";
 import { apiError, apiSuccess, withErrorHandling } from "@/lib/errorHandler";
 
@@ -16,6 +21,7 @@ export const PUT = requireAuth(
     if (!userRecord) {
       return apiError("找不到使用者", 404);
     }
+    const originalUsername = userRecord.username;
     
     // 限制 bio 字數
     const safeBio = typeof bio === "string" ? bio.slice(0, 60) : "";
@@ -62,10 +68,54 @@ export const PUT = requireAuth(
     }
     
     // 其他欄位
-    userRecord.username = username || userRecord.username;
+    if (typeof username === "string") {
+      const trimmed = username.trim();
+      if (trimmed) {
+        userRecord.username = trimmed;
+      }
+    }
     userRecord.bio = safeBio;
     
     await userRecord.save();
+    
+    if (userRecord.username !== originalUsername) {
+      const newUsername = userRecord.username;
+      const userId = userRecord._id;
+      try {
+        await Promise.all([
+          Image.updateMany(
+            { $or: [{ userId: userId.toString() }, { username: originalUsername }] },
+            { $set: { username: newUsername } }
+          ),
+          Music.updateMany(
+            { $or: [{ author: userId }, { authorName: originalUsername }] },
+            { $set: { authorName: newUsername } }
+          ),
+          Video.updateMany(
+            { $or: [{ author: userId }, { authorName: originalUsername }] },
+            { $set: { authorName: newUsername } }
+          ),
+          DiscussionPost.updateMany(
+            { $or: [{ author: userId }, { authorName: originalUsername }] },
+            { $set: { authorName: newUsername } }
+          ),
+          DiscussionComment.updateMany(
+            { $or: [{ author: userId }, { authorName: originalUsername }] },
+            { $set: { authorName: newUsername } }
+          ),
+          DiscussionComment.updateMany(
+            { replyToName: originalUsername },
+            { $set: { replyToName: newUsername } }
+          ),
+          User.updateMany(
+            { "pinnedPlayer.userId": userId },
+            { $set: { "pinnedPlayer.username": newUsername } }
+          ),
+        ]);
+      } catch (syncError) {
+        console.error("[edit-user] Failed to sync username to related documents:", syncError);
+      }
+    }
     
     return apiSuccess(userRecord);
   })
