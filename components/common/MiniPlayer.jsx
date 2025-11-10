@@ -27,6 +27,7 @@ export default function MiniPlayer() {
   const [dragStartTime, setDragStartTime] = useState(0);
   const dragStartPosRef = useRef({ x: 0, y: 0 });
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
   const justDraggedRef = useRef(false);
   const [isVolumeSliding, setIsVolumeSliding] = useState(false);
   const [isVolumeHovering, setIsVolumeHovering] = useState(false);
@@ -419,6 +420,7 @@ export default function MiniPlayer() {
     });
     dragOffsetRef.current = { x: offsetX, y: offsetY };
     setIsDragging(true);
+    isDraggingRef.current = true;
   };
 
   const updateDrag = (clientX, clientY) => {
@@ -433,7 +435,11 @@ export default function MiniPlayer() {
   };
 
   const finishDrag = (clientX, clientY) => {
+    if (!isDraggingRef.current) {
+      return;
+    }
     setIsDragging(false);
+    isDraggingRef.current = false;
     try {
       const hasClient = typeof clientX === "number" && typeof clientY === "number";
       const finalX = hasClient
@@ -485,6 +491,7 @@ export default function MiniPlayer() {
   };
 
   const handleMouseUp = (e) => {
+    if (!isDraggingRef.current) return;
     finishDrag(e?.clientX, e?.clientY);
   };
 
@@ -506,6 +513,9 @@ export default function MiniPlayer() {
   };
 
   const handleTouchEnd = (e) => {
+    if (!isDraggingRef.current) {
+      return;
+    }
     const touch =
       (e.changedTouches && e.changedTouches[0]) ||
       (e.touches && e.touches[0]) ||
