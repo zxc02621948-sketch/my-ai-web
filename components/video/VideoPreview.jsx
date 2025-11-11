@@ -136,32 +136,40 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     }
   }, [cleanupMobileCanPlay]);
 
-  const startMobilePreviewPlayback = useCallback(() => {
+  const startMobilePreviewPlayback = useCallback(async () => {
     const el = videoRef.current;
-    if (!el) return;
+    if (!el) return false;
 
     const attemptPlay = () => {
       try {
         const playPromise = el.play();
         if (playPromise && typeof playPromise.then === 'function') {
-          playPromise.catch((err) => {
-            console.warn('行動裝置預覽播放失敗:', err);
-            stopMobilePreview();
-          });
+          return playPromise
+            .then(() => true)
+            .catch((err) => {
+              console.warn('行動裝置預覽播放失敗:', err);
+              stopMobilePreview();
+              return false;
+            });
         }
+        return Promise.resolve(true);
       } catch (err) {
         console.warn('行動裝置預覽播放錯誤:', err);
         stopMobilePreview();
+        return Promise.resolve(false);
       }
     };
 
     if (el.readyState >= 2) {
-      attemptPlay();
-    } else {
+      return attemptPlay();
+    }
+
+    return new Promise((resolve) => {
       cleanupMobileCanPlay();
-      const handler = () => {
+      const handler = async () => {
         cleanupMobileCanPlay();
-        attemptPlay();
+        const result = await attemptPlay();
+        resolve(result);
       };
       mobileCanPlayHandlerRef.current = handler;
       el.addEventListener('canplay', handler, { once: true });
@@ -169,11 +177,13 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
         el.load();
       } catch (err) {
         console.warn('行動裝置預覽載入錯誤:', err);
+        cleanupMobileCanPlay();
+        resolve(false);
       }
-    }
+    });
   }, [cleanupMobileCanPlay, stopMobilePreview]);
 
-  const handleClick = () => {
+  const handleClick = useCallback(async () => {
     if (isMobile) {
       if (!mobilePreviewActive) {
         setMobilePreviewActive(true);
@@ -181,20 +191,33 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
         if (videoRef.current) {
           videoRef.current.currentTime = 0;
         }
-        startMobilePreviewPlayback();
-        mobilePreviewTimeoutRef.current = window.setTimeout(() => {
-          stopMobilePreview();
-        }, 2200);
+        const started = await startMobilePreviewPlayback();
+        if (started) {
+          const duration = Number.isFinite(video?.previewDuration)
+            ? Math.max(200, Math.min(5000, video.previewDuration * 1000))
+            : 2500;
+          mobilePreviewTimeoutRef.current = window.setTimeout(() => {
+            stopMobilePreview();
+          }, duration);
+        }
         return;
       }
 
       stopMobilePreview();
+      return;
     }
 
     if (onClick) {
       onClick(video);
     }
-  };
+  }, [
+    isMobile,
+    mobilePreviewActive,
+    onClick,
+    startMobilePreviewPlayback,
+    stopMobilePreview,
+    video,
+  ]);
 
   // 滑鼠進入處理
   const handleMouseEnter = () => {
