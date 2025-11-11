@@ -128,7 +128,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   };
 
   // 點擊處理
-  const stopPreview = useCallback(() => {
+  const stopPreview = useCallback(({ resetTriggered = false } = {}) => {
     cleanupMobileCanPlay();
     if (mobilePreviewTimeoutRef.current) {
       clearTimeout(mobilePreviewTimeoutRef.current);
@@ -144,6 +144,9 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     if (el) {
       el.pause();
       el.currentTime = 0;
+    }
+    if (resetTriggered) {
+      setHasTriggeredPreview(false);
     }
   }, [cleanupMobileCanPlay]);
 
@@ -266,7 +269,9 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     if (isMobile) {
       if (mobilePreviewActive) {
         stopPreview();
-        setHasTriggeredPreview(false);
+        if (onClick) {
+          onClick(video);
+        }
         return;
       }
       setMobilePreviewActive(true);
@@ -295,6 +300,8 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     mobilePreviewActive,
     startDesktopPreviewPlayback,
     stopPreview,
+    onClick,
+    video,
   ]);
 
   // 滑鼠進入處理
@@ -329,7 +336,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   // 清理 timeout
   useEffect(() => {
     return () => {
-      stopPreview();
+      stopPreview({ resetTriggered: true });
     };
   }, [stopPreview]);
 
