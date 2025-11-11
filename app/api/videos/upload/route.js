@@ -9,7 +9,6 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import { spawn } from 'child_process';
-import ffmpeg from '@ffmpeg-installer/ffmpeg';
 
 // ✅ 設定請求體大小限制
 export const config = {
@@ -247,8 +246,10 @@ async function generateThumbnailFromBuffer(videoBuffer, key) {
   try {
     await fs.writeFile(inputPath, videoBuffer);
 
+    const ffmpegPath = await resolveFfmpegPath();
+
     await new Promise((resolve, reject) => {
-      const ff = spawn(ffmpeg.path, [
+      const ff = spawn(ffmpegPath, [
         '-y',
         '-ss',
         '0.5',
@@ -301,8 +302,10 @@ async function generateThumbnailFromStreamUrl(videoUrl, key) {
     const arrayBuffer = await res.arrayBuffer();
     await fs.writeFile(inputPath, Buffer.from(arrayBuffer));
 
+    const ffmpegPath = await resolveFfmpegPath();
+
     await new Promise((resolve, reject) => {
-      const ff = spawn(ffmpeg.path, [
+      const ff = spawn(ffmpegPath, [
         '-y',
         '-ss',
         '0.5',
@@ -339,5 +342,29 @@ async function generateThumbnailFromStreamUrl(videoUrl, key) {
     return url || `${R2_PUBLIC_URL}/${key}`;
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+let cachedFfmpegPath = null;
+async function resolveFfmpegPath() {
+  if (cachedFfmpegPath) return cachedFfmpegPath;
+
+  if (process.env.FFMPEG_PATH) {
+    cachedFfmpegPath = process.env.FFMPEG_PATH;
+    return cachedFfmpegPath;
+  }
+
+  try {
+    const ffmpegInstaller = await import('@ffmpeg-installer/ffmpeg');
+    const installerPath = ffmpegInstaller?.default?.path || ffmpegInstaller?.path;
+    if (installerPath) {
+      cachedFfmpegPath = installerPath;
+      return cachedFfmpegPath;
+    }
+    throw new Error('ffmpeg path not found in installer package');
+  } catch (error) {
+    console.warn('[VideoUpload] 無法載入 @ffmpeg-installer/ffmpeg，改用系統 ffmpeg:', error?.message);
+    cachedFfmpegPath = 'ffmpeg';
+    return cachedFfmpegPath;
   }
 }

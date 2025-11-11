@@ -260,7 +260,6 @@ VideoSchema.index({ status: 1, popScore: -1 });
 VideoSchema.index({ status: 1, uploadDate: -1 });
 VideoSchema.index({ lastInteractionAt: -1 });
 VideoSchema.index({ isPinned: 1, author: 1 });
-VideoSchema.index({ isHighQuality: 1 });
 
 // ===== 新圖加成邏輯（引用圖片模型的邏輯） =====
 import { computeVideoPopScore, computeVideoInitialBoostFromTop, ensureVideoLikesCount } from '@/utils/scoreVideo';

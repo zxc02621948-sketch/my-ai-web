@@ -193,10 +193,8 @@ ImageSchema.index({ 'loraRefs.hash': 1 });
 
 // ===== 內容生命週期管理索引（預留） =====
 ImageSchema.index({ status: 1, popScore: -1 });
-ImageSchema.index({ status: 1, createdAt: -1 });
 ImageSchema.index({ lastInteractionAt: -1 });
 ImageSchema.index({ isPinned: 1, user: 1 });
-ImageSchema.index({ isHighQuality: 1 });
 
 // 目前最高分（取 popScore）
 async function fetchCurrentMaxPopScore(model) {

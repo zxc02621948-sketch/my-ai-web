@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable react-hooks/exhaustive-deps */
 
 import {
   createContext,
@@ -510,7 +509,6 @@ export function PlayerProvider({
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioRef.current]); // audio 元素就緒後掛載事件
 
   useEffect(() => {
