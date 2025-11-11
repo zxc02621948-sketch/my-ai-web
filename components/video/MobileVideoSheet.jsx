@@ -92,7 +92,7 @@ export default function MobileVideoSheet({
     if (video.streamId) {
       return (
         <iframe
-          src={`https://iframe.cloudflarestream.com/${video.streamId}?autoplay=true&loop=true`}
+          src={`https://iframe.cloudflarestream.com/${video.streamId}?autoplay=false&loop=true`}
           className="w-full h-full border-0"
           allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
           allowFullScreen
@@ -106,7 +106,6 @@ export default function MobileVideoSheet({
       <video
         src={video.videoUrl}
         controls
-        autoPlay
         loop
         playsInline
         className="max-h-full w-full object-contain"
