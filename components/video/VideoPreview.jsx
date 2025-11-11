@@ -20,6 +20,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const [isProcessing, setIsProcessing] = useState(false);
   const [renderKey, setRenderKey] = useState(0);
   const [posterIndex, setPosterIndex] = useState(0);
+  const [posterDebug, setPosterDebug] = useState([]);
 
   useEffect(() => {
     // 檢測是否為行動裝置
@@ -42,6 +43,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
 
   useEffect(() => {
     setPosterIndex(0);
+    setPosterDebug([]);
   }, [video?._id]);
 
   // 監聽全域同步事件
@@ -170,6 +172,12 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const currentPoster = posterCandidates[posterIndex] || '';
 
   const handlePosterError = () => {
+    setPosterDebug(prev => {
+      const source = posterCandidates[posterIndex] || '(空)';
+      if (prev.includes(source)) return prev;
+      return [...prev, source];
+    });
+
     setPosterIndex((prev) => {
       if (prev < posterCandidates.length - 1) {
         return prev + 1;
@@ -230,27 +238,36 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const isNew = (Date.now() - createdMs) / 36e5 < 10;
 
   const renderPosterImage = () => {
-    if (!currentPoster) {
-      return (
-        <div className="w-full h-full bg-zinc-600 flex items-center justify-center">
-          <div className="text-white text-sm opacity-50">🎬 影片載入中...</div>
-        </div>
-      );
-    }
-
     return (
-      <img
-        src={currentPoster}
-        alt={video.title || '影片縮圖'}
-        className="w-full h-full object-cover transition-all duration-300"
-        style={{
-          filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
-          transform: isHovered ? 'scale(1.02)' : 'scale(1)',
-        }}
-        onError={handlePosterError}
-        loading="lazy"
-        crossOrigin="anonymous"
-      />
+      <>
+        {currentPoster ? (
+          <img
+            src={currentPoster}
+            alt={video.title || '影片縮圖'}
+            className="w-full h-full object-cover transition-all duration-300"
+            style={{
+              filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
+              transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+            }}
+            onError={handlePosterError}
+            loading="lazy"
+            crossOrigin="anonymous"
+          />
+        ) : (
+          <div className="w-full h-full bg-zinc-600 flex items-center justify-center">
+            <div className="text-white text-sm opacity-50">🎬 影片載入中...</div>
+          </div>
+        )}
+
+        <div className="absolute inset-x-0 bottom-0 bg-black/70 text-[10px] text-yellow-300 px-2 py-1 space-y-0.5 pointer-events-none">
+          <div>⚠️ 縮圖載入失敗</div>
+          {posterDebug.length > 0 ? posterDebug.map((src, idx) => (
+            <div key={idx} className="break-words opacity-80">• {src}</div>
+          )) : (
+            <div className="opacity-80">目前無可用縮圖來源</div>
+          )}
+        </div>
+      </>
     );
   };
 
