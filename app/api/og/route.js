@@ -2,14 +2,7 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
-const size = {
-  width: 1200,
-  height: 630,
-};
-
-export const contentType = "image/png";
-
-export function GET() {
+export async function GET() {
   return new ImageResponse(
     (
       <div
@@ -21,7 +14,7 @@ export function GET() {
           alignItems: "center",
           justifyContent: "center",
           background:
-            "radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.5), transparent 45%), radial-gradient(circle at 80% 30%, rgba(14, 165, 233, 0.4), transparent 50%), #05060a",
+            "radial-gradient(circle at 25% 25%, rgba(99, 102, 241, 0.5), transparent 45%), radial-gradient(circle at 75% 35%, rgba(14, 165, 233, 0.4), transparent 55%), #06060a",
           color: "#ffffff",
           textAlign: "center",
         }}
@@ -47,7 +40,10 @@ export function GET() {
         </div>
       </div>
     ),
-    size,
+    {
+      width: 1200,
+      height: 630,
+    },
   );
 }
 

@@ -456,7 +456,7 @@ export default function HomePage() {
     setPage(1);
     setHasMore(true);
     fetchImages(1, q, selectedCategories, selectedRatings);
-  }, [displayMode, fetchImages]); // ✅ 監聽 displayMode 變化
+  }, [displayMode, fetchImages, searchParams, selectedCategories, selectedRatings]); // ✅ 監聽 displayMode 變化
 
   // —— 載入圖片（搜尋/排序/篩選變更時，包括初始載入） ——
   useEffect(() => {
