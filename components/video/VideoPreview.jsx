@@ -203,19 +203,27 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   }, [posterCandidates.length, debugInfo]);
 
   const renderDebugOverlay = (message) => (
-    <div className="absolute inset-x-0 bottom-0 bg-black/75 text-[10px] text-yellow-300 px-2 py-1 space-y-0.5 pointer-events-none max-h-[45%] overflow-y-auto">
+    <div className="absolute inset-x-0 bottom-0 bg-black/75 text-[10px] text-yellow-300 px-2 py-1 space-y-0.5 pointer-events-none max-h-[55%] overflow-y-auto">
       <div>{message}</div>
       <div className="opacity-70 break-words">ID: {debugInfo.id}</div>
       <div className="opacity-70 break-words">streamId: {debugInfo.streamId}</div>
       <div className="opacity-70 break-words">videoUrl: {debugInfo.videoUrl ? '✅' : '❌'}</div>
       <div className="opacity-70 break-words">previewUrl: {debugInfo.previewUrl ? '✅' : '❌'}</div>
-      <div className="opacity-70 break-words">thumbnailUrl: {debugInfo.thumbnailUrl ? '✅' : '❌'}</div>
+      <div className="opacity-70 break-words">thumbnailUrl欄位: {debugInfo.thumbnailUrl ? '✅' : '❌'}</div>
       <div className="opacity-70 break-words">候選縮圖數量: {posterCandidates.length}</div>
+      {posterCandidates.length > 0 && (
+        <div className="opacity-70 break-words">
+          候選來源：
+          {posterCandidates.map((src, idx) => (
+            <div key={`candidate-${idx}`} className="ml-2 break-words">{idx + 1}. {src}</div>
+          ))}
+        </div>
+      )}
       {posterDebug.length > 0 ? (
         <div className="opacity-70 break-words">
           失敗來源：
           {posterDebug.map((src, idx) => (
-            <div key={idx} className="ml-2 break-words">{idx + 1}. {src}</div>
+            <div key={`failed-${idx}`} className="ml-2 break-words">{idx + 1}. {src}</div>
           ))}
         </div>
       ) : (
@@ -291,7 +299,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
             loading="lazy"
             crossOrigin="anonymous"
           />
-          {posterDebug.length > 0 && renderDebugOverlay('⚠️ 部分縮圖載入失敗')}
+          {renderDebugOverlay(posterDebug.length > 0 ? '⚠️ 部分縮圖載入失敗' : '🧪 調試：載入縮圖')}
         </>
       );
     }
