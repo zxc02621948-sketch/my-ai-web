@@ -166,6 +166,11 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       push(`https://customer-h5be4kbubhrszsgr.cloudflarestream.com/${video.streamId}/thumbnails/thumbnail.jpg?height=720`);
     }
 
+    if (sources.length === 0 && video?.videoUrl) {
+      // 落到最後一層時，使用影片 URL 作為縮圖來源
+      push(`${video.videoUrl}#poster`);
+    }
+
     return sources;
   }, [video?.thumbnailUrl, video?.streamId]);
 
@@ -342,20 +347,23 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
 
     if (shouldUsePreviewVideo) {
       return (
-        <video
-          ref={videoRef}
-          src={video.previewUrl}
-          className="w-full h-full object-cover transition-all duration-300"
-          preload="metadata"
-          muted
-          playsInline
-          data-video-preview="true"
-          poster={posterCandidates[0] || undefined}
-          style={{
-            filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
-            transform: isHovered ? 'scale(1.02)' : 'scale(1)',
-          }}
-        />
+        <>
+          <video
+            ref={videoRef}
+            src={video.previewUrl}
+            className="w-full h-full object-cover transition-all duration-300"
+            preload="metadata"
+            muted
+            playsInline
+            data-video-preview="true"
+            poster={posterCandidates[0] || undefined}
+            style={{
+              filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
+              transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+            }}
+          />
+          {renderDebugOverlay('🧪 Stream 預覽模式')}
+        </>
       );
     }
 
@@ -390,20 +398,23 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
 
     if (!isMobile || !currentPoster) {
       return (
-        <video
-          ref={videoRef}
-          src={video.videoUrl}
-          className="w-full h-full object-cover transition-all duration-300"
-          preload="metadata"
-          muted
-          playsInline
-          data-video-preview="true"
-          poster={posterCandidates[0] || undefined}
-          style={{
-            filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
-            transform: isHovered ? 'scale(1.02)' : 'scale(1)',
-          }}
-        />
+        <>
+          <video
+            ref={videoRef}
+            src={video.videoUrl}
+            className="w-full h-full object-cover transition-all duration-300"
+            preload="metadata"
+            muted
+            playsInline
+            data-video-preview="true"
+            poster={posterCandidates[0] || undefined}
+            style={{
+              filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
+              transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+            }}
+          />
+          {renderDebugOverlay(!currentPoster ? '⚠️ 無縮圖，直接使用影片' : '🧪 影片元素作為主圖')}
+        </>
       );
     }
 
