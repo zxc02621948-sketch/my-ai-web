@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useMemo, memo } from 'react';
+import React, { useRef, useEffect, useState, useMemo, memo, useCallback } from 'react';
 import { Heart } from 'lucide-react';
 import NewBadge from '@/components/image/NewBadge';
 
@@ -10,6 +10,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const hoverTimeoutRef = useRef(null);
+  const mobilePreviewTimeoutRef = useRef(null);
   
   // 愛心相關狀態
   const canLike = !!currentUser;
@@ -21,6 +22,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const [renderKey, setRenderKey] = useState(0);
   const [posterIndex, setPosterIndex] = useState(0);
   const [posterDebug, setPosterDebug] = useState([]);
+  const [mobilePreviewActive, setMobilePreviewActive] = useState(false);
 
   useEffect(() => {
     // 檢測是否為行動裝置
@@ -44,6 +46,11 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   useEffect(() => {
     setPosterIndex(0);
     setPosterDebug([]);
+    setMobilePreviewActive(false);
+    if (mobilePreviewTimeoutRef.current) {
+      clearTimeout(mobilePreviewTimeoutRef.current);
+      mobilePreviewTimeoutRef.current = null;
+    }
   }, [video?._id]);
 
   // 監聽全域同步事件
@@ -106,7 +113,51 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   };
 
   // 點擊處理
+  const stopMobilePreview = useCallback(() => {
+    if (mobilePreviewTimeoutRef.current) {
+      clearTimeout(mobilePreviewTimeoutRef.current);
+      mobilePreviewTimeoutRef.current = null;
+    }
+    setMobilePreviewActive(false);
+    setIsPlaying(false);
+    const el = videoRef.current;
+    if (el) {
+      el.pause();
+      el.currentTime = 0;
+    }
+  }, []);
+
   const handleClick = () => {
+    if (isMobile) {
+      if (!mobilePreviewActive) {
+        setMobilePreviewActive(true);
+        setIsPlaying(true);
+        const el = videoRef.current;
+        if (el) {
+          try {
+            el.currentTime = 0;
+            const playPromise = el.play();
+            if (playPromise && typeof playPromise.then === 'function') {
+              playPromise.catch((err) => {
+                console.warn('行動裝置預覽播放失敗:', err);
+                stopMobilePreview();
+              });
+            }
+          } catch (err) {
+            console.warn('行動裝置預覽播放錯誤:', err);
+            stopMobilePreview();
+          }
+        }
+
+        mobilePreviewTimeoutRef.current = window.setTimeout(() => {
+          stopMobilePreview();
+        }, 2200);
+        return;
+      }
+
+      stopMobilePreview();
+    }
+
     if (onClick) {
       onClick(video);
     }
@@ -146,6 +197,9 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     return () => {
       if (hoverTimeoutRef.current) {
         clearTimeout(hoverTimeoutRef.current);
+      }
+      if (mobilePreviewTimeoutRef.current) {
+        clearTimeout(mobilePreviewTimeoutRef.current);
       }
     };
   }, []);
@@ -240,7 +294,14 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   // 影片播放控制 - 預覽循環播放前 2 秒片段
   useEffect(() => {
     const videoElement = videoRef.current;
-    if (!videoElement || !video.videoUrl || isMobile) return;
+    const allowPlayback = !isMobile || mobilePreviewActive;
+    if (!videoElement || !video.videoUrl || !allowPlayback) {
+      if (videoElement) {
+        videoElement.pause();
+        videoElement.currentTime = 0;
+      }
+      return;
+    }
 
     const handleTimeUpdate = () => {
       // 當播放超過 2 秒時，重新從頭開始（循環前 2 秒）
@@ -269,7 +330,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     return () => {
       videoElement.removeEventListener('timeupdate', handleTimeUpdate);
     };
-  }, [isPlaying, video.videoUrl]);
+  }, [isPlaying, video.videoUrl, isMobile, mobilePreviewActive]);
 
   // 計算影片比例
   const aspectRatio = video?.width && video?.height 
@@ -343,14 +404,25 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const renderStreamContent = () => {
     if (!video.streamId) return null;
 
-    const shouldUsePreviewVideo = !isMobile && Boolean(video.previewUrl);
+    const hasPoster = Boolean(currentPoster);
+    const hasPreviewVideo = Boolean(video.previewUrl);
+    const shouldShowVideo = !isMobile || mobilePreviewActive || !hasPoster;
 
-    if (shouldUsePreviewVideo) {
+    if (shouldShowVideo) {
+      const source = hasPreviewVideo ? video.previewUrl : video.videoUrl;
+      const debugMessage = hasPreviewVideo
+        ? (isMobile
+            ? mobilePreviewActive
+              ? '📱 Stream 預覽播放中'
+              : '🧪 Stream 預覽模式'
+            : '🧪 Stream 預覽模式')
+        : '⚠️ Stream 沒有縮圖，改用影片 URL';
+
       return (
         <>
           <video
             ref={videoRef}
-            src={video.previewUrl}
+            src={source}
             className="w-full h-full object-cover transition-all duration-300"
             preload="metadata"
             muted
@@ -362,33 +434,21 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
               transform: isHovered ? 'scale(1.02)' : 'scale(1)',
             }}
           />
-          {renderDebugOverlay('🧪 Stream 預覽模式')}
+          {renderDebugOverlay(debugMessage)}
         </>
       );
     }
 
-    if (!currentPoster && video?.videoUrl) {
-      return (
-        <>
-          <video
-            ref={videoRef}
-            src={video.videoUrl}
-            className="w-full h-full object-cover transition-all duration-300"
-            preload="metadata"
-            muted
-            playsInline
-            data-video-preview="true"
-            style={{
-              filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
-              transform: isHovered ? 'scale(1.02)' : 'scale(1)',
-            }}
-          />
-          {renderDebugOverlay('⚠️ Stream 沒有縮圖，改用影片 URL')}
-        </>
-      );
-    }
-
-    return renderPosterImage();
+    return (
+      <>
+        {renderPosterImage()}
+        {isMobile && !mobilePreviewActive && (
+          <div className="absolute top-3 right-3 bg-black/70 text-white text-[11px] px-2 py-1 rounded-full z-50 pointer-events-none">
+            點擊一次預覽
+          </div>
+        )}
+      </>
+    );
   };
 
   const renderRegularContent = () => {
@@ -396,7 +456,14 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       return renderPosterImage();
     }
 
-    if (!isMobile || !currentPoster) {
+    const hasPoster = Boolean(currentPoster);
+    const shouldShowVideo = !isMobile || mobilePreviewActive || !hasPoster;
+
+    if (shouldShowVideo) {
+      const debugMessage = hasPoster
+        ? (isMobile && mobilePreviewActive ? '📱 預覽播放中' : '🧪 影片元素作為主圖')
+        : '⚠️ 無縮圖，直接使用影片';
+
       return (
         <>
           <video
@@ -413,12 +480,21 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
               transform: isHovered ? 'scale(1.02)' : 'scale(1)',
             }}
           />
-          {renderDebugOverlay(!currentPoster ? '⚠️ 無縮圖，直接使用影片' : '🧪 影片元素作為主圖')}
+          {renderDebugOverlay(debugMessage)}
         </>
       );
     }
 
-    return renderPosterImage();
+    return (
+      <>
+        {renderPosterImage()}
+        {isMobile && !mobilePreviewActive && (
+          <div className="absolute top-3 right-3 bg-black/70 text-white text-[11px] px-2 py-1 rounded-full z-50 pointer-events-none">
+            點擊一次預覽
+          </div>
+        )}
+      </>
+    );
   };
 
   return (
