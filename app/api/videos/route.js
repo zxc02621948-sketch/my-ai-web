@@ -215,10 +215,23 @@ export async function GET(request) {
 
     // 執行查詢
     const videos = await Video.aggregate(pipeline);
+    const normalizedVideos = videos.map((video) => {
+      if (!video) return video;
+      const thumbnailCandidates = [];
+      if (video.thumbnailUrl) thumbnailCandidates.push(video.thumbnailUrl);
+      if (video.streamId) {
+        thumbnailCandidates.push(`https://customer-h5be4kbubhrszsgr.cloudflarestream.com/${video.streamId}/thumbnails/thumbnail.jpg?time=1s`);
+        thumbnailCandidates.push(`https://videodelivery.net/${video.streamId}/thumbnails/thumbnail.jpg?time=1s`);
+      }
+      return {
+        ...video,
+        thumbnailUrl: thumbnailCandidates.find(Boolean) || '',
+      };
+    });
 
     return NextResponse.json({
       success: true,
-      videos,
+      videos: normalizedVideos,
       pagination: {
         page,
         limit,
