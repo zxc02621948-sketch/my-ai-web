@@ -171,6 +171,16 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
 
   const currentPoster = posterCandidates[posterIndex] || '';
 
+  const debugInfo = useMemo(() => ({
+    id: video?._id || '(無)',
+    streamId: video?.streamId || '(無)',
+    videoUrl: video?.videoUrl || '',
+    previewUrl: video?.previewUrl || '',
+    thumbnailUrl: video?.thumbnailUrl || '',
+    posterCandidates: posterCandidates.length,
+    posterIndex,
+  }), [video?._id, video?.streamId, video?.videoUrl, video?.previewUrl, video?.thumbnailUrl, posterCandidates.length, posterIndex]);
+
   const handlePosterError = () => {
     setPosterDebug(prev => {
       const source = posterCandidates[posterIndex] || '(空)';
@@ -185,6 +195,34 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       return posterCandidates.length; // 標記為沒有可用縮圖
     });
   };
+
+  useEffect(() => {
+    if (posterCandidates.length === 0) {
+      console.warn('[VideoPreview] 沒有可用縮圖來源', debugInfo);
+    }
+  }, [posterCandidates.length, debugInfo]);
+
+  const renderDebugOverlay = (message) => (
+    <div className="absolute inset-x-0 bottom-0 bg-black/75 text-[10px] text-yellow-300 px-2 py-1 space-y-0.5 pointer-events-none max-h-[45%] overflow-y-auto">
+      <div>{message}</div>
+      <div className="opacity-70 break-words">ID: {debugInfo.id}</div>
+      <div className="opacity-70 break-words">streamId: {debugInfo.streamId}</div>
+      <div className="opacity-70 break-words">videoUrl: {debugInfo.videoUrl ? '✅' : '❌'}</div>
+      <div className="opacity-70 break-words">previewUrl: {debugInfo.previewUrl ? '✅' : '❌'}</div>
+      <div className="opacity-70 break-words">thumbnailUrl: {debugInfo.thumbnailUrl ? '✅' : '❌'}</div>
+      <div className="opacity-70 break-words">候選縮圖數量: {posterCandidates.length}</div>
+      {posterDebug.length > 0 ? (
+        <div className="opacity-70 break-words">
+          失敗來源：
+          {posterDebug.map((src, idx) => (
+            <div key={idx} className="ml-2 break-words">{idx + 1}. {src}</div>
+          ))}
+        </div>
+      ) : (
+        <div className="opacity-70 break-words">目前尚無失敗來源紀錄</div>
+      )}
+    </div>
+  );
 
   // 影片播放控制 - 預覽循環播放前 2 秒片段
   useEffect(() => {
@@ -238,9 +276,9 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const isNew = (Date.now() - createdMs) / 36e5 < 10;
 
   const renderPosterImage = () => {
-    return (
-      <>
-        {currentPoster ? (
+    if (currentPoster) {
+      return (
+        <>
           <img
             src={currentPoster}
             alt={video.title || '影片縮圖'}
@@ -253,20 +291,38 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
             loading="lazy"
             crossOrigin="anonymous"
           />
-        ) : (
-          <div className="w-full h-full bg-zinc-600 flex items-center justify-center">
-            <div className="text-white text-sm opacity-50">🎬 影片載入中...</div>
-          </div>
-        )}
+          {posterDebug.length > 0 && renderDebugOverlay('⚠️ 部分縮圖載入失敗')}
+        </>
+      );
+    }
 
-        <div className="absolute inset-x-0 bottom-0 bg-black/70 text-[10px] text-yellow-300 px-2 py-1 space-y-0.5 pointer-events-none">
-          <div>⚠️ 縮圖載入失敗</div>
-          {posterDebug.length > 0 ? posterDebug.map((src, idx) => (
-            <div key={idx} className="break-words opacity-80">• {src}</div>
-          )) : (
-            <div className="opacity-80">目前無可用縮圖來源</div>
-          )}
+    if (video?.videoUrl) {
+      return (
+        <>
+          <video
+            ref={videoRef}
+            src={video.videoUrl}
+            className="w-full h-full object-cover transition-all duration-300"
+            preload="metadata"
+            playsInline
+            muted
+            data-video-preview="true"
+            style={{
+              filter: isHovered ? 'brightness(1.08)' : 'brightness(1.02)',
+              transform: isHovered ? 'scale(1.01)' : 'scale(1)',
+            }}
+          />
+          {renderDebugOverlay('⚠️ 沒有縮圖，改顯示影片第一幀')}
+        </>
+      );
+    }
+
+    return (
+      <>
+        <div className="w-full h-full bg-zinc-600 flex items-center justify-center">
+          <div className="text-white text-sm opacity-50">🎬 影片載入中...</div>
         </div>
+        {renderDebugOverlay('⚠️ 沒有任何縮圖來源')}
       </>
     );
   };
@@ -295,6 +351,27 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       );
     }
 
+    if (!currentPoster && video?.videoUrl) {
+      return (
+        <>
+          <video
+            ref={videoRef}
+            src={video.videoUrl}
+            className="w-full h-full object-cover transition-all duration-300"
+            preload="metadata"
+            muted
+            playsInline
+            data-video-preview="true"
+            style={{
+              filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
+              transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+            }}
+          />
+          {renderDebugOverlay('⚠️ Stream 沒有縮圖，改用影片 URL')}
+        </>
+      );
+    }
+
     return renderPosterImage();
   };
 
@@ -303,7 +380,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       return renderPosterImage();
     }
 
-    if (!isMobile) {
+    if (!isMobile || !currentPoster) {
       return (
         <video
           ref={videoRef}
