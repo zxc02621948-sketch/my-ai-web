@@ -203,7 +203,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   }, [posterCandidates.length, debugInfo]);
 
   const renderDebugOverlay = (message) => (
-    <div className="absolute inset-x-0 bottom-0 bg-black/75 text-[10px] text-yellow-300 px-2 py-1 space-y-0.5 pointer-events-none max-h-[55%] overflow-y-auto">
+    <div className="absolute inset-x-0 bottom-0 bg-black/75 text-[10px] text-yellow-300 px-2 py-1 space-y-0.5 pointer-events-none max-h-[55%] overflow-y-auto z-40">
       <div>{message}</div>
       <div className="opacity-70 break-words">ID: {debugInfo.id}</div>
       <div className="opacity-70 break-words">streamId: {debugInfo.streamId}</div>
