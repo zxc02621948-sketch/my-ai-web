@@ -80,6 +80,10 @@ export default function ImageViewer({
   }, []);
 
   useEffect(() => {
+    if (scale <= 1.0005) {
+      setPosition({ x: 0, y: 0 });
+      setIsZoomed(false);
+    }
     onZoomChange?.(scale);
   }, [scale, onZoomChange]);
 
