@@ -21,6 +21,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const [isProcessing, setIsProcessing] = useState(false);
   const [posterIndex, setPosterIndex] = useState(0);
   const [mobilePreviewActive, setMobilePreviewActive] = useState(false);
+  const [hasTriggeredPreview, setHasTriggeredPreview] = useState(false);
   const mobileCanPlayHandlerRef = useRef(null);
   const desktopPreviewTimeoutRef = useRef(null);
 
@@ -64,6 +65,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       clearTimeout(desktopPreviewTimeoutRef.current);
       desktopPreviewTimeoutRef.current = null;
     }
+    setHasTriggeredPreview(false);
   }, [video?._id, cleanupMobileCanPlay]);
 
   // 監聽全域同步事件
@@ -223,21 +225,48 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       mobilePreviewTimeoutRef.current = window.setTimeout(() => {
         stopPreview();
       }, duration);
+      setHasTriggeredPreview(true);
     }
   }, [startMobilePreviewPlayback, stopPreview, video?.previewDuration]);
 
   const handleClick = useCallback(async () => {
+    if (isMobile) {
+      if (!hasTriggeredPreview) {
+        setMobilePreviewActive(true);
+        setIsPlaying(true);
+        const started = await handlePreviewRequest();
+        if (!started) {
+          setMobilePreviewActive(false);
+          setIsPlaying(false);
+        }
+        return;
+      }
+      if (mobilePreviewActive || isPlaying) {
+        stopPreview();
+      }
+    }
+
     stopPreview();
     if (onClick) {
       onClick(video);
     }
-  }, [onClick, stopPreview, video]);
+  }, [
+    handlePreviewRequest,
+    hasTriggeredPreview,
+    isMobile,
+    mobilePreviewActive,
+    onClick,
+    stopPreview,
+    video,
+    isPlaying,
+  ]);
 
   const handlePreviewButtonClick = useCallback(async (event) => {
     event.stopPropagation();
     if (isMobile) {
       if (mobilePreviewActive) {
         stopPreview();
+        setHasTriggeredPreview(false);
         return;
       }
       setMobilePreviewActive(true);
@@ -437,8 +466,8 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     return video?.videoUrl || '';
   }, [video?.streamId, video?.previewUrl, video?.videoUrl]);
 
-  const showVideo = ((!isMobile && isPlaying) || (isMobile && mobilePreviewActive)) && Boolean(baseVideoSource);
-  const showTapHint = isMobile && !mobilePreviewActive && !isPlaying;
+  const showVideo = Boolean(baseVideoSource) && ((isMobile && mobilePreviewActive) || (!isMobile && isPlaying));
+  const showTapHint = isMobile && !hasTriggeredPreview;
 
   return (
     <div 
