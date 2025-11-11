@@ -5,10 +5,17 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import VIDEO_CATEGORIES from '@/constants/videoCategories';
+import SelectField from '@/components/common/SelectField';
 
-export default function UploadVideoModal() {
+const SUCCESS_TOAST_STORAGE_KEY = 'videoUploadSuccessMessage';
+
+export default function UploadVideoModal({
+  isOpen,
+  onClose,
+  isVideoTab = true,
+}) {
   const [mounted, setMounted] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [step, setStep] = useState(1); // 步驟：1=選分級, 2=上傳和填寫
   
   // 基本資訊
@@ -44,10 +51,29 @@ export default function UploadVideoModal() {
 
   useEffect(() => setMounted(true), []);
 
+  // 顯示重新整理後的成功提示
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      const pendingMessage = sessionStorage.getItem(SUCCESS_TOAST_STORAGE_KEY);
+      if (pendingMessage) {
+        sessionStorage.removeItem(SUCCESS_TOAST_STORAGE_KEY);
+        toast.success(pendingMessage);
+      }
+    } catch (error) {
+      console.warn('讀取上傳成功提示失敗:', error);
+    }
+  }, [mounted]);
+
+  const handleClose = () => {
+    setInternalOpen(false);
+    onClose?.();
+  };
+
   // 監聽開啟事件
   useEffect(() => {
     const handleOpen = async () => {
-      setIsOpen(true);
+      setInternalOpen(true);
       
       // 獲取當前每日配額
       try {
@@ -66,35 +92,36 @@ export default function UploadVideoModal() {
     };
     window.addEventListener('openVideoUploadModal', handleOpen);
     return () => window.removeEventListener('openVideoUploadModal', handleOpen);
-  }, []);
+  }, [isOpen]);
 
   // 關閉時重置表單
   useEffect(() => {
-    if (!isOpen) {
-      setStep(1); // 重置到第一步
-      setFile(null);
-      setPreview(null);
-      setTitle('');
-      setDescription('');
-      setTags('');
-      setRating('');
-      setCategory('');
-      setVideoWidth(null);
-      setVideoHeight(null);
-      setDuration(null);
-      setPlatform('');
-      setPrompt('');
-      setNegativePrompt('');
-      setFps('');
-      setResolution('');
-      setSteps('');
-      setCfgScale('');
-      setSeed('');
-      setShowAdvanced(false);
-      setUploading(false);
-      setConfirmAdult(false);
-    }
-  }, [isOpen]);
+    const shouldReset = typeof isOpen === 'boolean' ? !isOpen : !internalOpen;
+    if (!shouldReset) return;
+
+    setStep(1); // 重置到第一步
+    setFile(null);
+    setPreview(null);
+    setTitle('');
+    setDescription('');
+    setTags('');
+    setRating('');
+    setCategory('');
+    setVideoWidth(null);
+    setVideoHeight(null);
+    setDuration(null);
+    setPlatform('');
+    setPrompt('');
+    setNegativePrompt('');
+    setFps('');
+    setResolution('');
+    setSteps('');
+    setCfgScale('');
+    setSeed('');
+    setShowAdvanced(false);
+    setUploading(false);
+    setConfirmAdult(false);
+  }, [isOpen, internalOpen]);
 
   const handleFileChange = async (e) => {
     const selectedFile = e.target.files?.[0];
@@ -180,6 +207,10 @@ export default function UploadVideoModal() {
       toast.error('請選擇分類');
       return;
     }
+    if (!platform) {
+      toast.error('請選擇生成平台');
+      return;
+    }
     if (rating === '18' && !confirmAdult) {
       toast.error('請勾選成年聲明');
       return;
@@ -261,19 +292,32 @@ export default function UploadVideoModal() {
       }
       
       // 更新每日配額顯示
+      let successMessage = `✅ 影片上傳成功！完整度：${completeness}分${qualityMessage}`;
+
       if (saveData.dailyUploads) {
         setDailyQuota({
           current: saveData.dailyUploads.current,
           limit: saveData.dailyUploads.limit,
           remaining: saveData.dailyUploads.remaining
         });
-        toast.success(`✅ 影片上傳成功！完整度：${completeness}分${qualityMessage}\n\n今日剩餘：${saveData.dailyUploads.remaining}/${saveData.dailyUploads.limit}`);
-      } else {
-        toast.success(`✅ 影片上傳成功！完整度：${completeness}分${qualityMessage}`);
+        successMessage += `\n\n今日剩餘：${saveData.dailyUploads.remaining}/${saveData.dailyUploads.limit}`;
       }
-      
-      setIsOpen(false);
-      window.location.href = '/videos';
+
+      try {
+        sessionStorage.setItem(SUCCESS_TOAST_STORAGE_KEY, successMessage);
+      } catch (error) {
+        console.warn('儲存上傳成功提示失敗:', error);
+      }
+
+      handleClose();
+      window.location.reload();
+      // 使用者如需立即看到更新，提醒手動刷新頁面
+      console.info('📦 影片上傳成功，已自動刷新列表。');
+      if (saveData?.video?.thumbnailUrl) {
+        console.log('🎬 縮圖 URL:', saveData.video.thumbnailUrl);
+      } else {
+        console.warn('⚠️ 後端未返回縮圖 URL');
+      }
 
     } catch (error) {
       console.error('影片上傳失敗:', error);
@@ -290,10 +334,13 @@ export default function UploadVideoModal() {
     return 'bg-green-600';
   };
 
-  if (!mounted || !isOpen) return null;
+  const computedOpen = typeof isOpen === 'boolean' ? isOpen : internalOpen;
+  const isModalOpen = mounted && computedOpen;
+
+  if (!isModalOpen) return null;
 
   const panel = (
-    <Dialog open={isOpen} onClose={() => setIsOpen(false)} className="relative z-[9999]">
+    <Dialog open={!!computedOpen} onClose={handleClose} className="relative z-[9999]">
       {/* 背景 */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
 
@@ -317,7 +364,7 @@ export default function UploadVideoModal() {
               </div>
               <button
                 type="button"
-                onClick={() => setIsOpen(false)}
+                onClick={handleClose}
                 className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/15 text-sm"
               >
                 關閉
@@ -474,35 +521,34 @@ export default function UploadVideoModal() {
                   <label className={`text-sm font-semibold ${category === '' ? 'text-red-400' : 'text-zinc-400'}`}>
                     📁 影片分類（必選）
                   </label>
-              <select
-                className={`p-2 rounded w-full bg-zinc-700 text-white ${category === '' ? 'border border-red-500' : ''}`}
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                <option value="" disabled hidden>
-                  請選擇分類
-                </option>
-                {VIDEO_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
+                  <SelectField
+                    value={category}
+                    onChange={setCategory}
+                    invalid={category === ''}
+                    placeholder="請選擇分類"
+                    options={VIDEO_CATEGORIES.map((cat) => ({
+                      value: cat,
+                      label: cat,
+                    }))}
+                  />
                 </div>
 
                 <div>
-                  <label className="text-sm text-zinc-400">🛠️ 生成平台</label>
-                  <select
-                    className="p-2 rounded bg-zinc-700 text-white w-full"
+                  <label className={`text-sm font-semibold ${platform ? 'text-zinc-400' : 'text-red-400'}`}>
+                    🛠️ 生成平台（必選）
+                  </label>
+                  <SelectField
                     value={platform}
-                    onChange={(e) => setPlatform(e.target.value)}
-                  >
-                    <option value="">選擇平台（選填）</option>
-                    <option value="Runway">Runway</option>
-                    <option value="Pika">Pika</option>
-                    <option value="Stable Video Diffusion">Stable Video Diffusion</option>
-                    <option value="其他">其他</option>
-                  </select>
+                    onChange={setPlatform}
+                    invalid={!platform}
+                    placeholder="請選擇平台"
+                    options={[
+                      { value: 'Runway', label: 'Runway' },
+                      { value: 'Pika', label: 'Pika' },
+                      { value: 'Stable Video Diffusion', label: 'Stable Video Diffusion' },
+                      { value: '其他', label: '其他' },
+                    ]}
+                  />
                 </div>
 
                 {/* 進階參數（可折疊） */}

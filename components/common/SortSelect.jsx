@@ -1,5 +1,7 @@
 "use client";
 
+import SelectField from "@/components/common/SelectField";
+
 const OPTIONS = [
   { label: "默認：熱門度（加權）", value: "popular" },
   { label: "由新到舊", value: "newest" },
@@ -13,17 +15,14 @@ export default function SortSelect({ value = "popular", onChange }) {
   return (
     <div className="inline-flex items-center gap-2">
       <span className="text-sm text-zinc-400">排序：</span>
-      <select
-        className="bg-zinc-900 border border-white/10 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      <SelectField
         value={value}
-        onChange={(e) => onChange?.(e.target.value)}
-      >
-        {OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        options={OPTIONS}
+        placeholder="請選擇排序"
+        className="min-w-[220px]"
+        buttonClassName="bg-zinc-900 border border-white/10 text-sm"
+      />
     </div>
   );
 }

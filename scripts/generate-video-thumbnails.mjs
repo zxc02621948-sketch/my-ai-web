@@ -2,11 +2,11 @@
 
 import nextEnv from '@next/env';
 import fs from 'fs/promises';
-import { createWriteStream } from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
 import mongoose from 'mongoose';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
@@ -34,26 +34,6 @@ const TMP_PREFIX = 'aiweb-thumb-';
 const OUTPUT_WIDTH = parseInt(process.env.VIDEO_THUMB_WIDTH || '1280', 10);
 const SAMPLE_OFFSET = process.env.VIDEO_THUMB_OFFSET || '0.5'; // 秒
 
-async function ensureFfmpeg() {
-  return new Promise((resolve, reject) => {
-    const probe = spawn('ffmpeg', ['-version']);
-    probe.once('error', (err) => {
-      reject(
-        new Error(
-          `找不到 ffmpeg，請先在環境中安裝。\n原始錯誤：${err.message}`
-        )
-      );
-    });
-    probe.once('exit', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error('ffmpeg 無法執行，請確認可在 shell 中呼叫'));
-      }
-    });
-  });
-}
-
 async function downloadVideo(url, destination) {
   const res = await fetch(url);
   if (!res.ok) {
@@ -80,7 +60,7 @@ async function generateThumbnail(inputPath, outputPath) {
       outputPath,
     ];
 
-    const ff = spawn('ffmpeg', args);
+    const ff = spawn(ffmpegInstaller.path, args);
 
     ff.stderr.on('data', () => {
       // 靜默輸出，避免淹沒終端；需要時可改成 console.log
@@ -130,13 +110,6 @@ async function processVideo(video) {
 }
 
 async function main() {
-  try {
-    await ensureFfmpeg();
-  } catch (err) {
-    console.error('❌', err.message);
-    process.exit(1);
-  }
-
   await dbConnect();
   console.log('✅ 已連接 MongoDB');
 

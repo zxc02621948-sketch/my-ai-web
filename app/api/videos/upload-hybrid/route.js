@@ -72,6 +72,7 @@ export async function POST(request) {
       videoUrl: streamResult.playbackUrl, // Stream 播放連結
       streamId: streamResult.streamId,
       previewUrl: previewResult.success ? previewResult.previewUrl : '', // R2 預覽連結
+      thumbnailUrl: `https://videodelivery.net/${streamResult.streamId}/thumbnails/thumbnail.jpg?time=1s`,
       status: 'active',
     });
 
@@ -96,6 +97,7 @@ export async function POST(request) {
         videoUrl: video.videoUrl,
         previewUrl: video.previewUrl,
         streamId: video.streamId,
+        thumbnailUrl: video.thumbnailUrl,
         completenessScore: video.completenessScore,
         popScore: video.popScore,
       }

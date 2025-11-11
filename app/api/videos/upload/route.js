@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { s3Client, R2_BUCKET_NAME, R2_PUBLIC_URL } from '@/lib/r2';
+import { s3Client, R2_BUCKET_NAME, R2_PUBLIC_URL, uploadToR2 } from '@/lib/r2';
 import { getCurrentUserFromRequest } from '@/lib/auth/getCurrentUserFromRequest';
 import { dbConnect } from '@/lib/db';
 import Video from '@/models/Video';
 import { computeVideoCompleteness, computeVideoInitialBoostFromTop, computeVideoPopScore } from '@/utils/scoreVideo';
+import os from 'os';
+import path from 'path';
+import fs from 'fs/promises';
+import { spawn } from 'child_process';
+import ffmpeg from '@ffmpeg-installer/ffmpeg';
 
 // ✅ 設定請求體大小限制
 export const config = {
@@ -15,9 +20,6 @@ export const config = {
   },
   maxDuration: 60, // 增加執行時間限制
 };
-
-// 動態導入以避免構建時錯誤
-const runtime = 'nodejs';
 
 export async function POST(request) {
   try {
@@ -124,8 +126,27 @@ export async function POST(request) {
 
     await s3Client.send(uploadCommand);
 
-    // 生成公開 URL
     const videoUrl = `${R2_PUBLIC_URL}/${fileName}`;
+
+    let thumbnailUrl = '';
+    const thumbnailKey = `videos/thumbnails/${user._id}/${timestamp}.jpg`;
+    try {
+      console.log('[VideoUpload] 產生縮圖: bufferSize', buffer.length, 'bytes');
+      console.time('[VideoUpload] Generate Thumbnail');
+      thumbnailUrl = await generateThumbnailFromBuffer(buffer, thumbnailKey);
+      console.timeEnd('[VideoUpload] Generate Thumbnail');
+      console.log('[VideoUpload] 縮圖已上傳:', thumbnailUrl);
+    } catch (err) {
+      console.error('影片縮圖產生失敗，改用影片第一幀:', err);
+      try {
+        const fallbackKey = `videos/thumbnails/${user._id}/${timestamp}-fallback.jpg`;
+        thumbnailUrl = await generateThumbnailFromStreamUrl(videoUrl, fallbackKey);
+        console.log('[VideoUpload] 使用影片 URL 產生縮圖:', thumbnailUrl);
+      } catch (fallbackErr) {
+        console.error('影片縮圖備援失敗，改用預設縮圖:', fallbackErr);
+        thumbnailUrl = `${R2_PUBLIC_URL}/videos/thumbnails/default-placeholder.jpg`;
+      }
+    }
 
     // ✅ 獲取當前最高分數（用於計算 initialBoost）
     const topVideo = await Video.findOne({}).sort({ popScore: -1 }).select('popScore').lean();
@@ -138,7 +159,7 @@ export async function POST(request) {
       description: description || '',
       tags: tags ? tags.split(/[,\s]+/).map(tag => tag.trim()).filter(t => t) : [],
       videoUrl,
-      thumbnailUrl: '', // 稍後會自動生成
+      thumbnailUrl,
       duration: 0, // 稍後會自動計算
       author: user._id,
       authorName: user.username,
@@ -215,5 +236,108 @@ export async function POST(request) {
   } catch (error) {
     console.error('影片上傳失敗:', error);
     return NextResponse.json({ error: '影片上傳失敗' }, { status: 500 });
+  }
+}
+
+async function generateThumbnailFromBuffer(videoBuffer, key) {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'video-thumb-'));
+  const inputPath = path.join(tmpDir, 'source');
+  const outputPath = path.join(tmpDir, 'thumb.jpg');
+
+  try {
+    await fs.writeFile(inputPath, videoBuffer);
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn(ffmpeg.path, [
+        '-y',
+        '-ss',
+        '0.5',
+        '-i',
+        inputPath,
+        '-frames:v',
+        '1',
+        '-vf',
+        'scale=1280:-1:flags=lanczos',
+        outputPath,
+      ]);
+
+      ff.once('error', reject);
+      ff.stderr?.on('data', (chunk) => {
+        console.log('[VideoUpload][ffmpeg]', chunk.toString());
+      });
+      ff.once('exit', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`ffmpeg 產生縮圖失敗，退出碼 ${code}`));
+        }
+      });
+    });
+
+    const stats = await fs.stat(outputPath).catch(() => null);
+    if (!stats || stats.size === 0) {
+      throw new Error('產生的縮圖檔案為空');
+    }
+
+    const buffer = await fs.readFile(outputPath);
+    const url = await uploadToR2(buffer, key, 'image/jpeg');
+    return url || `${R2_PUBLIC_URL}/${key}`;
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function generateThumbnailFromStreamUrl(videoUrl, key) {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'video-thumb-remote-'));
+  const inputPath = path.join(tmpDir, 'source');
+  const outputPath = path.join(tmpDir, 'thumb.jpg');
+
+  try {
+    console.log('[VideoUpload] 下載影片以產生縮圖，URL:', videoUrl);
+    const res = await fetch(videoUrl);
+    if (!res.ok) {
+      throw new Error(`下載影片失敗: ${res.status}`);
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    await fs.writeFile(inputPath, Buffer.from(arrayBuffer));
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn(ffmpeg.path, [
+        '-y',
+        '-ss',
+        '0.5',
+        '-i',
+        inputPath,
+        '-frames:v',
+        '1',
+        '-vf',
+        'scale=1280:-1:flags=lanczos',
+        outputPath,
+      ]);
+
+      ff.stderr?.on('data', (chunk) => {
+        console.log('[VideoUpload][ffmpeg][remote]', chunk.toString());
+      });
+
+      ff.once('error', reject);
+      ff.once('exit', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`ffmpeg (remote) 產生縮圖失敗，退出碼 ${code}`));
+        }
+      });
+    });
+
+    const stats = await fs.stat(outputPath).catch(() => null);
+    if (!stats || stats.size === 0) {
+      throw new Error('產生的縮圖檔案為空 (remote)');
+    }
+
+    const buffer = await fs.readFile(outputPath);
+    const url = await uploadToR2(buffer, key, 'image/jpeg');
+    return url || `${R2_PUBLIC_URL}/${key}`;
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
 }

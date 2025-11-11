@@ -10,6 +10,7 @@ import {
   MUSIC_LANGUAGES,
   LANGUAGE_MAP,
 } from "@/constants/musicCategories";
+import SelectField from "@/components/common/SelectField";
 
 export default function UploadMusicModal() {
   const [mounted, setMounted] = useState(false);
@@ -140,6 +141,14 @@ export default function UploadMusicModal() {
     }
     if (!platform) {
       toast.error("請選擇生成平台");
+      return;
+    }
+    if (category === "song" && !language) {
+      toast.error("請選擇歌曲語言");
+      return;
+    }
+    if (category === "song" && !singerGender) {
+      toast.error("請選擇歌手性別");
       return;
     }
     if (!genres || genres.length === 0) {
@@ -340,15 +349,17 @@ export default function UploadMusicModal() {
                             ? "15+ 清涼"
                             : "18+ 限制"}
                       </div>
-                      <select
-                        className="p-2 rounded bg-zinc-700 text-white"
-                        value={rating}
-                        onChange={(e) => setRating(e.target.value)}
-                      >
-                        <option value="all">一般（All）</option>
-                        <option value="15">15+（輕限）</option>
-                        <option value="18">18+（限制）</option>
-                      </select>
+                    <SelectField
+                      value={rating}
+                      onChange={setRating}
+                      options={[
+                        { value: "all", label: "一般（All）" },
+                        { value: "15", label: "15+（輕限）" },
+                        { value: "18", label: "18+（限制）" },
+                      ]}
+                      placeholder="選擇分級"
+                      className="min-w-[160px]"
+                    />
                     </div>
                   </div>
                 )}
@@ -397,370 +408,377 @@ export default function UploadMusicModal() {
                   onChange={(e) => setDescription(e.target.value)}
                 />
 
+                {category === "song" && (
+                  <div className="space-y-2">
+                    <label className="text-sm text-zinc-400">歌詞</label>
+                    <textarea
+                      placeholder="填寫完整歌詞（選填）"
+                      className="w-full p-2 rounded bg-zinc-700 text-white h-32 mt-1"
+                      value={lyrics}
+                      onChange={(e) => setLyrics(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {platform && (
+                  <div className="space-y-2">
+                    <label className="text-sm text-zinc-400">
+                      💭 提示詞（Prompt）
+                    </label>
+                    <textarea
+                      placeholder="描述您想要的音樂風格、情緒、樂器等"
+                      className="w-full p-2 rounded bg-zinc-700 text-white h-24"
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                    />
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
                   {/* 語言欄位（只顯示在歌曲類型） */}
                   {category === "song" && (
                     <div>
-                      <label className="text-sm text-zinc-400">🌐 語言</label>
-                      <select
-                        className="p-2 rounded bg-zinc-700 text-white w-full"
-                        value={language}
-                        onChange={(e) => setLanguage(e.target.value)}
+                      <label
+                        className={`text-sm font-semibold ${
+                          language ? "text-zinc-400" : "text-red-400"
+                        }`}
                       >
-                        <option value="">選擇語言（選填）</option>
-                        {MUSIC_LANGUAGES.map((lang) => (
-                          <option key={lang} value={lang}>
-                            {LANGUAGE_MAP[lang] || lang}
-                          </option>
-                        ))}
-                      </select>
+                        🌐 語言（必選）
+                      </label>
+                      <SelectField
+                        value={language}
+                        onChange={setLanguage}
+                        invalid={!language}
+                        placeholder="請選擇語言"
+                        options={MUSIC_LANGUAGES.map((lang) => ({
+                          value: lang,
+                          label: LANGUAGE_MAP[lang] || lang,
+                        }))}
+                      />
                     </div>
                   )}
 
                   <div className={category === "song" ? "" : "col-span-2"}>
-                    <label className="text-sm text-zinc-400">🛠️ 生成平台</label>
-                    <select
-                      className="p-2 rounded bg-zinc-700 text-white w-full"
-                      value={platform}
-                      onChange={(e) => setPlatform(e.target.value)}
+                    <label
+                      className={`text-sm font-semibold ${
+                        platform ? "text-zinc-400" : "text-red-400"
+                      }`}
                     >
-                      <option value="">選擇平台（選填）</option>
-                      <option value="Suno">Suno</option>
-                      <option value="Udio">Udio</option>
-                      <option value="MusicGen">MusicGen</option>
-                      <option value="Stable Audio">Stable Audio</option>
-                      <option value="其他">其他</option>
-                    </select>
+                      🛠️ 生成平台（必選）
+                    </label>
+                    <SelectField
+                      value={platform}
+                      onChange={setPlatform}
+                      invalid={!platform}
+                      placeholder="請選擇平台"
+                      options={[
+                        { value: "Suno", label: "Suno" },
+                        { value: "Udio", label: "Udio" },
+                        { value: "MusicGen", label: "MusicGen" },
+                        { value: "Stable Audio", label: "Stable Audio" },
+                        { value: "其他", label: "其他" },
+                      ]}
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-sm text-zinc-400">
-                    🎵 曲風（可複選）
-                  </label>
-                  <div className="max-h-32 overflow-y-auto border border-white/10 rounded p-2 bg-zinc-700">
-                    {MUSIC_GENRES.map((genreKey) => (
-                      <label
-                        key={genreKey}
-                        className="flex items-center gap-2 py-1 cursor-pointer hover:bg-zinc-600/50 rounded px-2"
-                      >
-                        <input
-                          type="checkbox"
-                          value={genreKey}
-                          checked={genres.includes(genreKey)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setGenres([...genres, genreKey]);
-                            } else {
-                              setGenres(genres.filter((g) => g !== genreKey));
-                            }
-                          }}
-                          className="rounded"
+                {/* 曲風與歌曲資訊 */}
+                <div className="space-y-3 border-t border-white/10 pt-4">
+                  <div>
+                    <label
+                      className={`text-sm font-semibold ${
+                        genres.length ? "text-zinc-400" : "text-red-400"
+                      }`}
+                    >
+                      🎵 曲風（可複選，至少 1 項）
+                    </label>
+                    <div
+                      className={`max-h-32 overflow-y-auto rounded p-2 bg-zinc-700 ${
+                        genres.length ? "border border-white/10" : "border border-red-500"
+                      }`}
+                    >
+                      {MUSIC_GENRES.map((genreKey) => (
+                        <label
+                          key={genreKey}
+                          className="flex items-center gap-2 py-1 cursor-pointer hover:bg-zinc-600/50 rounded px-2"
+                        >
+                          <input
+                            type="checkbox"
+                            value={genreKey}
+                            checked={genres.includes(genreKey)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setGenres([...genres, genreKey]);
+                              } else {
+                                setGenres(genres.filter((g) => g !== genreKey));
+                              }
+                            }}
+                            className="rounded"
+                          />
+                          <span className="text-white text-sm">
+                            {GENRE_MAP[genreKey]}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {category === "song" && (
+                    <div className="border-t border-white/10 pt-4 space-y-3">
+                      <div className="text-sm font-semibold text-zinc-300">
+                        🎤 歌曲資訊
+                      </div>
+
+                      <div>
+                        <label
+                          className={`text-sm font-semibold ${
+                            singerGender ? "text-zinc-400" : "text-red-400"
+                          }`}
+                        >
+                          歌手性別（必選）
+                        </label>
+                        <SelectField
+                          value={singerGender}
+                          onChange={setSingerGender}
+                          invalid={!singerGender}
+                          placeholder="請選擇歌手性別"
+                          options={[
+                            { value: "male", label: "男" },
+                            { value: "female", label: "女" },
+                            { value: "mixed", label: "混合" },
+                            { value: "n/a", label: "不適用" },
+                          ]}
                         />
-                        <span className="text-white text-sm">
-                          {GENRE_MAP[genreKey]}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* 歌曲專用欄位 */}
-                {category === "song" && (
-                  <div className="space-y-3 border-t border-white/10 pt-4">
-                    <div className="text-sm font-semibold text-zinc-300">
-                      🎤 歌曲資訊
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-zinc-400">歌詞</label>
-                      <textarea
-                        placeholder="填寫完整歌詞（選填）"
-                        className="w-full p-2 rounded bg-zinc-700 text-white h-32 mt-1"
-                        value={lyrics}
-                        onChange={(e) => setLyrics(e.target.value)}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-zinc-400">歌手性別</label>
-                      <select
-                        className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
-                        value={singerGender}
-                        onChange={(e) => setSingerGender(e.target.value)}
-                      >
-                        <option value="">選擇歌手性別（選填）</option>
-                        <option value="male">男</option>
-                        <option value="female">女</option>
-                        <option value="mixed">混合</option>
-                        <option value="n/a">不適用</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {/* 動態顯示平台對應的元數據欄位 */}
                 {platform && (
                   <div className="space-y-3 border-t border-white/10 pt-4">
-                    <div className="text-sm font-semibold text-zinc-300">
-                      📋{" "}
-                      {platform === "Suno"
-                        ? "Suno"
-                        : platform === "Udio"
-                          ? "Udio"
-                          : platform === "MusicGen"
-                            ? "MusicGen"
-                            : platform === "Stable Audio"
-                              ? "Stable Audio"
-                              : "生成平台"}{" "}
-                      元數據
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvanced((prev) => !prev)}
+                      className="flex w-full items-center justify-between text-sm text-zinc-300 hover:text-white"
+                    >
+                      <span className="flex items-center gap-2">
+                        {showAdvanced ? "▼" : "▶"} 進階參數（生成平台專用）
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {showAdvanced ? "收合" : "展開"}
+                      </span>
+                    </button>
 
-                    {/* Suno / Udio */}
-                    {(platform === "Suno" || platform === "Udio") && (
-                      <>
-                        <div className="space-y-2">
-                          <label className="text-sm text-zinc-400">
-                            💭 提示詞（Prompt）
-                          </label>
-                          <textarea
-                            placeholder="描述您想要的音樂風格、情緒、樂器等"
-                            className="w-full p-2 rounded bg-zinc-700 text-white h-24"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-sm text-zinc-400">
-                            ✂️ 排除風格（Exclude styles）
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="不想包含的音樂風格"
-                            className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
-                            value={excludeStyles}
-                            onChange={(e) => setExcludeStyles(e.target.value)}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-sm text-zinc-400 flex items-center gap-2">
-                            <span>🎭 怪異度（Weirdness）</span>
-                            <button
-                              type="button"
-                              onClick={() => setWeirdness("")}
-                              className="text-xs text-zinc-500 hover:text-white"
-                            >
-                              🔄 重置
-                            </button>
-                          </label>
-                          <div className="mt-2">
-                            <input
-                              type="range"
-                              min="0"
-                              max="100"
-                              value={weirdness || 0}
-                              onChange={(e) => setWeirdness(e.target.value)}
-                              className="w-full h-2 bg-zinc-600 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                            />
-                            <div className="flex justify-between text-xs text-zinc-400 mt-1">
-                              <span>0%</span>
-                              <span className="font-semibold text-white">
-                                {weirdness || 0}%
-                              </span>
-                              <span>100%</span>
+                    {showAdvanced && (
+                      <div className="mt-4 space-y-3">
+                        {(platform === "Suno" || platform === "Udio") && (
+                          <>
+                            <div>
+                              <label className="text-sm text-zinc-400">
+                                ✂️ 排除風格（Exclude styles）
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="不想包含的音樂風格"
+                                className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
+                                value={excludeStyles}
+                                onChange={(e) => setExcludeStyles(e.target.value)}
+                              />
                             </div>
-                          </div>
-                        </div>
 
-                        <div>
-                          <label className="text-sm text-zinc-400 flex items-center gap-2">
-                            <span>🎨 風格影響力（Style Influence）</span>
-                            <button
-                              type="button"
-                              onClick={() => setStyleInfluence("")}
-                              className="text-xs text-zinc-500 hover:text-white"
-                            >
-                              🔄 重置
-                            </button>
-                          </label>
-                          <div className="mt-2">
-                            <input
-                              type="range"
-                              min="0"
-                              max="100"
-                              value={styleInfluence || 0}
-                              onChange={(e) =>
-                                setStyleInfluence(e.target.value)
-                              }
-                              className="w-full h-2 bg-zinc-600 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                            />
-                            <div className="flex justify-between text-xs text-zinc-400 mt-1">
-                              <span>0%</span>
-                              <span className="font-semibold text-white">
-                                {styleInfluence || 0}%
-                              </span>
-                              <span>100%</span>
+                            <div>
+                              <label className="text-sm text-zinc-400 flex items-center gap-2">
+                                <span>🎭 怪異度（Weirdness）</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setWeirdness("")}
+                                  className="text-xs text-zinc-500 hover:text-white"
+                                >
+                                  🔄 重置
+                                </button>
+                              </label>
+                              <div className="mt-2">
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  value={weirdness || 0}
+                                  onChange={(e) => setWeirdness(e.target.value)}
+                                  className="w-full h-2 bg-zinc-600 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                />
+                                <div className="flex justify-between text-xs text-zinc-400 mt-1">
+                                  <span>0%</span>
+                                  <span className="font-semibold text-white">
+                                    {weirdness || 0}%
+                                  </span>
+                                  <span>100%</span>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
 
-                    {/* MusicGen / Stable Audio */}
-                    {(platform === "MusicGen" ||
-                      platform === "Stable Audio") && (
-                      <>
-                        <div className="space-y-2">
-                          <label className="text-sm text-zinc-400">
-                            💭 提示詞（Prompt）
-                          </label>
-                          <textarea
-                            placeholder="描述您想要的音樂風格、情緒、樂器等"
-                            className="w-full p-2 rounded bg-zinc-700 text-white h-24"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                          />
-                        </div>
+                            <div>
+                              <label className="text-sm text-zinc-400 flex items-center gap-2">
+                                <span>🎨 風格影響力（Style Influence）</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setStyleInfluence("")}
+                                  className="text-xs text-zinc-500 hover:text-white"
+                                >
+                                  🔄 重置
+                                </button>
+                              </label>
+                              <div className="mt-2">
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  value={styleInfluence || 0}
+                                  onChange={(e) =>
+                                    setStyleInfluence(e.target.value)
+                                  }
+                                  className="w-full h-2 bg-zinc-600 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                />
+                                <div className="flex justify-between text-xs text-zinc-400 mt-1">
+                                  <span>0%</span>
+                                  <span className="font-semibold text-white">
+                                    {styleInfluence || 0}%
+                                  </span>
+                                  <span>100%</span>
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="text-sm text-zinc-400">
-                              🤖 模型名稱
-                            </label>
+                        {(platform === "MusicGen" ||
+                          platform === "Stable Audio") && (
+                          <>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-sm text-zinc-400">
+                                  🤖 模型名稱
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="如：facebook/musicgen-large"
+                                  className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
+                                  value={modelName}
+                                  onChange={(e) => setModelName(e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-sm text-zinc-400">
+                                  🔗 模型連結
+                                </label>
+                                <input
+                                  type="url"
+                                  placeholder="HuggingFace / GitHub 連結"
+                                  className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
+                                  value={modelLink}
+                                  onChange={(e) => setModelLink(e.target.value)}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-3">
+                              <div>
+                                <label className="text-sm text-zinc-400">
+                                  ⚡ BPM
+                                </label>
+                                <input
+                                  type="number"
+                                  placeholder="節拍"
+                                  className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
+                                  value={tempo}
+                                  onChange={(e) => setTempo(e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-sm text-zinc-400">
+                                  🎹 調性
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="如：C Major"
+                                  className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
+                                  value={key}
+                                  onChange={(e) => setKey(e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-sm text-zinc-400">
+                                  🔢 Seed
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="隨機種子"
+                                  className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
+                                  value={seed}
+                                  onChange={(e) => setSeed(e.target.value)}
+                                />
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {platform === "其他" && (
+                          <>
+                            <div className="grid grid-cols-2 gap-3">
+                              <input
+                                type="text"
+                                placeholder="模型名稱"
+                                className="p-2 rounded bg-zinc-700 text-white"
+                                value={modelName}
+                                onChange={(e) => setModelName(e.target.value)}
+                              />
+                              <input
+                                type="url"
+                                placeholder="模型連結"
+                                className="p-2 rounded bg-zinc-700 text-white"
+                                value={modelLink}
+                                onChange={(e) => setModelLink(e.target.value)}
+                              />
+                            </div>
+
                             <input
                               type="text"
-                              placeholder="如：facebook/musicgen-large"
-                              className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
-                              value={modelName}
-                              onChange={(e) => setModelName(e.target.value)}
+                              placeholder="情緒（Mood）"
+                              className="w-full p-2 rounded bg-zinc-700 text-white"
+                              value={mood}
+                              onChange={(e) => setMood(e.target.value)}
                             />
-                          </div>
-                          <div>
-                            <label className="text-sm text-zinc-400">
-                              🔗 模型連結
-                            </label>
-                            <input
-                              type="url"
-                              placeholder="HuggingFace / GitHub 連結"
-                              className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
-                              value={modelLink}
-                              onChange={(e) => setModelLink(e.target.value)}
-                            />
-                          </div>
-                        </div>
 
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <label className="text-sm text-zinc-400">
-                              ⚡ BPM
-                            </label>
-                            <input
-                              type="number"
-                              placeholder="節拍"
-                              className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
-                              value={tempo}
-                              onChange={(e) => setTempo(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-sm text-zinc-400">
-                              🎹 調性
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="如：C Major"
-                              className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
-                              value={key}
-                              onChange={(e) => setKey(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-sm text-zinc-400">
-                              🔢 Seed
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="隨機種子"
-                              className="p-2 rounded bg-zinc-700 text-white w-full mt-1"
-                              value={seed}
-                              onChange={(e) => setSeed(e.target.value)}
-                            />
-                          </div>
+                            <div className="grid grid-cols-3 gap-3">
+                              <input
+                                type="number"
+                                placeholder="BPM"
+                                className="p-2 rounded bg-zinc-700 text-white"
+                                value={tempo}
+                                onChange={(e) => setTempo(e.target.value)}
+                              />
+                              <input
+                                type="text"
+                                placeholder="調性（Key）"
+                                className="p-2 rounded bg-zinc-700 text-white"
+                                value={key}
+                                onChange={(e) => setKey(e.target.value)}
+                              />
+                              <input
+                                type="text"
+                                placeholder="Seed"
+                                className="p-2 rounded bg-zinc-700 text-white"
+                                value={seed}
+                                onChange={(e) => setSeed(e.target.value)}
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        <div className="text-xs text-zinc-400 bg-blue-500/10 border border-blue-500/30 rounded p-2">
+                          💡 填寫越多參數，完整度分數越高，作品會獲得更多曝光！
                         </div>
-                      </>
+                      </div>
                     )}
-
-                    {/* 其他平台 */}
-                    {platform === "其他" && (
-                      <>
-                        <div className="space-y-2">
-                          <label className="text-sm text-zinc-400">
-                            💭 生成提示詞
-                          </label>
-                          <textarea
-                            placeholder="描述您想要的音樂風格、情緒、樂器等"
-                            className="w-full p-2 rounded bg-zinc-700 text-white h-24"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <input
-                            type="text"
-                            placeholder="模型名稱"
-                            className="p-2 rounded bg-zinc-700 text-white"
-                            value={modelName}
-                            onChange={(e) => setModelName(e.target.value)}
-                          />
-                          <input
-                            type="url"
-                            placeholder="模型連結"
-                            className="p-2 rounded bg-zinc-700 text-white"
-                            value={modelLink}
-                            onChange={(e) => setModelLink(e.target.value)}
-                          />
-                        </div>
-
-                        <input
-                          type="text"
-                          placeholder="情緒（Mood）"
-                          className="w-full p-2 rounded bg-zinc-700 text-white"
-                          value={mood}
-                          onChange={(e) => setMood(e.target.value)}
-                        />
-
-                        <div className="grid grid-cols-3 gap-3">
-                          <input
-                            type="number"
-                            placeholder="BPM"
-                            className="p-2 rounded bg-zinc-700 text-white"
-                            value={tempo}
-                            onChange={(e) => setTempo(e.target.value)}
-                          />
-                          <input
-                            type="text"
-                            placeholder="調性（Key）"
-                            className="p-2 rounded bg-zinc-700 text-white"
-                            value={key}
-                            onChange={(e) => setKey(e.target.value)}
-                          />
-                          <input
-                            type="text"
-                            placeholder="Seed"
-                            className="p-2 rounded bg-zinc-700 text-white"
-                            value={seed}
-                            onChange={(e) => setSeed(e.target.value)}
-                          />
-                        </div>
-                      </>
-                    )}
-
-                    <div className="text-xs text-zinc-400 bg-blue-500/10 border border-blue-500/30 rounded p-2">
-                      💡 填寫越多參數，完整度分數越高，作品會獲得更多曝光！
-                    </div>
                   </div>
                 )}
               </>

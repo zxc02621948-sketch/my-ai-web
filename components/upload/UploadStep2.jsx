@@ -7,6 +7,7 @@ import CATEGORIES from "@/constants/categories";
 import { civitaiByHash } from "@/lib/civitai";
 import { parseComfyWorkflow } from "@/lib/parseComfyWorkflow";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import SelectField from "@/components/common/SelectField";
 
 export default function UploadStep2({
   rating,
@@ -1153,11 +1154,17 @@ export default function UploadStep2({
             <div className={`text-xl font-bold px-4 py-2 rounded text-white inline-block ${getRatingColor()} self-start`}>
               目前選擇：{rating === "all" ? "一般 All" : rating === "15" ? "15+ 清涼" : "18+ 限制"}
             </div>
-            <select className="p-2 rounded bg-zinc-700" value={rating} onChange={(e) => setRating(e.target.value)}>
-              <option value="all">一般（All）</option>
-              <option value="15">15+（輕限）</option>
-              <option value="18">18+（限制）</option>
-            </select>
+            <SelectField
+              value={rating}
+              onChange={setRating}
+              options={[
+                { value: "all", label: "一般（All）" },
+                { value: "15", label: "15+（輕限）" },
+                { value: "18", label: "18+（限制）" },
+              ]}
+              placeholder="選擇分級"
+              buttonClassName="bg-zinc-700 text-white"
+            />
           </div>
 
           {/* 移除自動分級功能 - 改為用戶手動選擇 */}
@@ -1221,20 +1228,17 @@ export default function UploadStep2({
             <label className={`text-sm font-semibold ${category === "" ? "text-red-400" : "text-zinc-400"}`}>
               📁 圖片分類（必選）
             </label>
-            <select
-              className={`p-2 rounded w-full bg-zinc-700 ${category === "" ? "border border-red-500" : ""}`}
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              <option value="" disabled hidden>
-                請選擇分類
-              </option>
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
+          <SelectField
+            value={category}
+            onChange={setCategory}
+            invalid={!category}
+            placeholder="請選擇分類"
+            options={CATEGORIES.map((cat) => ({
+              value: cat,
+              label: cat,
+            }))}
+            buttonClassName="bg-zinc-700 text-white"
+          />
             
             {/* 移除自動分級功能 - 改為用戶手動選擇 */}
           </div>
@@ -1242,16 +1246,19 @@ export default function UploadStep2({
           <div>
             <label className="text-sm text-zinc-400">🛠️ 使用平台</label>
             <div className="flex items-center gap-2">
-              <select
-                className="p-2 rounded bg-zinc-700 w-full"
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-              >
-                <option value="Stable Diffusion WebUI">Stable Diffusion WebUI</option>
-                <option value="ComfyUI">ComfyUI</option>
-                <option value="GPT 生圖">GPT 生圖</option>
-                <option value="其他">其他</option>
-              </select>
+            <SelectField
+              value={platform}
+              onChange={setPlatform}
+              options={[
+                { value: "Stable Diffusion WebUI", label: "Stable Diffusion WebUI" },
+                { value: "ComfyUI", label: "ComfyUI" },
+                { value: "GPT 生圖", label: "GPT 生圖" },
+                { value: "其他", label: "其他" },
+              ]}
+              placeholder="選擇平台"
+              className="flex-1"
+              buttonClassName="bg-zinc-700 text-white"
+            />
 
               {/* ComfyUI：上傳 workflow 按鈕 - 手機簡化模式隱藏 */}
               {!mobileSimple && platform === "ComfyUI" && (
