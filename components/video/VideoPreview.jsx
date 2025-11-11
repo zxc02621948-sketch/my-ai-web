@@ -218,7 +218,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   }, [stopPreview]);
 
   const handlePreviewRequest = useCallback(async () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current) return false;
     videoRef.current.currentTime = 0;
     const started = await startMobilePreviewPlayback();
     if (started) {
@@ -228,8 +228,9 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       mobilePreviewTimeoutRef.current = window.setTimeout(() => {
         stopPreview();
       }, duration);
-      setHasTriggeredPreview(true);
+      return true;
     }
+    return false;
   }, [startMobilePreviewPlayback, stopPreview, video?.previewDuration]);
 
   const handleClick = useCallback(async () => {
@@ -241,6 +242,8 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
         if (!started) {
           setMobilePreviewActive(false);
           setIsPlaying(false);
+        } else {
+          setHasTriggeredPreview(true);
         }
         return;
       }
