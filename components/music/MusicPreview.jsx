@@ -729,7 +729,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white/70 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
             </span>
-            播放中
+            預覽中
           </>
         ) : (
           <>
@@ -743,7 +743,11 @@ const MusicPreview = ({ music, className = "", onClick }) => {
 
       {/* 音樂時長標籤（左上角） */}
       {displayDuration > 0 && (
-        <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-sm text-white text-xs px-2 py-1 rounded z-30">
+        <div
+          className={`absolute ${
+            isMobile ? "bottom-3 left-3" : "top-3 left-3"
+          } bg-black/70 backdrop-blur-sm text-white text-xs px-2 py-1 rounded z-30`}
+        >
           {(() => {
             // 格式化時長：將秒數轉換為「幾分幾秒」
             const minutes = Math.floor(displayDuration / 60);

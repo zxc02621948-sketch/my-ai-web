@@ -22,6 +22,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const [posterIndex, setPosterIndex] = useState(0);
   const [mobilePreviewActive, setMobilePreviewActive] = useState(false);
   const mobileCanPlayHandlerRef = useRef(null);
+  const desktopPreviewTimeoutRef = useRef(null);
 
   const cleanupMobileCanPlay = useCallback(() => {
     const handler = mobileCanPlayHandlerRef.current;
@@ -58,6 +59,10 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     if (mobilePreviewTimeoutRef.current) {
       clearTimeout(mobilePreviewTimeoutRef.current);
       mobilePreviewTimeoutRef.current = null;
+    }
+    if (desktopPreviewTimeoutRef.current) {
+      clearTimeout(desktopPreviewTimeoutRef.current);
+      desktopPreviewTimeoutRef.current = null;
     }
   }, [video?._id, cleanupMobileCanPlay]);
 
@@ -121,11 +126,15 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   };
 
   // 點擊處理
-  const stopMobilePreview = useCallback(() => {
+  const stopPreview = useCallback(() => {
     cleanupMobileCanPlay();
     if (mobilePreviewTimeoutRef.current) {
       clearTimeout(mobilePreviewTimeoutRef.current);
       mobilePreviewTimeoutRef.current = null;
+    }
+    if (desktopPreviewTimeoutRef.current) {
+      clearTimeout(desktopPreviewTimeoutRef.current);
+      desktopPreviewTimeoutRef.current = null;
     }
     setMobilePreviewActive(false);
     setIsPlaying(false);
@@ -148,14 +157,14 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
             .then(() => true)
             .catch((err) => {
               console.warn('行動裝置預覽播放失敗:', err);
-              stopMobilePreview();
+              stopPreview();
               return false;
             });
         }
         return Promise.resolve(true);
       } catch (err) {
         console.warn('行動裝置預覽播放錯誤:', err);
-        stopMobilePreview();
+        stopPreview();
         return Promise.resolve(false);
       }
     };
@@ -181,42 +190,82 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
         resolve(false);
       }
     });
-  }, [cleanupMobileCanPlay, stopMobilePreview]);
+  }, [cleanupMobileCanPlay, stopPreview]);
+
+  const startDesktopPreviewPlayback = useCallback(async () => {
+    const el = videoRef.current;
+    if (!el) return false;
+    try {
+      el.currentTime = 0;
+      const playPromise = el.play();
+      if (playPromise && typeof playPromise.then === 'function') {
+        await playPromise;
+      }
+      desktopPreviewTimeoutRef.current = window.setTimeout(() => {
+        stopPreview();
+      }, 2500);
+      return true;
+    } catch (err) {
+      console.warn('桌面預覽播放失敗:', err);
+      stopPreview();
+      return false;
+    }
+  }, [stopPreview]);
+
+  const handlePreviewRequest = useCallback(async () => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = 0;
+    const started = await startMobilePreviewPlayback();
+    if (started) {
+      const duration = Number.isFinite(video?.previewDuration)
+        ? Math.max(200, Math.min(5000, video.previewDuration * 1000))
+        : 2500;
+      mobilePreviewTimeoutRef.current = window.setTimeout(() => {
+        stopPreview();
+      }, duration);
+    }
+  }, [startMobilePreviewPlayback, stopPreview, video?.previewDuration]);
 
   const handleClick = useCallback(async () => {
-    if (isMobile) {
-      if (!mobilePreviewActive) {
-        setMobilePreviewActive(true);
-        setIsPlaying(true);
-        if (videoRef.current) {
-          videoRef.current.currentTime = 0;
-        }
-        const started = await startMobilePreviewPlayback();
-        if (started) {
-          const duration = Number.isFinite(video?.previewDuration)
-            ? Math.max(200, Math.min(5000, video.previewDuration * 1000))
-            : 2500;
-          mobilePreviewTimeoutRef.current = window.setTimeout(() => {
-            stopMobilePreview();
-          }, duration);
-        }
-        return;
-      }
-
-      stopMobilePreview();
-      return;
-    }
-
+    stopPreview();
     if (onClick) {
       onClick(video);
     }
+  }, [onClick, stopPreview, video]);
+
+  const handlePreviewButtonClick = useCallback(async (event) => {
+    event.stopPropagation();
+    if (isMobile) {
+      if (mobilePreviewActive) {
+        stopPreview();
+        return;
+      }
+      setMobilePreviewActive(true);
+      setIsPlaying(true);
+      const started = await handlePreviewRequest();
+      if (!started) {
+        setMobilePreviewActive(false);
+        setIsPlaying(false);
+      }
+    } else {
+      if (isPlaying) {
+        stopPreview();
+        return;
+      }
+      const started = await startDesktopPreviewPlayback();
+      if (started) {
+        setIsPlaying(true);
+      } else {
+        setIsPlaying(false);
+      }
+    }
   }, [
+    handlePreviewRequest,
     isMobile,
+    isPlaying,
     mobilePreviewActive,
-    onClick,
-    startMobilePreviewPlayback,
-    stopMobilePreview,
-    video,
+    startDesktopPreviewPlayback,
+    stopPreview,
   ]);
 
   // 滑鼠進入處理
@@ -251,15 +300,9 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   // 清理 timeout
   useEffect(() => {
     return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
-      if (mobilePreviewTimeoutRef.current) {
-        clearTimeout(mobilePreviewTimeoutRef.current);
-      }
-      cleanupMobileCanPlay();
+      stopPreview();
     };
-  }, [cleanupMobileCanPlay]);
+  }, [stopPreview]);
 
   const posterCandidates = useMemo(() => {
     const sources = [];
@@ -394,8 +437,8 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     return video?.videoUrl || '';
   }, [video?.streamId, video?.previewUrl, video?.videoUrl]);
 
-  const showVideo = ((!isMobile && isHovered) || (isMobile && mobilePreviewActive)) && Boolean(baseVideoSource);
-  const showTapHint = isMobile && !mobilePreviewActive;
+  const showVideo = ((!isMobile && isPlaying) || (isMobile && mobilePreviewActive)) && Boolean(baseVideoSource);
+  const showTapHint = isMobile && !mobilePreviewActive && !isPlaying;
 
   return (
     <div 
@@ -433,21 +476,24 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
 
       {/* 手機提示 */}
       {showTapHint && (
-        <div className="absolute top-3 right-3 bg-black/70 text-white text-[11px] px-2 py-1 rounded-full z-50 pointer-events-none">
+        <div className="absolute bottom-3 left-3 bg-black/70 text-white text-[11px] px-2 py-1 rounded-full z-50 pointer-events-none">
           點擊一次預覽
         </div>
       )}
 
       {/* 播放按鈕覆蓋層 */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className={`bg-black bg-opacity-60 rounded-full p-4 transition-all duration-300 ${
-          isHovered ? 'bg-opacity-40 scale-110' : 'bg-opacity-60 scale-100'
-        }`}>
-          <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-        </div>
-      </div>
+      <button
+        type="button"
+        onClick={handlePreviewButtonClick}
+        className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center rounded-full p-4 transition-all duration-300 bg-black/60 hover:bg-black/40 focus:outline-none focus:ring-2 focus:ring-white/60 ${
+          isHovered ? 'scale-110' : 'scale-100'
+        }`}
+        aria-label={isPlaying ? '停止預覽' : '播放預覽'}
+      >
+        <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+      </button>
 
       {/* NEW 徽章（左上角） */}
       {isNew && (
