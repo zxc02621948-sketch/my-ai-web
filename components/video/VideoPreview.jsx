@@ -19,10 +19,18 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     Array.isArray(video?.likes) ? video.likes.length : (video?.likesCount || 0)
   );
   const [isProcessing, setIsProcessing] = useState(false);
-  const [renderKey, setRenderKey] = useState(0);
   const [posterIndex, setPosterIndex] = useState(0);
-  const [posterDebug, setPosterDebug] = useState([]);
   const [mobilePreviewActive, setMobilePreviewActive] = useState(false);
+  const mobileCanPlayHandlerRef = useRef(null);
+
+  const cleanupMobileCanPlay = useCallback(() => {
+    const handler = mobileCanPlayHandlerRef.current;
+    const el = videoRef.current;
+    if (handler && el) {
+      el.removeEventListener('canplay', handler);
+    }
+    mobileCanPlayHandlerRef.current = null;
+  }, []);
 
   useEffect(() => {
     // 檢測是否為行動裝置
@@ -45,13 +53,13 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
 
   useEffect(() => {
     setPosterIndex(0);
-    setPosterDebug([]);
     setMobilePreviewActive(false);
+    cleanupMobileCanPlay();
     if (mobilePreviewTimeoutRef.current) {
       clearTimeout(mobilePreviewTimeoutRef.current);
       mobilePreviewTimeoutRef.current = null;
     }
-  }, [video?._id]);
+  }, [video?._id, cleanupMobileCanPlay]);
 
   // 監聽全域同步事件
   useEffect(() => {
@@ -114,6 +122,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
 
   // 點擊處理
   const stopMobilePreview = useCallback(() => {
+    cleanupMobileCanPlay();
     if (mobilePreviewTimeoutRef.current) {
       clearTimeout(mobilePreviewTimeoutRef.current);
       mobilePreviewTimeoutRef.current = null;
@@ -125,30 +134,54 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       el.pause();
       el.currentTime = 0;
     }
-  }, []);
+  }, [cleanupMobileCanPlay]);
+
+  const startMobilePreviewPlayback = useCallback(() => {
+    const el = videoRef.current;
+    if (!el) return;
+
+    const attemptPlay = () => {
+      try {
+        const playPromise = el.play();
+        if (playPromise && typeof playPromise.then === 'function') {
+          playPromise.catch((err) => {
+            console.warn('行動裝置預覽播放失敗:', err);
+            stopMobilePreview();
+          });
+        }
+      } catch (err) {
+        console.warn('行動裝置預覽播放錯誤:', err);
+        stopMobilePreview();
+      }
+    };
+
+    if (el.readyState >= 2) {
+      attemptPlay();
+    } else {
+      cleanupMobileCanPlay();
+      const handler = () => {
+        cleanupMobileCanPlay();
+        attemptPlay();
+      };
+      mobileCanPlayHandlerRef.current = handler;
+      el.addEventListener('canplay', handler, { once: true });
+      try {
+        el.load();
+      } catch (err) {
+        console.warn('行動裝置預覽載入錯誤:', err);
+      }
+    }
+  }, [cleanupMobileCanPlay, stopMobilePreview]);
 
   const handleClick = () => {
     if (isMobile) {
       if (!mobilePreviewActive) {
         setMobilePreviewActive(true);
         setIsPlaying(true);
-        const el = videoRef.current;
-        if (el) {
-          try {
-            el.currentTime = 0;
-            const playPromise = el.play();
-            if (playPromise && typeof playPromise.then === 'function') {
-              playPromise.catch((err) => {
-                console.warn('行動裝置預覽播放失敗:', err);
-                stopMobilePreview();
-              });
-            }
-          } catch (err) {
-            console.warn('行動裝置預覽播放錯誤:', err);
-            stopMobilePreview();
-          }
+        if (videoRef.current) {
+          videoRef.current.currentTime = 0;
         }
-
+        startMobilePreviewPlayback();
         mobilePreviewTimeoutRef.current = window.setTimeout(() => {
           stopMobilePreview();
         }, 2200);
@@ -201,8 +234,9 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       if (mobilePreviewTimeoutRef.current) {
         clearTimeout(mobilePreviewTimeoutRef.current);
       }
+      cleanupMobileCanPlay();
     };
-  }, []);
+  }, [cleanupMobileCanPlay]);
 
   const posterCandidates = useMemo(() => {
     const sources = [];
@@ -225,66 +259,14 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
 
   const currentPoster = posterCandidates[posterIndex] || '';
 
-  const debugInfo = useMemo(() => ({
-    id: video?._id || '(無)',
-    streamId: video?.streamId || '(無)',
-    videoUrl: video?.videoUrl || '',
-    previewUrl: video?.previewUrl || '',
-    thumbnailUrl: video?.thumbnailUrl || '',
-    posterCandidates: posterCandidates.length,
-    posterIndex,
-  }), [video?._id, video?.streamId, video?.videoUrl, video?.previewUrl, video?.thumbnailUrl, posterCandidates.length, posterIndex]);
-
   const handlePosterError = () => {
-    setPosterDebug(prev => {
-      const source = posterCandidates[posterIndex] || '(空)';
-      if (prev.includes(source)) return prev;
-      return [...prev, source];
-    });
-
     setPosterIndex((prev) => {
       if (prev < posterCandidates.length - 1) {
         return prev + 1;
       }
-      return posterCandidates.length; // 標記為沒有可用縮圖
+      return posterCandidates.length; // 使用預設佔位圖
     });
   };
-
-  useEffect(() => {
-    if (posterCandidates.length === 0) {
-      console.warn('[VideoPreview] 沒有可用縮圖來源', debugInfo);
-    }
-  }, [posterCandidates.length, debugInfo]);
-
-  const renderDebugOverlay = (message) => (
-    <div className="absolute inset-x-0 bottom-0 bg-black/75 text-[10px] text-yellow-300 px-2 py-1 space-y-0.5 pointer-events-none max-h-[55%] overflow-y-auto z-40">
-      <div>{message}</div>
-      <div className="opacity-70 break-words">ID: {debugInfo.id}</div>
-      <div className="opacity-70 break-words">streamId: {debugInfo.streamId}</div>
-      <div className="opacity-70 break-words">videoUrl: {debugInfo.videoUrl ? '✅' : '❌'}</div>
-      <div className="opacity-70 break-words">previewUrl: {debugInfo.previewUrl ? '✅' : '❌'}</div>
-      <div className="opacity-70 break-words">thumbnailUrl欄位: {debugInfo.thumbnailUrl ? '✅' : '❌'}</div>
-      <div className="opacity-70 break-words">候選縮圖數量: {posterCandidates.length}</div>
-      {posterCandidates.length > 0 && (
-        <div className="opacity-70 break-words">
-          候選來源：
-          {posterCandidates.map((src, idx) => (
-            <div key={`candidate-${idx}`} className="ml-2 break-words">{idx + 1}. {src}</div>
-          ))}
-        </div>
-      )}
-      {posterDebug.length > 0 ? (
-        <div className="opacity-70 break-words">
-          失敗來源：
-          {posterDebug.map((src, idx) => (
-            <div key={`failed-${idx}`} className="ml-2 break-words">{idx + 1}. {src}</div>
-          ))}
-        </div>
-      ) : (
-        <div className="opacity-70 break-words">目前尚無失敗來源紀錄</div>
-      )}
-    </div>
-  );
 
   // 影片播放控制 - 預覽循環播放前 2 秒片段
   useEffect(() => {
@@ -380,7 +362,6 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   };
 
 
-  const hasPoster = Boolean(currentPoster);
   const baseVideoSource = useMemo(() => {
     if (video?.streamId) {
       if (video?.previewUrl) return video.previewUrl;
@@ -392,26 +373,6 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
 
   const showVideo = ((!isMobile && isHovered) || (isMobile && mobilePreviewActive)) && Boolean(baseVideoSource);
   const showTapHint = isMobile && !mobilePreviewActive;
-
-  const videoDebugMessage = useMemo(() => {
-    if (!baseVideoSource) return '⚠️ 找不到影片來源';
-    if (video?.streamId) {
-      if (video?.previewUrl) {
-        if (isMobile) {
-          return mobilePreviewActive ? '📱 Stream 預覽播放中' : '🧪 Stream 預覽模式';
-        }
-        return '🧪 Stream 預覽模式';
-      }
-      return '⚠️ Stream 沒有縮圖，改用影片 URL';
-    }
-    if (!hasPoster) {
-      return '⚠️ 無縮圖，直接使用影片';
-    }
-    if (isMobile) {
-      return mobilePreviewActive ? '📱 預覽播放中' : '📱 點擊預覽';
-    }
-    return '🧪 影片元素作為主圖';
-  }, [baseVideoSource, video?.streamId, video?.previewUrl, hasPoster, isMobile, mobilePreviewActive]);
 
   return (
     <div 
@@ -446,9 +407,6 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
           }}
         />
       )}
-
-      {/* 除錯資訊 */}
-      {renderDebugOverlay(videoDebugMessage)}
 
       {/* 手機提示 */}
       {showTapHint && (
