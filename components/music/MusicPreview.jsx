@@ -512,7 +512,11 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     >
       {/* NEW 徽章（左上角，往下移避免被時長擋住） */}
       {isNew && (
-        <div className="absolute left-2 top-10 z-20 pointer-events-none">
+        <div
+          className={`absolute z-20 pointer-events-none ${
+            isMobile ? "left-2 top-2" : "left-2 top-10"
+          }`}
+        >
           <NewBadge animated />
         </div>
       )}

@@ -26,6 +26,15 @@ const VideoModal = ({
   const [likeCount, setLikeCount] = useState(video?.likes?.length || 0);
   const viewedRef = useRef(new Set());
   const portalContainer = usePortalContainer();
+  const [isMobile, setIsMobile] = useState(false);
+  const [touchOffsetX, setTouchOffsetX] = useState(0);
+  const [isTouching, setIsTouching] = useState(false);
+  const touchDataRef = useRef({
+    startX: 0,
+    startY: 0,
+    isHorizontal: false,
+    active: false,
+  });
 
   useEffect(() => {
     setIsLikedLocal(isLiked);
@@ -34,6 +43,16 @@ const VideoModal = ({
   useEffect(() => {
     setLikeCount(video?.likes?.length || 0);
   }, [video?.likes]);
+
+  useEffect(() => {
+    const updateIsMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    updateIsMobile();
+    window.addEventListener('resize', updateIsMobile);
+    return () => window.removeEventListener('resize', updateIsMobile);
+  }, []);
 
   // ✅ 記錄點擊（每次打開影片時調用一次）
   useEffect(() => {
@@ -96,15 +115,94 @@ const VideoModal = ({
     }
   };
 
+  const resetTouchState = () => {
+    touchDataRef.current = {
+      startX: 0,
+      startY: 0,
+      isHorizontal: false,
+      active: false,
+    };
+    setIsTouching(false);
+    setTouchOffsetX(0);
+  };
+
+  const handleTouchStart = (e) => {
+    if (!isMobile || e.touches.length !== 1) return;
+    const { clientX, clientY } = e.touches[0];
+    touchDataRef.current = {
+      startX: clientX,
+      startY: clientY,
+      isHorizontal: false,
+      active: true,
+    };
+    setIsTouching(true);
+    setTouchOffsetX(0);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!touchDataRef.current.active || !isMobile || e.touches.length !== 1) return;
+
+    const { clientX, clientY } = e.touches[0];
+    const dx = clientX - touchDataRef.current.startX;
+    const dy = clientY - touchDataRef.current.startY;
+
+    if (!touchDataRef.current.isHorizontal) {
+      const isHorizontalGesture = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10;
+      touchDataRef.current.isHorizontal = isHorizontalGesture;
+    }
+
+    if (touchDataRef.current.isHorizontal) {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+      setTouchOffsetX(dx);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchDataRef.current.active || !isMobile) return;
+
+    const shouldClose =
+      touchDataRef.current.isHorizontal && Math.abs(touchOffsetX) > 80;
+
+    if (shouldClose) {
+      onClose();
+    } else {
+      setTouchOffsetX(0);
+      setTimeout(() => {
+        resetTouchState();
+      }, 200);
+    }
+
+    if (shouldClose) {
+      resetTouchState();
+    }
+  };
+
   if (!portalContainer) return null;
 
   return createPortal(
     <div
       ref={modalRef}
       onClick={handleBackdropClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
     >
-      <div className="relative w-full max-w-5xl bg-[#1a1a1a] rounded-lg shadow-2xl overflow-hidden">
+      <div
+        className={`relative w-full max-w-5xl bg-[#1a1a1a] rounded-lg shadow-2xl overflow-hidden ${
+          !isTouching ? 'transition-transform duration-200 ease-out' : ''
+        }`}
+        style={
+          isMobile
+            ? {
+                transform: `translateX(${touchOffsetX}px)`,
+                opacity: Math.max(0.2, 1 - Math.min(1, Math.abs(touchOffsetX) / 220)),
+              }
+            : undefined
+        }
+      >
         <div className="flex flex-col md:flex-row h-full">
           {/* 左側：影片播放器 */}
           <div className="flex-1 relative bg-black flex items-center justify-center">

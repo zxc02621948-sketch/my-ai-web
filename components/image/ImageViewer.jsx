@@ -23,6 +23,7 @@ export default function ImageViewer({
   onClose,
   disableTapZoom = false,
   onToggleLike,
+  onZoomChange,
 }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
@@ -77,6 +78,10 @@ export default function ImageViewer({
     setScale(1);
     setIsZoomed(false);
   }, []);
+
+  useEffect(() => {
+    onZoomChange?.(scale);
+  }, [scale, onZoomChange]);
 
   // ✅ 忽略來自工具列/互動元素的點擊，避免觸發縮放
   const shouldIgnoreClick = (e) => {

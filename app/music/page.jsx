@@ -124,8 +124,13 @@ const MusicPage = () => {
                 <p className="mt-1 text-gray-400">探索精彩的 AI 生成音樂</p>
               </div>
               {/* 提示文字 */}
-              <div className="md:hidden text-yellow-400 text-sm">
-                <div>💡 點擊「播放」或「預覽」按鈕即可開始試聽。</div>
+              <div className="text-yellow-400 text-sm">
+                <div className="md:hidden">
+                  💡 點擊「播放」或「預覽」按鈕即可開始試聽。
+                </div>
+                <div className="hidden md:block">
+                  💡 點擊「播放」或「預覽」按鈕即可開始試聽，滑鼠移開卡片時預覽會立即結束。
+                </div>
               </div>
             </div>
 
