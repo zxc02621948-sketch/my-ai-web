@@ -220,11 +220,6 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       push(`https://customer-h5be4kbubhrszsgr.cloudflarestream.com/${video.streamId}/thumbnails/thumbnail.jpg?height=720`);
     }
 
-    if (sources.length === 0 && video?.videoUrl) {
-      // 落到最後一層時，使用影片 URL 作為縮圖來源
-      push(`${video.videoUrl}#poster`);
-    }
-
     return sources;
   }, [video?.thumbnailUrl, video?.streamId]);
 
@@ -352,150 +347,71 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const renderPosterImage = () => {
     if (currentPoster) {
       return (
-        <>
-          <img
-            src={currentPoster}
-            alt={video.title || '影片縮圖'}
-            className="w-full h-full object-cover transition-all duration-300"
-            style={{
-              filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
-              transform: isHovered ? 'scale(1.02)' : 'scale(1)',
-            }}
-            onError={handlePosterError}
-            loading="lazy"
-            crossOrigin="anonymous"
-          />
-          {renderDebugOverlay(posterDebug.length > 0 ? '⚠️ 部分縮圖載入失敗' : '🧪 調試：載入縮圖')}
-        </>
-      );
-    }
-
-    if (video?.videoUrl) {
-      return (
-        <>
-          <video
-            ref={videoRef}
-            src={video.videoUrl}
-            className="w-full h-full object-cover transition-all duration-300"
-            preload="metadata"
-            playsInline
-            muted
-            data-video-preview="true"
-            style={{
-              filter: isHovered ? 'brightness(1.08)' : 'brightness(1.02)',
-              transform: isHovered ? 'scale(1.01)' : 'scale(1)',
-            }}
-          />
-          {renderDebugOverlay('⚠️ 沒有縮圖，改顯示影片第一幀')}
-        </>
+        <img
+          src={currentPoster}
+          alt={video.title || '影片縮圖'}
+          className="w-full h-full object-cover transition-all duration-300"
+          style={{
+            filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
+            transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+          }}
+          onError={handlePosterError}
+          loading="lazy"
+        />
       );
     }
 
     return (
-      <>
-        <div className="w-full h-full bg-zinc-600 flex items-center justify-center">
-          <div className="text-white text-sm opacity-50">🎬 影片載入中...</div>
+      <div className="w-full h-full relative flex flex-col items-center justify-center bg-gradient-to-br from-zinc-800 via-zinc-900 to-black text-white/80">
+        <div className="w-12 h-12 flex items-center justify-center rounded-full bg-white/10 mb-3">
+          <svg
+            className="w-6 h-6"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path d="M8 5v14l11-7z" />
+          </svg>
         </div>
-        {renderDebugOverlay('⚠️ 沒有任何縮圖來源')}
-      </>
+        <div className="text-sm font-medium tracking-wide">Video</div>
+        <div className="text-xs text-white/50 mt-1">暫無預覽縮圖</div>
+      </div>
     );
   };
 
-  const renderStreamContent = () => {
-    if (!video.streamId) return null;
 
-    const hasPoster = Boolean(currentPoster);
-    const hasPreviewVideo = Boolean(video.previewUrl);
-    const shouldShowVideo = !isMobile || mobilePreviewActive || !hasPoster;
-
-    if (shouldShowVideo) {
-      const source = hasPreviewVideo ? video.previewUrl : video.videoUrl;
-      const debugMessage = hasPreviewVideo
-        ? (isMobile
-            ? mobilePreviewActive
-              ? '📱 Stream 預覽播放中'
-              : '🧪 Stream 預覽模式'
-            : '🧪 Stream 預覽模式')
-        : '⚠️ Stream 沒有縮圖，改用影片 URL';
-
-      return (
-        <>
-          <video
-            ref={videoRef}
-            src={source}
-            className="w-full h-full object-cover transition-all duration-300"
-            preload="metadata"
-            muted
-            playsInline
-            data-video-preview="true"
-            poster={posterCandidates[0] || undefined}
-            style={{
-              filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
-              transform: isHovered ? 'scale(1.02)' : 'scale(1)',
-            }}
-          />
-          {renderDebugOverlay(debugMessage)}
-        </>
-      );
+  const hasPoster = Boolean(currentPoster);
+  const baseVideoSource = useMemo(() => {
+    if (video?.streamId) {
+      if (video?.previewUrl) return video.previewUrl;
+      if (video?.videoUrl) return video.videoUrl;
+      return '';
     }
+    return video?.videoUrl || '';
+  }, [video?.streamId, video?.previewUrl, video?.videoUrl]);
 
-    return (
-      <>
-        {renderPosterImage()}
-        {isMobile && !mobilePreviewActive && (
-          <div className="absolute top-3 right-3 bg-black/70 text-white text-[11px] px-2 py-1 rounded-full z-50 pointer-events-none">
-            點擊一次預覽
-          </div>
-        )}
-      </>
-    );
-  };
+  const showVideo = ((!isMobile && isHovered) || (isMobile && mobilePreviewActive)) && Boolean(baseVideoSource);
+  const showTapHint = isMobile && !mobilePreviewActive;
 
-  const renderRegularContent = () => {
-    if (!video.videoUrl) {
-      return renderPosterImage();
+  const videoDebugMessage = useMemo(() => {
+    if (!baseVideoSource) return '⚠️ 找不到影片來源';
+    if (video?.streamId) {
+      if (video?.previewUrl) {
+        if (isMobile) {
+          return mobilePreviewActive ? '📱 Stream 預覽播放中' : '🧪 Stream 預覽模式';
+        }
+        return '🧪 Stream 預覽模式';
+      }
+      return '⚠️ Stream 沒有縮圖，改用影片 URL';
     }
-
-    const hasPoster = Boolean(currentPoster);
-    const shouldShowVideo = !isMobile || mobilePreviewActive || !hasPoster;
-
-    if (shouldShowVideo) {
-      const debugMessage = hasPoster
-        ? (isMobile && mobilePreviewActive ? '📱 預覽播放中' : '🧪 影片元素作為主圖')
-        : '⚠️ 無縮圖，直接使用影片';
-
-      return (
-        <>
-          <video
-            ref={videoRef}
-            src={video.videoUrl}
-            className="w-full h-full object-cover transition-all duration-300"
-            preload="metadata"
-            muted
-            playsInline
-            data-video-preview="true"
-            poster={posterCandidates[0] || undefined}
-            style={{
-              filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
-              transform: isHovered ? 'scale(1.02)' : 'scale(1)',
-            }}
-          />
-          {renderDebugOverlay(debugMessage)}
-        </>
-      );
+    if (!hasPoster) {
+      return '⚠️ 無縮圖，直接使用影片';
     }
-
-    return (
-      <>
-        {renderPosterImage()}
-        {isMobile && !mobilePreviewActive && (
-          <div className="absolute top-3 right-3 bg-black/70 text-white text-[11px] px-2 py-1 rounded-full z-50 pointer-events-none">
-            點擊一次預覽
-          </div>
-        )}
-      </>
-    );
-  };
+    if (isMobile) {
+      return mobilePreviewActive ? '📱 預覽播放中' : '📱 點擊預覽';
+    }
+    return '🧪 影片元素作為主圖';
+  }, [baseVideoSource, video?.streamId, video?.previewUrl, hasPoster, isMobile, mobilePreviewActive]);
 
   return (
     <div 
@@ -507,9 +423,40 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}
     >
-      {/* 影片元素 / 縮圖 */}
-      {video.streamId ? renderStreamContent() : renderRegularContent()}
-      
+      {/* 縮圖層 */}
+      <div className="absolute inset-0">
+        {renderPosterImage()}
+      </div>
+
+      {/* 影片層 */}
+      {baseVideoSource && (
+        <video
+          key={`${video._id}-${mobilePreviewActive ? 'playing' : 'idle'}`}
+          ref={videoRef}
+          src={baseVideoSource}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          preload="metadata"
+          muted
+          playsInline
+          data-video-preview="true"
+          poster={posterCandidates[0] || undefined}
+          style={{
+            filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
+            transform: isHovered ? 'scale(1.02)' : 'scale(1)',
+          }}
+        />
+      )}
+
+      {/* 除錯資訊 */}
+      {renderDebugOverlay(videoDebugMessage)}
+
+      {/* 手機提示 */}
+      {showTapHint && (
+        <div className="absolute top-3 right-3 bg-black/70 text-white text-[11px] px-2 py-1 rounded-full z-50 pointer-events-none">
+          點擊一次預覽
+        </div>
+      )}
+
       {/* 播放按鈕覆蓋層 */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className={`bg-black bg-opacity-60 rounded-full p-4 transition-all duration-300 ${
