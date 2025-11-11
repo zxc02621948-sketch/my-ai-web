@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { X, Heart } from 'lucide-react';
 import DesktopVideoRightPane from './DesktopVideoRightPane';
 import { usePortalContainer } from '@/components/common/usePortal';
+import MobileVideoSheet from './MobileVideoSheet';
 
 const VideoModal = ({ 
   video, 
@@ -98,7 +99,7 @@ const VideoModal = ({
 
   // 處理愛心點擊
   const handleLikeClick = async (e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
     if (!currentUser || !onToggleLike) return;
 
     // 樂觀更新 UI
@@ -128,6 +129,25 @@ const VideoModal = ({
 
   const handleTouchStart = (e) => {
     if (!isMobile || e.touches.length !== 1) return;
+
+    const target = e.target;
+    if (
+      target.closest?.('[data-stop-swipe]') ||
+      target.closest?.('video') ||
+      target.closest?.('iframe') ||
+      target.closest?.('button')
+    ) {
+      touchDataRef.current = {
+        startX: 0,
+        startY: 0,
+        isHorizontal: false,
+        active: false,
+      };
+      setIsTouching(false);
+      setTouchOffsetX(0);
+      return;
+    }
+
     const { clientX, clientY } = e.touches[0];
     touchDataRef.current = {
       startX: clientX,
@@ -160,22 +180,22 @@ const VideoModal = ({
   };
 
   const handleTouchEnd = () => {
-    if (!touchDataRef.current.active || !isMobile) return;
+    if (!touchDataRef.current.active || !isMobile) {
+      resetTouchState();
+      return;
+    }
 
     const shouldClose =
       touchDataRef.current.isHorizontal && Math.abs(touchOffsetX) > 80;
 
     if (shouldClose) {
       onClose();
+      resetTouchState();
     } else {
       setTouchOffsetX(0);
       setTimeout(() => {
         resetTouchState();
       }, 200);
-    }
-
-    if (shouldClose) {
-      resetTouchState();
     }
   };
 
@@ -203,85 +223,100 @@ const VideoModal = ({
             : undefined
         }
       >
-        <div className="flex flex-col md:flex-row h-full">
-          {/* 左側：影片播放器 */}
-          <div className="flex-1 relative bg-black flex items-center justify-center">
-            {/* 檢查是否為 Stream 影片 */}
-            {video.streamId ? (
-              // Cloudflare Stream 影片使用 iframe 播放器
-              <iframe
-                src={`https://iframe.cloudflarestream.com/${video.streamId}?autoplay=true&loop=true`}
-                className="w-full h-full max-h-[70vh] border-0"
-                allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
-                allowFullScreen
-                onError={(e) => {
-                  console.error('Stream 影片載入失敗:', e);
-                  console.log('Stream ID:', video.streamId);
-                  console.log('播放 URL:', video.videoUrl);
-                }}
-              />
-            ) : (
-              // 一般影片使用 HTML5 video 標籤
-              <video
-                ref={videoRef}
-                src={video.videoUrl}
-                controls
-                autoPlay
-                loop
-                className="w-full h-full max-h-[70vh] object-contain"
-                onError={(e) => {
-                  console.error('影片載入失敗:', e);
-                  console.log('影片 URL:', video.videoUrl);
-                  console.log('影片類型:', video.videoUrl?.includes('r2.dev') ? 'R2 影片' : '其他');
-                }}
-                onLoadStart={() => {
-                  console.log('開始載入影片:', video.videoUrl);
-                }}
-                onCanPlay={() => {
-                  console.log('影片可以播放:', video.videoUrl);
-                }}
-              />
-            )}
-            
-            {/* 愛心按鈕 - 右下角（避開進度條） */}
-            {currentUser && (
-              <button
-                onClick={handleLikeClick}
-                className="absolute bottom-16 right-4 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full p-3 transition-all duration-200 hover:scale-110 z-10"
-                title={isLikedLocal ? "取消愛心" : "點愛心"}
-              >
-                <Heart
-                  size={24}
-                  className={`transition-all duration-200 ${
-                    isLikedLocal 
-                      ? "text-pink-400 fill-pink-400" 
-                      : "text-white"
-                  }`}
-                />
-                {likeCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                    {likeCount > 99 ? '99+' : likeCount}
-                  </span>
-                )}
-              </button>
-            )}
+        <div className="flex h-full">
+          <div className="flex-1 md:hidden">
+            <MobileVideoSheet
+              video={video}
+              currentUser={currentUser}
+              displayMode={displayMode}
+              isFollowing={isFollowing}
+              onFollowToggle={onFollowToggle}
+              onUserClick={onUserClick}
+              onClose={onClose}
+              onDelete={onDelete}
+              canEdit={canEdit}
+              onEdit={onEdit}
+              isLiked={isLikedLocal}
+              likeCount={likeCount}
+              onLikeClick={handleLikeClick}
+            />
           </div>
 
-          {/* 右側：影片資訊 - 使用新的組件 */}
-          <DesktopVideoRightPane
-            video={video}
-            currentUser={currentUser}
-            displayMode={displayMode}
-            isFollowing={isFollowing}
-            onFollowToggle={onFollowToggle}
-            onUserClick={onUserClick}
-            onClose={onClose}
-            onDelete={onDelete}
-            canEdit={canEdit}
-            onEdit={onEdit}
-            isLiked={isLiked}
-            onToggleLike={onToggleLike}
-          />
+          <div className="hidden md:flex md:flex-row h-full flex-1">
+            <div className="flex-1 relative bg-black flex items-center justify-center">
+              {video.streamId ? (
+                <iframe
+                  src={`https://iframe.cloudflarestream.com/${video.streamId}?autoplay=true&loop=true`}
+                  className="w-full h-full max-h-[70vh] border-0"
+                  allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
+                  allowFullScreen
+                  onError={(e) => {
+                    console.error('Stream 影片載入失敗:', e);
+                    console.log('Stream ID:', video.streamId);
+                    console.log('播放 URL:', video.videoUrl);
+                  }}
+                />
+              ) : (
+                <video
+                  ref={videoRef}
+                  src={video.videoUrl}
+                  controls
+                  autoPlay
+                  loop
+                  className="w-full h-full max-h-[70vh] object-contain"
+                  onError={(e) => {
+                    console.error('影片載入失敗:', e);
+                    console.log('影片 URL:', video.videoUrl);
+                    console.log('影片類型:', video.videoUrl?.includes('r2.dev') ? 'R2 影片' : '其他');
+                  }}
+                  onLoadStart={() => {
+                    console.log('開始載入影片:', video.videoUrl);
+                  }}
+                  onCanPlay={() => {
+                    console.log('影片可以播放:', video.videoUrl);
+                  }}
+                />
+              )}
+
+              {currentUser && (
+                <button
+                  onClick={handleLikeClick}
+                  className="absolute bottom-16 right-4 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full p-3 transition-all duration-200 hover:scale-110 z-10"
+                  title={isLikedLocal ? "取消愛心" : "點愛心"}
+                  data-stop-swipe
+                >
+                  <Heart
+                    size={24}
+                    className={`transition-all duration-200 ${
+                      isLikedLocal
+                        ? "text-pink-400 fill-pink-400"
+                        : "text-white"
+                    }`}
+                  />
+                  {likeCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                      {likeCount > 99 ? '99+' : likeCount}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
+
+            <DesktopVideoRightPane
+              video={video}
+              currentUser={currentUser}
+              displayMode={displayMode}
+              isFollowing={isFollowing}
+              onFollowToggle={onFollowToggle}
+              onUserClick={onUserClick}
+              onClose={onClose}
+              onDelete={onDelete}
+              canEdit={canEdit}
+              onEdit={onEdit}
+              isLiked={isLiked}
+              onToggleLike={onToggleLike}
+            />
+          </div>
         </div>
       </div>
     </div>,
