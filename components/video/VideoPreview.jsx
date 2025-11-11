@@ -19,7 +19,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   );
   const [isProcessing, setIsProcessing] = useState(false);
   const [renderKey, setRenderKey] = useState(0);
-  const [posterFailed, setPosterFailed] = useState(false);
+  const [posterIndex, setPosterIndex] = useState(0);
 
   useEffect(() => {
     // 檢測是否為行動裝置
@@ -40,9 +40,8 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     );
   }, [isLiked, video?.likes, video?.likesCount, video?._id]);
 
-  // Reset poster error when video changes
   useEffect(() => {
-    setPosterFailed(false);
+    setPosterIndex(0);
   }, [video?._id]);
 
   // 監聽全域同步事件
@@ -149,13 +148,35 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
     };
   }, []);
 
-  const posterUrl = useMemo(() => {
-    if (video?.thumbnailUrl) return video.thumbnailUrl;
+  const posterCandidates = useMemo(() => {
+    const sources = [];
+    const push = (url) => {
+      if (typeof url === 'string' && url.trim() && !sources.includes(url.trim())) {
+        sources.push(url.trim());
+      }
+    };
+
+    push(video?.thumbnailUrl);
+
     if (video?.streamId) {
-      return `https://customer-h5be4kbubhrszsgr.cloudflarestream.com/${video.streamId}/thumbnails/thumbnail.jpg?time=1s`;
+      push(`https://customer-h5be4kbubhrszsgr.cloudflarestream.com/${video.streamId}/thumbnails/thumbnail.jpg?time=1s`);
+      push(`https://videodelivery.net/${video.streamId}/thumbnails/thumbnail.jpg?time=1s`);
+      push(`https://customer-h5be4kbubhrszsgr.cloudflarestream.com/${video.streamId}/thumbnails/thumbnail.jpg?height=720`);
     }
-    return '';
+
+    return sources;
   }, [video?.thumbnailUrl, video?.streamId]);
+
+  const currentPoster = posterCandidates[posterIndex] || '';
+
+  const handlePosterError = () => {
+    setPosterIndex((prev) => {
+      if (prev < posterCandidates.length - 1) {
+        return prev + 1;
+      }
+      return posterCandidates.length; // 標記為沒有可用縮圖
+    });
+  };
 
   // 影片播放控制 - 預覽循環播放前 2 秒片段
   useEffect(() => {
@@ -209,7 +230,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   const isNew = (Date.now() - createdMs) / 36e5 < 10;
 
   const renderPosterImage = () => {
-    if (!posterUrl || posterFailed) {
+    if (!currentPoster) {
       return (
         <div className="w-full h-full bg-zinc-600 flex items-center justify-center">
           <div className="text-white text-sm opacity-50">🎬 影片載入中...</div>
@@ -219,15 +240,16 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
 
     return (
       <img
-        src={posterUrl}
+        src={currentPoster}
         alt={video.title || '影片縮圖'}
         className="w-full h-full object-cover transition-all duration-300"
         style={{
           filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
           transform: isHovered ? 'scale(1.02)' : 'scale(1)',
         }}
-        onError={() => setPosterFailed(true)}
+        onError={handlePosterError}
         loading="lazy"
+        crossOrigin="anonymous"
       />
     );
   };
@@ -247,7 +269,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
           muted
           playsInline
           data-video-preview="true"
-          poster={posterUrl || undefined}
+          poster={posterCandidates[0] || undefined}
           style={{
             filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
             transform: isHovered ? 'scale(1.02)' : 'scale(1)',
@@ -274,7 +296,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
           muted
           playsInline
           data-video-preview="true"
-          poster={posterUrl || undefined}
+          poster={posterCandidates[0] || undefined}
           style={{
             filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
             transform: isHovered ? 'scale(1.02)' : 'scale(1)',
