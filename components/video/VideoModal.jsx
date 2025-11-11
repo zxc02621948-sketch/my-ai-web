@@ -223,26 +223,24 @@ const VideoModal = ({
             : undefined
         }
       >
-        <div className="flex h-full">
-          <div className="flex-1 md:hidden">
-            <MobileVideoSheet
-              video={video}
-              currentUser={currentUser}
-              displayMode={displayMode}
-              isFollowing={isFollowing}
-              onFollowToggle={onFollowToggle}
-              onUserClick={onUserClick}
-              onClose={onClose}
-              onDelete={onDelete}
-              canEdit={canEdit}
-              onEdit={onEdit}
-              isLiked={isLikedLocal}
-              likeCount={likeCount}
-              onLikeClick={handleLikeClick}
-            />
-          </div>
-
-          <div className="hidden md:flex md:flex-row h-full flex-1">
+        {isMobile ? (
+          <MobileVideoSheet
+            video={video}
+            currentUser={currentUser}
+            displayMode={displayMode}
+            isFollowing={isFollowing}
+            onFollowToggle={onFollowToggle}
+            onUserClick={onUserClick}
+            onClose={onClose}
+            onDelete={onDelete}
+            canEdit={canEdit}
+            onEdit={onEdit}
+            isLiked={isLikedLocal}
+            likeCount={likeCount}
+            onLikeClick={handleLikeClick}
+          />
+        ) : (
+          <div className="flex flex-row h-full">
             <div className="flex-1 relative bg-black flex items-center justify-center">
               {video.streamId ? (
                 <iframe
@@ -317,7 +315,7 @@ const VideoModal = ({
               onToggleLike={onToggleLike}
             />
           </div>
-        </div>
+        )}
       </div>
     </div>,
     portalContainer
