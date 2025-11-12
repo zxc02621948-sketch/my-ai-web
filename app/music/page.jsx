@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import MusicGrid from "@/components/music/MusicGrid";
 import MusicModal from "@/components/music/MusicModal";
@@ -22,6 +22,11 @@ import {
 const MusicPage = () => {
   const [music, setMusic] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const isFetchingRef = useRef(false);
+  const pageRef = useRef(1);
   const [selectedMusic, setSelectedMusic] = useState(null);
   const [showMusicModal, setShowMusicModal] = useState(false);
   const [editingMusic, setEditingMusic] = useState(null);
@@ -48,65 +53,99 @@ const MusicPage = () => {
     [levelFilters],
   );
 
-  const loadMusic = useCallback(async () => {
-    try {
-      // 獲取搜尋參數
-      const searchQuery = searchParams.get("search") || "";
+  const searchQuery = searchParams.get("search") || "";
 
-      // 構建 API URL
-      // 將前端的排序值轉換為 API 接受的格式
-      const apiSort = sort.toLowerCase() === "mostlikes" ? "mostlikes" : sort.toLowerCase();
-      
+  const ratingsKey = useMemo(
+    () => selectedRatings.join(","),
+    [selectedRatings],
+  );
+  const categoriesKey = useMemo(
+    () => categoryFilters.join(","),
+    [categoryFilters],
+  );
+  const typesKey = useMemo(
+    () => typeFilters.join(","),
+    [typeFilters],
+  );
+  const languagesKey = useMemo(
+    () => languageFilters.join(","),
+    [languageFilters],
+  );
+
+  const queryKey = useMemo(
+    () =>
+      [
+        sort,
+        searchQuery,
+        ratingsKey,
+        categoriesKey,
+        typesKey,
+        languagesKey,
+      ].join("||"),
+    [sort, searchQuery, ratingsKey, categoriesKey, typesKey, languagesKey],
+  );
+
+  const loadPage = async (targetPage = 1, append = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    try {
+      if (append) {
+        setIsLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+
+      const apiSort =
+        sort.toLowerCase() === "mostlikes" ? "mostlikes" : sort.toLowerCase();
+
       const params = new URLSearchParams({
-        page: "1",
+        page: String(targetPage),
         limit: "20",
         sort: apiSort,
-        live: sort === "popular" ? "1" : "0", // 只有熱門度排序使用即時計算
+        live: sort === "popular" ? "1" : "0",
       });
 
       if (searchQuery.trim()) {
         params.append("search", searchQuery.trim());
       }
+      if (ratingsKey) params.append("ratings", ratingsKey);
+      if (categoriesKey) params.append("categories", categoriesKey);
+      if (typesKey) params.append("types", typesKey);
+      if (languagesKey) params.append("languages", languagesKey);
 
-      // ✅ 添加篩選參數
-      if (selectedRatings.length > 0) {
-        params.append("ratings", selectedRatings.join(","));
-      }
-      if (categoryFilters.length > 0) {
-        params.append("categories", categoryFilters.join(","));
-      }
-      if (typeFilters.length > 0) {
-        params.append("types", typeFilters.join(","));
-      }
-      if (languageFilters.length > 0) {
-        params.append("languages", languageFilters.join(","));
-      }
-
-      const response = await fetch(`/api/music?${params}`);
+      const response = await fetch(`/api/music?${params.toString()}`);
       const data = await response.json();
 
       if (data.success) {
-        setMusic(data.music || []);
+        const incoming = data.music || [];
+        setMusic((prev) => {
+          if (!append) return incoming;
+          const known = new Set(prev.map((item) => String(item?._id)));
+          const filtered = incoming.filter(
+            (item) => item && !known.has(String(item._id)),
+          );
+          return [...prev, ...filtered];
+        });
+        setHasMore(incoming.length === 20);
+        setPage(targetPage);
+        pageRef.current = targetPage;
       }
-      setLoading(false);
     } catch (error) {
       console.error("載入音樂失敗:", error);
+    } finally {
       setLoading(false);
+      setIsLoadingMore(false);
+      isFetchingRef.current = false;
     }
-  }, [
-    searchParams,
-    selectedRatings,
-    categoryFilters,
-    typeFilters,
-    languageFilters,
-    sort,
-  ]);
+  };
 
-  // 監聽篩選條件變化
   useEffect(() => {
     if (!isInitialized) return;
-    loadMusic();
-  }, [isInitialized, loadMusic]);
+    pageRef.current = 1;
+    setMusic([]);
+    setHasMore(true);
+    loadPage(1, false);
+  }, [isInitialized, queryKey]);
 
   // 播放器邏輯（參考首頁）
   usePinnedPlayerBootstrap({ player, currentUser, shareMode: "global" });
@@ -210,7 +249,16 @@ const MusicPage = () => {
             </div>
             <div className="h-8 w-px bg-zinc-700 mx-2"></div>
             {/* 排序選擇器 */}
-            <SortSelect value={sort} onChange={setSort} />
+            <div className="flex items-center gap-3">
+              <SortSelect value={sort} onChange={setSort} />
+              <a
+                href="/music/create"
+                className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-orange-500/40 hover:from-amber-500 hover:via-orange-500 hover:to-red-500 transition"
+              >
+                <span role="img" aria-label="前往創作音樂">🎧</span>
+                前往創作音樂
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -239,15 +287,41 @@ const MusicPage = () => {
             </button>
           </div>
         ) : (
-          <MusicGrid
-            music={music}
-            onSelectMusic={(track) => {
-              // ✅ 只打開 Modal，不設置播放器
-              // MusicModal 有自己的播放功能，不應該影響到網站播放器
-              setSelectedMusic(track);
-              setShowMusicModal(true);
-            }}
-          />
+          <>
+            <MusicGrid
+              music={music}
+              onSelectMusic={(track) => {
+                // ✅ 只打開 Modal，不設置播放器
+                // MusicModal 有自己的播放功能，不應該影響到網站播放器
+                setSelectedMusic(track);
+                setShowMusicModal(true);
+              }}
+            />
+            <div className="mt-10 flex justify-center">
+              {hasMore ? (
+                <button
+                  onClick={() => {
+                    if (isFetchingRef.current) return;
+                    const nextPage = pageRef.current + 1;
+                    loadPage(nextPage, true);
+                  }}
+                  disabled={isLoadingMore}
+                  className="inline-flex items-center gap-2 rounded-full bg-purple-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-600/30 transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></span>
+                      <span>載入更多中...</span>
+                    </>
+                  ) : (
+                    "載入更多"
+                  )}
+                </button>
+              ) : (
+                <p className="text-gray-500">已載入全部音樂</p>
+              )}
+            </div>
+          </>
         )}
       </div>
 

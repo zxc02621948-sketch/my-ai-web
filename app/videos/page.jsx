@@ -292,8 +292,15 @@ const VideosPage = () => {
             </div>
             
             {/* 右側：排序選擇器 */}
-            <div className="flex-shrink-0">
+            <div className="flex items-center gap-3">
               <SortSelect value={sort} onChange={setSort} />
+              <a
+                href="/videos/create"
+                className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-500/40 hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 transition"
+              >
+                <span role="img" aria-label="前往創作影片">🎬</span>
+                前往創作影片
+              </a>
             </div>
           </div>
         </div>

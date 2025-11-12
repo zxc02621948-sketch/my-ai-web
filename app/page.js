@@ -624,9 +624,16 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 右側：排序下拉 */}
-          <div className="flex-shrink-0">
+          {/* 右側：排序 + 前往創作 */}
+          <div className="flex items-center gap-3">
             <SortSelect value={sort} onChange={setSort} />
+            <a
+              href="/images/create"
+              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500/90 to-teal-500/90 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 hover:from-emerald-500 hover:to-teal-500 transition"
+            >
+              <span role="img" aria-label="前往創作圖片">🧪</span>
+              前往創作圖片
+            </a>
           </div>
         </div>
 

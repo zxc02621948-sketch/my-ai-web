@@ -118,7 +118,11 @@ export default function InstallGuide() {
              </p>
 
         {guides.map((g) => (
-          <div key={g.id} className="bg-zinc-800 rounded p-4 border border-zinc-700 mb-6">
+          <div
+            key={g.id}
+            id={g.id}
+            className="bg-zinc-800 rounded p-4 border border-zinc-700 mb-6"
+          >
             <h2 className="text-xl font-semibold mb-2">{g.title}</h2>
             <ul className="text-sm text-gray-300 space-y-1">
               <li><strong>🔥 使用難易度：</strong>{g.level}</li>

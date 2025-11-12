@@ -92,7 +92,7 @@ export default function MobileVideoSheet({
     if (video.streamId) {
       return (
         <iframe
-          src={`https://iframe.cloudflarestream.com/${video.streamId}?autoplay=false&loop=true`}
+          src={`https://iframe.cloudflarestream.com/${video.streamId}?autoplay=true&muted=true&loop=true`}
           className="w-full h-full border-0"
           allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
           allowFullScreen
@@ -106,7 +106,9 @@ export default function MobileVideoSheet({
       <video
         src={video.videoUrl}
         controls
+        autoPlay
         loop
+        muted
         playsInline
         className="max-h-full w-full object-contain"
         style={{ maxHeight: "calc(var(--app-vh, 1vh) * 100)" }}

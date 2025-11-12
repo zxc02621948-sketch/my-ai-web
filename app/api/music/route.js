@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import Music from "@/models/Music";
+import {
+  ensureMusicLikesCount,
+  computeMusicInitialBoostDecay,
+} from "@/utils/scoreMusic";
 
 // 熱門度計算常數（音樂系統：播放分已包含點擊分）
 const POP_W_LIKE = 8.0;
@@ -79,7 +83,7 @@ export async function GET(request) {
     const total = await Music.countDocuments(match);
 
     // 根據排序方式建立 pipeline
-    let pipeline;
+    let pipeline = [];
 
     switch (sort) {
       case "newest":
@@ -313,80 +317,9 @@ export async function GET(request) {
       }
 
       default:
-        // 熱門度排序（預設）
-        const calcLive = {
-          $addFields: {
-            likesCountCalc: {
-              $cond: [
-                { $isArray: "$likes" },
-                { $size: { $ifNull: ["$likes", []] } },
-                { $ifNull: ["$likesCount", 0] },
-              ],
-            },
-            // 計算經過時間（小時）
-            hoursElapsed: {
-              $divide: [
-                { $subtract: ["$$NOW", { $ifNull: ["$createdAt", "$$NOW"] }] },
-                1000 * 60 * 60,
-              ],
-            },
-            // 計算加成因子（10小時內線性衰減）
-            boostFactor: {
-              $max: [
-                0,
-                {
-                  $subtract: [
-                    1,
-                    { $divide: ["$hoursElapsed", POP_NEW_WINDOW_HOURS] },
-                  ],
-                },
-              ],
-            },
-            // 最終加成 = 初始加成 × 衰減因子
-            finalBoost: {
-              $round: [
-                {
-                  $multiply: [
-                    { $ifNull: ["$initialBoost", 0] },
-                    "$boostFactor",
-                  ],
-                },
-                1,
-              ],
-            },
-            // 基礎分數（clicks 不再計分，已包含在 plays 中）
-            baseScore: {
-              $add: [
-                { $multiply: ["$likesCountCalc", POP_W_LIKE] },
-                { $multiply: [{ $ifNull: ["$plays", 0] }, POP_W_PLAY] },
-                {
-                  $multiply: [
-                    { $ifNull: ["$completenessScore", 0] },
-                    POP_W_COMPLETE,
-                  ],
-                },
-              ],
-            },
-            // 即時熱門度分數
-            livePopScore: { $add: ["$baseScore", "$finalBoost"] },
-            // 資料庫快照分數
-            popScoreDB: { $ifNull: ["$popScore", 0] },
-          },
-        };
-
         pipeline = [
           { $match: match },
-          calcLive,
-          {
-            // 使用數據庫中的 popScore 排序（已確保在播放和點讚時更新）
-            // 如果 useLive 為 true，仍然使用 livePopScore 作為備用（但主要還是 popScoreDB）
-            $sort: { 
-              popScoreDB: -1, 
-              livePopScore: -1,  // 備用排序（如果 popScoreDB 相同）
-              createdAt: -1, 
-              _id: -1 
-            },
-          },
+          { $sort: { popScore: -1, createdAt: -1, _id: -1 } },
           { $skip: skip },
           { $limit: limit },
           {
@@ -413,8 +346,13 @@ export async function GET(request) {
         break;
     }
 
-    // 執行查詢
-    const music = await Music.aggregate(pipeline);
+    const music = pipeline.length > 0
+      ? await Music.aggregate(pipeline)
+      : await Music.find(match)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean();
 
     // ✅ 將音樂 URL 轉換為串流 API URL
     const musicWithStreamUrl = music.map((item) => ({
