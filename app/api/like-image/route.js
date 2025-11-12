@@ -45,7 +45,7 @@ export async function PUT(req) {
 
     img.likesCount = ensureLikesCount(img);
     img.popScore = computePopScore(img);
-    await img.save();
+    await img.save({ validateBeforeSave: false });
 
     let currentUserPointsBalance = undefined;
 

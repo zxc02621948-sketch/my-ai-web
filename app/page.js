@@ -13,11 +13,36 @@ import { usePlayer } from "@/components/context/PlayerContext";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import usePinnedPlayerBootstrap from "@/hooks/usePinnedPlayerBootstrap";
+import usePaginatedResource from "@/hooks/usePaginatedResource";
 
 
 /** ====== 超精簡資料流：去掉預覽/快取/一次性旗標，只保留 inFlightId ====== */
 
 const PAGE_SIZE = 20;
+
+function normalizeImageData(img) {
+  if (!img) return img;
+  const raw = img.user ?? img.userId ?? null;
+  const uid =
+    typeof raw === "object"
+      ? raw?._id || raw?.id || raw?.userId || null
+      : raw || null;
+  const userObj =
+    typeof raw === "object"
+      ? { ...raw, _id: uid }
+      : uid
+        ? { _id: uid }
+        : { _id: null };
+  const isFollowingVal =
+    (typeof raw === "object" ? raw?.isFollowing : img?.isFollowing) ?? false;
+  return { ...img, user: { ...userObj, isFollowing: Boolean(isFollowingVal) } };
+}
+
+function mergeImageData(oldImg, updated) {
+  if (!oldImg || !updated?._id) return oldImg;
+  if (String(oldImg._id) !== String(updated._id)) return oldImg;
+  return normalizeImageData({ ...oldImg, ...updated });
+}
 
 export default function HomePage() {
   const player = usePlayer();
@@ -79,92 +104,9 @@ export default function HomePage() {
     [levelFilters]
   );
   
-  // ✅ 雙緩存：畫廊和作品集分別緩存
-  const [galleryCache, setGalleryCache] = useState({
-    images: [],
-    page: 1,
-    hasMore: true,
-    fetchedOnce: false,
-  });
-  const [collectionCache, setCollectionCache] = useState({
-    images: [],
-    page: 1,
-    hasMore: true,
-    fetchedOnce: false,
-  });
-
-  // 當前顯示的數據（根據 displayMode）
-  const currentCache = displayMode === "gallery" ? galleryCache : collectionCache;
-  const setCurrentCache = displayMode === "gallery" ? setGalleryCache : setCollectionCache;
-  
-  const [images, setImages] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [fetchedOnce, setFetchedOnce] = useState(false);
 
-  // —— 追蹤狀態同步（父層處理器，提供給 ImageModal） ——
-  const handleFollowChange = (targetUserId, isFollowing) => {
-    // 1) 同步正在開啟的大圖
-    setSelectedImage((prev) => {
-      if (!prev) return prev;
-      const uid =
-        typeof prev.user === "object"
-          ? (prev.user?._id || prev.user?.id || prev.user?.userId)
-          : prev.user;
-      if (uid && String(uid) === String(targetUserId)) {
-        const userObj =
-          typeof prev.user === "object"
-            ? { ...prev.user, _id: prev.user?._id || prev.user?.id || prev.user?.userId }
-            : { _id: uid };
-        return { ...prev, user: { ...userObj, isFollowing } };
-      }
-      return prev;
-    });
-
-    // 2) 同步首頁列表卡片
-    setImages((prev) =>
-      Array.isArray(prev)
-        ? prev.map((img) => {
-            const uid =
-              typeof img.user === "object"
-                ? (img.user?._id || img.user?.id || img.user?.userId)
-                : img.user;
-            if (uid && String(uid) === String(targetUserId)) {
-              const userObj = typeof img.user === "object" ? img.user : { _id: uid };
-              return { ...img, user: { ...userObj, isFollowing } };
-            }
-            return img;
-          })
-        : prev
-    );
-
-    // 3) 同步 currentUser.following
-    setCurrentUser((prev) => {
-      if (!prev) return prev;
-      const uid = String(targetUserId);
-      const list = Array.isArray(prev.following) ? [...prev.following] : [];
-      const getId = (x) => (typeof x === "object" && x !== null ? String(x.userId) : String(x));
-      const exists = list.some((x) => getId(x) === uid);
-      let nextList = list;
-      if (isFollowing && !exists) nextList = [...list, uid];
-      if (!isFollowing && exists) nextList = list.filter((x) => getId(x) !== uid);
-      return { ...prev, following: nextList };
-    });
-  };
-
-  // ===== Refs（用於避免 IntersectionObserver 的閉包舊值問題） =====
-  const inFlightId = useRef(0);
   const loadMoreRef = useRef(null);
-  const lastFetchParamsRef = useRef(null); // 追踪上次的請求參數，避免重複調用
-  const isFetchingRef = useRef(false); // 並發鎖
-
-  const pageRef = useRef(1);
-  const qRef = useRef("");
-  const catsRef = useRef([]);
-  const ratsRef = useRef([]);
-  const sortRef = useRef("popular");
   usePinnedPlayerBootstrap({ player, currentUser });
 
   // 雙軌制訪問追蹤 - 同時記錄防刷量統計和廣告收益統計
@@ -289,23 +231,164 @@ export default function HomePage() {
     return v === "likes" || v === "mostlikes" ? "mostlikes" : v;
   };
 
-  // 圖片合併和更新函數
-  const mergeImage = (oldImg, updated) => {
-    if (!oldImg || !updated?._id) return oldImg;
-    if (String(oldImg._id) !== String(updated._id)) return oldImg;
-    const nextUser =
-      updated.user ||
-      (typeof oldImg.user === "object"
-        ? oldImg.user
-        : (oldImg.user ? { _id: oldImg.user } : undefined));
-    return { ...oldImg, ...updated, ...(nextUser ? { user: nextUser } : {}) };
-  };
+  const filtersReady = selectedRatings.length > 0;
+  const searchQuery = useMemo(
+    () => (searchParams.get("search") || "").trim(),
+    [searchParams],
+  );
 
-  const applyUpdatedImage = useCallback((updated) => {
-    if (!updated?._id) return;
-    setImages((prev) => (Array.isArray(prev) ? prev.map((it) => mergeImage(it, updated)) : prev));
-    setSelectedImage((prev) => mergeImage(prev, updated));
-  }, []);
+  const paginationDeps = useMemo(
+    () => [
+      displayMode,
+      sort,
+      searchQuery,
+      selectedCategories.join(","),
+      selectedRatings.join(","),
+    ],
+    [displayMode, sort, searchQuery, selectedCategories, selectedRatings],
+  );
+
+  const fetchImagesPage = useCallback(
+    async (targetPage = 1) => {
+      const params = new URLSearchParams({
+        page: String(targetPage),
+        limit: String(PAGE_SIZE),
+        sort: mapSortForApi(sort),
+      });
+
+      if (selectedCategories.length) {
+        params.set("categories", selectedCategories.join(","));
+      }
+      if (selectedRatings.length) {
+        params.set("ratings", selectedRatings.join(","));
+      }
+      if (searchQuery) {
+        params.set("search", searchQuery);
+      }
+      if (displayMode === "collection") {
+        params.set("hasMetadata", "true");
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      try {
+        const response = await fetch(`/api/images?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const listRaw = Array.isArray(data?.images) ? data.images : [];
+        const items = listRaw.map(normalizeImageData);
+        return {
+          items,
+          hasMore: items.length >= PAGE_SIZE,
+        };
+      } catch (error) {
+        clearTimeout(timeoutId);
+        console.error("載入圖片失敗:", error);
+        throw error;
+      }
+    },
+    [
+      displayMode,
+      searchQuery,
+      selectedCategories,
+      selectedRatings,
+      sort,
+    ],
+  );
+
+  const {
+    items: images,
+    hasMore,
+    loading,
+    loadingMore,
+    loadMore,
+    setItems: setImageItems,
+  } = usePaginatedResource({
+    fetchPage: fetchImagesPage,
+    deps: paginationDeps,
+    enabled: filtersReady,
+  });
+
+  // —— 追蹤狀態同步（父層處理器，提供給 ImageModal） ——
+  const handleFollowChange = useCallback(
+    (targetUserId, isFollowing) => {
+      setSelectedImage((prev) => {
+        if (!prev) return prev;
+        const uid =
+          typeof prev.user === "object"
+            ? prev.user?._id || prev.user?.id || prev.user?.userId
+            : prev.user;
+        if (uid && String(uid) === String(targetUserId)) {
+          const userObj =
+            typeof prev.user === "object"
+              ? {
+                  ...prev.user,
+                  _id: prev.user?._id || prev.user?.id || prev.user?.userId,
+                }
+              : { _id: uid };
+          return { ...prev, user: { ...userObj, isFollowing } };
+        }
+        return prev;
+      });
+
+      setImageItems((prev) =>
+        Array.isArray(prev)
+          ? prev.map((img) => {
+              const uid =
+                typeof img.user === "object"
+                  ? img.user?._id || img.user?.id || img.user?.userId
+                  : img.user;
+              if (uid && String(uid) === String(targetUserId)) {
+                const userObj = typeof img.user === "object" ? img.user : { _id: uid };
+                return { ...img, user: { ...userObj, isFollowing } };
+              }
+              return img;
+            })
+          : prev,
+      );
+
+      setCurrentUser((prev) => {
+        if (!prev) return prev;
+        const uid = String(targetUserId);
+        const list = Array.isArray(prev.following) ? [...prev.following] : [];
+        const getId = (x) =>
+          typeof x === "object" && x !== null ? String(x.userId) : String(x);
+        const exists = list.some((x) => getId(x) === uid);
+        let nextList = list;
+        if (isFollowing && !exists) nextList = [...list, uid];
+        if (!isFollowing && exists) nextList = list.filter((x) => getId(x) !== uid);
+        return { ...prev, following: nextList };
+      });
+    },
+    [setCurrentUser, setImageItems],
+  );
+ 
+  const applyUpdatedImage = useCallback(
+    (updated) => {
+      if (!updated?._id) return;
+      setImageItems((prev) =>
+        Array.isArray(prev)
+          ? prev.map((item) => mergeImageData(item, updated))
+          : prev,
+      );
+      setSelectedImage((prev) => mergeImageData(prev, updated));
+    },
+    [setImageItems],
+  );
 
   // —— 通知 → 直接打開指定圖片 ——
   useEffect(() => {
@@ -317,11 +400,13 @@ export default function HomePage() {
         const j = await r.json().catch(() => ({}));
         const img = j?.image || null;
         if (img?._id) {
-          setImages((prev) => {
-            const exists = Array.isArray(prev) && prev.some((x) => String(x._id) === String(img._id));
-            return exists ? prev : [normalizeImage(img), ...(Array.isArray(prev) ? prev : [])];
+          setImageItems((prev) => {
+            const normalized = normalizeImageData(img);
+            if (!Array.isArray(prev)) return [normalized];
+            const exists = prev.some((x) => String(x._id) === String(img._id));
+            return exists ? prev : [normalized, ...prev];
           });
-          setSelectedImage(normalizeImage(img));
+          setSelectedImage(normalizeImageData(img));
         } else {
           notify.warning("提示", "找不到該圖片，可能已被刪除");
         }
@@ -332,7 +417,7 @@ export default function HomePage() {
     };
     window.addEventListener("openImageModal", onOpenFromNotification);
     return () => window.removeEventListener("openImageModal", onOpenFromNotification);
-  }, []);
+  }, [setImageItems]);
 
   // —— 單張圖片更新（從子元件或外部事件） ——
   useEffect(() => {
@@ -344,186 +429,28 @@ export default function HomePage() {
     return () => window.removeEventListener("image-updated", onUpdated);
   }, [applyUpdatedImage]);
 
-  // —— 同步最新的查詢條件到 refs（避免閉包舊值） ——
+  // —— 無限捲動（共用 hook） ——
   useEffect(() => {
-    qRef.current = (searchParams.get("search") || "").trim();
-  }, [searchParams]);
-  useEffect(() => { catsRef.current = selectedCategories; }, [selectedCategories]);
-  useEffect(() => { ratsRef.current = selectedRatings; }, [selectedRatings]);
-  useEffect(() => { sortRef.current = sort; }, [sort]);
-  useEffect(() => { pageRef.current = page; }, [page]);
-
-  // —— 核心資料抓取（只以 inFlightId 防舊回應） ——
-  const fetchImages = useCallback(async (pageToFetch, q, cats, rats, retryAttempt = 0, existingId = null) => {
-    // 調試信息已移除
-    
-    if (retryAttempt === 0) {
-      setIsLoading(true);
-    }
-    const myId = existingId ?? ++inFlightId.current;
-    
-    try {
-      const params = new URLSearchParams({
-        page: String(pageToFetch),
-        limit: String(PAGE_SIZE),
-        sort: mapSortForApi(sortRef.current),
-      });
-      if (Array.isArray(cats) && cats.length) params.set("categories", cats.join(","));
-      if (Array.isArray(rats) && rats.length) params.set("ratings", rats.join(","));
-      if (q) params.set("search", q);
-      
-      // ✅ 如果是作品集模式，添加 hasMetadata 篩選
-      if (displayMode === "collection") {
-        params.set("hasMetadata", "true");
-      }
-
-      const url = `/api/images?${params.toString()}`;
-      // 調試信息已移除
-
-      // 添加超時控制
-      const controller = new AbortController();
-      const timeoutMs = retryAttempt === 0 ? 15000 : 25000;
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-      const r = await fetch(url, { 
-        cache: "no-store",
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!r.ok) {
-        throw new Error(`HTTP ${r.status}: ${r.statusText}`);
-      }
-
-      const j = await r.json();
-
-      // 調試信息已移除
-
-      if (myId !== inFlightId.current) return; // 只採用最新請求
-
-      const listRaw = Array.isArray(j?.images) ? j.images : [];
-      const list = listRaw.map(normalizeImage);
-      setHasMore(list.length >= PAGE_SIZE);
-
-
-      if (pageToFetch === 1) {
-        setImages(list);
-      } else {
-        // 直接添加新圖片，不做任何滾動位置干預
-        setImages((prev) => {
-          const exists = new Set(prev.map((x) => String(x._id)));
-          const uniq = list.filter((x) => !exists.has(String(x._id)));
-          return [...prev, ...uniq];
-        });
-      }
-      setPage(pageToFetch);
-      setFetchedOnce(true);
-    } catch (e) {
-      if (myId !== inFlightId.current) return; // 忽略已取消的請求
-      
-      console.error("🚨 [fetchImages] 載入圖片失敗:", e.message || e);
-      
-      // 如果是超時或網路錯誤，可以考慮重試
-      if (e.name === 'AbortError') {
-        console.warn("⏰ [fetchImages] 請求超時 (嘗試次數:", retryAttempt + 1, ")");
-        if (retryAttempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, retryAttempt === 0 ? 300 : 800));
-          return fetchImages(pageToFetch, q, cats, rats, retryAttempt + 1, myId);
-        }
-      } else if (e.message?.includes('Failed to fetch')) {
-        console.warn("🌐 [fetchImages] 網路連接失敗");
-      }
-    } finally {
-      if (myId === inFlightId.current) {
-        setIsLoading(false);
-      }
-    }
-  }, [displayMode]); // ✅ 添加 displayMode 依賴
-
-  // ✅ 當切換「畫廊」/「作品集」模式時，重新載入圖片
-  useEffect(() => {
-    if (selectedRatings.length === 0) return;
-    
-    const q = (searchParams.get("search") || "").trim();
-    
-    setFetchedOnce(false);
-    setImages([]);
-    setPage(1);
-    setHasMore(true);
-    fetchImages(1, q, selectedCategories, selectedRatings);
-  }, [displayMode, fetchImages, searchParams, selectedCategories, selectedRatings]); // ✅ 監聽 displayMode 變化
-
-  // —— 載入圖片（搜尋/排序/篩選變更時，包括初始載入） ——
-  useEffect(() => {
-    // 等待 selectedRatings 初始化完成
-    if (selectedRatings.length === 0) return;
-    
-    const q = (searchParams.get("search") || "").trim();
-    
-    // 檢查參數是否與上次相同，避免重複調用
-    const currentParams = JSON.stringify({
-      q,
-      cats: selectedCategories,
-      rats: selectedRatings,
-      sort: sort
-    });
-    
-    if (lastFetchParamsRef.current === currentParams) {
-      return; // 參數相同，跳過
-    }
-    
-    lastFetchParamsRef.current = currentParams;
-    
-    setFetchedOnce(false);
-    setImages([]);
-    setPage(1);
-    setHasMore(true);
-    fetchImages(1, q, selectedCategories, selectedRatings);
-  }, [selectedCategories, selectedRatings, searchParams, sort, fetchImages]);
-
-
-
-
-
-  // —— 無限捲動（最小依賴 + 使用 refs 讀最新狀態） ——
-  useEffect(() => {
-    if (!hasMore || isLoading || !fetchedOnce) return;
+    if (!filtersReady || !hasMore || loading || loadingMore) return;
     const el = loadMoreRef.current;
     if (!el) return;
 
-    const handleLoadMore = () => {
-      if (isFetchingRef.current) return;
-      isFetchingRef.current = true;
-      const q = qRef.current;
-      const cats = catsRef.current;
-      const rats = ratsRef.current;
-      const nextPage = (pageRef.current || 1) + 1;
-      fetchImages(nextPage, q, cats, rats).finally(() => {
-        isFetchingRef.current = false;
-      });
-    };
-
-    const io = new IntersectionObserver(
+    const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          handleLoadMore();
+          loadMore();
         }
       },
-      { root: null, rootMargin: "500px 0px", threshold: 0.01 }
+      { root: null, rootMargin: "500px 0px", threshold: 0.01 },
     );
 
-    io.observe(el);
-    return () => io.disconnect();
-  }, [hasMore, isLoading, fetchedOnce, fetchImages]);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [filtersReady, hasMore, loadMore, loading, loadingMore]);
 
   // Like hook
   const { handleToggleLike, onLikeUpdate: onLikeUpdateHook } = useLikeHandler({
-    setUploadedImages: setImages,
+    setUploadedImages: setImageItems,
     setLikedImages: null,
     selectedImage,
     setSelectedImage,
@@ -535,22 +462,8 @@ export default function HomePage() {
     return img.likes.includes(uid);
   };
 
-  const normalizeImage = (img) => {
-    if (!img) return img;
-    const raw = img.user ?? img.userId ?? null;
-    const uid = typeof raw === "object"
-      ? (raw?._id || raw?.id || raw?.userId || null)
-      : (raw || null);
-    const userObj = (typeof raw === "object")
-      ? { ...raw, _id: uid }
-      : (uid ? { _id: uid } : { _id: null });
-    const isFollowingVal =
-      (typeof raw === "object" ? raw?.isFollowing : img?.isFollowing) ?? false;
-    return { ...img, user: { ...userObj, isFollowing: Boolean(isFollowingVal) } };
-  };
-
   // ImageModal 導航
-  const openImage = (img) => setSelectedImage(normalizeImage(img));
+  const openImage = (img) => setSelectedImage(normalizeImageData(img));
   const idx = selectedImage ? images.findIndex((x) => String(x._id) === String(selectedImage._id)) : -1;
   const prevImage = idx > 0 ? images[idx - 1] : undefined;
   const nextImage = idx >= 0 && idx < images.length - 1 ? images[idx + 1] : undefined;
@@ -696,10 +609,11 @@ export default function HomePage() {
         style={{ overflowAnchor: "auto" }}
         className="py-6 text-center text-zinc-400 text-sm"
       >
-        {!fetchedOnce && isLoading && "載入中..."}
-        {fetchedOnce && hasMore && "載入更多中..."}
-        {fetchedOnce && !isLoading && images.length === 0 && "目前沒有符合條件的圖片"}
-        {fetchedOnce && !hasMore && images.length > 0 && "已經到底囉"}
+        {(!filtersReady || (loading && images.length === 0)) && "載入中..."}
+        {filtersReady && loadingMore && "載入更多中..."}
+        {filtersReady && !loading && !loadingMore && hasMore && images.length > 0 && "載入更多中..."}
+        {filtersReady && !loading && !hasMore && images.length === 0 && "目前沒有符合條件的圖片"}
+        {filtersReady && !loading && !hasMore && images.length > 0 && "已經到底囉"}
       </div>
 
       {selectedImage && currentUser !== undefined && (

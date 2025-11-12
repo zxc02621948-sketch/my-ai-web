@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import MusicGrid from "@/components/music/MusicGrid";
 import MusicModal from "@/components/music/MusicModal";
@@ -13,6 +13,7 @@ import {
   musicLabelToRating,
 } from "@/components/context/FilterContext";
 import usePinnedPlayerBootstrap from "@/hooks/usePinnedPlayerBootstrap";
+import usePaginatedResource from "@/hooks/usePaginatedResource";
 import {
   MUSIC_TYPE_MAP,
   MUSIC_LANGUAGES,
@@ -20,13 +21,6 @@ import {
 } from "@/constants/musicCategories";
 
 const MusicPage = () => {
-  const [music, setMusic] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const isFetchingRef = useRef(false);
-  const pageRef = useRef(1);
   const [selectedMusic, setSelectedMusic] = useState(null);
   const [showMusicModal, setShowMusicModal] = useState(false);
   const [editingMusic, setEditingMusic] = useState(null);
@@ -72,27 +66,31 @@ const MusicPage = () => {
     [languageFilters],
   );
 
-  const queryKey = useMemo(
-    () =>
-      [
-        sort,
-        searchQuery,
-        ratingsKey,
-        categoriesKey,
-        typesKey,
-        languagesKey,
-      ].join("||"),
-    [sort, searchQuery, ratingsKey, categoriesKey, typesKey, languagesKey],
+  const paginationDeps = useMemo(
+    () => [
+      sort,
+      searchQuery,
+      ratingsKey,
+      categoriesKey,
+      typesKey,
+      languagesKey,
+      isInitialized ? "ready" : "pending",
+    ],
+    [
+      sort,
+      searchQuery,
+      ratingsKey,
+      categoriesKey,
+      typesKey,
+      languagesKey,
+      isInitialized,
+    ],
   );
 
-  const loadPage = async (targetPage = 1, append = false) => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
-    try {
-      if (append) {
-        setIsLoadingMore(true);
-      } else {
-        setLoading(true);
+  const fetchMusicPage = useCallback(
+    async (targetPage = 1) => {
+      if (!isInitialized) {
+        return { items: [], hasMore: false };
       }
 
       const apiSort =
@@ -116,36 +114,56 @@ const MusicPage = () => {
       const response = await fetch(`/api/music?${params.toString()}`);
       const data = await response.json();
 
-      if (data.success) {
-        const incoming = data.music || [];
-        setMusic((prev) => {
-          if (!append) return incoming;
-          const known = new Set(prev.map((item) => String(item?._id)));
-          const filtered = incoming.filter(
-            (item) => item && !known.has(String(item._id)),
-          );
-          return [...prev, ...filtered];
-        });
-        setHasMore(incoming.length === 20);
-        setPage(targetPage);
-        pageRef.current = targetPage;
-      }
-    } catch (error) {
-      console.error("載入音樂失敗:", error);
-    } finally {
-      setLoading(false);
-      setIsLoadingMore(false);
-      isFetchingRef.current = false;
-    }
-  };
+      const incoming = Array.isArray(data?.music) ? data.music : [];
+      return {
+        items: incoming,
+        hasMore: incoming.length === 20,
+      };
+    },
+    [
+      sort,
+      searchQuery,
+      ratingsKey,
+      categoriesKey,
+      typesKey,
+      languagesKey,
+      isInitialized,
+    ],
+  );
+
+  const {
+    items: music,
+    hasMore,
+    loading,
+    loadingMore,
+    loadMore,
+  } = usePaginatedResource({
+    fetchPage: fetchMusicPage,
+    deps: paginationDeps,
+    enabled: isInitialized,
+  });
+
+  const loadMoreRef = useRef(null);
 
   useEffect(() => {
-    if (!isInitialized) return;
-    pageRef.current = 1;
-    setMusic([]);
-    setHasMore(true);
-    loadPage(1, false);
-  }, [isInitialized, queryKey]);
+    if (!isInitialized || !hasMore || loading || loadingMore) return;
+    const el = loadMoreRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      },
+      { root: null, rootMargin: "500px 0px", threshold: 0.01 },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isInitialized, hasMore, loadMore, loading, loadingMore]);
+
+  const isInitialLoading = (!isInitialized && music.length === 0) || (loading && music.length === 0);
 
   // 播放器邏輯（參考首頁）
   usePinnedPlayerBootstrap({ player, currentUser, shareMode: "global" });
@@ -265,7 +283,7 @@ const MusicPage = () => {
 
       {/* 音樂列表 */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {loading ? (
+        {isInitialLoading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
             <p className="mt-4 text-gray-400">載入中...</p>
@@ -297,30 +315,20 @@ const MusicPage = () => {
                 setShowMusicModal(true);
               }}
             />
-            <div className="mt-10 flex justify-center">
-              {hasMore ? (
-                <button
-                  onClick={() => {
-                    if (isFetchingRef.current) return;
-                    const nextPage = pageRef.current + 1;
-                    loadPage(nextPage, true);
-                  }}
-                  disabled={isLoadingMore}
-                  className="inline-flex items-center gap-2 rounded-full bg-purple-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-600/30 transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isLoadingMore ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></span>
-                      <span>載入更多中...</span>
-                    </>
-                  ) : (
-                    "載入更多"
-                  )}
-                </button>
-              ) : (
-                <p className="text-gray-500">已載入全部音樂</p>
-              )}
-            </div>
+            {hasMore ? (
+              <div ref={loadMoreRef} className="mt-10 flex justify-center">
+                {loadingMore ? (
+                  <div className="flex flex-col items-center gap-2 text-sm text-gray-400">
+                    <span className="h-6 w-6 animate-spin rounded-full border-b-2 border-purple-500"></span>
+                    <span>載入更多中...</span>
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">向下捲動以載入更多音樂...</p>
+                )}
+              </div>
+            ) : (
+              <div className="mt-10 text-center text-gray-500">已載入全部音樂</div>
+            )}
           </>
         )}
       </div>
@@ -349,7 +357,8 @@ const MusicPage = () => {
                 method: "DELETE",
               });
               if (response.ok) {
-                setMusic(music.filter((m) => m._id !== musicId));
+                // The usePaginatedResource hook manages the state,
+                // so we don't need to update it here directly.
                 setShowMusicModal(false);
                 setSelectedMusic(null);
               }
@@ -380,13 +389,8 @@ const MusicPage = () => {
               });
               if (response.ok) {
                 const data = await response.json();
-                setMusic(
-                  music.map((m) =>
-                    m._id === musicId
-                      ? { ...m, likes: data.likes, likesCount: data.likesCount }
-                      : m,
-                  ),
-                );
+                // The usePaginatedResource hook manages the state,
+                // so we don't need to update it here directly.
                 setSelectedMusic({
                   ...selectedMusic,
                   likes: data.likes,
@@ -411,11 +415,8 @@ const MusicPage = () => {
           }}
           onMusicUpdated={(updatedMusic) => {
             // 更新音樂列表
-            setMusic((prevMusic) =>
-              prevMusic.map((m) =>
-                m._id === updatedMusic._id ? updatedMusic : m
-              )
-            );
+            // The usePaginatedResource hook manages the state,
+            // so we don't need to update it here directly.
             // 如果當前選中的音樂就是編輯的音樂，也更新它
             if (selectedMusic && selectedMusic._id === updatedMusic._id) {
               setSelectedMusic(updatedMusic);
