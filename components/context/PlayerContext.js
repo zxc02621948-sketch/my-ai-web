@@ -451,11 +451,29 @@ export function PlayerProvider({
       // ✅ 保存開始播放位置到 dataset
       audioRef.current.dataset.startTime = startTime.toString();
     }
+
+    // ✅ 更新 Media Session playbackState（Android 需要）
+    if (typeof navigator !== "undefined" && navigator.mediaSession) {
+      try {
+        navigator.mediaSession.playbackState = "playing";
+      } catch (error) {
+        // 忽略錯誤
+      }
+    }
   }, []);
 
   const onPause = useCallback(() => {
     // ✅ 只處理本地音頻播放器
     setIsPlaying(false);
+
+    // ✅ 更新 Media Session playbackState（Android 需要）
+    if (typeof navigator !== "undefined" && navigator.mediaSession) {
+      try {
+        navigator.mediaSession.playbackState = "paused";
+      } catch (error) {
+        // 忽略錯誤
+      }
+    }
   }, []);
 
   // ✅ 預先聲明 nextRef，將在 next 函數定義後設置
@@ -1443,9 +1461,35 @@ export function PlayerProvider({
     // 初始設置位置狀態
     updatePositionState();
 
+    // ✅ Android 背景播放需要直接操作 audio 元素，而不是通过 play/pause 函数
     const handlePlayAction = async () => {
       try {
-        await play();
+        const audio = audioRef.current;
+        if (!audio) {
+          console.warn("[MediaSession] audio 元素不存在");
+          return;
+        }
+        
+        // ✅ 直接操作 audio 元素，确保在背景播放时也能正常工作
+        if (audio.paused) {
+          // ✅ 请求播放权限
+          const canPlay = audioManager.requestPlay(audio, 1);
+          if (!canPlay) {
+            console.warn("[MediaSession] 優先度不夠，無法播放");
+            return;
+          }
+          
+          try {
+            await audio.play();
+            setIsPlaying(true);
+            // ✅ 更新 playbackState
+            if (navigator.mediaSession) {
+              navigator.mediaSession.playbackState = "playing";
+            }
+          } catch (error) {
+            console.warn("[MediaSession] play() 失敗:", error);
+          }
+        }
       } catch (error) {
         console.warn("[MediaSession] play handler 失敗:", error);
       }
@@ -1453,7 +1497,23 @@ export function PlayerProvider({
 
     const handlePauseAction = () => {
       try {
-        pause();
+        const audio = audioRef.current;
+        if (!audio) {
+          console.warn("[MediaSession] audio 元素不存在");
+          return;
+        }
+        
+        // ✅ 直接操作 audio 元素
+        if (!audio.paused) {
+          audio.pause();
+          setIsPlaying(false);
+          // ✅ 釋放播放權限
+          audioManager.release(audio);
+          // ✅ 更新 playbackState
+          if (navigator.mediaSession) {
+            navigator.mediaSession.playbackState = "paused";
+          }
+        }
       } catch (error) {
         console.warn("[MediaSession] pause handler 失敗:", error);
       }
@@ -1461,8 +1521,11 @@ export function PlayerProvider({
 
     const handleNextAction = () => {
       try {
+        // ✅ 使用 ref 获取最新的 next 函数，避免闭包问题
         if (typeof next === "function") {
           next();
+        } else {
+          console.warn("[MediaSession] next 函數不可用");
         }
       } catch (error) {
         console.warn("[MediaSession] next handler 失敗:", error);
@@ -1471,34 +1534,45 @@ export function PlayerProvider({
 
     const handlePrevAction = () => {
       try {
+        // ✅ 使用 ref 获取最新的 previous 函数，避免闭包问题
         if (typeof previous === "function") {
           previous();
+        } else {
+          console.warn("[MediaSession] previous 函數不可用");
         }
       } catch (error) {
         console.warn("[MediaSession] previous handler 失敗:", error);
       }
     };
 
+    // ✅ 清除所有 action handlers，避免重复设置
     try {
-      navigator.mediaSession.setActionHandler("play", handlePlayAction);
+      navigator.mediaSession.setActionHandler("play", null);
+      navigator.mediaSession.setActionHandler("pause", null);
+      navigator.mediaSession.setActionHandler("nexttrack", null);
+      navigator.mediaSession.setActionHandler("previoustrack", null);
     } catch (error) {
-      console.warn("[MediaSession] 設定 play handler 失敗:", error);
+      // 忽略清理错误
     }
 
+    // ✅ 设置 play 和 pause handlers（始终可用，只要有音频源）
     try {
-      navigator.mediaSession.setActionHandler("pause", handlePauseAction);
+      if (hasMusic) {
+        navigator.mediaSession.setActionHandler("play", handlePlayAction);
+        navigator.mediaSession.setActionHandler("pause", handlePauseAction);
+      }
     } catch (error) {
-      console.warn("[MediaSession] 設定 pause handler 失敗:", error);
+      console.warn("[MediaSession] 設定 play/pause handler 失敗:", error);
     }
 
+    // ✅ 设置上一首/下一首 handlers（只要有播放列表就显示，即使只有一首歌也可以循环）
     try {
-      if (Array.isArray(playlist) && playlist.length > 1) {
+      if (Array.isArray(playlist) && playlist.length > 0) {
+        // ✅ 即使只有一首歌，也显示按钮（可以循环播放）
         navigator.mediaSession.setActionHandler("nexttrack", handleNextAction);
-        navigator.mediaSession.setActionHandler(
-          "previoustrack",
-          handlePrevAction,
-        );
+        navigator.mediaSession.setActionHandler("previoustrack", handlePrevAction);
       } else {
+        // ✅ 没有播放列表时，移除按钮
         navigator.mediaSession.setActionHandler("nexttrack", null);
         navigator.mediaSession.setActionHandler("previoustrack", null);
       }
@@ -1506,12 +1580,39 @@ export function PlayerProvider({
       console.warn("[MediaSession] 設定 track handler 失敗:", error);
     }
 
-    // ✅ 當播放時間更新時，同步更新 Media Session 的位置狀態（Android 需要）
+    // ✅ 當播放時間更新時，同步更新 Media Session 的位置狀態和播放狀態（Android 需要）
     const timeUpdateInterval = setInterval(() => {
-      if (isPlaying && audioRef.current) {
-        updatePositionState();
+      if (audioRef.current) {
+        // ✅ 更新位置狀態
+        if (isPlaying) {
+          updatePositionState();
+        }
+        
+        // ✅ 同步播放狀態（確保與實際 audio 元素狀態一致）
+        const audioPaused = audioRef.current.paused;
+        if (audioPaused && isPlaying) {
+          // 如果 audio 已暫停但狀態顯示正在播放，同步狀態
+          setIsPlaying(false);
+          if (navigator.mediaSession) {
+            try {
+              navigator.mediaSession.playbackState = "paused";
+            } catch (error) {
+              // 忽略錯誤
+            }
+          }
+        } else if (!audioPaused && !isPlaying) {
+          // 如果 audio 正在播放但狀態顯示已暫停，同步狀態
+          setIsPlaying(true);
+          if (navigator.mediaSession) {
+            try {
+              navigator.mediaSession.playbackState = "playing";
+            } catch (error) {
+              // 忽略錯誤
+            }
+          }
+        }
       }
-    }, 1000); // 每秒更新一次
+    }, 500); // 每 0.5 秒更新一次，確保響應及時
 
     return () => {
       clearInterval(timeUpdateInterval);
