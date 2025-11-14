@@ -448,6 +448,65 @@ export function PlayerProvider({
     }
   }, [src]);
 
+  // ✅ 更新 Media Session metadata 的輔助函數（用於在播放時確保 metadata 已設置）
+  const updateMediaSessionMetadata = useCallback(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+
+    // ✅ 獲取當前播放的音樂信息
+    const currentTrack =
+      Array.isArray(playlist) && playlist.length > 0 && activeIndex >= 0 && activeIndex < playlist.length
+        ? playlist[activeIndex]
+        : null;
+
+    const hasMusic = src || (currentTrack && currentTrack.url) || trackTitle;
+    if (!hasMusic) {
+      return;
+    }
+
+    // ✅ 構建基本的 metadata
+    const metadataTitle =
+      (currentTrack && (currentTrack.title || currentTrack.trackTitle)) ||
+      trackTitle ||
+      (currentTrack && currentTrack.url) ||
+      src ||
+      "音樂作品";
+    const metadataArtist =
+      (currentTrack && (currentTrack.artist || currentTrack.authorName)) ||
+      playerOwner?.username ||
+      "未知創作者";
+    const metadataAlbum =
+      (currentTrack && currentTrack.album) || playerOwner?.username || "";
+
+    // ✅ 構建 artwork
+    const artwork = [];
+    const coverCandidate =
+      (currentTrack && (currentTrack.coverImageUrl || currentTrack.cover || currentTrack.imageUrl || currentTrack.thumbnailUrl)) ||
+      "";
+    
+    if (coverCandidate) {
+      artwork.push({ src: coverCandidate, sizes: "96x96", type: "image/png" });
+      artwork.push({ src: coverCandidate, sizes: "128x128", type: "image/png" });
+      artwork.push({ src: coverCandidate, sizes: "192x192", type: "image/png" });
+      artwork.push({ src: coverCandidate, sizes: "256x256", type: "image/png" });
+      artwork.push({ src: coverCandidate, sizes: "384x384", type: "image/png" });
+      artwork.push({ src: coverCandidate, sizes: "512x512", type: "image/png" });
+    }
+
+    // ✅ 設置 metadata
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: metadataTitle || "音樂作品",
+        artist: metadataArtist || "未知創作者",
+        album: metadataAlbum,
+        artwork: artwork.length > 0 ? artwork : undefined,
+      });
+    } catch (error) {
+      console.warn("[MediaSession] 設定 metadata 失敗:", error);
+    }
+  }, [playlist, activeIndex, src, trackTitle, playerOwner]);
+
   const onPlay = useCallback(() => {
     // ✅ 只處理本地音頻播放器
     setIsPlaying(true);
@@ -459,15 +518,18 @@ export function PlayerProvider({
       audioRef.current.dataset.startTime = startTime.toString();
     }
 
-    // ✅ 更新 Media Session playbackState（Android 需要）
+    // ✅ 在播放時立即更新 Media Session metadata 和 playbackState（Android 需要）
     if (typeof navigator !== "undefined" && navigator.mediaSession) {
       try {
+        // ✅ 確保 metadata 已設置（Android 背景播放面板需要）
+        updateMediaSessionMetadata();
+        // ✅ 更新 playbackState
         navigator.mediaSession.playbackState = "playing";
       } catch (error) {
-        // 忽略錯誤
+        console.warn("[MediaSession] 更新播放狀態失敗:", error);
       }
     }
-  }, []);
+  }, [updateMediaSessionMetadata]);
 
   const onPause = useCallback(() => {
     // ✅ 只處理本地音頻播放器
@@ -1393,122 +1455,26 @@ export function PlayerProvider({
     const hasMusic = src || (currentTrack && currentTrack.url) || trackTitle;
 
     if (hasMusic) {
-      // ✅ 根據音樂 URL 獲取完整信息（如果播放列表中沒有完整信息）
+      // ✅ 優先使用播放列表中的信息，如果沒有則使用 trackTitle 和 playerOwner
       const musicUrl = src || (currentTrack && currentTrack.url) || "";
       const isMusicStreamUrl = musicUrl && musicUrl.includes("/api/music/stream/");
       
-      // ✅ 如果播放列表中沒有完整信息（缺少封面或作者），且 URL 是音樂流媒體 URL，獲取完整信息
-      const needsMusicInfo = isMusicStreamUrl && 
-        (!currentTrack || !currentTrack.coverImageUrl || !currentTrack.authorName);
-      
-      if (needsMusicInfo) {
-        const musicId = musicUrl.match(/\/api\/music\/stream\/([^/?]+)/)?.[1];
-        if (musicId) {
-          // ✅ 使用 useRef 緩存音樂信息，避免重複請求
-          const musicCacheKey = `music_${musicId}`;
-          const cachedMusic = sessionStorage.getItem(musicCacheKey);
-          
-          if (cachedMusic) {
-            try {
-              const music = JSON.parse(cachedMusic);
-              // ✅ 使用緩存的音樂信息設置 metadata
-              const metadataTitle = music.title || trackTitle || "音樂作品";
-              const metadataArtist = music.authorName || music.author?.username || playerOwner?.username || "未知創作者";
-              const metadataAlbum = playerOwner?.username || "";
-              
-              const artwork = [];
-              if (music.coverImageUrl) {
-                artwork.push({ src: music.coverImageUrl, sizes: "96x96", type: "image/png" });
-                artwork.push({ src: music.coverImageUrl, sizes: "128x128", type: "image/png" });
-                artwork.push({ src: music.coverImageUrl, sizes: "192x192", type: "image/png" });
-                artwork.push({ src: music.coverImageUrl, sizes: "256x256", type: "image/png" });
-                artwork.push({ src: music.coverImageUrl, sizes: "384x384", type: "image/png" });
-                artwork.push({ src: music.coverImageUrl, sizes: "512x512", type: "image/png" });
-              }
-              
-              try {
-                navigator.mediaSession.metadata = new MediaMetadata({
-                  title: metadataTitle,
-                  artist: metadataArtist,
-                  album: metadataAlbum,
-                  artwork: artwork.length > 0 ? artwork : undefined,
-                });
-              } catch (error) {
-                console.warn("[MediaSession] 設定 metadata 失敗:", error);
-              }
-            } catch (error) {
-              // 緩存解析失敗，繼續獲取
-            }
-          } else {
-            // ✅ 異步獲取音樂完整信息（不阻塞 UI）
-            fetch(`/api/music/${musicId}`)
-              .then((res) => res.json())
-              .then((data) => {
-                const music = data?.music || data;
-                if (music) {
-                  // ✅ 緩存音樂信息（5分鐘過期）
-                  try {
-                    sessionStorage.setItem(musicCacheKey, JSON.stringify({
-                      title: music.title,
-                      coverImageUrl: music.coverImageUrl,
-                      authorName: music.authorName || music.author?.username,
-                      authorAvatar: music.authorAvatar || music.author?.avatar,
-                    }));
-                  } catch (error) {
-                    // 忽略緩存錯誤
-                  }
-                  
-                  // ✅ 更新 Media Session metadata
-                  const metadataTitle = music.title || trackTitle || "音樂作品";
-                  const metadataArtist = music.authorName || music.author?.username || playerOwner?.username || "未知創作者";
-                  const metadataAlbum = playerOwner?.username || "";
-                  
-                  const artwork = [];
-                  if (music.coverImageUrl) {
-                    artwork.push({ src: music.coverImageUrl, sizes: "96x96", type: "image/png" });
-                    artwork.push({ src: music.coverImageUrl, sizes: "128x128", type: "image/png" });
-                    artwork.push({ src: music.coverImageUrl, sizes: "192x192", type: "image/png" });
-                    artwork.push({ src: music.coverImageUrl, sizes: "256x256", type: "image/png" });
-                    artwork.push({ src: music.coverImageUrl, sizes: "384x384", type: "image/png" });
-                    artwork.push({ src: music.coverImageUrl, sizes: "512x512", type: "image/png" });
-                  }
-                  
-                  try {
-                    navigator.mediaSession.metadata = new MediaMetadata({
-                      title: metadataTitle,
-                      artist: metadataArtist,
-                      album: metadataAlbum,
-                      artwork: artwork.length > 0 ? artwork : undefined,
-                    });
-                  } catch (error) {
-                    console.warn("[MediaSession] 設定 metadata 失敗:", error);
-                  }
-                }
-              })
-              .catch((error) => {
-                // 忽略錯誤，繼續使用現有信息
-                console.debug("[MediaSession] 獲取音樂信息失敗:", error);
-              });
-          }
-        }
-      }
-
-      // ✅ 優先使用播放列表中的信息，如果沒有則使用 trackTitle 和 playerOwner
-      const metadataTitle =
+      // ✅ 構建基本的 metadata（總是先設置，確保有信息顯示）
+      let metadataTitle =
         (currentTrack && (currentTrack.title || currentTrack.trackTitle)) ||
         trackTitle ||
         (currentTrack && currentTrack.url) ||
         src ||
         "音樂作品";
-      const metadataArtist =
+      let metadataArtist =
         (currentTrack && (currentTrack.artist || currentTrack.authorName)) ||
         playerOwner?.username ||
         "未知創作者";
-      const metadataAlbum =
+      let metadataAlbum =
         (currentTrack && currentTrack.album) || playerOwner?.username || "";
 
       // ✅ 優先使用播放列表中的封面，如果沒有則嘗試其他來源
-      const artwork = [];
+      let artwork = [];
       const coverCandidate =
         (currentTrack && (currentTrack.coverImageUrl || currentTrack.cover || currentTrack.imageUrl || currentTrack.thumbnailUrl)) ||
         "";
@@ -1547,24 +1513,22 @@ export function PlayerProvider({
         });
       }
 
+      // ✅ 總是先設置基本的 metadata（確保立即顯示，即使信息不完整）
       try {
-        // ✅ 確保 metadata 有有效的 title 和 artist（Android 需要）
+        // ✅ 確保 metadata 有有效的 title 和 artist（Android 和 iOS 都需要）
         const finalTitle = metadataTitle || "音樂作品";
         const finalArtist = metadataArtist || "未知創作者";
         
-        // ✅ 只有在沒有從 API 獲取完整信息時，才使用現有信息設置 metadata
-        if (!needsMusicInfo || !isMusicStreamUrl) {
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: finalTitle,
-            artist: finalArtist,
-            album: metadataAlbum,
-            artwork: artwork.length > 0 ? artwork : undefined,
-          });
-        }
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: finalTitle,
+          artist: finalArtist,
+          album: metadataAlbum,
+          artwork: artwork.length > 0 ? artwork : undefined,
+        });
         
         // ✅ 調試日志（開發模式）
         if (process.env.NODE_ENV === "development") {
-          console.debug("[MediaSession] 設置 metadata:", {
+          console.debug("[MediaSession] 設置基本 metadata:", {
             title: finalTitle,
             artist: finalArtist,
             album: metadataAlbum,
@@ -1574,11 +1538,134 @@ export function PlayerProvider({
             activeIndex,
             musicUrl,
             isMusicStreamUrl,
-            needsMusicInfo,
+            trackTitle,
           });
         }
       } catch (error) {
         console.warn("[MediaSession] 設定 metadata 失敗:", error);
+      }
+
+      // ✅ 如果需要獲取完整信息（播放列表中缺少封面或作者），且 URL 是音樂流媒體 URL，異步獲取並更新
+      const needsMusicInfo = isMusicStreamUrl && 
+        (!currentTrack || !currentTrack.coverImageUrl || !currentTrack.authorName);
+      
+      if (needsMusicInfo) {
+        const musicId = musicUrl.match(/\/api\/music\/stream\/([^/?]+)/)?.[1];
+        if (musicId) {
+          // ✅ 使用 sessionStorage 緩存音樂信息，避免重複請求
+          const musicCacheKey = `music_${musicId}`;
+          
+          // ✅ 先檢查緩存
+          try {
+            const cachedMusic = sessionStorage.getItem(musicCacheKey);
+            if (cachedMusic) {
+              try {
+                const music = JSON.parse(cachedMusic);
+                // ✅ 使用緩存的音樂信息更新 metadata
+                const cachedMetadataTitle = music.title || trackTitle || "音樂作品";
+                const cachedMetadataArtist = music.authorName || music.author?.username || playerOwner?.username || "未知創作者";
+                const cachedMetadataAlbum = playerOwner?.username || "";
+                
+                const cachedArtwork = [];
+                if (music.coverImageUrl) {
+                  cachedArtwork.push({ src: music.coverImageUrl, sizes: "96x96", type: "image/png" });
+                  cachedArtwork.push({ src: music.coverImageUrl, sizes: "128x128", type: "image/png" });
+                  cachedArtwork.push({ src: music.coverImageUrl, sizes: "192x192", type: "image/png" });
+                  cachedArtwork.push({ src: music.coverImageUrl, sizes: "256x256", type: "image/png" });
+                  cachedArtwork.push({ src: music.coverImageUrl, sizes: "384x384", type: "image/png" });
+                  cachedArtwork.push({ src: music.coverImageUrl, sizes: "512x512", type: "image/png" });
+                }
+                
+                try {
+                  navigator.mediaSession.metadata = new MediaMetadata({
+                    title: cachedMetadataTitle,
+                    artist: cachedMetadataArtist,
+                    album: cachedMetadataAlbum,
+                    artwork: cachedArtwork.length > 0 ? cachedArtwork : undefined,
+                  });
+                  
+                  // ✅ 調試日志（開發模式）
+                  if (process.env.NODE_ENV === "development") {
+                    console.debug("[MediaSession] 使用緩存更新 metadata:", {
+                      title: cachedMetadataTitle,
+                      artist: cachedMetadataArtist,
+                      album: cachedMetadataAlbum,
+                      artworkCount: cachedArtwork.length,
+                    });
+                  }
+                } catch (error) {
+                  console.warn("[MediaSession] 更新 metadata 失敗:", error);
+                }
+              } catch (error) {
+                // 緩存解析失敗，繼續獲取
+                console.debug("[MediaSession] 緩存解析失敗:", error);
+              }
+            } else {
+              // ✅ 異步獲取音樂完整信息（不阻塞 UI）
+              fetch(`/api/music/${musicId}`)
+                .then((res) => res.json())
+                .then((data) => {
+                  const music = data?.music || data;
+                  if (music) {
+                    // ✅ 緩存音樂信息
+                    try {
+                      sessionStorage.setItem(musicCacheKey, JSON.stringify({
+                        title: music.title,
+                        coverImageUrl: music.coverImageUrl,
+                        authorName: music.authorName || music.author?.username,
+                        authorAvatar: music.authorAvatar || music.author?.avatar,
+                      }));
+                    } catch (error) {
+                      // 忽略緩存錯誤
+                    }
+                    
+                    // ✅ 更新 Media Session metadata（使用完整信息）
+                    const metadataTitle = music.title || trackTitle || "音樂作品";
+                    const metadataArtist = music.authorName || music.author?.username || playerOwner?.username || "未知創作者";
+                    const metadataAlbum = playerOwner?.username || "";
+                    
+                    const artwork = [];
+                    if (music.coverImageUrl) {
+                      artwork.push({ src: music.coverImageUrl, sizes: "96x96", type: "image/png" });
+                      artwork.push({ src: music.coverImageUrl, sizes: "128x128", type: "image/png" });
+                      artwork.push({ src: music.coverImageUrl, sizes: "192x192", type: "image/png" });
+                      artwork.push({ src: music.coverImageUrl, sizes: "256x256", type: "image/png" });
+                      artwork.push({ src: music.coverImageUrl, sizes: "384x384", type: "image/png" });
+                      artwork.push({ src: music.coverImageUrl, sizes: "512x512", type: "image/png" });
+                    }
+                    
+                    try {
+                      navigator.mediaSession.metadata = new MediaMetadata({
+                        title: metadataTitle,
+                        artist: metadataArtist,
+                        album: metadataAlbum,
+                        artwork: artwork.length > 0 ? artwork : undefined,
+                      });
+                      
+                      // ✅ 調試日志（開發模式）
+                      if (process.env.NODE_ENV === "development") {
+                        console.debug("[MediaSession] 更新完整 metadata:", {
+                          title: metadataTitle,
+                          artist: metadataArtist,
+                          album: metadataAlbum,
+                          artworkCount: artwork.length,
+                        });
+                      }
+                    } catch (error) {
+                      console.warn("[MediaSession] 更新 metadata 失敗:", error);
+                    }
+                  }
+                })
+                .catch((error) => {
+                  // 忽略錯誤，繼續使用基本信息
+                  console.debug("[MediaSession] 獲取音樂信息失敗:", error);
+                });
+            }
+          } catch (error) {
+            // sessionStorage 訪問失敗，跳過緩存
+            console.debug("[MediaSession] sessionStorage 訪問失敗:", error);
+          }
+        }
       }
     } else {
       // ✅ 如果沒有音樂來源，清除 metadata（避免顯示過時信息）
@@ -1622,8 +1709,69 @@ export function PlayerProvider({
       }
     };
 
-    // 初始設置位置狀態
-    updatePositionState();
+    // ✅ 在 useEffect 內部創建更新 metadata 的函數（可以訪問最新的狀態和 ref）
+    const updateMetadataInEffect = () => {
+      if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+        return;
+      }
+
+      // ✅ 獲取當前播放的音樂信息
+      const currentTrack =
+        Array.isArray(playlist) && playlist.length > 0 && activeIndex >= 0 && activeIndex < playlist.length
+          ? playlist[activeIndex]
+          : null;
+
+      const hasMusic = src || (currentTrack && currentTrack.url) || trackTitle;
+      if (!hasMusic) {
+        return;
+      }
+
+      // ✅ 構建基本的 metadata
+      const metadataTitle =
+        (currentTrack && (currentTrack.title || currentTrack.trackTitle)) ||
+        trackTitle ||
+        (currentTrack && currentTrack.url) ||
+        src ||
+        "音樂作品";
+      const metadataArtist =
+        (currentTrack && (currentTrack.artist || currentTrack.authorName)) ||
+        playerOwner?.username ||
+        "未知創作者";
+      const metadataAlbum =
+        (currentTrack && currentTrack.album) || playerOwner?.username || "";
+
+      // ✅ 構建 artwork
+      const artwork = [];
+      const coverCandidate =
+        (currentTrack && (currentTrack.coverImageUrl || currentTrack.cover || currentTrack.imageUrl || currentTrack.thumbnailUrl)) ||
+        "";
+      
+      if (coverCandidate) {
+        artwork.push({ src: coverCandidate, sizes: "96x96", type: "image/png" });
+        artwork.push({ src: coverCandidate, sizes: "128x128", type: "image/png" });
+        artwork.push({ src: coverCandidate, sizes: "192x192", type: "image/png" });
+        artwork.push({ src: coverCandidate, sizes: "256x256", type: "image/png" });
+        artwork.push({ src: coverCandidate, sizes: "384x384", type: "image/png" });
+        artwork.push({ src: coverCandidate, sizes: "512x512", type: "image/png" });
+      }
+
+      // ✅ 設置 metadata
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: metadataTitle || "音樂作品",
+          artist: metadataArtist || "未知創作者",
+          album: metadataAlbum,
+          artwork: artwork.length > 0 ? artwork : undefined,
+        });
+      } catch (error) {
+        console.warn("[MediaSession] 設定 metadata 失敗:", error);
+      }
+    };
+
+    // 初始設置位置狀態（如果有音頻且正在播放）
+    if (audioRef.current && !audioRef.current.paused) {
+      updatePositionState();
+    }
 
     // ✅ Android 背景播放需要直接操作 audio 元素，而不是通过 play/pause 函数
     const handlePlayAction = async () => {
@@ -1646,9 +1794,17 @@ export function PlayerProvider({
           try {
             await audio.play();
             setIsPlaying(true);
-            // ✅ 更新 playbackState
+            
+            // ✅ 確保 metadata 已設置（Android 背景播放面板需要）
             if (navigator.mediaSession) {
-              navigator.mediaSession.playbackState = "playing";
+              try {
+                updateMetadataInEffect();
+                navigator.mediaSession.playbackState = "playing";
+                // ✅ 立即更新 position state（Android 需要）
+                updatePositionState();
+              } catch (error) {
+                console.warn("[MediaSession] 更新播放狀態失敗:", error);
+              }
             }
           } catch (error) {
             console.warn("[MediaSession] play() 失敗:", error);
