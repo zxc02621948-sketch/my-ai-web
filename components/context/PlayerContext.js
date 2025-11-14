@@ -518,17 +518,64 @@ export function PlayerProvider({
       audioRef.current.dataset.startTime = startTime.toString();
     }
 
-    // ✅ 在播放時立即更新 Media Session metadata 和 playbackState（Android 需要）
-    if (typeof navigator !== "undefined" && navigator.mediaSession) {
-      try {
-        // ✅ 確保 metadata 已設置（Android 背景播放面板需要）
-        updateMediaSessionMetadata();
-        // ✅ 更新 playbackState
-        navigator.mediaSession.playbackState = "playing";
-      } catch (error) {
-        console.warn("[MediaSession] 更新播放狀態失敗:", error);
+    // ✅ Android 背景播放面板必須在音頻真正播放後才顯示
+    // ✅ 使用遞歸檢查確保在音頻元素真正開始播放且 duration 已加載後才設置 metadata
+    const setupMediaSessionForAndroid = (attempts = 0) => {
+      if (typeof navigator === "undefined" || !("mediaSession" in navigator) || !audioRef.current) {
+        return;
       }
-    }
+      
+      const audio = audioRef.current;
+      const maxAttempts = 10; // ✅ 最多嘗試 10 次（1 秒）
+      
+      // ✅ 檢查音頻元素是否正在播放且 duration 已加載（Android 需要）
+      if (!audio.paused && audio.duration > 0 && isFinite(audio.duration)) {
+        try {
+          // ✅ 確保 metadata 已設置（Android 背景播放面板需要）
+          updateMediaSessionMetadata();
+          
+          // ✅ 更新 playbackState（必須在 metadata 之後設置）
+          navigator.mediaSession.playbackState = "playing";
+          
+          // ✅ 立即設置 position state（Android 需要）
+          const currentTime = audio.currentTime || 0;
+          const duration = audio.duration || 0;
+          
+          if (duration > 0 && isFinite(duration) && isFinite(currentTime)) {
+            try {
+              if (navigator.mediaSession.setPositionState) {
+                navigator.mediaSession.setPositionState({
+                  duration: duration,
+                  playbackRate: audio.playbackRate || 1.0,
+                  position: currentTime,
+                });
+              }
+            } catch (error) {
+              // 某些瀏覽器可能不支援 setPositionState，忽略即可
+            }
+          }
+          
+          // ✅ 調試日志（開發模式）
+          if (process.env.NODE_ENV === "development") {
+            console.debug("[MediaSession] onPlay - 設置 metadata 和 playbackState:", {
+              paused: audio.paused,
+              duration: audio.duration,
+              currentTime: audio.currentTime,
+              attempts,
+            });
+          }
+        } catch (error) {
+          console.warn("[MediaSession] 更新播放狀態失敗:", error);
+        }
+      } else if (attempts < maxAttempts) {
+        // ✅ 如果音頻還沒準備好，繼續等待（Android 需要等待 duration 加載）
+        setTimeout(() => setupMediaSessionForAndroid(attempts + 1), 100);
+      }
+    };
+    
+    // ✅ 立即開始設置（如果音頻已準備好）
+    // ✅ 否則等待 100ms 後重試（Android 需要）
+    setTimeout(() => setupMediaSessionForAndroid(0), 100);
   }, [updateMediaSessionMetadata]);
 
   const onPause = useCallback(() => {
@@ -1795,17 +1842,49 @@ export function PlayerProvider({
             await audio.play();
             setIsPlaying(true);
             
-            // ✅ 確保 metadata 已設置（Android 背景播放面板需要）
-            if (navigator.mediaSession) {
-              try {
-                updateMetadataInEffect();
-                navigator.mediaSession.playbackState = "playing";
-                // ✅ 立即更新 position state（Android 需要）
-                updatePositionState();
-              } catch (error) {
-                console.warn("[MediaSession] 更新播放狀態失敗:", error);
+            // ✅ Android 背景播放面板必須在音頻真正播放後才顯示
+            // ✅ 使用遞歸檢查確保在音頻元素真正開始播放且 duration 已加載後才設置 metadata
+            const setupMediaSessionForAndroid = (attempts = 0) => {
+              if (!navigator.mediaSession || !audioRef.current) {
+                return;
               }
-            }
+              
+              const audio = audioRef.current;
+              const maxAttempts = 10; // ✅ 最多嘗試 10 次（1 秒）
+              
+              // ✅ 檢查音頻元素是否正在播放且 duration 已加載（Android 需要）
+              if (!audio.paused && audio.duration > 0 && isFinite(audio.duration)) {
+                try {
+                  // ✅ 確保 metadata 已設置（Android 背景播放面板需要）
+                  updateMetadataInEffect();
+                  
+                  // ✅ 更新 playbackState（必須在 metadata 之後設置）
+                  navigator.mediaSession.playbackState = "playing";
+                  
+                  // ✅ 立即更新 position state（Android 需要）
+                  updatePositionState();
+                  
+                  // ✅ 調試日志（開發模式）
+                  if (process.env.NODE_ENV === "development") {
+                    console.debug("[MediaSession] handlePlayAction - 設置 metadata 和 playbackState:", {
+                      paused: audio.paused,
+                      duration: audio.duration,
+                      currentTime: audio.currentTime,
+                      attempts,
+                    });
+                  }
+                } catch (error) {
+                  console.warn("[MediaSession] 更新播放狀態失敗:", error);
+                }
+              } else if (attempts < maxAttempts) {
+                // ✅ 如果音頻還沒準備好，繼續等待（Android 需要等待 duration 加載）
+                setTimeout(() => setupMediaSessionForAndroid(attempts + 1), 100);
+              }
+            };
+            
+            // ✅ 立即開始設置（如果音頻已準備好）
+            // ✅ 否則等待 100ms 後重試（Android 需要）
+            setTimeout(() => setupMediaSessionForAndroid(0), 100);
           } catch (error) {
             console.warn("[MediaSession] play() 失敗:", error);
           }
