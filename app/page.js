@@ -28,8 +28,8 @@ const SECTION_CONFIG = [
     href: "/images",
     accent: {
       badge: "from-pink-500/80 to-purple-500/80",
-      // 參考 ContentMenuButtons 圖片專區按鈕顏色：深紫藍漸層
-      ring: "from-[#6a11cb] to-[#2575fc]",
+      // 參考 ContentMenuButtons 圖片專區按鈕顏色：深紫藍漸層（加深）
+      ring: "from-[#4a0ba8] to-[#1a55d9]",
       border: "border-pink-400/60",
     },
     duration: 48,
@@ -42,8 +42,8 @@ const SECTION_CONFIG = [
     accent: {
       // 統一使用圖片區的 badge 顏色
       badge: "from-pink-500/80 to-purple-500/80",
-      // 參考 ContentMenuButtons 音樂專區按鈕顏色：靛紫粉漸層
-      ring: "from-indigo-500 via-purple-500 to-pink-500",
+      // 參考 ContentMenuButtons 音樂專區按鈕顏色：靛紫粉漸層（加深）
+      ring: "from-indigo-600 via-purple-600 to-pink-600",
       border: "border-purple-400/60",
     },
     duration: 52,
@@ -56,8 +56,8 @@ const SECTION_CONFIG = [
     accent: {
       // 統一使用圖片區的 badge 顏色
       badge: "from-pink-500/80 to-purple-500/80",
-      // 參考 ContentMenuButtons 影片專區按鈕顏色：橙粉紅漸層
-      ring: "from-orange-500 via-pink-500 to-red-500",
+      // 參考 ContentMenuButtons 影片專區按鈕顏色：橙粉紅漸層（加深）
+      ring: "from-orange-600 via-pink-600 to-red-600",
       border: "border-sky-400/60",
     },
     duration: 56,
@@ -245,26 +245,26 @@ function ShowcaseHeader({ title, description, href, accent }) {
   return (
     <Link
       href={href}
-      className={`group block w-full rounded-xl bg-gradient-to-r ${accent.ring} p-6 md:p-8 transition-all hover:opacity-90 cursor-pointer`}
+      className={`group block w-full rounded-t-2xl bg-gradient-to-r ${accent.ring} p-4 md:p-5 transition-all hover:opacity-90 cursor-pointer`}
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex-1">
           <div
-            className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r ${accent.badge} px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white`}
+            className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r ${accent.badge} px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-white`}
           >
-            <Sparkles className="h-3.5 w-3.5" />
+            <Sparkles className="h-3 w-3" />
             精選內容
           </div>
-          <h2 className="mt-3 text-2xl font-bold text-white sm:text-3xl group-hover:text-white/90 transition-colors">
+          <h2 className="mt-1.5 text-lg font-bold text-white sm:text-xl md:text-2xl group-hover:text-white/90 transition-colors">
             {title}
           </h2>
-          <p className="mt-2 max-w-2xl text-sm text-zinc-300 sm:text-base group-hover:text-zinc-200 transition-colors">
+          <p className="mt-1 max-w-2xl text-xs text-zinc-300 sm:text-sm group-hover:text-zinc-200 transition-colors">
             {description}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm font-medium text-white/60 group-hover:text-white transition-colors">
+        <div className="flex items-center gap-2 text-xs font-medium text-white/60 group-hover:text-white transition-colors sm:mt-0 mt-2">
           <span>前往專區</span>
-          <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
         </div>
       </div>
     </Link>
@@ -460,10 +460,10 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href })
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl border ${accent.border} bg-zinc-900/50`}
+      className={`group relative overflow-hidden rounded-b-3xl border-t-0 border ${accent.border} bg-zinc-900/50`}
     >
       <div
-        className="marquee-track flex gap-4 px-6 py-10 md:pr-10"
+        className="marquee-track flex gap-4 px-6 py-4 md:pr-10 md:py-6"
         style={{ "--marquee-duration": `${duration}s` }}
       >
         {marqueeItems.map((item, index) => (
@@ -482,37 +482,37 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href })
 function HeroSection() {
   return (
     <header className="border-b border-white/10 bg-gradient-to-br from-emerald-500/10 via-purple-600/5 to-sky-500/10">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-16 sm:px-10 sm:py-20">
+      <div className="mx-auto flex max-w-[1536px] flex-col gap-3 px-6 py-6 sm:px-10 sm:py-8">
         {/* Logo 和標題 */}
         <Link
           href="/"
-          className="flex items-center gap-3 md:gap-4 shrink-0 mb-6"
+          className="flex items-center gap-2 md:gap-3 shrink-0 mb-3"
           aria-label="回首頁"
         >
           <Image
             src="/ai_logo_icon.png"
             alt="AI 創界 Logo"
-            width={64}
-            height={64}
-            className="rounded-lg md:w-[80px] md:h-[80px]"
+            width={40}
+            height={40}
+            className="rounded-lg md:w-[48px] md:h-[48px]"
             priority
           />
-          <span className="text-white text-2xl md:text-4xl font-extrabold tracking-wide">
+          <span className="text-white text-lg md:text-2xl font-extrabold tracking-wide">
             AI 創界
           </span>
         </Link>
 
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white sm:text-4xl lg:text-5xl">
+            <h1 className="text-xl font-bold text-white sm:text-2xl lg:text-3xl">
               創作、靈感與音樂的交會處
             </h1>
-            <p className="mt-4 max-w-2xl text-sm text-zinc-200 sm:text-base">
+            <p className="mt-1.5 max-w-2xl text-xs text-zinc-200 sm:text-sm">
               我們將圖片、音樂與影片三大內容專區匯聚於此，一頁掌握最新精選作品，
               滑過即可瀏覽，點擊即可探索每個專區的完整體驗。
             </p>
           </div>
-          <div className="flex flex-shrink-0 gap-3">
+          <div className="flex flex-shrink-0 gap-2">
             <Link
               href="/images"
               className="rounded-full border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition hover:border-white/40 hover:bg-white/20"
@@ -949,7 +949,7 @@ const musicPreviewStateRef = useRef({
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <HeroSection />
-      <main className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-16 sm:px-10 sm:py-20">
+      <main className="mx-auto flex max-w-[1536px] flex-col gap-16 px-6 py-16 sm:px-10 sm:py-20">
         {SECTION_CONFIG.map((section) => {
           const data = sectionData[section.id] || {
             items: [],
@@ -958,31 +958,33 @@ const musicPreviewStateRef = useRef({
           };
 
           return (
-            <section key={section.id} className="space-y-6">
-              <ShowcaseHeader
-                title={section.title}
-                description={section.description}
-                href={section.href}
-                accent={section.accent}
-              />
-              {data.error ? (
-                <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">
-                  無法取得最新內容，請稍後再試。
-                </div>
-              ) : (
-                <div className="overflow-x-auto md:overflow-visible">
-                  <ShowcaseMarquee
-                    items={data.items}
-                    renderItem={(item, idx) =>
-                      sectionCards[section.id]?.(item, idx)
-                    }
-                    accent={section.accent}
-                    duration={section.duration}
-                    loading={data.loading}
-                    href={section.href}
-                  />
-                </div>
-              )}
+            <section key={section.id} className="space-y-4">
+              <div>
+                <ShowcaseHeader
+                  title={section.title}
+                  description={section.description}
+                  href={section.href}
+                  accent={section.accent}
+                />
+                {data.error ? (
+                  <div className="rounded-b-3xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">
+                    無法取得最新內容，請稍後再試。
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto md:overflow-visible">
+                    <ShowcaseMarquee
+                      items={data.items}
+                      renderItem={(item, idx) =>
+                        sectionCards[section.id]?.(item, idx)
+                      }
+                      accent={section.accent}
+                      duration={section.duration}
+                      loading={data.loading}
+                      href={section.href}
+                    />
+                  </div>
+                )}
+              </div>
             </section>
           );
         })}
