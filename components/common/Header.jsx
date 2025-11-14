@@ -294,10 +294,11 @@ export default function Header({
 
   return (
     <>
-      <header
-        ref={headerRef}
-        className="sticky top-0 left-0 right-0 z-50 bg-zinc-900 border-b border-zinc-700"
-      >
+      {pathname !== "/" && (
+        <header
+          ref={headerRef}
+          className="sticky top-0 left-0 right-0 z-50 bg-zinc-900 border-b border-zinc-700"
+        >
         <div className="px-3 md:px-4 py-1 md:py-2 flex items-center justify-between gap-3">
           {/* 左：Logo */}
           <Link
@@ -336,299 +337,308 @@ export default function Header({
             </span>
           </Link>
 
-          {/* 中：篩選 + 桌機搜尋 */}
-          <div className="flex-1 min-w-0 flex items-center justify-start w-full">
-            <div className="flex items-center gap-2 w-full">
-              <div className="w-[92px] md:w-[110px] shrink-0">
-                <button
-                  ref={filterButtonRef}
-                  onClick={() => setFilterMenuOpen((prev) => !prev)}
-                  className="w-full px-3 py-2 md:px-4 rounded-lg text-white text-sm md:text-base font-semibold transition
-                             bg-blue-600 hover:bg-blue-700 border border-blue-400/40 shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
-                  title="篩選"
+          {/* 中：篩選 + 桌機搜尋 - 首頁不顯示 */}
+          {pathname !== "/" && (
+            <div className="flex-1 min-w-0 flex items-center justify-start w-full">
+              <div className="flex items-center gap-2 w-full">
+                <div className="w-[92px] md:w-[110px] shrink-0">
+                  <button
+                    ref={filterButtonRef}
+                    onClick={() => setFilterMenuOpen((prev) => !prev)}
+                    className="w-full px-3 py-2 md:px-4 rounded-lg text-white text-sm md:text-base font-semibold transition
+                               bg-blue-600 hover:bg-blue-700 border border-blue-400/40 shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
+                    title="篩選"
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <Wrench className="w-4 h-4" />
+                      <span>篩選</span>
+                    </span>
+                  </button>
+                </div>
+
+                {/* 桌機搜尋列 */}
+                <div
+                  className="relative flex-1 min-w-0 hidden md:block"
+                  ref={searchBoxRefDesktop}
                 >
-                  <span className="inline-flex items-center gap-1.5">
-                    <Wrench className="w-4 h-4" />
-                    <span>篩選</span>
-                  </span>
-                </button>
+                  <form
+                    onSubmit={handleSubmit}
+                    className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
+                  >
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={searchQuery}
+                      onChange={handleInputChange}
+                      onCompositionStart={() => setIsComposing(true)}
+                      onCompositionEnd={() => setIsComposing(false)}
+                      placeholder="搜尋標題、作者、標籤…"
+                      className="flex-1 min-w-0 pl-4 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none text-base"
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2 rounded-r bg-zinc-700 text-white hover:bg-zinc-600 text-sm font-medium"
+                    >
+                      搜尋
+                    </button>
+                  </form>
+
+                  {showDropdown && !isComposing && (
+                    <ul className="absolute z-50 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded shadow-md text-sm text-white max-h-60 overflow-y-auto">
+                      {filteredSuggestions.map((s, i) => (
+                        <li
+                          key={i}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSuggestionClick(s);
+                          }}
+                          className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
+                        >
+                          {s}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
 
-              {/* 桌機搜尋列 */}
-              <div
-                className="relative flex-1 min-w-0 hidden md:block"
-                ref={searchBoxRefDesktop}
-              >
-                <form
-                  onSubmit={handleSubmit}
-                  className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
-                >
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={handleInputChange}
-                    onCompositionStart={() => setIsComposing(true)}
-                    onCompositionEnd={() => setIsComposing(false)}
-                    placeholder="搜尋標題、作者、標籤…"
-                    className="flex-1 min-w-0 pl-4 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none text-base"
-                  />
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-r bg-zinc-700 text-white hover:bg-zinc-600 text-sm font-medium"
+              {/* 篩選面板（Portal，動態定位） */}
+              {filterMenuOpen &&
+                createPortal(
+                  <div
+                    ref={filterPanelRef}
+                    style={{
+                      position: "fixed",
+                      top: panelStyle.top,
+                      left: panelStyle.left,
+                      width: panelStyle.width,
+                      maxWidth: "90vw",
+                      zIndex: 99999,
+                      visibility: panelReady ? "visible" : "hidden",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    搜尋
-                  </button>
-                </form>
+                    <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-3 md:p-4">
+                      {pathname === "/music" ? (
+                        <MusicFilterPanel
+                          currentUser={currentUser}
+                          filterMenuOpen={filterMenuOpen}
+                          setFilterMenuOpen={setFilterMenuOpen}
+                          levelFilters={levelFilters}
+                          categoryFilters={categoryFilters}
+                          viewMode={viewMode}
+                          toggleLevelFilter={toggleLevelFilter}
+                          toggleCategoryFilter={toggleCategoryFilter}
+                          onToggleLevel={toggleLevelFilter}
+                          onToggleCategory={toggleCategoryFilter}
+                          setViewMode={setViewMode}
+                        />
+                      ) : (
+                        <FilterPanel
+                          currentUser={currentUser}
+                          filterMenuOpen={filterMenuOpen}
+                          setFilterMenuOpen={setFilterMenuOpen}
+                          levelFilters={levelFilters}
+                          categoryFilters={categoryFilters}
+                          viewMode={viewMode}
+                          toggleLevelFilter={toggleLevelFilter}
+                          toggleCategoryFilter={toggleCategoryFilter}
+                          onToggleLevel={toggleLevelFilter}
+                          onToggleCategory={toggleCategoryFilter}
+                          setViewMode={setViewMode}
+                        />
+                      )}
+                    </div>
+                  </div>,
+                  portalContainer || document.body,
+                )}
+            </div>
+          )}
 
-                {showDropdown && !isComposing && (
-                  <ul className="absolute z-50 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded shadow-md text-sm text-white max-h-60 overflow-y-auto">
-                    {filteredSuggestions.map((s, i) => (
-                      <li
-                        key={i}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          handleSuggestionClick(s);
-                        }}
-                        className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
+          {/* 右：操作區 - 首頁不顯示 */}
+          {pathname !== "/" && (
+            <div className="flex items-center gap-2 md:gap-2 lg:gap-3 shrink-0">
+              <div className="hidden md:block">
+                <UploadDropdown />
+              </div>
+
+              <div className="hidden md:block">
+                <TutorialMenu onGuideClick={onGuideClick} />
+              </div>
+
+              {currentUser && <NotificationBell />}
+              {currentUser && <InboxButton />}
+
+              {/* 使用者選單 */}
+              <div className="relative" ref={userMenuRef}>
+                {currentUser === undefined ? (
+                  <div className="px-3 md:px-4 py-2 bg-zinc-800 text-gray-400 rounded text-sm">
+                    🔄
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setUserMenuOpen((prev) => !prev)}
+                      className="px-3 md:px-4 py-2 bg-zinc-800 text白 rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[40px] md:min-w-[140px] max-w-[160px] truncate text-left"
+                      aria-haspopup="menu"
+                      aria-expanded={userMenuOpen}
+                      title={currentUser?.username || "登入 / 註冊"}
+                    >
+                      <span className="md:hidden" aria-hidden>
+                        👤
+                      </span>
+                      <span className="hidden md:inline">
+                        {currentUser?.username
+                          ? `👤 ${currentUser.username} ▼`
+                          : "🔑 登入 / 註冊 ▼"}
+                      </span>
+                    </button>
+
+                    {userMenuOpen && (
+                      <div
+                        className="absolute right-0 mt-2 w-48 bg-zinc-800 text白 rounded shadow-md py-1 z-50"
+                        role="menu"
                       >
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
+                        {currentUser?.username ? (
+                          <>
+                            <Link
+                              href={`/user/${currentUser._id}`}
+                              className="block px-4 py-2 hover:bg-zinc-700 text-sm"
+                              onClick={() => setUserMenuOpen(false)}
+                              role="menuitem"
+                            >
+                              👤 我的頁面
+                            </Link>
+
+                            <Link
+                              href="/store"
+                              className="block px-4 py-2 hover:bg-zinc-700 text-sm"
+                              onClick={() => setUserMenuOpen(false)}
+                              role="menuitem"
+                            >
+                              🛍️ 積分商店
+                            </Link>
+
+                            <Link
+                              href="/settings"
+                              className="block px-4 py-2 hover:bg-zinc-700 text-sm"
+                              onClick={() => setUserMenuOpen(false)}
+                              role="menuitem"
+                            >
+                              ⚙️ 設定
+                            </Link>
+
+                            <div className="border-t border-zinc-700 my-1"></div>
+
+                            <button
+                              onClick={async () => {
+                                setUserMenuOpen(false);
+                                localStorage.clear();
+                                await axios.post(
+                                  "/api/auth/logout",
+                                  {},
+                                  { withCredentials: true },
+                                );
+                                location.reload();
+                              }}
+                              className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-red-400"
+                              role="menuitem"
+                            >
+                              🚪 登出
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                setUserMenuOpen(false);
+                                onLoginOpen?.();
+                              }}
+                              className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
+                              role="menuitem"
+                            >
+                              登入
+                            </button>
+                            <button
+                              onClick={() => {
+                                setUserMenuOpen(false);
+                                onRegisterOpen?.();
+                              }}
+                              className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
+                              role="menuitem"
+                            >
+                              註冊
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
-
-            {/* 篩選面板（Portal，動態定位） */}
-            {filterMenuOpen &&
-              createPortal(
-                <div
-                  ref={filterPanelRef}
-                  style={{
-                    position: "fixed",
-                    top: panelStyle.top,
-                    left: panelStyle.left,
-                    width: panelStyle.width,
-                    maxWidth: "90vw",
-                    zIndex: 99999,
-                    visibility: panelReady ? "visible" : "hidden",
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="bg-zinc-900 border border-zinc-700 shadow-xl rounded-xl p-3 md:p-4">
-                    {pathname === "/music" ? (
-                      <MusicFilterPanel
-                        currentUser={currentUser}
-                        filterMenuOpen={filterMenuOpen}
-                        setFilterMenuOpen={setFilterMenuOpen}
-                        levelFilters={levelFilters}
-                        categoryFilters={categoryFilters}
-                        viewMode={viewMode}
-                        toggleLevelFilter={toggleLevelFilter}
-                        toggleCategoryFilter={toggleCategoryFilter}
-                        onToggleLevel={toggleLevelFilter}
-                        onToggleCategory={toggleCategoryFilter}
-                        setViewMode={setViewMode}
-                      />
-                    ) : (
-                      <FilterPanel
-                        currentUser={currentUser}
-                        filterMenuOpen={filterMenuOpen}
-                        setFilterMenuOpen={setFilterMenuOpen}
-                        levelFilters={levelFilters}
-                        categoryFilters={categoryFilters}
-                        viewMode={viewMode}
-                        toggleLevelFilter={toggleLevelFilter}
-                        toggleCategoryFilter={toggleCategoryFilter}
-                        onToggleLevel={toggleLevelFilter}
-                        onToggleCategory={toggleCategoryFilter}
-                        setViewMode={setViewMode}
-                      />
-                    )}
-                  </div>
-                </div>,
-                portalContainer || document.body,
-              )}
-          </div>
-
-          {/* 右：操作區 */}
-          <div className="flex items-center gap-2 md:gap-2 lg:gap-3 shrink-0">
-            <div className="hidden md:block">
-              <UploadDropdown />
-            </div>
-
-            <div className="hidden md:block">
-              <TutorialMenu onGuideClick={onGuideClick} />
-            </div>
-
-            {currentUser && <NotificationBell />}
-            {currentUser && <InboxButton />}
-
-            {/* 使用者選單 */}
-            <div className="relative" ref={userMenuRef}>
-              {currentUser === undefined ? (
-                <div className="px-3 md:px-4 py-2 bg-zinc-800 text-gray-400 rounded text-sm">
-                  🔄
-                </div>
-              ) : (
-                <>
-                  <button
-                    onClick={() => setUserMenuOpen((prev) => !prev)}
-                    className="px-3 md:px-4 py-2 bg-zinc-800 text白 rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[40px] md:min-w-[140px] max-w-[160px] truncate text-left"
-                    aria-haspopup="menu"
-                    aria-expanded={userMenuOpen}
-                    title={currentUser?.username || "登入 / 註冊"}
-                  >
-                    <span className="md:hidden" aria-hidden>
-                      👤
-                    </span>
-                    <span className="hidden md:inline">
-                      {currentUser?.username
-                        ? `👤 ${currentUser.username} ▼`
-                        : "🔑 登入 / 註冊 ▼"}
-                    </span>
-                  </button>
-
-                  {userMenuOpen && (
-                    <div
-                      className="absolute right-0 mt-2 w-48 bg-zinc-800 text白 rounded shadow-md py-1 z-50"
-                      role="menu"
-                    >
-                      {currentUser?.username ? (
-                        <>
-                          <Link
-                            href={`/user/${currentUser._id}`}
-                            className="block px-4 py-2 hover:bg-zinc-700 text-sm"
-                            onClick={() => setUserMenuOpen(false)}
-                            role="menuitem"
-                          >
-                            👤 我的頁面
-                          </Link>
-
-                          <Link
-                            href="/store"
-                            className="block px-4 py-2 hover:bg-zinc-700 text-sm"
-                            onClick={() => setUserMenuOpen(false)}
-                            role="menuitem"
-                          >
-                            🛍️ 積分商店
-                          </Link>
-
-                          <Link
-                            href="/settings"
-                            className="block px-4 py-2 hover:bg-zinc-700 text-sm"
-                            onClick={() => setUserMenuOpen(false)}
-                            role="menuitem"
-                          >
-                            ⚙️ 設定
-                          </Link>
-
-                          <div className="border-t border-zinc-700 my-1"></div>
-
-                          <button
-                            onClick={async () => {
-                              setUserMenuOpen(false);
-                              localStorage.clear();
-                              await axios.post(
-                                "/api/auth/logout",
-                                {},
-                                { withCredentials: true },
-                              );
-                              location.reload();
-                            }}
-                            className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-red-400"
-                            role="menuitem"
-                          >
-                            🚪 登出
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => {
-                              setUserMenuOpen(false);
-                              onLoginOpen?.();
-                            }}
-                            className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
-                            role="menuitem"
-                          >
-                            登入
-                          </button>
-                          <button
-                            onClick={() => {
-                              setUserMenuOpen(false);
-                              onRegisterOpen?.();
-                            }}
-                            className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm"
-                            role="menuitem"
-                          >
-                            註冊
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* 內容專區按鈕列（桌面版和手機版） */}
-        <div className="px-3 md:px-6 py-2 border-t border-zinc-700/50 bg-zinc-900/50">
-          <ContentMenuButtons />
-        </div>
-
-        {/* 第二列：📱 手機搜尋專用 */}
-        <div
-          className="md:hidden px-3 pb-1.5 pt-1 border-t border-zinc-700"
-          ref={searchBoxRefMobile}
-        >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSubmit(e);
-            }}
-            className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
-          >
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={handleInputChange}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              placeholder="搜尋標題、作者、標籤…"
-              className="flex-1 min-w-0 pl-3 pr-2 py-2 rounded-l bg-zinc-800 text白 placeholder-gray-400 focus:outline-none text-sm"
-            />
-            <button
-              type="submit"
-              className="px-3 py-2 rounded-r bg-zinc-700 text白 hover:bg-zinc-600 text-sm font-medium"
-            >
-              搜尋
-            </button>
-          </form>
-
-          {showDropdown && !isComposing && (
-            <ul className="mt-1 w-full bg-zinc-800 border border-zinc-700 rounded shadow-md text-sm text白 max-h-60 overflow-y-auto">
-              {filteredSuggestions.map((s, i) => (
-                <li
-                  key={i}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    handleSuggestionClick(s);
-                  }}
-                  className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
-                >
-                  {s}
-                </li>
-              ))}
-            </ul>
           )}
         </div>
 
-        {/* 第三列：📱 手機常用功能 */}
-        <div className="md:hidden px-3 pb-2 border-t border-zinc-700/50">
+        {/* 內容專區按鈕列（桌面版和手機版）- 首頁不顯示 */}
+        {pathname !== "/" && (
+          <div className="px-3 md:px-6 py-2 border-t border-zinc-700/50 bg-zinc-900/50">
+            <ContentMenuButtons />
+          </div>
+        )}
+
+        {/* 第二列：📱 手機搜尋專用 - 首頁不顯示 */}
+        {pathname !== "/" && (
+          <div
+            className="md:hidden px-3 pb-1.5 pt-1 border-t border-zinc-700"
+            ref={searchBoxRefMobile}
+          >
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSubmit(e);
+              }}
+              className="flex w-full rounded-lg bg-zinc-800 border border-zinc-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden"
+            >
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={handleInputChange}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
+                placeholder="搜尋標題、作者、標籤…"
+                className="flex-1 min-w-0 pl-3 pr-2 py-2 rounded-l bg-zinc-800 text-white placeholder-gray-400 focus:outline-none text-sm"
+              />
+              <button
+                type="submit"
+                className="px-3 py-2 rounded-r bg-zinc-700 text-white hover:bg-zinc-600 text-sm font-medium"
+              >
+                搜尋
+              </button>
+            </form>
+
+            {showDropdown && !isComposing && (
+              <ul className="mt-1 w-full bg-zinc-800 border border-zinc-700 rounded shadow-md text-sm text-white max-h-60 overflow-y-auto">
+                {filteredSuggestions.map((s, i) => (
+                  <li
+                    key={i}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSuggestionClick(s);
+                    }}
+                    className="px-4 py-2 hover:bg-zinc-700 cursor-pointer"
+                  >
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* 第三列：📱 手機常用功能 - 首頁不顯示 */}
+        {pathname !== "/" && (
+          <div className="md:hidden px-3 pb-2 border-t border-zinc-700/50">
           <div
             className="flex gap-2 overflow-x-auto overflow-y-hidden"
             style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}
@@ -639,8 +649,10 @@ export default function Header({
               <UploadDropdown />
             </div>
           </div>
-        </div>
-      </header>
+          </div>
+        )}
+        </header>
+      )}
 
       {showImageModal && selectedImage && (
         <ImageModal

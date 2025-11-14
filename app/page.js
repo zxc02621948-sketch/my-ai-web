@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ImageIcon,
   MusicIcon,
@@ -27,7 +28,8 @@ const SECTION_CONFIG = [
     href: "/images",
     accent: {
       badge: "from-pink-500/80 to-purple-500/80",
-      ring: "from-pink-500/20 via-purple-500/10 to-blue-500/10",
+      // 參考 ContentMenuButtons 圖片專區按鈕顏色：深紫藍漸層
+      ring: "from-[#6a11cb] to-[#2575fc]",
       border: "border-pink-400/60",
     },
     duration: 48,
@@ -38,8 +40,10 @@ const SECTION_CONFIG = [
     description: "以音樂陪伴創作旅程，立即試聽人氣 AI 曲目。",
     href: "/music",
     accent: {
-      badge: "from-purple-500/80 to-indigo-500/80",
-      ring: "from-purple-600/20 via-indigo-500/10 to-blue-500/10",
+      // 統一使用圖片區的 badge 顏色
+      badge: "from-pink-500/80 to-purple-500/80",
+      // 參考 ContentMenuButtons 音樂專區按鈕顏色：靛紫粉漸層
+      ring: "from-indigo-500 via-purple-500 to-pink-500",
       border: "border-purple-400/60",
     },
     duration: 52,
@@ -50,8 +54,10 @@ const SECTION_CONFIG = [
     description: "探索動態視覺的 AI 實驗，收錄前衛的創作影片。",
     href: "/videos",
     accent: {
-      badge: "from-blue-500/80 to-cyan-500/80",
-      ring: "from-sky-500/20 via-blue-500/10 to-emerald-500/10",
+      // 統一使用圖片區的 badge 顏色
+      badge: "from-pink-500/80 to-purple-500/80",
+      // 參考 ContentMenuButtons 影片專區按鈕顏色：橙粉紅漸層
+      ring: "from-orange-500 via-pink-500 to-red-500",
       border: "border-sky-400/60",
     },
     duration: 56,
@@ -237,29 +243,31 @@ function formatDuration(seconds) {
 
 function ShowcaseHeader({ title, description, href, accent }) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <div
-          className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r ${accent.badge} px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white`}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          精選內容
+    <Link
+      href={href}
+      className={`group block w-full rounded-xl bg-gradient-to-r ${accent.ring} p-6 md:p-8 transition-all hover:opacity-90 cursor-pointer`}
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex-1">
+          <div
+            className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r ${accent.badge} px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white`}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            精選內容
+          </div>
+          <h2 className="mt-3 text-2xl font-bold text-white sm:text-3xl group-hover:text-white/90 transition-colors">
+            {title}
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-zinc-300 sm:text-base group-hover:text-zinc-200 transition-colors">
+            {description}
+          </p>
         </div>
-        <h2 className="mt-3 text-2xl font-bold text-white sm:text-3xl">
-          {title}
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-300 sm:text-base">
-          {description}
-        </p>
+        <div className="flex items-center gap-2 text-sm font-medium text-white/60 group-hover:text-white transition-colors">
+          <span>前往專區</span>
+          <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+        </div>
       </div>
-      <Link
-        href={href}
-        className="inline-flex items-center gap-2 self-start rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/10"
-      >
-        前往專區
-        <ArrowRight className="h-4 w-4" />
-      </Link>
-    </div>
+    </Link>
   );
 }
 
@@ -452,9 +460,8 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href })
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl border ${accent.border} bg-gradient-to-r ${accent.ring}`}
+      className={`group relative overflow-hidden rounded-2xl border ${accent.border} bg-zinc-900/50`}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.04),transparent_60%)]" />
       <div
         className="marquee-track flex gap-4 px-6 py-10 md:pr-10"
         style={{ "--marquee-duration": `${duration}s` }}
@@ -476,6 +483,25 @@ function HeroSection() {
   return (
     <header className="border-b border-white/10 bg-gradient-to-br from-emerald-500/10 via-purple-600/5 to-sky-500/10">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-16 sm:px-10 sm:py-20">
+        {/* Logo 和標題 */}
+        <Link
+          href="/"
+          className="flex items-center gap-3 md:gap-4 shrink-0 mb-6"
+          aria-label="回首頁"
+        >
+          <Image
+            src="/ai_logo_icon.png"
+            alt="AI 創界 Logo"
+            width={64}
+            height={64}
+            className="rounded-lg md:w-[80px] md:h-[80px]"
+            priority
+          />
+          <span className="text-white text-2xl md:text-4xl font-extrabold tracking-wide">
+            AI 創界
+          </span>
+        </Link>
+
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white sm:text-4xl lg:text-5xl">
