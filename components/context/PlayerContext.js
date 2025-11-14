@@ -1082,7 +1082,7 @@ export function PlayerProvider({
       audio.dataset.startTime = "";
 
       if (isSameSource) {
-        console.log("🎵 [setSrcWithAudio] 保留現有音頻源:", newSrc || "(空)");
+        // 保留現有音源，無需重新載入
         return;
       }
 
@@ -1093,7 +1093,7 @@ export function PlayerProvider({
       audio.src = newSrc || "";
       audio.load();
 
-      console.log("🎵 [setSrcWithAudio] 設置音頻源:", newSrc || "(空)");
+      // 設置新的音源
     } catch (error) {
       console.warn("🔧 設置音頻源失敗", error);
     }
@@ -1384,6 +1384,35 @@ export function PlayerProvider({
       // 某些瀏覽器可能不支援 playbackState，忽略即可
     }
 
+    // ✅ Android 鎖屏控件需要 setPositionState 來正確顯示進度和響應控制
+    // updatePositionState 必須在 useEffect 內部，以確保能訪問最新的 audioRef
+    const updatePositionState = () => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      
+      const currentTime = audio.currentTime || 0;
+      const duration = audio.duration || 0;
+      
+      // 只有在有有效時長時才設置位置狀態
+      if (duration > 0 && isFinite(duration) && isFinite(currentTime)) {
+        try {
+          if (navigator.mediaSession.setPositionState) {
+            navigator.mediaSession.setPositionState({
+              duration: duration,
+              playbackRate: audio.playbackRate || 1.0,
+              position: currentTime,
+            });
+          }
+        } catch (error) {
+          // 某些瀏覽器可能不支援 setPositionState，忽略即可
+          console.warn("[MediaSession] 設定 position state 失敗:", error);
+        }
+      }
+    };
+
+    // 初始設置位置狀態
+    updatePositionState();
+
     const handlePlayAction = async () => {
       try {
         await play();
@@ -1447,7 +1476,15 @@ export function PlayerProvider({
       console.warn("[MediaSession] 設定 track handler 失敗:", error);
     }
 
+    // ✅ 當播放時間更新時，同步更新 Media Session 的位置狀態（Android 需要）
+    const timeUpdateInterval = setInterval(() => {
+      if (isPlaying && audioRef.current) {
+        updatePositionState();
+      }
+    }, 1000); // 每秒更新一次
+
     return () => {
+      clearInterval(timeUpdateInterval);
       try {
         navigator.mediaSession.setActionHandler("play", null);
         navigator.mediaSession.setActionHandler("pause", null);
@@ -1463,6 +1500,8 @@ export function PlayerProvider({
     trackTitle,
     playerOwner?.username,
     isPlaying,
+    // ✅ 不包含 currentTime 和 duration，避免 useEffect 頻繁重新運行
+    // 我們直接在 updatePositionState 中從 audioRef.current 讀取最新值
     play,
     pause,
     next,

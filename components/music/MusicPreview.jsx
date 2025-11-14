@@ -127,7 +127,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       audio.volume = Math.max(0, Math.min(1, calculatedVolume));
 
       if (currentTime >= endTime) {
-        console.log("🎵 [MusicPreview] 預覽結束（timeupdate）");
+        // 預覽結束，自動停止
         stopPreview({ restore: true });
       } else {
         lastPlayTimeRef.current = currentTime - startTime;
@@ -230,7 +230,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
 
       const canPlay = audioManager.requestPlay(audio, 2);
       if (!canPlay) {
-        console.log("🎵 [Preview] ❌ 優先度不夠，取消播放");
+        // 優先度不夠，取消播放
         stopPreview({ restore: true });
         return;
       }
@@ -282,7 +282,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       if (action === "play" || action === "pause") {
         const oldValue = wasPlayerPlayingRef.current;
         wasPlayerPlayingRef.current = isPlaying;
-        console.log(`🎵 [Preview] 播放器狀態變化（用戶操作 ${action}）: ${oldValue} -> ${isPlaying}`);
+        // 播放器狀態因用戶操作變化
       }
     };
 
@@ -357,12 +357,12 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   const handleMouseEnter = () => {
     if (!isMobile) {
       const musicId = music?._id?.substring(0, 8) || 'unknown';
-      console.log(`🎵 [Preview] Hover Enter [${musicId}]`);
+      // hover 進入，準備播放預覽
       setIsHovered(true);
       if (restoreTimerRef.current) {
         clearTimeout(restoreTimerRef.current);
         restoreTimerRef.current = null;
-        console.log(`🎵 [Preview] Hover: 取消恢復 timer（有新預覽）`);
+        // 有新的預覽，取消恢復計時器
       }
     }
   };
@@ -370,7 +370,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   const handleMouseLeave = () => {
     if (!isMobile) {
       const musicId = music?._id?.substring(0, 8) || 'unknown';
-      console.log(`🎵 [Preview] Hover Leave [${musicId}], isPlaying: ${isPlaying}`);
+      // 離開 hover，停止預覽
       setIsHovered(false);
       if (isPlayingRef.current || isPlaying) {
         stopPreview({ restore: true });
@@ -393,11 +393,11 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     if (restoreTimerRef.current) {
       clearTimeout(restoreTimerRef.current);
       restoreTimerRef.current = null;
-      console.log(`🎵 [Preview] Click: 取消恢復 timer（有新預覽）`);
+      // 點擊時取消恢復計時器
     }
 
     const musicId = music?._id?.substring(0, 8) || 'unknown';
-    console.log(`🎵 [Preview] Click: 開始預覽 [${musicId}]`);
+    // 開始播放預覽
 
     try {
       if (typeof document !== "undefined") {

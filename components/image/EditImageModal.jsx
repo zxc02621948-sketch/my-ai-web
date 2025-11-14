@@ -115,12 +115,14 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
   const handleChange = (field, value) => setForm((p) => ({ ...p, [field]: value }));
 
   const isNonEmpty = (v) => typeof v === "string" && v.trim() !== "";
-  const notCivitai = (v) => isNonEmpty(v) && !/^https?:\/\/(www\.)?civitai\.com\//i.test(v.trim());
+  const notAllowedLink = (v) =>
+    isNonEmpty(v) &&
+    !/^https?:\/\/(www\.)?(civitai\.com|seaart\.ai)\//i.test(v.trim());
 
   const handleSubmit = async () => {
     try {
-      if (notCivitai(form.modelUrl) || notCivitai(form.loraUrl)) {
-        toast.error("模型 / LoRA 連結僅允許 civitai.com 網址");
+      if (notAllowedLink(form.modelUrl) || notAllowedLink(form.loraUrl)) {
+        toast.error("模型 / LoRA 連結僅允許 civitai.com 或 seaart.ai 網址");
         return;
       }
       setSaving(true);
@@ -250,7 +252,7 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
           模型 civitai 連結
           <input
             className="mt-1 w-full p-2 rounded bg-zinc-800 text-white"
-            placeholder="https://civitai.com/..."
+            placeholder="https://civitai.com/... 或 https://seaart.ai/..."
             value={form.modelUrl}
             onChange={(e) => handleChange("modelUrl", e.target.value)}
             disabled={loading || saving}
@@ -272,7 +274,7 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
           LoRA civitai 連結
           <input
             className="mt-1 w-full p-2 rounded bg-zinc-800 text-white"
-            placeholder="https://civitai.com/..."
+            placeholder="https://civitai.com/... 或 https://seaart.ai/..."
             value={form.loraUrl}
             onChange={(e) => handleChange("loraUrl", e.target.value)}
             disabled={loading || saving}

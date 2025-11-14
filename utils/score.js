@@ -166,7 +166,7 @@ function isCivitaiUrl(u) {
   if (!hasText(u)) return false;
   try {
     const url = new URL(u);
-    return /(^|\.)civitai\.com$/i.test(url.hostname);
+    return /(^|\.)civitai\.com$/i.test(url.hostname) || /(^|\.)seaart\.ai$/i.test(url.hostname);
   } catch {
     return false;
   }

@@ -8,6 +8,9 @@ import {
   computeMusicCompleteness,
   computeMusicInitialBoostFromTop,
   computeMusicPopScore,
+  computeMusicBaseScore,
+  computeMusicInitialBoostDecay,
+  ensureMusicLikesCount,
 } from "@/utils/scoreMusic";
 import { parseBuffer } from "music-metadata";
 
@@ -175,11 +178,41 @@ export async function POST(request) {
     }
 
     // ✅ 獲取當前最高分數（用於計算 initialBoost）
-    const topMusic = await Music.findOne({})
-      .sort({ popScore: -1 })
-      .select("popScore")
+    // 需要先計算 livePopScore，才能找到真正當前最高的音樂（避免選到已過期加成的舊數據）
+    // 只取前3首，避免分數差距懸殊導致加成過小
+    const allPublicMusic = await Music.find({ isPublic: true })
+      .select(
+        "likes likesCount plays completenessScore initialBoost createdAt popScore uploadDate",
+      )
       .lean();
-    const topScore = topMusic?.popScore || 0;
+
+    // 計算每首的 livePopScore 和 baseScore
+    const musicWithScores = allPublicMusic.map(doc => {
+      const likesCount = ensureMusicLikesCount(doc);
+      const baseScore = computeMusicBaseScore({ ...doc, likesCount });
+      const decayedBoost = computeMusicInitialBoostDecay(doc);
+      const livePopScore = baseScore + decayedBoost;
+      return { ...doc, baseScore, livePopScore };
+    });
+
+    // 按 livePopScore 排序，取前3首
+    const topCandidates = musicWithScores
+      .sort((a, b) => {
+        if (b.livePopScore !== a.livePopScore) {
+          return b.livePopScore - a.livePopScore;
+        }
+        const timeA = new Date(a.createdAt || a.uploadDate || 0).getTime();
+        const timeB = new Date(b.createdAt || b.uploadDate || 0).getTime();
+        if (timeB !== timeA) return timeB - timeA;
+        return (b._id?.toString?.() || "").localeCompare(a._id?.toString?.() || "");
+      })
+      .slice(0, 3);
+
+    // 取這3首中 baseScore 最高的
+    const topScore = topCandidates.reduce((max, doc) => {
+      return doc.baseScore > max ? doc.baseScore : max;
+    }, 0);
+
     const initialBoost = computeMusicInitialBoostFromTop(topScore);
 
     // ✅ 建立音樂文檔

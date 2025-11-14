@@ -12,6 +12,8 @@ import {
 } from "@/constants/musicCategories";
 import SelectField from "@/components/common/SelectField";
 
+const SUCCESS_TOAST_STORAGE_KEY = "musicUploadSuccessMessage";
+
 export default function UploadMusicModal() {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -53,6 +55,19 @@ export default function UploadMusicModal() {
   const [confirmAdult, setConfirmAdult] = useState(false);
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      const pendingMessage = sessionStorage.getItem(SUCCESS_TOAST_STORAGE_KEY);
+      if (pendingMessage) {
+        sessionStorage.removeItem(SUCCESS_TOAST_STORAGE_KEY);
+        toast.success(pendingMessage);
+      }
+    } catch (error) {
+      console.warn("讀取音樂上傳成功提示失敗:", error);
+    }
+  }, [mounted]);
 
   // 監聽開啟事件
   useEffect(() => {
@@ -201,7 +216,17 @@ export default function UploadMusicModal() {
 
       if (result.success) {
         const completeness = result.music?.completenessScore || 0;
-        toast.success(`✅ 音樂上傳成功！完整度：${completeness}分`);
+        const successMessage = `✅ 音樂上傳成功！完整度：${completeness}分`;
+        let storedMessage = false;
+        try {
+          sessionStorage.setItem(SUCCESS_TOAST_STORAGE_KEY, successMessage);
+          storedMessage = true;
+        } catch (err) {
+          console.warn("儲存音樂上傳成功提示失敗:", err);
+        }
+        if (!storedMessage) {
+          toast.success(successMessage);
+        }
         setIsOpen(false);
         window.location.href = "/music";
       } else {

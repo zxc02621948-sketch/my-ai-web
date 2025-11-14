@@ -6,12 +6,25 @@ const IMAGE_PLATFORMS = [
   {
     id: "stable-diffusion",
     name: "Stable Diffusion 生態系",
-    description: "（待補）開源自架 / 雲端服務，支援 LoRA、ControlNet 等擴充。",
-    pricing: "（待補）本地部署成本 vs. 雲端計算定價比較。",
+    description: "開源自架 / 雲端服務，支援 LoRA、ControlNet 等擴充。",
+    infoTitle: "優點與缺點",
+    pricing: {
+      pros: [
+        "完全掌控模型與擴充，工作流可依需求高度客製",
+        "可離線運行並保留資料主權，不受平台規範限制",
+        "除了硬體、電力或雲端資源外，生成本身不需額外費用",
+      ],
+      cons: [
+        "需要自備 GPU 或支付雲端運算費用",
+        "環境部署與更新維護門檻較高",
+      ],
+    },
+    rating: 5,
+    learningDifficulty: 4,
     guidePoints: [
-      "安裝 WebUI / Forge / ComfyUI 的流程（待補）",
-      "模型與 LoRA 資源管理（待補）",
-      "進階工作流與後製建議（待補）",
+      "安裝 WebUI / Forge / ComfyUI 的流程",
+      "模型與 LoRA 資源管理",
+      "進階工作流與後製建議",
     ],
     links: [
       { label: "Stable Diffusion 生態系安裝教學", href: "/install-guide" },
@@ -19,35 +32,14 @@ const IMAGE_PLATFORMS = [
       { label: "新手生成 Q&A", href: "/qa" },
     ],
   },
-  {
-    id: "midjourney",
-    name: "Midjourney",
-    description: "（待補）主打 Discord 指令操作與高品質成品的付費平台。",
-    pricing: "（待補）方案價格、影像輸出限制與使用授權。",
-    guidePoints: [
-      "加入 Discord 伺服器與訂閱流程（待補）",
-      "常用提示詞與參數格式（待補）",
-      "Upscale / Variation 操作重點（待補）",
-    ],
-    links: [
-      { label: "官方網站", href: "https://www.midjourney.com" },
-    ],
-  },
-  {
-    id: "novelai",
-    name: "NovelAI / 其他雲端服務",
-    description: "（待補）偏向動漫風格的訂閱服務與線上生成工具整理。",
-    pricing: "（待補）不同 tiers、影像尺寸與授權比較。",
-    guidePoints: [
-      "帳號設定與模型選擇（待補）",
-      "Prompt / Negative Prompt 構造（待補）",
-      "品質調校與後製建議（待補）",
-    ],
-    links: [
-      { label: "NovelAI", href: "https://novelai.net" },
-    ],
-  },
 ];
+
+const renderStars = (value, activeClass, inactiveClass) =>
+  Array.from({ length: 5 }, (_, idx) => (
+    <span key={idx} className={idx < value ? activeClass : inactiveClass}>
+      ★
+    </span>
+  ));
 
 export default function ImageCreationHubPage() {
   return (
@@ -70,13 +62,13 @@ export default function ImageCreationHubPage() {
         <section className="rounded-2xl border border-white/10 bg-black/30 p-6 sm:p-8 shadow-xl shadow-black/20">
           <h2 className="text-2xl font-semibold text-white">挑選平台前的評估重點</h2>
           <p className="mt-3 text-sm text-zinc-300 sm:text-base">
-            以下整理多數創作者會關注的面向，實際內容待補充：
+            以下整理多數創作者會關注的面向：
           </p>
           <ul className="mt-4 list-disc space-y-2 pl-6 text-sm text-zinc-300 sm:text-base">
-            <li>產出風格、品質與可重現性（待補）</li>
-            <li>提示詞設計、參數調整與進階功能（待補）</li>
-            <li>版權授權、商用條款與社群規範（待補）</li>
-            <li>後製工作流與其他工具整合（待補）</li>
+            <li>產出風格、品質與可重現性</li>
+            <li>提示詞設計、參數調整與進階功能</li>
+            <li>版權授權、商用條款與社群規範</li>
+            <li>後製工作流與其他工具整合</li>
           </ul>
         </section>
 
@@ -91,6 +83,41 @@ export default function ImageCreationHubPage() {
                   <h3 className="text-xl font-semibold text-white sm:text-2xl">{platform.name}</h3>
                   <p className="text-sm text-zinc-300 sm:text-base">{platform.description}</p>
                 </div>
+                {(typeof platform.rating === "number" ||
+                  typeof platform.learningDifficulty === "number") && (
+                  <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center sm:gap-3">
+                    {typeof platform.learningDifficulty === "number" && (
+                      <div className="inline-flex items-center gap-3 rounded-full border border-amber-400/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-100">
+                        <span className="uppercase tracking-wide text-amber-200">
+                          學習難度
+                        </span>
+                        <span
+                          aria-label={`學習難度 ${platform.learningDifficulty} / 5`}
+                          className="text-lg"
+                        >
+                          {renderStars(
+                            platform.learningDifficulty,
+                            "text-amber-300",
+                            "text-amber-900",
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {typeof platform.rating === "number" && (
+                      <div className="inline-flex items-center gap-3 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100">
+                        <span className="uppercase tracking-wide text-emerald-200">
+                          推薦指數
+                        </span>
+                        <span
+                          aria-label={`推薦指數 ${platform.rating} / 5`}
+                          className="text-lg"
+                        >
+                          {renderStars(platform.rating, "text-emerald-300", "text-emerald-800")}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </header>
 
               <div className="mt-5 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -108,8 +135,33 @@ export default function ImageCreationHubPage() {
                   </div>
 
                   <div>
-                    <h4 className="text-sm font-semibold uppercase tracking-wide text-emerald-200">定價與方案（待補）</h4>
-                    <p className="mt-2 rounded-lg bg-black/30 p-4 text-sm text-zinc-300">{platform.pricing}</p>
+                    <h4 className="text-sm font-semibold uppercase tracking-wide text-emerald-200">
+                      {platform.infoTitle ?? "定價與方案"}
+                    </h4>
+                    {Array.isArray(platform.pricing?.pros) ? (
+                      <div className="mt-2 space-y-3 rounded-lg bg-black/30 p-4 text-sm text-zinc-300">
+                        <div>
+                          <p className="font-semibold text-emerald-200">優點</p>
+                          <ul className="mt-2 list-disc space-y-1 pl-5">
+                            {platform.pricing.pros.map((item, idx) => (
+                              <li key={`pros-${platform.id}-${idx}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-rose-200">缺點</p>
+                          <ul className="mt-2 list-disc space-y-1 pl-5">
+                            {platform.pricing.cons?.map((item, idx) => (
+                              <li key={`cons-${platform.id}-${idx}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-2 rounded-lg bg-black/30 p-4 text-sm text-zinc-300">
+                        {platform.pricing}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -134,7 +186,7 @@ export default function ImageCreationHubPage() {
                   <div>
                     <h4 className="text-sm font-semibold uppercase tracking-wide text-emerald-200">備註 / 資源（待補）</h4>
                     <p className="mt-2 rounded-lg bg-black/30 p-4 text-sm text-zinc-300">
-                      可補充官方教學、社群範例、模型下載站等連結。
+                      此生態擁有豐富教學懶人包與多語系社群資源，從入門到進階皆有對應學習路線與應用範例。
                     </p>
                   </div>
                 </div>

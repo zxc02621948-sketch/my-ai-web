@@ -1,637 +1,1011 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
-import ImageGrid from "@/components/image/ImageGrid";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import Link from "next/link";
+import {
+  ImageIcon,
+  MusicIcon,
+  VideoIcon,
+  ArrowRight,
+  Sparkles,
+} from "lucide-react";
+import ShowcaseImageModal from "@/components/homepage/ShowcaseImageModal";
+import ShowcaseVideoModal from "@/components/homepage/ShowcaseVideoModal";
 import ImageModal from "@/components/image/ImageModal";
-import AdminPanel from "@/components/homepage/AdminPanel";
+import VideoModal from "@/components/video/VideoModal";
 import BackToTopButton from "@/components/common/BackToTopButton";
-import SortSelect from "@/components/common/SortSelect";
-import { useFilterContext, labelToRating } from "@/components/context/FilterContext";
-import useLikeHandler from "@/hooks/useLikeHandler";
-import { usePlayer } from "@/components/context/PlayerContext";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
-import { notify } from "@/components/common/GlobalNotificationManager";
-import usePinnedPlayerBootstrap from "@/hooks/usePinnedPlayerBootstrap";
-import usePaginatedResource from "@/hooks/usePaginatedResource";
 
+const SHOWCASE_LIMIT = 12;
+const CF_IMAGE_BASE = "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A";
 
-/** ====== 超精簡資料流：去掉預覽/快取/一次性旗標，只保留 inFlightId ====== */
+const SECTION_CONFIG = [
+  {
+    id: "images",
+    title: "圖片專區",
+    description: "精選最新熱門的 AI 圖像創作，帶你從靈感到實作。",
+    href: "/images",
+    accent: {
+      badge: "from-pink-500/80 to-purple-500/80",
+      ring: "from-pink-500/20 via-purple-500/10 to-blue-500/10",
+      border: "border-pink-400/60",
+    },
+    duration: 48,
+  },
+  {
+    id: "music",
+    title: "音樂專區",
+    description: "以音樂陪伴創作旅程，立即試聽人氣 AI 曲目。",
+    href: "/music",
+    accent: {
+      badge: "from-purple-500/80 to-indigo-500/80",
+      ring: "from-purple-600/20 via-indigo-500/10 to-blue-500/10",
+      border: "border-purple-400/60",
+    },
+    duration: 52,
+  },
+  {
+    id: "videos",
+    title: "影片專區",
+    description: "探索動態視覺的 AI 實驗，收錄前衛的創作影片。",
+    href: "/videos",
+    accent: {
+      badge: "from-blue-500/80 to-cyan-500/80",
+      ring: "from-sky-500/20 via-blue-500/10 to-emerald-500/10",
+      border: "border-sky-400/60",
+    },
+    duration: 56,
+  },
+];
 
-const PAGE_SIZE = 20;
-
-function normalizeImageData(img) {
-  if (!img) return img;
-  const raw = img.user ?? img.userId ?? null;
-  const uid =
-    typeof raw === "object"
-      ? raw?._id || raw?.id || raw?.userId || null
-      : raw || null;
-  const userObj =
-    typeof raw === "object"
-      ? { ...raw, _id: uid }
-      : uid
-        ? { _id: uid }
-        : { _id: null };
-  const isFollowingVal =
-    (typeof raw === "object" ? raw?.isFollowing : img?.isFollowing) ?? false;
-  return { ...img, user: { ...userObj, isFollowing: Boolean(isFollowingVal) } };
+function resolveImageUrl(image) {
+  if (!image) return "";
+  if (image.imageUrl) return image.imageUrl;
+  if (image.imageId) {
+    const variant = image.variant || "public";
+    return `${CF_IMAGE_BASE}/${image.imageId}/${variant}`;
+  }
+  if (Array.isArray(image.files) && image.files[0]?.url) {
+    return image.files[0].url;
+  }
+  return "";
 }
 
-function mergeImageData(oldImg, updated) {
-  if (!oldImg || !updated?._id) return oldImg;
-  if (String(oldImg._id) !== String(updated._id)) return oldImg;
-  return normalizeImageData({ ...oldImg, ...updated });
+async function fetchImages(signal) {
+  const params = new URLSearchParams({
+    page: "1",
+    limit: String(SHOWCASE_LIMIT),
+    sort: "popular",
+    ratings: "sfw,15",
+  });
+  const res = await fetch(`/api/images?${params.toString()}`, {
+    signal,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Images request failed: ${res.status}`);
+  }
+  const data = await res.json();
+  const list = Array.isArray(data?.images) ? data.images : [];
+  return list.map((item) => {
+    const userObj =
+      typeof item.user === "object" && item.user
+        ? item.user
+        : null;
+    const fallbackAuthor =
+      typeof item.author === "string" && item.author.trim()
+        ? item.author.trim()
+        : null;
+    const authorName =
+      userObj?.nickname ||
+      userObj?.displayName ||
+      userObj?.username ||
+      item.username ||
+      fallbackAuthor ||
+      "匿名創作者";
+
+    return {
+      id: item._id || item.id,
+      title: item.title || "未命名作品",
+      author: authorName,
+      imageUrl: resolveImageUrl(item),
+      likesCount:
+        typeof item.likesCount === "number"
+          ? item.likesCount
+          : Array.isArray(item.likes)
+            ? item.likes.length
+            : 0,
+      createdAt: item.createdAt || item.uploadDate || null,
+    };
+  });
 }
 
-export default function HomePage() {
-  const player = usePlayer();
-  const searchParams = useSearchParams();
-  const { currentUser, setCurrentUser } = useCurrentUser(); // 使用 Context
-  
-  // 從 FilterContext 獲取狀態
-  const {
-    levelFilters,
-    categoryFilters,
-    viewMode,
-  } = useFilterContext();
+async function fetchMusic(signal) {
+  const params = new URLSearchParams({
+    page: "1",
+    limit: String(SHOWCASE_LIMIT),
+    sort: "popular",
+    live: "1",
+  });
+  const res = await fetch(`/api/music?${params.toString()}`, {
+    signal,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Music request failed: ${res.status}`);
+  }
+  const data = await res.json();
+  const list = Array.isArray(data?.music) ? data.music : [];
+  const sorted = [...list].sort((a, b) => {
+    const scoreA = typeof a.livePopScore === "number" ? a.livePopScore : 0;
+    const scoreB = typeof b.livePopScore === "number" ? b.livePopScore : 0;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    const timeA = new Date(a.createdAt || a.uploadDate || 0).getTime();
+    const timeB = new Date(b.createdAt || b.uploadDate || 0).getTime();
+    if (timeB !== timeA) return timeB - timeA;
+    const idA = (a._id || a.id || "").toString();
+    const idB = (b._id || b.id || "").toString();
+    return idB.localeCompare(idA);
+  });
 
-  // 本地狀態
-  const [sort, setSort] = useState("popular");
-  
-  // ✅ 記住用戶偏好（避免 hydration 錯誤）
-  const [displayMode, setDisplayMode] = useState('gallery');
-  
-  // ✅ 首次訪問引導（避免 hydration 錯誤）
-  const [showGuide, setShowGuide] = useState(false);
-  
-  // ✅ 客戶端初始化
-  const [isClient, setIsClient] = useState(false);
-  
-  // ✅ 手機檢測（避免 hydration 錯誤）
-  const [isMobile, setIsMobile] = useState(false);
-  
-  useEffect(() => {
-    setIsClient(true);
-    // 從 localStorage 讀取偏好
-    const savedMode = localStorage.getItem('galleryMode');
-    if (savedMode) {
-      setDisplayMode(savedMode);
-    }
-    // 檢查是否顯示引導
-    const guideShown = localStorage.getItem('galleryGuideShown');
-    if (!guideShown) {
-      setShowGuide(true);
-    }
-    // 檢測手機裝置
-    setIsMobile(window.innerWidth < 768);
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  return sorted.map((item) => {
+    const id = item._id || item.id;
+    const authorName =
+      item.authorName ||
+      item.author?.nickname ||
+      item.author?.displayName ||
+      item.author?.username ||
+      "匿名創作者";
+    const cover =
+      item.coverImageUrl ||
+      (Array.isArray(item.coverCandidates) ? item.coverCandidates[0] : "") ||
+      "";
+    const likesCount =
+      typeof item.likesCount === "number"
+        ? item.likesCount
+        : Array.isArray(item.likes)
+          ? item.likes.length
+          : 0;
 
-  // 保存模式偏好
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('galleryMode', displayMode);
-    }
-  }, [displayMode]);
+    return {
+      ...item,
+      id,
+      displayTitle: item.title || "未命名歌曲",
+      displayAuthor: authorName,
+      cover,
+      previewUrl:
+        item.previewUrl ||
+        item.previewAudioUrl ||
+        (Array.isArray(item.previewUrls) ? item.previewUrls[0] : "") ||
+        "",
+      likesCount,
+      duration: item.duration || 0,
+      createdAt: item.uploadDate || item.createdAt || null,
+    };
+  });
+}
 
-  // 計算衍生狀態（使用 useMemo 避免無限循環）
-  const selectedCategories = useMemo(() => categoryFilters, [categoryFilters]);
-  const selectedRatings = useMemo(() => 
-    levelFilters.map(label => labelToRating[label]).filter(Boolean), 
-    [levelFilters]
+async function fetchVideos(signal) {
+  const params = new URLSearchParams({
+    page: "1",
+    limit: String(SHOWCASE_LIMIT),
+    sort: "popular",
+    ratings: "sfw,15",
+  });
+  const res = await fetch(`/api/videos?${params.toString()}`, {
+    signal,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Videos request failed: ${res.status}`);
+  }
+  const data = await res.json();
+  const list = Array.isArray(data?.videos) ? data.videos : [];
+  return list.map((item) => {
+    const id = item._id || item.id;
+    const authorName =
+      item.authorName ||
+      item.author?.nickname ||
+      item.author?.displayName ||
+      item.author?.username ||
+      "匿名創作者";
+    const likesCount =
+      typeof item.likesCount === "number"
+        ? item.likesCount
+        : Array.isArray(item.likes)
+          ? item.likes.length
+          : 0;
+    return {
+      ...item,
+      id,
+      displayTitle: item.title || "未命名影片",
+      displayAuthor: authorName,
+      thumbnail: item.thumbnailUrl || item.previewUrl || "",
+      duration: item.duration || 0,
+      likesCount,
+      createdAt: item.uploadDate || item.createdAt || null,
+    };
+  });
+}
+
+function formatDuration(seconds) {
+  if (!seconds || Number.isNaN(seconds)) return "";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
+function ShowcaseHeader({ title, description, href, accent }) {
+  return (
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <div
+          className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r ${accent.badge} px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white`}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          精選內容
+        </div>
+        <h2 className="mt-3 text-2xl font-bold text-white sm:text-3xl">
+          {title}
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm text-zinc-300 sm:text-base">
+          {description}
+        </p>
+      </div>
+      <Link
+        href={href}
+        className="inline-flex items-center gap-2 self-start rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:border-white/30 hover:bg-white/10"
+      >
+        前往專區
+        <ArrowRight className="h-4 w-4" />
+      </Link>
+    </div>
   );
-  
-  const [selectedImage, setSelectedImage] = useState(null);
+}
 
-  const loadMoreRef = useRef(null);
-  usePinnedPlayerBootstrap({ player, currentUser });
+function EmptyNotice({ href }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/30 p-8 text-center text-sm text-zinc-300">
+      目前沒有可顯示的內容，前往{" "}
+      <Link href={href} className="text-emerald-300 underline">
+        專區頁面
+      </Link>{" "}
+      查看更多。
+    </div>
+  );
+}
 
-  // 雙軌制訪問追蹤 - 同時記錄防刷量統計和廣告收益統計
+function ShowcaseSkeletonRow({ accent }) {
+  const placeholders = Array.from({ length: 6 });
+  return (
+    <div
+      className={`relative overflow-hidden rounded-2xl border ${accent.border} bg-gradient-to-r ${accent.ring} px-6 py-10`}
+    >
+      <div className="flex gap-4">
+        {placeholders.map((_, idx) => (
+          <div
+            key={`skeleton-${idx}`}
+            className="h-56 w-72 flex-shrink-0 rounded-xl bg-zinc-800/40"
+          >
+            <div className="h-full w-full animate-pulse rounded-xl bg-zinc-700/40" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ImageShowcaseCard({ item, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="group/card relative flex h-56 w-full flex-col overflow-hidden rounded-xl border border-white/5 bg-black/60 shadow-lg shadow-black/30 transition hover:border-white/20 hover:shadow-black/50"
+    >
+      <div className="relative h-40 w-full overflow-hidden">
+        {item.imageUrl ? (
+          <img
+            src={item.imageUrl}
+            alt={item.title}
+            loading="lazy"
+            className="h-full w-full object-cover transition duration-700 group-hover/card:scale-105"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-zinc-900 text-zinc-500">
+            <ImageIcon className="h-8 w-8" />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+      </div>
+      <div className="flex flex-1 flex-col justify-between px-4 pb-3 pt-2">
+        <div>
+          <p className="line-clamp-2 text-sm font-semibold text-white">
+            {item.title}
+          </p>
+          <p className="mt-1 text-xs text-zinc-400">by {item.author}</p>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-400">
+          <span className="inline-flex items-center gap-1">
+            <ImageIcon className="h-3.5 w-3.5 text-pink-300" />
+            圖片專區
+          </span>
+          {typeof item.likesCount === "number" && (
+            <span>♥ {item.likesCount}</span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function MusicShowcaseCard({ item, onSelect, isActive }) {
+  const title = item.displayTitle || item.title || "未命名歌曲";
+  const author = item.displayAuthor || item.author || item.authorName || "匿名創作者";
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`group/card relative flex h-56 w-full flex-col overflow-hidden rounded-xl border bg-gradient-to-br from-purple-500/10 via-black/70 to-black shadow-lg shadow-black/40 transition hover:border-white/20 hover:shadow-black/60 ${
+        isActive
+          ? "border-purple-400/70 shadow-purple-500/50"
+          : "border-white/5"
+      }`}
+    >
+      <div className="relative h-40 w-full overflow-hidden">
+        {item.cover ? (
+          <img
+            src={item.cover}
+            alt={title}
+            loading="lazy"
+            className="h-full w-full object-cover transition duration-700 group-hover/card:scale-105"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-purple-600/40 to-blue-600/30 text-purple-100">
+            <MusicIcon className="h-9 w-9" />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
+      </div>
+      <div className="flex flex-1 flex-col justify-between px-4 pb-3 pt-2">
+        <div>
+          <p className="line-clamp-2 text-sm font-semibold text-white">{title}</p>
+          <p className="mt-1 text-xs text-zinc-300">by {author}</p>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-300">
+          <span className="inline-flex items-center gap-1">
+            <MusicIcon className="h-3.5 w-3.5 text-purple-300" />
+            音樂專區
+          </span>
+          <span>
+            {formatDuration(item.duration)} · ♥ {item.likesCount ?? 0}
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function VideoShowcaseCard({ item, onSelect }) {
+  const title = item.displayTitle || item.title || "未命名影片";
+  const author =
+    item.displayAuthor ||
+    item.author ||
+    item.authorName ||
+    item.author?.username ||
+    "匿名創作者";
+  const thumb =
+    item.thumbnail ||
+    item.thumbnailUrl ||
+    item.previewUrl ||
+    (Array.isArray(item.previewImages) ? item.previewImages[0] : "");
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="group/card relative flex h-56 w-full flex-col overflow-hidden rounded-xl border border-white/5 bg-gradient-to-br from-sky-500/15 via-black/70 to-black shadow-lg shadow-black/40 transition hover:border-white/20 hover:shadow-black/60"
+    >
+      <div className="relative h-40 w-full overflow-hidden">
+        {thumb ? (
+          <img
+            src={thumb}
+            alt={title}
+            loading="lazy"
+            className="h-full w-full object-cover transition duration-700 group-hover/card:scale-105"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-sky-500/40 to-emerald-500/30 text-sky-100">
+            <VideoIcon className="h-9 w-9" />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
+      </div>
+      <div className="flex flex-1 flex-col justify-between px-4 pb-3 pt-2">
+        <div>
+          <p className="line-clamp-2 text-sm font-semibold text-white">{title}</p>
+          <p className="mt-1 text-xs text-zinc-300">by {author}</p>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-300">
+          <span className="inline-flex items-center gap-1">
+            <VideoIcon className="h-3.5 w-3.5 text-sky-300" />
+            影片專區
+          </span>
+          <span>
+            {formatDuration(item.duration)} · ♥ {item.likesCount ?? 0}
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href }) {
+  if (loading) {
+    return <ShowcaseSkeletonRow accent={accent} />;
+  }
+
+  if (!items.length) {
+    return <EmptyNotice href={href} />;
+  }
+
+  const marqueeItems = items.length >= 6 ? [...items, ...items] : [...items];
+
+  return (
+    <div
+      className={`group relative overflow-hidden rounded-2xl border ${accent.border} bg-gradient-to-r ${accent.ring}`}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.04),transparent_60%)]" />
+      <div
+        className="marquee-track flex gap-4 px-6 py-10 md:pr-10"
+        style={{ "--marquee-duration": `${duration}s` }}
+      >
+        {marqueeItems.map((item, index) => (
+          <div
+            key={`${item.id ?? index}-${index}`}
+            className="w-64 flex-shrink-0"
+          >
+            {renderItem(item, index)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HeroSection() {
+  return (
+    <header className="border-b border-white/10 bg-gradient-to-br from-emerald-500/10 via-purple-600/5 to-sky-500/10">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-16 sm:px-10 sm:py-20">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white sm:text-4xl lg:text-5xl">
+              創作、靈感與音樂的交會處
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm text-zinc-200 sm:text-base">
+              我們將圖片、音樂與影片三大內容專區匯聚於此，一頁掌握最新精選作品，
+              滑過即可瀏覽，點擊即可探索每個專區的完整體驗。
+            </p>
+          </div>
+          <div className="flex flex-shrink-0 gap-3">
+            <Link
+              href="/images"
+              className="rounded-full border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition hover:border-white/40 hover:bg-white/20"
+            >
+              圖片專區
+            </Link>
+            <Link
+              href="/music"
+              className="rounded-full border border-purple-300/40 bg-purple-500/20 px-5 py-2 text-sm font-semibold text-purple-100 transition hover:border-purple-300/60 hover:bg-purple-500/30"
+            >
+              音樂專區
+            </Link>
+            <Link
+              href="/videos"
+              className="rounded-full border border-sky-300/40 bg-sky-500/20 px-5 py-2 text-sm font-semibold text-sky-100 transition hover:border-sky-300/60 hover:bg-sky-500/30"
+            >
+              影片專區
+            </Link>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-black/40 p-6">
+            <ImageIcon className="h-7 w-7 text-pink-300" />
+            <p className="mt-3 text-sm font-medium text-white">圖片 · 靈感資料庫</p>
+            <p className="mt-2 text-xs text-zinc-300">
+              包含參數與模型資訊的 AI 圖像，協助你快速再現喜歡的風格。
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-black/40 p-6">
+            <MusicIcon className="h-7 w-7 text-purple-300" />
+            <p className="mt-3 text-sm font-medium text-white">音樂 · 全天候播放</p>
+            <p className="mt-2 text-xs text-zinc-300">
+              可預覽、釘選的個人化播放器，播放你的 AI 音樂收藏。
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-black/40 p-6">
+            <VideoIcon className="h-7 w-7 text-sky-300" />
+            <p className="mt-3 text-sm font-medium text-white">影片 · 動態呈現</p>
+            <p className="mt-2 text-xs text-zinc-300">
+              將創意延伸為動態敘事，瀏覽 AI 影片的多元應用案例。
+            </p>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+export default function LandingPage() {
+  const { currentUser } = useCurrentUser();
+  const [sectionData, setSectionData] = useState(() =>
+    SECTION_CONFIG.reduce((acc, section) => {
+      acc[section.id] = {
+        items: [],
+        loading: true,
+        error: null,
+      };
+      return acc;
+    }, {}),
+  );
+const [selectedImageId, setSelectedImageId] = useState(null);
+const [expandedImage, setExpandedImage] = useState(null);
+const [selectedVideo, setSelectedVideo] = useState(null);
+const [expandedVideo, setExpandedVideo] = useState(null);
+const [activeMusicPreviewId, setActiveMusicPreviewId] = useState(null);
+const musicPreviewStateRef = useRef({
+  audio: null,
+  timeoutId: null,
+  endedHandler: null,
+  pauseHandler: null,
+});
+
   useEffect(() => {
-    let isLogging = false; // 防止並發請求
-    
-    const logDualTrackVisit = async () => {
-      try {
-        // 防止並發請求
-        if (isLogging) {
-          return;
+    const controllers = {
+      images: new AbortController(),
+      music: new AbortController(),
+      videos: new AbortController(),
+    };
+    let isMounted = true;
+
+    async function load() {
+      setSectionData((prev) => {
+        const next = { ...prev };
+        for (const key of Object.keys(next)) {
+          next[key] = { ...next[key], loading: true, error: null };
         }
-
-        isLogging = true;
-        const currentPath = window.location.pathname;
-        
-        // 🛡️ 防刷量統計 - 保持原有的嚴格防重複機制
-        const logAntiSpamVisit = async () => {
-          try {
-            // 檢查是否已經在此會話中記錄過訪問
-            const sessionKey = `visit_logged_${currentPath}`;
-            const hasLoggedThisSession = sessionStorage.getItem(sessionKey);
-            
-            if (hasLoggedThisSession) {
-              return { success: true, skipped: true, reason: 'session' };
-            }
-
-            // 檢查最近是否剛記錄過（防抖機制）
-            const lastLogTime = sessionStorage.getItem('last_visit_log_time');
-            const now = Date.now();
-            if (lastLogTime && (now - parseInt(lastLogTime)) < 1000) { // 1秒內不重複記錄
-              return { success: true, skipped: true, reason: 'debounce' };
-            }
-            
-            const response = await fetch('/api/log-visit', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              credentials: 'include',
-              body: JSON.stringify({
-                path: currentPath
-              })
-            });
-
-            if (response.ok) {
-              // 標記此會話已記錄過訪問
-              sessionStorage.setItem(sessionKey, 'true');
-              sessionStorage.setItem('last_visit_log_time', now.toString());
-              return { success: true, skipped: false };
-            } else {
-              throw new Error(`HTTP ${response.status}`);
-            }
-          } catch (error) {
-            console.warn('🛡️ [防刷量] 訪問記錄失敗:', error);
-            return { success: false, error };
-          }
-        };
-
-        // 💰 廣告收益統計 - 更寬鬆的防重複機制
-        const logAdRevenueVisit = async () => {
-          try {
-            // 廣告統計只檢查很短時間內的重複（避免同一次點擊產生多次記錄）
-            const adLastLogTime = sessionStorage.getItem('last_ad_visit_log_time');
-            const now = Date.now();
-            if (adLastLogTime && (now - parseInt(adLastLogTime)) < 200) { // 200ms內不重複記錄
-              return { success: true, skipped: true, reason: 'rapid_click' };
-            }
-
-            const response = await fetch('/api/log-ad-visit', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              credentials: 'include',
-              body: JSON.stringify({
-                path: currentPath
-              })
-            });
-
-            if (response.ok) {
-              sessionStorage.setItem('last_ad_visit_log_time', now.toString());
-              const result = await response.json();
-              return { success: true, skipped: false, isDuplicate: result.isDuplicate };
-            } else {
-              throw new Error(`HTTP ${response.status}`);
-            }
-          } catch (error) {
-            console.warn('💰 [廣告統計] 訪問記錄失敗:', error);
-            return { success: false, error };
-          }
-        };
-
-        // 並行執行兩個統計
-        const [antiSpamResult, adRevenueResult] = await Promise.allSettled([
-          logAntiSpamVisit(),
-          logAdRevenueVisit()
-        ]);
-
-        // 記錄結果
-
-      } catch (error) {
-        console.warn('📊 [雙軌統計] 整體失敗:', error);
-      } finally {
-        isLogging = false;
-      }
-    };
-
-    // 使用 setTimeout 延遲執行，確保頁面完全加載
-    const timeoutId = setTimeout(logDualTrackVisit, 100);
-    
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, []); // 只在組件掛載時執行一次
-
-  // 調試信息已移除
-
-  // 排序參數對應後端
-  const mapSortForApi = (s) => {
-    const v = (s || "").toLowerCase();
-    return v === "likes" || v === "mostlikes" ? "mostlikes" : v;
-  };
-
-  const filtersReady = selectedRatings.length > 0;
-  const searchQuery = useMemo(
-    () => (searchParams.get("search") || "").trim(),
-    [searchParams],
-  );
-
-  const paginationDeps = useMemo(
-    () => [
-      displayMode,
-      sort,
-      searchQuery,
-      selectedCategories.join(","),
-      selectedRatings.join(","),
-    ],
-    [displayMode, sort, searchQuery, selectedCategories, selectedRatings],
-  );
-
-  const fetchImagesPage = useCallback(
-    async (targetPage = 1) => {
-      const params = new URLSearchParams({
-        page: String(targetPage),
-        limit: String(PAGE_SIZE),
-        sort: mapSortForApi(sort),
+        return next;
       });
 
-      if (selectedCategories.length) {
-        params.set("categories", selectedCategories.join(","));
+      try {
+        const [images, music, videos] = await Promise.all([
+          fetchImages(controllers.images.signal),
+          fetchMusic(controllers.music.signal),
+          fetchVideos(controllers.videos.signal),
+        ]);
+
+        if (!isMounted) return;
+
+        setSectionData({
+          images: { items: images, loading: false, error: null },
+          music: { items: music, loading: false, error: null },
+          videos: { items: videos, loading: false, error: null },
+        });
+      } catch (error) {
+        if (!isMounted) return;
+        console.warn("首頁精選載入失敗", error);
+        setSectionData((prev) => ({
+          images: {
+            items: prev.images.items,
+            loading: false,
+            error:
+              prev.images.error ??
+              (controllers.images.signal.aborted ? null : error),
+          },
+          music: {
+            items: prev.music.items,
+            loading: false,
+            error:
+              prev.music.error ??
+              (controllers.music.signal.aborted ? null : error),
+          },
+          videos: {
+            items: prev.videos.items,
+            loading: false,
+            error:
+              prev.videos.error ??
+              (controllers.videos.signal.aborted ? null : error),
+          },
+        }));
       }
-      if (selectedRatings.length) {
-        params.set("ratings", selectedRatings.join(","));
+    }
+
+    load();
+
+    return () => {
+      isMounted = false;
+      controllers.images.abort();
+      controllers.music.abort();
+      controllers.videos.abort();
+    };
+  }, []);
+
+  const handleOpenImage = useCallback((item) => {
+    setSelectedImageId(item.id);
+  }, []);
+
+  const handleCloseShowcaseModal = useCallback(() => {
+    setSelectedImageId(null);
+  }, []);
+
+  const handleExpandImage = useCallback((imageData) => {
+    setSelectedImageId(null);
+    setExpandedImage(imageData);
+  }, []);
+
+  const handleCloseExpandedModal = useCallback(() => {
+    setExpandedImage(null);
+  }, []);
+
+  const stopMusicPreview = useCallback(() => {
+    const { audio, timeoutId, endedHandler, pauseHandler } =
+      musicPreviewStateRef.current;
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      musicPreviewStateRef.current.timeoutId = null;
+    }
+    if (audio) {
+      if (endedHandler) {
+        audio.removeEventListener("ended", endedHandler);
+        musicPreviewStateRef.current.endedHandler = null;
       }
-      if (searchQuery) {
-        params.set("search", searchQuery);
+      if (pauseHandler) {
+        audio.removeEventListener("pause", pauseHandler);
+        musicPreviewStateRef.current.pauseHandler = null;
       }
-      if (displayMode === "collection") {
-        params.set("hasMetadata", "true");
+      try {
+        audio.pause();
+      } catch {}
+      audioManager.release(audio);
+    }
+    setActiveMusicPreviewId(null);
+  }, []);
+
+  const computePreviewWindow = useCallback((durationSeconds) => {
+    const duration = Math.max(durationSeconds || 60, 8);
+    const minStartPercent = 0.3;
+    const maxStartPercent = 0.7;
+    const randomStartPercent =
+      minStartPercent + Math.random() * (maxStartPercent - minStartPercent);
+    const start = duration * randomStartPercent;
+    const end = Math.min(start + 8, duration);
+    return { start, end };
+  }, []);
+
+  const startMusicPreview = useCallback(
+    async (item) => {
+      if (!item) return;
+      const musicId = item._id || item.id;
+      const previewSrc =
+        item.previewUrl ||
+        item.previewAudioUrl ||
+        (Array.isArray(item.previewUrls) ? item.previewUrls[0] : "") ||
+        "";
+      const fallbackSrc = item.musicUrl || "";
+      const src = previewSrc || fallbackSrc;
+      if (!src) return;
+
+      if (activeMusicPreviewId && String(activeMusicPreviewId) === String(musicId)) {
+        stopMusicPreview();
+        return;
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      stopMusicPreview();
+
+      let audio = musicPreviewStateRef.current.audio;
+      if (!audio) {
+        audio = new Audio();
+        audio.preload = "auto";
+        musicPreviewStateRef.current.audio = audio;
+      }
+
+      audio.src = src;
+      audio.loop = false;
+      audio.muted = false;
+      audio.dataset.musicPreview = "true";
 
       try {
-        const response = await fetch(`/api/images?${params.toString()}`, {
-          cache: "no-store",
-          signal: controller.signal,
+        const savedVolume = localStorage.getItem("playerVolume");
+        if (savedVolume) {
+          const vol = parseFloat(savedVolume);
+          if (!Number.isNaN(vol) && vol >= 0 && vol <= 1) {
+            audio.volume = vol;
+          }
+        }
+      } catch {}
+
+      try {
+        if (audio.readyState < 2) {
+          await new Promise((resolve, reject) => {
+            const onLoaded = () => {
+              audio.removeEventListener("canplaythrough", onLoaded);
+              audio.removeEventListener("loadedmetadata", onLoaded);
+              audio.removeEventListener("error", onError);
+              resolve();
+            };
+            const onError = (e) => {
+              audio.removeEventListener("canplaythrough", onLoaded);
+              audio.removeEventListener("loadedmetadata", onLoaded);
+              audio.removeEventListener("error", onError);
+              reject(e);
+            };
+            audio.addEventListener("canplaythrough", onLoaded);
+            audio.addEventListener("loadedmetadata", onLoaded);
+            audio.addEventListener("error", onError);
+            try {
+              audio.load();
+            } catch {}
+          });
+        }
+      } catch (err) {
+        console.warn("音樂預覽載入失敗:", err);
+        return;
+      }
+
+      const effectiveDuration =
+        (audio.duration && Number.isFinite(audio.duration)
+          ? audio.duration
+          : item.duration || 60) || 60;
+      const { start, end } = computePreviewWindow(effectiveDuration);
+
+      try {
+        audio.currentTime = start;
+      } catch (error) {
+        console.warn("設定音樂預覽起點失敗:", error);
+      }
+
+      const canPlay = audioManager.requestPlay(audio, 2);
+      if (!canPlay) {
+        return;
+      }
+
+      try {
+        await audio.play();
+      } catch (error) {
+        console.warn("音樂預覽播放失敗:", error);
+        audioManager.release(audio);
+        return;
+      }
+
+      setActiveMusicPreviewId(musicId);
+
+      const handleEnded = () => {
+        stopMusicPreview();
+      };
+      const handlePause = () => {
+        if (!audio.ended && activeMusicPreviewId === musicId) {
+          stopMusicPreview();
+        }
+      };
+      audio.addEventListener("ended", handleEnded);
+      audio.addEventListener("pause", handlePause);
+      musicPreviewStateRef.current.endedHandler = handleEnded;
+      musicPreviewStateRef.current.pauseHandler = handlePause;
+
+      const remaining = Math.max((end - start) * 1000, 0);
+      musicPreviewStateRef.current.timeoutId = setTimeout(() => {
+        stopMusicPreview();
+      }, remaining);
+    },
+    [activeMusicPreviewId, computePreviewWindow, stopMusicPreview],
+  );
+
+  useEffect(() => {
+    return () => {
+      stopMusicPreview();
+    };
+  }, [stopMusicPreview]);
+
+  const handleOpenVideo = useCallback((item) => {
+    setSelectedVideo(item);
+  }, []);
+
+  const handleCloseVideoModal = useCallback(() => {
+    setSelectedVideo(null);
+  }, []);
+
+  const handleExpandVideo = useCallback((videoData) => {
+    setSelectedVideo(null);
+    setExpandedVideo(videoData);
+  }, []);
+
+  const handleCloseExpandedVideo = useCallback(() => {
+    setExpandedVideo(null);
+  }, []);
+
+  const handleVideoLikeToggle = useCallback(
+    async (videoId) => {
+      if (!videoId) return null;
+      try {
+        const response = await fetch(`/api/videos/${videoId}/like`, {
+          method: "POST",
           headers: {
-            Accept: "application/json",
             "Content-Type": "application/json",
           },
+          credentials: "include",
         });
 
-        clearTimeout(timeoutId);
-
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+          return null;
         }
 
         const data = await response.json();
-        const listRaw = Array.isArray(data?.images) ? data.images : [];
-        const items = listRaw.map(normalizeImageData);
-        return {
-          items,
-          hasMore: items.length >= PAGE_SIZE,
-        };
-      } catch (error) {
-        clearTimeout(timeoutId);
-        console.error("載入圖片失敗:", error);
-        throw error;
-      }
-    },
-    [
-      displayMode,
-      searchQuery,
-      selectedCategories,
-      selectedRatings,
-      sort,
-    ],
-  );
 
-  const {
-    items: images,
-    hasMore,
-    loading,
-    loadingMore,
-    loadMore,
-    setItems: setImageItems,
-  } = usePaginatedResource({
-    fetchPage: fetchImagesPage,
-    deps: paginationDeps,
-    enabled: filtersReady,
-  });
-
-  // —— 追蹤狀態同步（父層處理器，提供給 ImageModal） ——
-  const handleFollowChange = useCallback(
-    (targetUserId, isFollowing) => {
-      setSelectedImage((prev) => {
-        if (!prev) return prev;
-        const uid =
-          typeof prev.user === "object"
-            ? prev.user?._id || prev.user?.id || prev.user?.userId
-            : prev.user;
-        if (uid && String(uid) === String(targetUserId)) {
-          const userObj =
-            typeof prev.user === "object"
-              ? {
-                  ...prev.user,
-                  _id: prev.user?._id || prev.user?.id || prev.user?.userId,
-                }
-              : { _id: uid };
-          return { ...prev, user: { ...userObj, isFollowing } };
-        }
-        return prev;
-      });
-
-      setImageItems((prev) =>
-        Array.isArray(prev)
-          ? prev.map((img) => {
-              const uid =
-                typeof img.user === "object"
-                  ? img.user?._id || img.user?.id || img.user?.userId
-                  : img.user;
-              if (uid && String(uid) === String(targetUserId)) {
-                const userObj = typeof img.user === "object" ? img.user : { _id: uid };
-                return { ...img, user: { ...userObj, isFollowing } };
-              }
-              return img;
-            })
-          : prev,
-      );
-
-      setCurrentUser((prev) => {
-        if (!prev) return prev;
-        const uid = String(targetUserId);
-        const list = Array.isArray(prev.following) ? [...prev.following] : [];
-        const getId = (x) =>
-          typeof x === "object" && x !== null ? String(x.userId) : String(x);
-        const exists = list.some((x) => getId(x) === uid);
-        let nextList = list;
-        if (isFollowing && !exists) nextList = [...list, uid];
-        if (!isFollowing && exists) nextList = list.filter((x) => getId(x) !== uid);
-        return { ...prev, following: nextList };
-      });
-    },
-    [setCurrentUser, setImageItems],
-  );
- 
-  const applyUpdatedImage = useCallback(
-    (updated) => {
-      if (!updated?._id) return;
-      setImageItems((prev) =>
-        Array.isArray(prev)
-          ? prev.map((item) => mergeImageData(item, updated))
-          : prev,
-      );
-      setSelectedImage((prev) => mergeImageData(prev, updated));
-    },
-    [setImageItems],
-  );
-
-  // —— 通知 → 直接打開指定圖片 ——
-  useEffect(() => {
-    const onOpenFromNotification = async (e) => {
-      const id = String(e?.detail?.imageId || "").trim();
-      if (!id) return;
-      try {
-        const r = await fetch(`/api/images/${id}`, { cache: "no-store" });
-        const j = await r.json().catch(() => ({}));
-        const img = j?.image || null;
-        if (img?._id) {
-          setImageItems((prev) => {
-            const normalized = normalizeImageData(img);
-            if (!Array.isArray(prev)) return [normalized];
-            const exists = prev.some((x) => String(x._id) === String(img._id));
-            return exists ? prev : [normalized, ...prev];
+        if (Array.isArray(data?.likes)) {
+          setSectionData((prev) => {
+            const prevVideos = prev.videos || {
+              items: [],
+              loading: false,
+              error: null,
+            };
+            const items = Array.isArray(prevVideos.items)
+              ? prevVideos.items.map((video) => {
+                  const vid = video._id || video.id;
+                  if (String(vid) !== String(videoId)) return video;
+                  return {
+                    ...video,
+                    likes: data.likes,
+                    likesCount: data.likes.length,
+                  };
+                })
+              : prevVideos.items;
+            return {
+              ...prev,
+              videos: {
+                ...prevVideos,
+                items,
+              },
+            };
           });
-          setSelectedImage(normalizeImageData(img));
-        } else {
-          notify.warning("提示", "找不到該圖片，可能已被刪除");
+
+          setSelectedVideo((prev) =>
+            prev && String((prev._id || prev.id)) === String(videoId)
+              ? { ...prev, likes: data.likes, likesCount: data.likes.length }
+              : prev,
+          );
+
+          setExpandedVideo((prev) =>
+            prev && String((prev._id || prev.id)) === String(videoId)
+              ? { ...prev, likes: data.likes, likesCount: data.likes.length }
+              : prev,
+          );
         }
-      } catch (err) {
-        console.warn("⚠️ 找不到該圖片，可能已被刪除", err);
-        notify.warning("提示", "找不到該圖片，可能已被刪除");
+
+        return data;
+      } catch (error) {
+        console.warn("首頁影片愛心切換失敗:", error);
+        return null;
       }
-    };
-    window.addEventListener("openImageModal", onOpenFromNotification);
-    return () => window.removeEventListener("openImageModal", onOpenFromNotification);
-  }, [setImageItems]);
+    },
+    [setSectionData],
+  );
 
-  // —— 單張圖片更新（從子元件或外部事件） ——
-  useEffect(() => {
-    const onUpdated = (e) => {
-      const updated = e?.detail?.updated;
-      if (updated?._id) applyUpdatedImage(updated);
-    };
-    window.addEventListener("image-updated", onUpdated);
-    return () => window.removeEventListener("image-updated", onUpdated);
-  }, [applyUpdatedImage]);
-
-  // —— 無限捲動（共用 hook） ——
-  useEffect(() => {
-    if (!filtersReady || !hasMore || loading || loadingMore) return;
-    const el = loadMoreRef.current;
-    if (!el) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMore();
-        }
-      },
-      { root: null, rootMargin: "500px 0px", threshold: 0.01 },
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [filtersReady, hasMore, loadMore, loading, loadingMore]);
-
-  // Like hook
-  const { handleToggleLike, onLikeUpdate: onLikeUpdateHook } = useLikeHandler({
-    setUploadedImages: setImageItems,
-    setLikedImages: null,
-    selectedImage,
-    setSelectedImage,
-    currentUser,
-  });
-  const isLikedByCurrentUser = (img) => {
-    if (!currentUser || !img?.likes) return false;
-    const uid = currentUser._id || currentUser.id;
-    return img.likes.includes(uid);
-  };
-
-  // ImageModal 導航
-  const openImage = (img) => setSelectedImage(normalizeImageData(img));
-  const idx = selectedImage ? images.findIndex((x) => String(x._id) === String(selectedImage._id)) : -1;
-  const prevImage = idx > 0 ? images[idx - 1] : undefined;
-  const nextImage = idx >= 0 && idx < images.length - 1 ? images[idx + 1] : undefined;
-  const navigateFromSelected = (dir) => {
-    if (idx < 0) return;
-    const nextIdx = dir === "next" ? idx + 1 : idx - 1;
-    if (nextIdx < 0 || nextIdx >= images.length) return;
-    setSelectedImage(images[nextIdx]);
-  };
+  const sectionCards = useMemo(
+    () => ({
+      images: (item, idx) => (
+        <ImageShowcaseCard
+          key={item.id ?? idx}
+          item={item}
+          onSelect={() => handleOpenImage(item)}
+        />
+      ),
+      music: (item, idx) => (
+        <MusicShowcaseCard
+          key={item.id ?? item._id ?? idx}
+          item={item}
+          onSelect={() => startMusicPreview(item)}
+          isActive={
+            activeMusicPreviewId &&
+            String(activeMusicPreviewId) === String(item._id || item.id)
+          }
+        />
+      ),
+      videos: (item, idx) => (
+        <VideoShowcaseCard
+          key={item.id ?? item._id ?? idx}
+          item={item}
+          onSelect={() => handleOpenVideo(item)}
+        />
+      ),
+    }),
+    [handleOpenImage, startMusicPreview, handleOpenVideo],
+  );
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white px-4 pb-4 pt-0 -mt-2 md:-mt-16">
-      {currentUser?.isAdmin && (
-        <div className="mb-4">
-          <AdminPanel />
-        </div>
-      )}
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <HeroSection />
+      <main className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-16 sm:px-10 sm:py-20">
+        {SECTION_CONFIG.map((section) => {
+          const data = sectionData[section.id] || {
+            items: [],
+            loading: true,
+            error: null,
+          };
 
-      {/* ✅ 畫廊/作品集標籤切換 */}
-      <div className="max-w-6xl mx-auto mb-4">
-        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-6">
-          {/* 左側：模式切換標籤 */}
-          <div className="flex gap-3">
-                   <button
-                     onClick={() => setDisplayMode("gallery")}
-                     className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                       displayMode === "gallery"
-                         ? "bg-white text-black shadow-md"
-                         : "bg-zinc-800 text-gray-300 hover:bg-zinc-700"
-                     }`}
-                   >
-                     🎨 作品展示
-                     <span className="text-xs ml-1.5 opacity-60">全部作品</span>
-                   </button>
-                   <button
-                     onClick={() => setDisplayMode("collection")}
-                     className={`relative px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                       displayMode === "collection"
-                         ? "bg-white text-black shadow-md"
-                         : "bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg"
-                     }`}
-                   >
-                     <span className="flex items-center gap-1.5">
-                       🔧 創作參考
-                       <span className="text-xs opacity-75">可學習參數</span>
-                     </span>
-              {/* 閃爍提示徽章 */}
-              {displayMode !== "collection" && (
-                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
-                </span>
+          return (
+            <section key={section.id} className="space-y-6">
+              <ShowcaseHeader
+                title={section.title}
+                description={section.description}
+                href={section.href}
+                accent={section.accent}
+              />
+              {data.error ? (
+                <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">
+                  無法取得最新內容，請稍後再試。
+                </div>
+              ) : (
+                <div className="overflow-x-auto md:overflow-visible">
+                  <ShowcaseMarquee
+                    items={data.items}
+                    renderItem={(item, idx) =>
+                      sectionCards[section.id]?.(item, idx)
+                    }
+                    accent={section.accent}
+                    duration={section.duration}
+                    loading={data.loading}
+                    href={section.href}
+                  />
+                </div>
               )}
-            </button>
-          </div>
-
-          {/* 中間：關於本站、版本資訊和法律連結（手機版隱藏） */}
-          <div className="hidden md:flex items-center gap-4 text-xs text-gray-400 flex-1 justify-center flex-wrap">
-                <div className="flex items-center gap-2">
-                  <a href="/about" className="hover:text-white transition text-sm font-medium text-blue-400">我們的故事</a>
-              <span className="text-gray-600">•</span>
-              <span className="text-sm text-yellow-400">版本 v0.8.0（2025-10-15）🎉</span>
-              <a href="/changelog" className="text-sm underline hover:text-white">
-                查看更新內容
-              </a>
-            </div>
-            <div className="flex items-center gap-2">
-              <a href="/privacy" className="hover:text-white transition">隱私政策</a>
-              <span className="text-gray-600">•</span>
-              <a href="/terms" className="hover:text-white transition">服務條款</a>
-            </div>
-          </div>
-
-          {/* 右側：排序 + 前往創作 */}
-          <div className="flex items-center gap-3">
-            <SortSelect value={sort} onChange={setSort} />
-            <a
-              href="/images/create"
-              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500/90 to-teal-500/90 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 hover:from-emerald-500 hover:to-teal-500 transition"
-            >
-              <span role="img" aria-label="前往創作圖片">🧪</span>
-              前往創作圖片
-            </a>
-          </div>
-        </div>
-
-               {/* ✅ 首次訪問引導橫幅（手機版隱藏） */}
-               {showGuide && displayMode === "gallery" && !isMobile && (
-                 <div className="mt-3 bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/50 rounded-lg p-4 relative">
-                   <button
-                     onClick={() => {
-                       setShowGuide(false);
-                       if (typeof window !== 'undefined') {
-                         localStorage.setItem('galleryGuideShown', 'true');
-                       }
-                     }}
-                     className="absolute top-2 right-2 text-gray-400 hover:text-white transition"
-                     title="關閉提示"
-                   >
-                     ✕
-                   </button>
-                   <div className="flex items-start gap-3">
-                     <div className="text-3xl">💡</div>
-                     <div className="flex-1">
-                       <h3 className="text-white font-semibold mb-1">探索 AI 創作技巧</h3>
-                       <p className="text-gray-300 text-sm mb-3">
-                         這裡有 <span className="text-yellow-400 font-bold">98 個</span> 包含完整生成參數的優質作品！
-                         查看 Prompt、模型、採樣器等設置，快速提升你的 AI 繪圖技巧。
-                       </p>
-                       <button
-                         onClick={() => {
-                           setDisplayMode('collection');
-                           setShowGuide(false);
-                           if (typeof window !== 'undefined') {
-                             localStorage.setItem('galleryGuideShown', 'true');
-                           }
-                         }}
-                         className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
-                       >
-                         🔧 立即探索創作參考
-                       </button>
-                     </div>
-                   </div>
-                 </div>
-               )}
-      </div>
-
-
-
-      <ImageGrid
-        images={images}
-        viewMode={viewMode}
-        onSelectImage={openImage}
-        currentUser={currentUser}
-        isLikedByCurrentUser={isLikedByCurrentUser}
-        onToggleLike={handleToggleLike}
-        onLocalLikeChange={(updated) => onLikeUpdateHook(updated)}
-      />
-
-      {/* sentinel：啟用錨點捲動錨定 */}
-      <div
-        ref={loadMoreRef}
-        style={{ overflowAnchor: "auto" }}
-        className="py-6 text-center text-zinc-400 text-sm"
-      >
-        {(!filtersReady || (loading && images.length === 0)) && "載入中..."}
-        {filtersReady && loadingMore && "載入更多中..."}
-        {filtersReady && !loading && !loadingMore && hasMore && images.length > 0 && "載入更多中..."}
-        {filtersReady && !loading && !hasMore && images.length === 0 && "目前沒有符合條件的圖片"}
-        {filtersReady && !loading && !hasMore && images.length > 0 && "已經到底囉"}
-      </div>
-
-      {selectedImage && currentUser !== undefined && (
-        <ImageModal
-          imageData={selectedImage}
-          prevImage={prevImage}
-          nextImage={nextImage}
-          onClose={() => setSelectedImage(null)}
+            </section>
+          );
+        })}
+      </main>
+      {selectedImageId && (
+        <ShowcaseImageModal
+          imageId={selectedImageId}
+          isOpen={!!selectedImageId}
+          onClose={handleCloseShowcaseModal}
+          onExpand={handleExpandImage}
           currentUser={currentUser}
-          displayMode={displayMode} // ✅ 傳遞顯示模式
-          onLikeUpdate={(updated) => onLikeUpdateHook(updated)}
-          onNavigate={(dir) => navigateFromSelected(dir)}
-          onFollowChange={handleFollowChange}
-          onImageUpdated={applyUpdatedImage}
         />
       )}
-
-      <BackToTopButton />
-    </main>
+      {expandedImage && (
+        <ImageModal
+          imageData={expandedImage}
+          onClose={handleCloseExpandedModal}
+          currentUser={currentUser}
+          displayMode="gallery"
+        />
+      )}
+  {selectedVideo && (
+    <ShowcaseVideoModal
+      video={selectedVideo}
+      isOpen={!!selectedVideo}
+      onClose={handleCloseVideoModal}
+      onExpand={handleExpandVideo}
+      onToggleLike={handleVideoLikeToggle}
+      currentUser={currentUser}
+    />
+  )}
+  {expandedVideo && (
+    <VideoModal
+      video={expandedVideo}
+      onClose={handleCloseExpandedVideo}
+      currentUser={currentUser}
+      isLiked={
+        !!(
+          currentUser?._id &&
+          Array.isArray(expandedVideo?.likes) &&
+          expandedVideo.likes.some(
+            (id) => String(id) === String(currentUser._id || currentUser.id),
+          )
+        )
+      }
+      onToggleLike={handleVideoLikeToggle}
+    />
+  )}
+  <BackToTopButton />
+    </div>
   );
 }

@@ -141,6 +141,16 @@ export async function POST(req) {
       loraRefs,
     } = body;
 
+    const rawRating = typeof rating === "string" ? rating.trim().toLowerCase() : "";
+    const normalizedRating =
+      rawRating === "18"
+        ? "18"
+        : rawRating === "15"
+          ? "15"
+          : rawRating === "sfw" || rawRating === "all" || rawRating === "general"
+            ? "sfw"
+            : "";
+
     // 验证必填字段
     if (!imageId || !title || !title.trim()) {
       return NextResponse.json({ message: "缺少图片 ID 或标题" }, { status: 400 });
@@ -150,12 +160,12 @@ export async function POST(req) {
       return NextResponse.json({ message: "请选择图片分类" }, { status: 400 });
     }
     
-    if (!rating || !['all', '15', '18'].includes(rating)) {
+    if (!normalizedRating) {
       return NextResponse.json({ message: "请选择有效的分级" }, { status: 400 });
     }
     
     // 验证 18+ 图片的成年声明
-    if (rating === '18' && !body.adultDeclaration) {
+    if (normalizedRating === '18' && !body.adultDeclaration) {
       return NextResponse.json({ message: "18+ 图片必须勾选成年声明" }, { status: 400 });
     }
 
@@ -225,7 +235,7 @@ export async function POST(req) {
       platform: platform || "",
       positivePrompt: positivePrompt || "",
       negativePrompt: negativePrompt || "",
-      rating,
+      rating: normalizedRating,
       category,
       description: description || "",
       tags: Array.isArray(tags) ? tags : [],

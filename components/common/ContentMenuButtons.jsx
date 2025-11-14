@@ -9,7 +9,7 @@ const ContentMenuButtons = () => {
 
   const menuItems = [
     { 
-      path: '/', 
+      path: '/images', 
       icon: '🖼️', 
       label: '圖片專區', 
       description: 'AI 生成圖片',
@@ -50,17 +50,11 @@ const ContentMenuButtons = () => {
   };
 
   const isActive = (itemPath) => {
-    if (itemPath === '/') {
-      return pathname === '/';
-    }
     return pathname.startsWith(itemPath);
   };
 
   // 過濾掉當前頁面對應的按鈕
   const filteredMenuItems = menuItems.filter((item) => {
-    if (item.path === '/') {
-      return pathname !== '/'; // 圖片區不顯示圖片專區按鈕
-    }
     return !pathname.startsWith(item.path); // 其他頁面不顯示對應的按鈕
   });
 

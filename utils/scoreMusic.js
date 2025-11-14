@@ -1,5 +1,10 @@
 // utils/scoreMusic.js
 
+export const MUSIC_POP_W_LIKE = 8.0;
+export const MUSIC_POP_W_PLAY = 1.0; // 播放分與點擊分合併：播放計數 = 1次 = 1分
+export const MUSIC_POP_W_COMPLETE = 0.25;
+export const MUSIC_POP_NEW_WINDOW_HOURS = 10;
+
 /** 計算音樂資料完整度（0~100） */
 export function computeMusicCompleteness(music = {}) {
   let score = 0;
@@ -42,24 +47,25 @@ export function computeMusicCompleteness(music = {}) {
   return Math.max(0, Math.min(100, score));
 }
 
-/** 計算音樂熱門度分數 */
-export function computeMusicPopScore(music = {}) {
-  const W_LIKE = 8.0;
-  const W_PLAY = 1.0; // 播放分與點擊分合併：播放計數 = 1次 = 1分
-  const W_COMPLETE = 0.25;
-
+/** 計算音樂基礎熱門度分數（不含新歌加成） */
+export function computeMusicBaseScore(music = {}) {
   // clicks 不再計分（因為必須點開才能播放，已包含在 plays 中）
   const likesCount = ensureMusicLikesCount(music);
   const plays = toNum(music.plays, 0);
   const comp = toNum(music.completenessScore, 0);
-  const decayedBoost = computeMusicInitialBoostDecay(music);
 
   return (
-    likesCount * W_LIKE +
-    plays * W_PLAY +
-    comp * W_COMPLETE +
-    decayedBoost
+    likesCount * MUSIC_POP_W_LIKE +
+    plays * MUSIC_POP_W_PLAY +
+    comp * MUSIC_POP_W_COMPLETE
   );
+}
+
+/** 計算音樂熱門度分數（含新歌加成） */
+export function computeMusicPopScore(music = {}) {
+  const base = computeMusicBaseScore(music);
+  const decayedBoost = computeMusicInitialBoostDecay(music);
+  return base + decayedBoost;
 }
 
 /** 確保 likesCount */
@@ -77,11 +83,10 @@ export function computeMusicInitialBoostDecay(music = {}) {
 
   const createdMs = getCreatedMs(music);
   const hours = Math.max(0, (Date.now() - createdMs) / 36e5);
-  const WINDOW_HOURS = 10; // 10小時窗口
 
-  if (hours >= WINDOW_HOURS) return 0;
+  if (hours >= MUSIC_POP_NEW_WINDOW_HOURS) return 0;
 
-  const factor = Math.max(0, 1 - hours / WINDOW_HOURS);
+  const factor = Math.max(0, 1 - hours / MUSIC_POP_NEW_WINDOW_HOURS);
   const boost = base * factor;
 
   return Math.round(boost * 10) / 10;

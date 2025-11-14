@@ -303,10 +303,16 @@ export default function UploadVideoModal({
         successMessage += `\n\n今日剩餘：${saveData.dailyUploads.remaining}/${saveData.dailyUploads.limit}`;
       }
 
+      let storedMessage = false;
       try {
         sessionStorage.setItem(SUCCESS_TOAST_STORAGE_KEY, successMessage);
+        storedMessage = true;
       } catch (error) {
         console.warn('儲存上傳成功提示失敗:', error);
+      }
+
+      if (!storedMessage) {
+        toast.success(successMessage);
       }
 
       handleClose();

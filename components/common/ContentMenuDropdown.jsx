@@ -49,21 +49,21 @@ const ContentMenuDropdown = () => {
   };
 
   const menuItems = [
-    { path: '/', icon: '🖼️', label: '圖片專區', description: 'AI 生成圖片' },
+    { path: '/images', icon: '🖼️', label: '圖片專區', description: 'AI 生成圖片' },
     { path: '/videos', icon: '🎬', label: '影片專區', description: 'AI 生成影片' },
     { path: '/music', icon: '🎵', label: '音樂專區', description: 'AI 生成音樂' },
     { path: '/discussion', icon: '💬', label: '討論區', description: '交流討論' },
   ];
 
-  // 找到當前頁面對應的項目，但在首頁時顯示影片按鈕
+  // 找到當前頁面對應的項目
   const currentItem = (() => {
-    // 如果在首頁，顯示影片按鈕（因為首頁就是圖片專區）
+    // 在首頁顯示圖片專區按鈕
     if (pathname === '/') {
-      return menuItems[1]; // 影片專區
+      return menuItems[0]; // 圖片專區
     }
     // 其他頁面顯示對應的按鈕
     const item = menuItems.find(item => pathname.startsWith(item.path));
-    return item || menuItems[1]; // 找不到就默認影片
+    return item || menuItems[0]; // 找不到就默認圖片專區
   })();
 
   return (
@@ -133,7 +133,7 @@ const ContentMenuDropdown = () => {
               key={item.path}
               onClick={() => handleNavigate(item.path)}
               className={`w-full px-4 py-3 text-left hover:bg-zinc-700 flex items-center gap-3 transition-colors
-                ${pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path)) ? 'bg-zinc-700' : ''}`}
+                ${pathname.startsWith(item.path) ? 'bg-zinc-700' : ''}`}
             >
               <span className="text-2xl">{item.icon}</span>
               <div>

@@ -9,6 +9,8 @@ import { parseComfyWorkflow } from "@/lib/parseComfyWorkflow";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import SelectField from "@/components/common/SelectField";
 
+const IMAGE_UPLOAD_SUCCESS_STORAGE_KEY = "imageUploadSuccessMessage";
+
 export default function UploadStep2({
   rating,
   setRating,
@@ -772,7 +774,7 @@ export default function UploadStep2({
   };
 
   // ====== Submit ======
-  const civitaiRegex = /^https?:\/\/(www\.)?civitai\.com(\/|$)/i;
+  const allowedModelRegex = /^https?:\/\/(www\.)?(civitai\.com|seaart\.ai)(\/|$)/i;
 
   const handleUpload = async () => {
     if (!imageFile) {
@@ -794,15 +796,15 @@ export default function UploadStep2({
       notify.warning("提示", "請選擇圖片分類！");
       return;
     }
-    if (modelLink && !civitaiRegex.test(modelLink)) {
-      notify.warning("提示", "模型連結僅允許 civitai.com 網址。");
+    if (modelLink && !allowedModelRegex.test(modelLink)) {
+      notify.warning("提示", "模型連結僅允許 civitai.com 或 seaart.ai 網址。");
       return;
     }
     if (loraLink) {
       const lines = loraLink.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-      const invalid = lines.some(line => !civitaiRegex.test(line));
+      const invalid = lines.some(line => !allowedModelRegex.test(line));
       if (invalid) {
-        notify.warning("提示", "LoRA 連結僅允許 civitai.com 網址（多筆請每行一條）。");
+        notify.warning("提示", "LoRA 連結僅允許 civitai.com 或 seaart.ai 網址（多筆請每行一條）。");
         return;
       }
     }
@@ -869,6 +871,9 @@ export default function UploadStep2({
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
 
+      const normalizedRating =
+        rating === "all" ? "sfw" : (rating === "general" ? "sfw" : rating || "sfw");
+
       // 手機簡化模式：模型名稱以下的欄位為空，確保 hasMetadata = false
       const metadataBase = {
         imageId,
@@ -876,7 +881,7 @@ export default function UploadStep2({
         title: title?.trim() || "",
         author: mobileSimple ? "" : (author?.trim() || ""),
         category: category || "",
-        rating: rating || "sfw",
+        rating: normalizedRating,
         platform: platform?.trim() || "",
         modelName: mobileSimple ? "" : (modelName?.trim() || ""),
         loraName: mobileSimple ? "" : (loraName?.trim() || ""),
@@ -898,7 +903,7 @@ export default function UploadStep2({
         width: mobileSimple ? undefined : (Number.isFinite(wNum) && wNum ? wNum : undefined),
         height: mobileSimple ? undefined : (Number.isFinite(hNum) && hNum ? hNum : undefined),
         modelHash: mobileSimple ? "" : (modelHash || undefined),
-        adultDeclaration: rating === "18" ? true : undefined,
+        adultDeclaration: normalizedRating === "18" ? true : undefined,
         // ⬇️ 新增：若勾選分享 workflow，夾帶到後端（手機簡化模式不分享）
         comfy: mobileSimple ? undefined : (shareWorkflow
           ? {
@@ -976,12 +981,30 @@ export default function UploadStep2({
       // ✅ 上傳成功提示（根據元數據質量顯示結果）
       const finalQuality = getCurrentMetadataQuality;
       
+      let successBody;
       if (finalQuality === "优质图") {
-        alert("✅ 上傳成功！\n\n⭐ 此圖片已標記為「優質圖」\n✨ 將出現在「作品展示」和「創作參考」中\n🎓 其他用戶可以學習您的高質量生成參數");
+        successBody = "⭐ 此圖片已標記為「優質圖」\n✨ 將出現在「作品展示」和「創作參考」中\n🎓 其他用戶可以學習您的高質量生成參數";
       } else if (finalQuality === "标准图") {
-        alert("✅ 上傳成功！\n\n✓ 此圖片已標記為「標準圖」\n✨ 將出現在「作品展示」和「創作參考」中\n📚 其他用戶可以參考您的生成參數");
+        successBody = "✓ 此圖片已標記為「標準圖」\n✨ 將出現在「作品展示」和「創作參考」中\n📚 其他用戶可以參考您的生成參數";
       } else {
-        alert("✅ 上傳成功！\n\n🎨 此圖片已標記為「展示圖」\n📸 將出現在「作品展示」中供欣賞\n💡 建議填寫有意義的參數以進入「創作參考」");
+        successBody = "🎨 此圖片已標記為「展示圖」\n📸 將出現在「作品展示」中供欣賞\n💡 建議填寫有意義的參數以進入「創作參考」";
+      }
+
+      let storedMessage = false;
+      try {
+        const payload = {
+          title: "✅ 上傳成功！",
+          body: successBody,
+          quality: finalQuality,
+        };
+        sessionStorage.setItem(IMAGE_UPLOAD_SUCCESS_STORAGE_KEY, JSON.stringify(payload));
+        storedMessage = true;
+      } catch (error) {
+        console.warn("儲存圖片上傳成功提示失敗:", error);
+      }
+
+      if (!storedMessage) {
+        alert(`✅ 上傳成功！\n\n${successBody}`);
       }
 
       setStep(1);
@@ -1252,7 +1275,7 @@ export default function UploadStep2({
               options={[
                 { value: "Stable Diffusion WebUI", label: "Stable Diffusion WebUI" },
                 { value: "ComfyUI", label: "ComfyUI" },
-                { value: "GPT 生圖", label: "GPT 生圖" },
+                { value: "SeaArt.ai", label: "SeaArt.ai" },
                 { value: "其他", label: "其他" },
               ]}
               placeholder="選擇平台"
@@ -1388,7 +1411,7 @@ export default function UploadStep2({
             />
 
             <p className="text-xs text-zinc-400">
-              只接受 <span className="underline">civitai.com</span> 的網址（可留白）。
+              只接受 <span className="underline">civitai.com</span> 或 <span className="underline">seaart.ai</span> 的網址（可留白）。
             </p>
           </>
         )}

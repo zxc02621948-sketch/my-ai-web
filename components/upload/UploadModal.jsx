@@ -3,8 +3,11 @@
 import { Dialog } from "@headlessui/react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { notify } from "@/components/common/GlobalNotificationManager";
 import UploadStep1 from "./UploadStep1";
 import UploadStep2 from "./UploadStep2";
+
+const SUCCESS_MESSAGE_STORAGE_KEY = "imageUploadSuccessMessage";
 
 export default function UploadModal() {
   const [mounted, setMounted] = useState(false);
@@ -33,6 +36,28 @@ export default function UploadModal() {
   const [uploadLimits, setUploadLimits] = useState(null);
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      const rawMessage = sessionStorage.getItem(SUCCESS_MESSAGE_STORAGE_KEY);
+      if (!rawMessage) return;
+      sessionStorage.removeItem(SUCCESS_MESSAGE_STORAGE_KEY);
+      let payload;
+      try {
+        payload = JSON.parse(rawMessage);
+      } catch {
+        payload = null;
+      }
+      if (payload && typeof payload === "object") {
+        notify.success(payload.title ?? "上傳成功", payload.body ?? "");
+      } else {
+        notify.success("上傳成功", rawMessage);
+      }
+    } catch (error) {
+      console.warn("讀取圖片上傳成功提示失敗:", error);
+    }
+  }, [mounted]);
 
   // 行動視窗高修正（面板用）
   useEffect(() => {

@@ -15,6 +15,9 @@ export default function usePaginatedResource({
   initialPage = 1,
   idSelector = defaultIdSelector,
   enabled = true,
+  mergeStrategy, // optional custom merge function
+  orderKey,
+  orderComparator,
 }) {
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(initialPage);
@@ -33,37 +36,74 @@ export default function usePaginatedResource({
 
   const mergeItems = useCallback(
     (incoming, append) => {
-      if (!append) {
-        itemsRef.current = incoming;
-        setItems(incoming);
+      const normalizedIncoming = Array.isArray(incoming) ? incoming : [];
+
+      if (typeof mergeStrategy === "function") {
+        const merged = mergeStrategy({
+          existing: itemsRef.current,
+          incoming: normalizedIncoming,
+          append,
+        });
+        let normalizedMerged = Array.isArray(merged) ? merged : [];
+        if (orderComparator && normalizedMerged.length > 1) {
+          normalizedMerged = [...normalizedMerged].sort(orderComparator);
+        }
+        itemsRef.current = normalizedMerged;
+        setItems(normalizedMerged);
         return;
       }
 
-      const knownIds = new Set(itemsRef.current.map((item) => idSelector(item)));
-      const merged = [...itemsRef.current];
-
-      for (const entry of incoming) {
-        const id = idSelector(entry);
-        if (id && knownIds.has(id)) continue;
-        merged.push(entry);
-        if (id) knownIds.add(id);
+      if (!append) {
+        itemsRef.current = normalizedIncoming;
+        setItems(normalizedIncoming);
+        return;
       }
 
-      itemsRef.current = merged;
-      setItems(merged);
+      const knownIds = new Map(
+        itemsRef.current.map((item, index) => [idSelector(item), index]),
+      );
+
+      const merged = [...itemsRef.current];
+
+      normalizedIncoming.forEach((entry) => {
+        const id = idSelector(entry);
+        if (id && knownIds.has(id)) {
+          // 覆寫既有項目（以新資料為準）
+          merged[knownIds.get(id)] = entry;
+        } else {
+          merged.push(entry);
+          if (id) knownIds.set(id, merged.length - 1);
+        }
+      });
+
+      const nextItems =
+        orderComparator && merged.length > 1
+          ? [...merged].sort(orderComparator)
+          : merged;
+
+      itemsRef.current = nextItems;
+      setItems(nextItems);
     },
     [idSelector],
   );
 
   const setItemsManual = useCallback((updater) => {
     setItems((prev) => {
-      const next =
+      const prevArr = Array.isArray(prev) ? prev : [];
+      let next =
         typeof updater === "function"
-          ? updater(Array.isArray(prev) ? prev : [])
+          ? updater(prevArr)
           : updater;
-      const normalized = Array.isArray(next) ? next : [];
-      itemsRef.current = normalized;
-      return normalized;
+      if (!Array.isArray(next)) {
+        next = [];
+      }
+
+      if (orderComparator && next.length > 1) {
+        next = [...next].sort(orderComparator);
+      }
+
+      itemsRef.current = next;
+      return next;
     });
   }, []);
 

@@ -4,14 +4,15 @@ import Music from "@/models/Music";
 import {
   ensureMusicLikesCount,
   computeMusicInitialBoostDecay,
+  computeMusicBaseScore,
+  computeMusicPopScore,
+  MUSIC_POP_W_LIKE,
+  MUSIC_POP_W_PLAY,
+  MUSIC_POP_W_COMPLETE,
+  MUSIC_POP_NEW_WINDOW_HOURS,
 } from "@/utils/scoreMusic";
 
 // 熱門度計算常數（音樂系統：播放分已包含點擊分）
-const POP_W_LIKE = 8.0;
-const POP_W_PLAY = 1.0; // 播放分與點擊分合併：播放計數 = 1次 = 1分
-const POP_W_COMPLETE = 0.25;
-const POP_NEW_WINDOW_HOURS = 10;
-
 export async function GET(request) {
   try {
     await dbConnect();
@@ -82,8 +83,36 @@ export async function GET(request) {
     // 查詢總數
     const total = await Music.countDocuments(match);
 
-    // 根據排序方式建立 pipeline
+    const enrichMusicRecords = (items = []) => {
+      const now = Date.now();
+      return items.map((raw) => {
+        // 兼容 Mongoose Document / plain object
+        const item =
+          typeof raw.toObject === "function" ? raw.toObject() : { ...raw };
+
+        const likesCount = ensureMusicLikesCount(item);
+        const playsCount = Number(item.plays ?? 0);
+        const completeness = Number(item.completenessScore ?? 0);
+        const decayedBoost = computeMusicInitialBoostDecay(item);
+
+        const baseScore = computeMusicBaseScore(item);
+        const livePopScore = baseScore + decayedBoost;
+
+        return {
+          ...item,
+          likesCount,
+          livePopScore,
+          finalBoost: decayedBoost,
+          baseScore,
+          popScoreLive: livePopScore,
+          popScore: useLive ? livePopScore : item.popScore ?? livePopScore,
+          _computedAt: now,
+        };
+      });
+    };
+
     let pipeline = [];
+    let music = [];
 
     switch (sort) {
       case "newest":
@@ -114,6 +143,8 @@ export async function GET(request) {
           },
           { $unwind: { path: "$author", preserveNullAndEmptyArrays: true } },
         ];
+        music = await Music.aggregate(pipeline);
+        music = enrichMusicRecords(music);
         break;
 
       case "oldest":
@@ -144,6 +175,8 @@ export async function GET(request) {
           },
           { $unwind: { path: "$author", preserveNullAndEmptyArrays: true } },
         ];
+        music = await Music.aggregate(pipeline);
+        music = enrichMusicRecords(music);
         break;
 
       case "mostlikes":
@@ -185,6 +218,8 @@ export async function GET(request) {
           },
           { $unwind: { path: "$author", preserveNullAndEmptyArrays: true } },
         ];
+        music = await Music.aggregate(pipeline);
+        music = enrichMusicRecords(music);
         break;
 
       case "mostplays":
@@ -215,6 +250,8 @@ export async function GET(request) {
           },
           { $unwind: { path: "$author", preserveNullAndEmptyArrays: true } },
         ];
+        music = await Music.aggregate(pipeline);
+        music = enrichMusicRecords(music);
         break;
 
       case "random":
@@ -243,6 +280,8 @@ export async function GET(request) {
           },
           { $unwind: { path: "$author", preserveNullAndEmptyArrays: true } },
         ];
+        music = await Music.aggregate(pipeline);
+        music = enrichMusicRecords(music);
         break;
 
       case "hybrid": {
@@ -305,7 +344,7 @@ export async function GET(request) {
           ]);
         }
         
-        const merged = [...pinned, ...randoms];
+        const merged = enrichMusicRecords([...pinned, ...randoms]);
         return NextResponse.json(
           {
             success: true,
@@ -316,49 +355,77 @@ export async function GET(request) {
         );
       }
 
-      default:
-        pipeline = [
-          { $match: match },
-          { $sort: { popScore: -1, createdAt: -1, _id: -1 } },
-          { $skip: skip },
-          { $limit: limit },
-          {
-            $lookup: {
-              from: "users",
-              localField: "author",
-              foreignField: "_id",
-              as: "author",
-              pipeline: [
-                {
-                  $project: {
-                    _id: 1,
-                    username: 1,
-                    avatar: 1,
-                    currentFrame: 1,
-                    frameSettings: 1,
-                  },
-                },
-              ],
-            },
-          },
-          { $unwind: { path: "$author", preserveNullAndEmptyArrays: true } },
-        ];
-        break;
-    }
+      default: {
+        if (useLive) {
+          const docs = await Music.find(match)
+            .populate({
+              path: "author",
+              select: "_id username avatar currentFrame frameSettings",
+            })
+            .lean();
 
-    const music = pipeline.length > 0
-      ? await Music.aggregate(pipeline)
-      : await Music.find(match)
-          .sort({ createdAt: -1 })
+          const ranked = enrichMusicRecords(docs).sort((a, b) => {
+            if (b.livePopScore !== a.livePopScore) {
+              return b.livePopScore - a.livePopScore;
+            }
+            const timeA = new Date(a.createdAt || 0).getTime();
+            const timeB = new Date(b.createdAt || 0).getTime();
+            if (timeB !== timeA) {
+              return timeB - timeA;
+            }
+            return (b._id?.toString?.() || "").localeCompare(
+              a._id?.toString?.() || "",
+            );
+          });
+
+          music = ranked.slice(skip, skip + limit);
+          break;
+        }
+        const docs = await Music.find(match)
+          .sort({ popScore: -1, createdAt: -1, _id: -1 })
           .skip(skip)
           .limit(limit)
           .lean();
 
-    // ✅ 將音樂 URL 轉換為串流 API URL
-    const musicWithStreamUrl = music.map((item) => ({
-      ...item,
-      musicUrl: `/api/music/stream/${item._id}`,
-    }));
+        music = enrichMusicRecords(docs);
+
+        if (useLive) {
+          music.sort((a, b) => {
+            if (b.livePopScore !== a.livePopScore) {
+              return b.livePopScore - a.livePopScore;
+            }
+            const dateA = new Date(a.createdAt || 0).getTime();
+            const dateB = new Date(b.createdAt || 0).getTime();
+            if (dateB !== dateA) {
+              return dateB - dateA;
+            }
+            return (b._id?.toString?.() || "").localeCompare(
+              a._id?.toString?.() || "",
+            );
+          });
+        }
+        break;
+      }
+    }
+
+    const musicWithStreamUrl = enrichMusicRecords(music)
+      .sort((a, b) => {
+        if (b.livePopScore !== a.livePopScore) {
+          return b.livePopScore - a.livePopScore;
+        }
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        if (dateB !== dateA) {
+          return dateB - dateA;
+        }
+        const idA = a._id?.toString?.() || "";
+        const idB = b._id?.toString?.() || "";
+        return idB.localeCompare(idA);
+      })
+      .map((item) => ({
+        ...item,
+        musicUrl: `/api/music/stream/${item._id}`,
+      }));
 
     return NextResponse.json({
       success: true,
@@ -375,3 +442,4 @@ export async function GET(request) {
     return NextResponse.json({ error: "載入音樂失敗" }, { status: 500 });
   }
 }
+

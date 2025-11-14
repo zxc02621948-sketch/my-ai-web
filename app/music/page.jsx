@@ -115,9 +115,26 @@ const MusicPage = () => {
       const data = await response.json();
 
       const incoming = Array.isArray(data?.music) ? data.music : [];
+      const sortedIncoming = [...incoming]
+        .filter((item) => {
+          const valid =
+            item && typeof item.livePopScore === "number" && !Number.isNaN(item.livePopScore);
+          return valid;
+        })
+        .sort((a, b) => {
+        const scoreA = typeof a.livePopScore === "number" ? a.livePopScore : 0;
+        const scoreB = typeof b.livePopScore === "number" ? b.livePopScore : 0;
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        const timeA = new Date(a.createdAt || a.uploadDate || 0).getTime();
+        const timeB = new Date(b.createdAt || b.uploadDate || 0).getTime();
+        if (timeB !== timeA) return timeB - timeA;
+        const idA = (a._id || a.id || "").toString();
+        const idB = (b._id || b.id || "").toString();
+        return idB.localeCompare(idA);
+        });
       return {
-        items: incoming,
-        hasMore: incoming.length === 20,
+        items: sortedIncoming,
+        hasMore: sortedIncoming.length === 20,
       };
     },
     [
@@ -137,10 +154,39 @@ const MusicPage = () => {
     loading,
     loadingMore,
     loadMore,
+    refresh,
   } = usePaginatedResource({
     fetchPage: fetchMusicPage,
     deps: paginationDeps,
     enabled: isInitialized,
+    orderComparator: (a, b) => {
+      const scoreA = typeof a.livePopScore === "number" ? a.livePopScore : 0;
+      const scoreB = typeof b.livePopScore === "number" ? b.livePopScore : 0;
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      const timeA = new Date(a.createdAt || a.uploadDate || 0).getTime();
+      const timeB = new Date(b.createdAt || b.uploadDate || 0).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      const idA = (a._id || a.id || "").toString();
+      const idB = (b._id || b.id || "").toString();
+      return idB.localeCompare(idA);
+    },
+    mergeStrategy: ({ incoming, existing, append }) => {
+      const normalizedIncoming = Array.isArray(incoming) ? incoming : [];
+      if (!append) {
+        return normalizedIncoming;
+      }
+      const seen = new Map();
+      const merged = normalizedIncoming
+        .concat(existing)
+        .filter((item) => {
+          const id = item?._id || item?.id;
+          if (!id) return true;
+          if (seen.has(id)) return false;
+          seen.set(id, true);
+          return true;
+        });
+      return merged;
+    },
   });
 
   const loadMoreRef = useRef(null);
@@ -357,10 +403,10 @@ const MusicPage = () => {
                 method: "DELETE",
               });
               if (response.ok) {
-                // The usePaginatedResource hook manages the state,
-                // so we don't need to update it here directly.
                 setShowMusicModal(false);
                 setSelectedMusic(null);
+                // 重新整理列表，移除已刪除的音樂
+                refresh();
               }
             } catch (error) {
               console.error("刪除音樂失敗:", error);
