@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 import Image from "@/models/Image";
+import Music from "@/models/Music";
+import Video from "@/models/Video";
 import Comment from "@/models/Comment";
 import PointsTransaction from "@/models/PointsTransaction";
 
@@ -28,27 +30,6 @@ export async function calculateUserStats(userId) {
   try {
     await dbConnect();
 
-    // 簡化查詢以避免 webpack 模組錯誤
-    const worksCount = await Image.countDocuments({ userId });
-    const followersCount = await User.countDocuments({ "following.userId": userId });
-    const user = await User.findById(userId);
-    const followingCount = user?.following?.length || 0;
-    const userImages = await Image.find({ userId }, { likes: 1, _id: 1 }).lean();
-    const commentsCount = await Comment.countDocuments({ userId });
-
-    // 計算總點讚數 - 用戶所有作品獲得的點讚總數
-    const likesCount = userImages.reduce((total, image) => {
-      return total + (Array.isArray(image.likes) ? image.likes.length : 0);
-    }, 0);
-
-    // 計算收藏數 - 這裡假設收藏就是點讚（根據實際業務邏輯調整）
-    const favoritesCount = likesCount;
-
-    // ===== 新增：本月獲得 & 總計獲得積分 =====
-    const now = new Date();
-    const startOfMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const startOfNextMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-
     // 確保 userId 是有效的 ObjectId
     let validUserId;
     try {
@@ -66,6 +47,43 @@ export async function calculateUserStats(userId) {
         totalEarned: 0,
       };
     }
+
+    // ✅ 計算作品數量：圖片 + 音樂 + 影片
+    const imageCount = await Image.countDocuments({ userId });
+    const musicCount = await Music.countDocuments({ author: validUserId });
+    const videoCount = await Video.countDocuments({ author: validUserId });
+    const worksCount = imageCount + musicCount + videoCount;
+
+    const followersCount = await User.countDocuments({ "following.userId": userId });
+    const user = await User.findById(userId);
+    const followingCount = user?.following?.length || 0;
+    
+    // ✅ 獲取所有作品用於計算點讚數
+    const userImages = await Image.find({ userId }, { likes: 1, _id: 1 }).lean();
+    const userMusic = await Music.find({ author: validUserId }, { likes: 1, _id: 1 }).lean();
+    const userVideos = await Video.find({ author: validUserId }, { likes: 1, _id: 1 }).lean();
+    
+    const commentsCount = await Comment.countDocuments({ userId });
+
+    // ✅ 計算總點讚數 - 用戶所有作品（圖片、音樂、影片）獲得的點讚總數
+    const imageLikes = userImages.reduce((total, image) => {
+      return total + (Array.isArray(image.likes) ? image.likes.length : 0);
+    }, 0);
+    const musicLikes = userMusic.reduce((total, music) => {
+      return total + (Array.isArray(music.likes) ? music.likes.length : 0);
+    }, 0);
+    const videoLikes = userVideos.reduce((total, video) => {
+      return total + (Array.isArray(video.likes) ? video.likes.length : 0);
+    }, 0);
+    const likesCount = imageLikes + musicLikes + videoLikes;
+
+    // 計算收藏數 - 這裡假設收藏就是點讚（根據實際業務邏輯調整）
+    const favoritesCount = likesCount;
+
+    // ===== 新增：本月獲得 & 總計獲得積分 =====
+    const now = new Date();
+    const startOfMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const startOfNextMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
     // ✅ 使用累計獲得積分（只增不減）來計算等級，而非當前餘額
     const totalEarned = user?.totalEarnedPoints || 0;

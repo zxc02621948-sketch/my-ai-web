@@ -414,6 +414,28 @@ export function PlayerProvider({
         }
       }
 
+      // ✅ 更新 Media Session 位置狀態（Android 鎖屏控件需要）
+      // ✅ 節流更新：每 1 秒更新一次，避免過度更新
+      const now = Date.now();
+      const lastUpdate = audio.dataset.lastMediaSessionUpdate || "0";
+      if (now - parseInt(lastUpdate) >= 1000) {
+        if (typeof navigator !== "undefined" && navigator.mediaSession && navigator.mediaSession.setPositionState) {
+          const audioDuration = audio.duration || 0;
+          if (audioDuration > 0 && isFinite(audioDuration) && isFinite(newTime)) {
+            try {
+              navigator.mediaSession.setPositionState({
+                duration: audioDuration,
+                playbackRate: audio.playbackRate || 1.0,
+                position: newTime,
+              });
+              audio.dataset.lastMediaSessionUpdate = now.toString();
+            } catch (error) {
+              // 某些瀏覽器可能不支援 setPositionState，忽略即可
+            }
+          }
+        }
+      }
+
       // ✅ 更新 setCurrentTime（如果需要）
       // ✅ 這裡可以添加節流邏輯，避免過度更新 UI
     }
@@ -1336,48 +1358,56 @@ export function PlayerProvider({
       return;
     }
 
+    // ✅ 只要有音樂來源就設置 metadata（即使沒有播放列表）
     const currentTrack =
       Array.isArray(playlist) && playlist.length > 0 && activeIndex >= 0
         ? playlist[activeIndex]
         : null;
 
-    const metadataTitle =
-      (currentTrack && (currentTrack.title || currentTrack.trackTitle)) ||
-      trackTitle ||
-      (currentTrack && currentTrack.url) ||
-      "音樂作品";
-    const metadataArtist =
-      (currentTrack && (currentTrack.artist || currentTrack.authorName)) ||
-      playerOwner?.username ||
-      "未知創作者";
-    const metadataAlbum =
-      (currentTrack && currentTrack.album) || playerOwner?.username || "";
+    // ✅ 即使沒有播放列表，只要有 src 和 trackTitle，也要設置 metadata
+    const hasMusic = src || (currentTrack && currentTrack.url) || trackTitle;
 
-    const artwork = [];
-    const coverCandidate =
-      currentTrack?.coverImageUrl ||
-      currentTrack?.cover ||
-      currentTrack?.imageUrl ||
-      currentTrack?.thumbnailUrl;
-    if (coverCandidate) {
-      artwork.push({
-        src: coverCandidate,
-        sizes: "512x512",
-        type: "image/png",
-      });
+    if (hasMusic) {
+      const metadataTitle =
+        (currentTrack && (currentTrack.title || currentTrack.trackTitle)) ||
+        trackTitle ||
+        (currentTrack && currentTrack.url) ||
+        src ||
+        "音樂作品";
+      const metadataArtist =
+        (currentTrack && (currentTrack.artist || currentTrack.authorName)) ||
+        playerOwner?.username ||
+        "未知創作者";
+      const metadataAlbum =
+        (currentTrack && currentTrack.album) || playerOwner?.username || "";
+
+      const artwork = [];
+      const coverCandidate =
+        currentTrack?.coverImageUrl ||
+        currentTrack?.cover ||
+        currentTrack?.imageUrl ||
+        currentTrack?.thumbnailUrl;
+      if (coverCandidate) {
+        artwork.push({
+          src: coverCandidate,
+          sizes: "512x512",
+          type: "image/png",
+        });
+      }
+
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: metadataTitle,
+          artist: metadataArtist,
+          album: metadataAlbum,
+          artwork,
+        });
+      } catch (error) {
+        console.warn("[MediaSession] 設定 metadata 失敗:", error);
+      }
     }
 
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: metadataTitle,
-        artist: metadataArtist,
-        album: metadataAlbum,
-        artwork,
-      });
-    } catch (error) {
-      console.warn("[MediaSession] 設定 metadata 失敗:", error);
-    }
-
+    // ✅ 及時更新播放狀態
     try {
       navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
     } catch (error) {
@@ -1500,6 +1530,7 @@ export function PlayerProvider({
     trackTitle,
     playerOwner?.username,
     isPlaying,
+    src, // ✅ 添加 src 依賴，確保音樂來源改變時更新 metadata
     // ✅ 不包含 currentTime 和 duration，避免 useEffect 頻繁重新運行
     // 我們直接在 updatePositionState 中從 audioRef.current 讀取最新值
     play,
