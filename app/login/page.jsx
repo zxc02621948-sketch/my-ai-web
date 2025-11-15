@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import OAuthButtons from "@/components/auth/OAuthButtons";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -62,10 +63,17 @@ export default function LoginPage() {
 
         <button
           onClick={handleLogin}
-          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded"
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded mb-4"
         >
           登入
         </button>
+
+        {/* ✅ OAuth 第三方登入按鈕 */}
+        <OAuthButtons
+          onSuccess={() => {
+            router.push("/");
+          }}
+        />
       </div>
     </div>
   );

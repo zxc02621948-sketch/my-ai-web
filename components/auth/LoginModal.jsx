@@ -5,6 +5,7 @@ import { Dialog } from "@headlessui/react";
 import { X } from "lucide-react";
 import axios from "axios";
 import ForgotPasswordModal from "./ForgotPasswordModal";
+import OAuthButtons from "./OAuthButtons";
 import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function LoginModal() {
@@ -126,6 +127,14 @@ export default function LoginModal() {
             >
               {isLoading ? "登入中..." : "登入"}
             </button>
+
+            {/* ✅ OAuth 第三方登入按鈕 */}
+            <OAuthButtons
+              onSuccess={() => {
+                onClose();
+                window.location.reload();
+              }}
+            />
 
             <div className="text-right mt-2">
               <button

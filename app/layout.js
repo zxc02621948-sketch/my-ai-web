@@ -9,6 +9,7 @@ import UploadVideoModal from "@/components/upload/UploadVideoModal";
 import UploadMusicModal from "@/components/upload/UploadMusicModal";
 import LoginModal from "@/components/auth/LoginModal";
 import RegisterModal from "@/components/auth/RegisterModal";
+import SessionProviderWrapper from "@/components/auth/SessionProviderWrapper";
 import { FilterProvider } from "@/components/context/FilterContext";
 import ClientToaster from "@/components/common/ClientToaster";
 import { PlayerProvider } from "@/components/context/PlayerContext";
@@ -86,10 +87,11 @@ export default async function RootLayout({ children }) {
       </head>
 
       <body className={`antialiased min-h-screen bg-zinc-950 text-white`}>
-        <CurrentUserProvider>
-          <FilterProvider>
-            <PlayerProvider defaultShareMode="global" defaultMiniPlayerEnabled={false} defaultSeekable={false}>
-              <ClientHeaderWrapper currentUser={currentUser} />
+        <SessionProviderWrapper>
+          <CurrentUserProvider>
+            <FilterProvider>
+              <PlayerProvider defaultShareMode="global" defaultMiniPlayerEnabled={false} defaultSeekable={false}>
+                <ClientHeaderWrapper currentUser={currentUser} />
 
               <UploadModal />
               <UploadVideoModal />
@@ -112,9 +114,10 @@ export default async function RootLayout({ children }) {
               {/* 條件性播放器組件 */}
               <ConditionalPlayer />
 
-            </PlayerProvider>
-          </FilterProvider>
-        </CurrentUserProvider>
+              </PlayerProvider>
+            </FilterProvider>
+          </CurrentUserProvider>
+        </SessionProviderWrapper>
       </body>
     </html>
   );

@@ -5,11 +5,24 @@ const userSchema = new mongoose.Schema(
   {
     lastVerificationEmailSentAt: { type: Date, default: null },
     email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
+    password: { type: String, required: false }, // ✅ 改為可選，OAuth 用戶不需要密碼
     username: { type: String, required: true, unique: true },
     isVerified: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
     image: { type: String, default: '' },
+    
+    // ✅ OAuth 第三方登入欄位
+    provider: { 
+      type: String, 
+      enum: ['local', 'google', 'facebook'], 
+      default: 'local' 
+    }, // 登入方式：local = 郵箱密碼，google = Google OAuth，facebook = Facebook OAuth
+    providerId: { type: String }, // OAuth 提供商的用戶 ID（例如 Google sub、Facebook id）
+    providers: [{ 
+      provider: { type: String, enum: ['local', 'google', 'facebook'] },
+      providerId: { type: String },
+      linkedAt: { type: Date, default: Date.now }
+    }], // ✅ 支援多種登入方式（例如用戶同時綁定 Google 和 Facebook）
 
     gender: {
       type: String,
