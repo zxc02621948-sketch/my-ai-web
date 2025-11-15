@@ -15,6 +15,7 @@ import ShowcaseVideoModal from "@/components/homepage/ShowcaseVideoModal";
 import ImageModal from "@/components/image/ImageModal";
 import VideoModal from "@/components/video/VideoModal";
 import BackToTopButton from "@/components/common/BackToTopButton";
+import StarrySky from "@/components/homepage/StarrySky";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 const SHOWCASE_LIMIT = 12;
@@ -32,7 +33,7 @@ const SECTION_CONFIG = [
       ring: "from-[#4a0ba8] to-[#1a55d9]",
       border: "border-pink-400/60",
     },
-    duration: 48,
+    duration: 100, // 統一速度，放慢至約2倍
   },
   {
     id: "music",
@@ -46,7 +47,8 @@ const SECTION_CONFIG = [
       ring: "from-indigo-600 via-purple-600 to-pink-600",
       border: "border-purple-400/60",
     },
-    duration: 52,
+    duration: 100, // 統一速度，放慢至約2倍
+    direction: "right", // 向右滾動
   },
   {
     id: "videos",
@@ -60,7 +62,7 @@ const SECTION_CONFIG = [
       ring: "from-orange-600 via-pink-600 to-red-600",
       border: "border-sky-400/60",
     },
-    duration: 56,
+    duration: 100, // 統一速度，放慢至約2倍
   },
 ];
 
@@ -262,9 +264,9 @@ function ShowcaseHeader({ title, description, href, accent }) {
             {description}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-medium text-white/60 group-hover:text-white transition-colors sm:mt-0 mt-2">
+        <div className="flex items-center gap-3 text-lg sm:text-xl md:text-2xl font-bold text-white group-hover:text-white/90 transition-colors sm:mt-0 mt-2">
           <span>前往專區</span>
-          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
+          <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 group-hover:translate-x-1 transition-transform" />
         </div>
       </div>
     </Link>
@@ -447,7 +449,22 @@ function VideoShowcaseCard({ item, onSelect }) {
   );
 }
 
-function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href }) {
+function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, direction = "left" }) {
+  const trackRef = useRef(null);
+  const animationDelayRef = useRef(0); // 动画延迟（秒）
+  const scrollOffsetRef = useRef(0); // 手动滚动偏移量（像素）
+  const animationRef = useRef(null);
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      if (animationRef.current) {
+        clearTimeout(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, []);
+
   if (loading) {
     return <ShowcaseSkeletonRow accent={accent} />;
   }
@@ -457,14 +474,127 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href })
   }
 
   const marqueeItems = items.length >= 6 ? [...items, ...items] : [...items];
+  const trackClass = direction === "right" ? "marquee-track-right" : "marquee-track";
+
+  // 点击按钮滚动：通过 CSS 变量调整 transform，叠加在无缝循环动画上
+  const scroll = (dir) => {
+    if (!trackRef.current) return;
+    
+    const track = trackRef.current;
+    const trackWidth = track.scrollWidth / 2;
+    
+    // 计算滚动距离（每个卡片宽度 + gap）
+    const cardWidth = 256; // w-64 = 16rem = 256px
+    const gap = 16; // gap-4 = 1rem = 16px
+    const scrollAmount = cardWidth + gap;
+    
+    // 确定滚动方向
+    // 左按钮 = 向左移动（scrollOffset 减少），右按钮 = 向右移动（scrollOffset 增加）
+    const scrollDelta = dir === "left" ? -scrollAmount : scrollAmount;
+    
+    // 更新滚动偏移量
+    scrollOffsetRef.current += scrollDelta;
+    
+    // 将偏移量归一化到 [-trackWidth, 0) 范围内，确保无缝循环
+    let normalizedOffset = scrollOffsetRef.current;
+    if (normalizedOffset < -trackWidth) {
+      // 超出下界：调整到等效位置
+      normalizedOffset = normalizedOffset % trackWidth;
+      if (normalizedOffset > 0) {
+        normalizedOffset -= trackWidth;
+      }
+    } else if (normalizedOffset > 0) {
+      // 超出上界：调整到等效位置
+      normalizedOffset = normalizedOffset % trackWidth;
+      if (normalizedOffset > 0) {
+        normalizedOffset -= trackWidth;
+      }
+    }
+    
+    // 更新 CSS 变量，transform 会叠加在动画上
+    track.style.setProperty("--scroll-offset", `${normalizedOffset}px`);
+    scrollOffsetRef.current = normalizedOffset;
+    
+    console.log(`Scrolling ${dir}, offset: ${scrollOffsetRef.current}px, delta: ${scrollDelta}px`);
+    
+    // 清除之前的延迟恢复（不再自动恢复，让动画和偏移量保持叠加状态）
+    if (animationRef.current) {
+      clearTimeout(animationRef.current);
+      animationRef.current = null;
+    }
+  };
+
+  const handleMouseEnter = () => {
+    if (trackRef.current) {
+      const track = trackRef.current;
+      // 暂停动画，允许手动控制
+      track.style.animationPlayState = "paused";
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (!trackRef.current) return;
+    
+    const track = trackRef.current;
+    // 恢复动画，同时确保偏移量保持不变
+    track.style.animationPlayState = "running";
+    // 确保 --scroll-offset 变量仍然保持之前的值
+    if (scrollOffsetRef.current !== 0) {
+      track.style.setProperty("--scroll-offset", `${scrollOffsetRef.current}px`);
+    }
+  };
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-b-3xl border-t-0 border ${accent.border} bg-zinc-900/50`}
+      className={`group relative overflow-hidden rounded-b-3xl border-t-0 border ${accent.border} bg-transparent`}
     >
+      {/* 左按钮 */}
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log("Left button clicked");
+          scroll("left");
+        }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        className="absolute left-3 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 backdrop-blur-sm border border-white/30 shadow-xl hover:scale-110 active:scale-95 cursor-pointer"
+        aria-label="向左滚动"
+        type="button"
+      >
+        <ArrowRight className="w-6 h-6 rotate-180" />
+      </button>
+
+      {/* 右按钮 */}
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log("Right button clicked");
+          scroll("right");
+        }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        className="absolute right-3 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 backdrop-blur-sm border border-white/30 shadow-xl hover:scale-110 active:scale-95 cursor-pointer"
+        aria-label="向右滚动"
+        type="button"
+      >
+        <ArrowRight className="w-6 h-6" />
+      </button>
+
       <div
-        className="marquee-track flex gap-4 px-6 py-4 md:pr-10 md:py-6"
-        style={{ "--marquee-duration": `${duration}s` }}
+        ref={trackRef}
+        className={`${trackClass} flex gap-4 px-6 py-4 md:pr-10 md:py-6`}
+        style={{ 
+          "--marquee-duration": `${duration}s`,
+          "--scroll-offset": "0px"
+        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         {marqueeItems.map((item, index) => (
           <div
@@ -512,22 +642,22 @@ function HeroSection() {
               滑過即可瀏覽，點擊即可探索每個專區的完整體驗。
             </p>
           </div>
-          <div className="flex flex-shrink-0 gap-2">
+          <div className="flex flex-shrink-0 gap-3 sm:gap-4">
             <Link
               href="/images"
-              className="rounded-full border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition hover:border-white/40 hover:bg-white/20"
+              className="rounded-xl border-2 border-[#4a0ba8]/80 bg-gradient-to-r from-[#4a0ba8]/90 to-[#1a55d9]/90 px-6 py-3 text-base sm:text-lg font-bold text-white shadow-lg shadow-[#4a0ba8]/50 transition-all hover:border-[#4a0ba8] hover:from-[#4a0ba8] hover:to-[#1a55d9] hover:shadow-xl hover:shadow-[#4a0ba8]/70 hover:scale-105 active:scale-100"
             >
               圖片專區
             </Link>
             <Link
               href="/music"
-              className="rounded-full border border-purple-300/40 bg-purple-500/20 px-5 py-2 text-sm font-semibold text-purple-100 transition hover:border-purple-300/60 hover:bg-purple-500/30"
+              className="rounded-xl border-2 border-purple-400/80 bg-gradient-to-r from-indigo-600/90 via-purple-600/90 to-pink-600/90 px-6 py-3 text-base sm:text-lg font-bold text-white shadow-lg shadow-purple-600/50 transition-all hover:border-purple-400 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 hover:shadow-xl hover:shadow-purple-600/70 hover:scale-105 active:scale-100"
             >
               音樂專區
             </Link>
             <Link
               href="/videos"
-              className="rounded-full border border-sky-300/40 bg-sky-500/20 px-5 py-2 text-sm font-semibold text-sky-100 transition hover:border-sky-300/60 hover:bg-sky-500/30"
+              className="rounded-xl border-2 border-orange-400/80 bg-gradient-to-r from-orange-600/90 via-pink-600/90 to-red-600/90 px-6 py-3 text-base sm:text-lg font-bold text-white shadow-lg shadow-orange-600/50 transition-all hover:border-orange-400 hover:from-orange-600 hover:via-pink-600 hover:to-red-600 hover:shadow-xl hover:shadow-orange-600/70 hover:scale-105 active:scale-100"
             >
               影片專區
             </Link>
@@ -947,9 +1077,10 @@ const musicPreviewStateRef = useRef({
   );
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="min-h-screen bg-transparent text-zinc-100 relative">
+      <StarrySky />
       <HeroSection />
-      <main className="mx-auto flex max-w-[1536px] flex-col gap-16 px-6 py-16 sm:px-10 sm:py-20">
+      <main className="mx-auto flex max-w-[1536px] flex-col gap-16 px-6 py-16 sm:px-10 sm:py-20 bg-transparent">
         {SECTION_CONFIG.map((section) => {
           const data = sectionData[section.id] || {
             items: [],
@@ -981,6 +1112,7 @@ const musicPreviewStateRef = useRef({
                       duration={section.duration}
                       loading={data.loading}
                       href={section.href}
+                      direction={section.direction}
                     />
                   </div>
                 )}

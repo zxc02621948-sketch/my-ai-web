@@ -1,6 +1,7 @@
 // components/user/PowerCouponModal.jsx
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { notify } from '@/components/common/GlobalNotificationManager';
 
 export default function PowerCouponModal({ isOpen, onClose, userData }) {
   const [coupons, setCoupons] = useState([]);
@@ -39,14 +40,14 @@ export default function PowerCouponModal({ isOpen, onClose, userData }) {
       });
       
       if (res?.data?.success) {
-        alert('權力券使用成功！');
+        notify.success("成功", "權力券使用成功！");
         loadCoupons(); // 重新載入權力券
       } else {
-        alert(res?.data?.message || '使用失敗');
+        notify.error("使用失敗", res?.data?.message || "請稍後再試");
       }
     } catch (error) {
       console.error('使用權力券失敗:', error);
-      alert('使用失敗，請稍後再試');
+      notify.error("使用失敗", "請稍後再試");
     } finally {
       setUsingCoupon(null);
     }

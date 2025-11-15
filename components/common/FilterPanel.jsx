@@ -1,5 +1,6 @@
 // components/common/FilterPanel.jsx
 import CATEGORIES from "@/constants/categories";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function FilterPanel({
   levelFilters,
@@ -14,7 +15,7 @@ export default function FilterPanel({
 
   const handleLevelClick = (label) => {
     if (label === "18+ 圖片" && !currentUser) {
-      alert("請先登入才能查看 18+ 圖片");
+      notify.warning("提示", "請先登入才能查看 18+ 圖片");
       return;
     }
     toggleLevelFilter(label);

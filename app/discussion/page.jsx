@@ -127,7 +127,8 @@ export default function DiscussionPage() {
 
   // 刪除帖子
   const handleDelete = async (postId) => {
-    if (!confirm('確定要刪除此帖子嗎？')) return;
+    const confirmed = await notify.confirm("確認刪除", "確定要刪除此帖子嗎？");
+    if (!confirmed) return;
     
     try {
       const response = await fetch(`/api/discussion/posts/${postId}`, {

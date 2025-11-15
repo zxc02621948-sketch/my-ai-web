@@ -4,6 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import axios from "axios";
 import { Trash2 } from "lucide-react";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function NotificationList({
   notifications,
@@ -31,7 +32,8 @@ export default function NotificationList({
   };
 
   const handleDeleteRead = async () => {
-    if (!confirm("確定要刪除所有已讀通知嗎？")) return;
+    const confirmed = await notify.confirm("確認刪除", "確定要刪除所有已讀通知嗎？");
+    if (!confirmed) return;
     await axios.delete("/api/notifications/delete-read");
     const updated = notifications.filter((n) => !n.isRead);
     setNotifications(updated);

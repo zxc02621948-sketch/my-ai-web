@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function AdminPanel() {
   const [dryRun, setDryRun] = useState(true);
@@ -34,11 +35,11 @@ export default function AdminPanel() {
     });
 
     const data = await res.json();
-    alert(
-      data.success
-        ? `✅ 建立成功：${data.user.email}`
-        : `❌ 失敗：${data.message || data.error}`
-    );
+    if (data.success) {
+      notify.success("成功", `建立成功：${data.user.email}`);
+    } else {
+      notify.error("失敗", data.message || data.error);
+    }
   };
 
   // 給自己發送積分
@@ -54,15 +55,15 @@ export default function AdminPanel() {
       const data = await res.json();
       
       if (data.success) {
-        alert(`💰 成功獲得 ${pointsAmount} 積分！\n原積分: ${data.data.oldBalance}\n新積分: ${data.data.newBalance}`);
+        notify.success("成功", `成功獲得 ${pointsAmount} 積分！\n原積分: ${data.data.oldBalance}\n新積分: ${data.data.newBalance}`);
         // 刷新頁面以更新顯示
         window.location.reload();
       } else {
-        alert(`❌ 失敗：${data.message}`);
+        notify.error("失敗", data.message);
       }
     } catch (error) {
       console.error("發送積分失敗:", error);
-      alert(`❌ 發送失敗：${error.message}`);
+      notify.error("發送失敗", error.message);
     } finally {
       setPointsLoading(false);
     }
@@ -71,7 +72,7 @@ export default function AdminPanel() {
   // 發送積分給指定用戶
   const handleSendPoints = async () => {
     if (!targetUsername.trim()) {
-      alert("請輸入目標用戶名");
+      notify.warning("提示", "請輸入目標用戶名");
       return;
     }
 
@@ -82,7 +83,7 @@ export default function AdminPanel() {
       const userData = await userRes.json();
       
       if (!userData._id) {
-        alert(`❌ 找不到用戶：${targetUsername}`);
+        notify.error("錯誤", `找不到用戶：${targetUsername}`);
         setSendLoading(false);
         return;
       }
@@ -101,18 +102,16 @@ export default function AdminPanel() {
       const data = await res.json();
       
       if (data.success) {
-        alert(`✅ 成功發送 ${sendPointsAmount} 積分給 ${targetUsername}！\n` +
-              `原餘額：${data.data.targetUser.oldBalance}\n` +
-              `新餘額：${data.data.targetUser.newBalance}`);
+        notify.success("成功", `成功發送 ${sendPointsAmount} 積分給 ${targetUsername}！\n原餘額：${data.data.targetUser.oldBalance}\n新餘額：${data.data.targetUser.newBalance}`);
         // 清空輸入
         setTargetUsername("");
         setSendReason("");
       } else {
-        alert(`❌ 失敗：${data.message}`);
+        notify.error("失敗", data.message);
       }
     } catch (error) {
       console.error("發送積分錯誤:", error);
-      alert("發送積分時發生錯誤");
+      notify.error("錯誤", "發送積分時發生錯誤");
     } finally {
       setSendLoading(false);
     }
@@ -153,18 +152,18 @@ export default function AdminPanel() {
       const data = await res.json();
       setResult(data);
       if (!res.ok || data?.ok === false) {
-        alert(`❌ 執行失敗：${data?.message || "Unknown error"}`);
+        notify.error("執行失敗", data?.message || "Unknown error");
       } else {
         const mode = data?.mode === "missingOnly" ? "只補缺的" : "全部";
         const write = dryRun ? "（Dry-run：未寫入）" : "（已寫入）";
         const stats = data?.stats
           ? `平均 ${data.stats.avg}，最小 ${data.stats.min}，最大 ${data.stats.max}`
           : "";
-        alert(`✅ 重算完成：模式【${mode}】${write}\n掃描 ${data.totalScanned} 筆，更新 ${data.updated} 筆。\n${stats}`);
+        notify.success("重算完成", `模式【${mode}】${write}\n掃描 ${data.totalScanned} 筆，更新 ${data.updated} 筆。\n${stats}`);
       }
     } catch (e) {
       console.error("recompute error:", e);
-      alert("❌ 伺服器錯誤，請稍後再試");
+      notify.error("伺服器錯誤", "請稍後再試");
     } finally {
       setLoading(false);
     }
@@ -201,13 +200,13 @@ export default function AdminPanel() {
       const data = await res.json();
       setResult(data);
       if (!res.ok || data?.ok === false) {
-        alert(`❌ 執行失敗：${data?.message || "Unknown error"}`);
+        notify.error("執行失敗", data?.message || "Unknown error");
       } else {
-        alert(`✅ 熱門度重算完成：共掃描 ${data.total} 筆，更新 ${data.updated} 筆。`);
+        notify.success("重算完成", `熱門度重算完成：共掃描 ${data.total} 筆，更新 ${data.updated} 筆。`);
       }
     } catch (e) {
       console.error("recompute pop error:", e);
-      alert("❌ 伺服器錯誤，請稍後再試");
+      notify.error("伺服器錯誤", "請稍後再試");
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 function cx(...cls){ return cls.filter(Boolean).join(" "); }
 
@@ -69,7 +70,7 @@ function AdminComposeModal({ open, onClose, onSent }) {
 
   async function send() {
     if (!to.trim() || !subject.trim() || !body.trim()) {
-      alert("請填寫 收件者 / 主旨 / 內容");
+      notify.warning("提示", "請填寫 收件者 / 主旨 / 內容");
       return;
     }
     setBusy(true);
@@ -91,7 +92,7 @@ function AdminComposeModal({ open, onClose, onSent }) {
       onClose?.();        // 關閉彈窗
       window.dispatchEvent(new CustomEvent("inbox:refresh"));
     } catch (e) {
-      alert("❌ " + e.message);
+      notify.error("發送失敗", e.message);
     } finally {
       setBusy(false);
     }
@@ -275,7 +276,8 @@ export default function MessagesPage() {
   /** 封存（軟刪除）當前會話：只對自己隱藏 */
   async function archiveActive() {
     if (!activeId) return;
-    if (!confirm("確定要封存這個會話嗎？（只對你自己隱藏，可再恢復）")) return;
+    const confirmed = await notify.confirm("確認封存", "確定要封存這個會話嗎？（只對你自己隱藏，可再恢復）");
+    if (!confirmed) return;
 
     const res = await fetch("/api/messages/thread/archive", {
       method: "POST",
@@ -284,12 +286,12 @@ export default function MessagesPage() {
     });
     let j=null; try{ j=await res.json(); }catch{ j=null; }
     if (!res.ok || !j?.ok) {
-      alert("❌ 封存失敗：" + ((j && (j.error||j.message)) || `HTTP ${res.status}`));
+      notify.error("封存失敗", (j && (j.error||j.message)) || `HTTP ${res.status}`);
       return;
     }
     console.log("[archive] matched=", j?.matched, "modified=", j?.modified);
     if (!j?.modified) {
-      alert("⚠️ 封存 API 沒有任何訊息被更新（modified=0）。可能是 ID 沒對上或後端條件不完整。");
+      notify.warning("提示", "封存 API 沒有任何訊息被更新（modified=0）。可能是 ID 沒對上或後端條件不完整。");
     }
 
     setThreadArchived(true);
@@ -328,7 +330,7 @@ export default function MessagesPage() {
       });
       let j=null; try{ j=await res.json(); }catch{ j=null; }
       if (!res.ok || !j?.ok) {
-        alert("❌ " + ((j && (j.error||j.message)) || `HTTP ${res.status}`));
+        notify.error("發送失敗", (j && (j.error||j.message)) || `HTTP ${res.status}`);
         return;
       }
       setThread(prev => [...prev, j.message]);
@@ -345,7 +347,7 @@ export default function MessagesPage() {
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 0);
       window.dispatchEvent(new CustomEvent("inbox:refresh"));
     } catch (e) {
-      alert("❌ 發送失敗：" + e.message);
+      notify.error("發送失敗", e.message);
     }
   }
 

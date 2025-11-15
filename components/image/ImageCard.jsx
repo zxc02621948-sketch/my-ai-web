@@ -6,7 +6,8 @@ import NewBadge from "@/components/image/NewBadge";
 import FireEffect from "@/components/image/FireEffect";
 import VideoPreview from "@/components/video/VideoPreview";
 import MusicPreview from "@/components/music/MusicPreview";
-import { updateLikeCacheAndBroadcast } from "@/lib/likeSync"; 
+import { updateLikeCacheAndBroadcast } from "@/lib/likeSync";
+import { notify } from "@/components/common/GlobalNotificationManager"; 
 
 // ⬇️ 從 ObjectId 推回建立時間（備援）
 function getCreatedMsFromObjectId(id) {
@@ -112,7 +113,7 @@ export default function ImageCard({
       onLikeUpdate?.(rollbackImage);
       updateLikeCacheAndBroadcast(rollbackImage);
 
-      alert("愛心更新失敗");
+      notify.error("錯誤", "愛心更新失敗");
     } finally {
       // 防連點（保留你原本 1 秒解鎖）
       setTimeout(() => setIsProcessing(false), 1000);

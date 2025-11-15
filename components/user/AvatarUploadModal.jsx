@@ -4,6 +4,7 @@ import React, { useState, useCallback } from "react";
 import Cropper from "react-easy-crop";
 import { Slider } from "@mui/material";
 import { getCroppedImg } from "@/lib/cropImage";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function AvatarUploadModal({ 
   isOpen, 
@@ -49,7 +50,7 @@ export default function AvatarUploadModal({
       onClose();
     } catch (error) {
       console.error("處理圖片時發生錯誤:", error);
-      alert("處理圖片時發生錯誤，請重試");
+      notify.error("錯誤", "處理圖片時發生錯誤，請重試");
     }
   };
 

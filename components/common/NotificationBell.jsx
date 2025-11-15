@@ -5,6 +5,7 @@ import axios from "axios";
 import { Bell } from "lucide-react";
 import NotificationList from "./NotificationList";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function NotificationBell() {
   const { currentUser, unreadCounts, fetchUnreadCounts, updateUnreadCount } = useCurrentUser();
@@ -78,7 +79,7 @@ export default function NotificationBell() {
       }
     } catch (err) {
       console.warn("⚠️ 找不到該圖片，可能已被刪除");
-      alert("找不到該圖片，可能已被刪除");
+      notify.warning("提示", "找不到該圖片，可能已被刪除");
     }
   };
 

@@ -3,6 +3,7 @@ import { X, Trash2, Clipboard, Plus } from "lucide-react";
 import axios from "axios";
 import { GENRE_MAP } from "@/constants/musicCategories";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function MusicInfoBox({
   music,
@@ -111,19 +112,19 @@ export default function MusicInfoBox({
   // 加入播放清單
   const handleAddToPlaylist = async () => {
     if (!currentUser || !music?.musicUrl) {
-      alert("無法添加：缺少必要信息");
+      notify.warning("提示", "無法添加：缺少必要信息");
       return;
     }
 
     // 檢查是否已達上限
     if (playlist.length >= playlistMaxSize) {
-      alert(`播放清單已達上限（${playlistMaxSize} 首），請前往積分商店擴充`);
+      notify.warning("提示", `播放清單已達上限（${playlistMaxSize} 首），請前往積分商店擴充`);
       return;
     }
 
     // 檢查是否已在播放清單中
     if (isInPlaylist) {
-      alert("此音樂已在播放清單中");
+      notify.info("提示", "此音樂已在播放清單中");
       return;
     }
 
@@ -167,13 +168,13 @@ export default function MusicInfoBox({
         // ✅ 觸發播放清單變更事件，通知 MiniPlayer 重新載入
         window.dispatchEvent(new CustomEvent('playlistChanged'));
         
-        alert("✅ 已加入播放清單！");
+        notify.success("成功", "已加入播放清單！");
       } else {
-        alert(response.data.message || "加入播放清單失敗");
+        notify.error("失敗", response.data.message || "加入播放清單失敗");
       }
     } catch (error) {
       console.error("加入播放清單失敗:", error);
-      alert(error.response?.data?.message || "加入播放清單失敗，請重試");
+      notify.error("失敗", error.response?.data?.message || "加入播放清單失敗，請重試");
     } finally {
       setAddingToPlaylist(false);
     }
@@ -215,9 +216,14 @@ export default function MusicInfoBox({
                     ? "⚠️ 管理員權限：確定要刪除這首音樂嗎？此操作無法復原。"
                     : "確定要刪除這首音樂嗎？此操作無法復原。";
 
-                if (window.confirm(confirmMessage)) {
-                  onDelete(music._id);
-                }
+                notify.confirm(
+                  "確認刪除",
+                  confirmMessage
+                ).then((confirmed) => {
+                  if (confirmed) {
+                    onDelete(music._id);
+                  }
+                });
               }}
               className="p-2 hover:bg-red-600/20 rounded-lg transition-colors"
               title={isAdmin && !isOwner ? "管理員刪除音樂" : "刪除音樂"}

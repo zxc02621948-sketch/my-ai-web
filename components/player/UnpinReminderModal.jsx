@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useCurrentUser } from '@/contexts/CurrentUserContext';
+import { notify } from '@/components/common/GlobalNotificationManager';
 
 export default function UnpinReminderModal({ 
   pageUserId, 
@@ -64,7 +65,7 @@ export default function UnpinReminderModal({
       setIsOpen(false);
     } catch (error) {
       console.error('解除釘選失敗:', error);
-      alert('解除釘選失敗，請稍後再試');
+      notify.error('解除釘選失敗', '請稍後再試');
     }
   };
 

@@ -14,6 +14,7 @@ import {
 } from "@/components/context/FilterContext";
 import usePinnedPlayerBootstrap from "@/hooks/usePinnedPlayerBootstrap";
 import usePaginatedResource from "@/hooks/usePaginatedResource";
+import { audioManager } from "@/utils/audioManager";
 import {
   MUSIC_TYPE_MAP,
   MUSIC_LANGUAGES,
@@ -190,6 +191,34 @@ const MusicPage = () => {
   });
 
   const loadMoreRef = useRef(null);
+
+  // 當篩選條件變化時，清理所有正在播放的預覽
+  useEffect(() => {
+    // 停止所有正在播放的預覽音頻
+    if (typeof document !== "undefined") {
+      const allPreviews = document.querySelectorAll("audio[data-music-preview=\"true\"]");
+      allPreviews.forEach((audioElement) => {
+        if (audioElement && !audioElement.paused) {
+          try {
+            audioElement.pause();
+            audioElement.currentTime = 0;
+            audioElement.removeAttribute("data-music-preview");
+            if (audioManager && typeof audioManager.release === "function") {
+              audioManager.release(audioElement);
+            }
+            // 觸發事件通知組件停止預覽
+            audioElement.dispatchEvent(new CustomEvent("preview-stopped", { bubbles: true }));
+          } catch (err) {
+            console.warn("清理預覽失敗:", err);
+          }
+        }
+      });
+      // 強制清理 audioManager 狀態
+      audioManager.release();
+      // 觸發全局事件，通知所有 MusicPreview 組件檢查狀態
+      window.dispatchEvent(new CustomEvent("music-preview-switched"));
+    }
+  }, [ratingsKey, categoriesKey, typesKey, languagesKey, sort, searchQuery]);
 
   useEffect(() => {
     if (!isInitialized || !hasMore || loading || loadingMore) return;

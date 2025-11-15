@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -21,14 +22,14 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
-        alert("✅ 登入成功！");
+        notify.success("登入成功", "登入成功！");
         router.push("/"); // ✅ 登入成功後跳轉首頁
       } else {
-        alert(`❌ 登入失敗：${data.message}`);
+        notify.error("登入失敗", data.message);
       }
     } catch (err) {
       console.error("登入錯誤：", err);
-      alert("❌ 發生錯誤，請稍後再試");
+      notify.error("錯誤", "發生錯誤，請稍後再試");
     }
   };
 

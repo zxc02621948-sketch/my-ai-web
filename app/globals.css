@@ -290,10 +290,19 @@ input, textarea, select, button {
 /* ===== 全站共用：跑馬燈動畫 ===== */
 @keyframes marquee-scroll {
   0% {
-    transform: translateX(0);
+    transform: translateX(calc(0px + var(--scroll-offset, 0px)));
   }
   100% {
-    transform: translateX(-50%);
+    transform: translateX(calc(-50% + var(--scroll-offset, 0px)));
+  }
+}
+
+@keyframes marquee-scroll-right {
+  0% {
+    transform: translateX(calc(-50% + var(--scroll-offset, 0px)));
+  }
+  100% {
+    transform: translateX(calc(0px + var(--scroll-offset, 0px)));
   }
 }
 
@@ -303,19 +312,28 @@ input, textarea, select, button {
   will-change: transform;
 }
 
-.group:hover .marquee-track {
+.marquee-track-right {
+  width: max-content;
+  animation: marquee-scroll-right var(--marquee-duration, 40s) linear infinite;
+  will-change: transform;
+}
+
+.group:hover .marquee-track,
+.group:hover .marquee-track-right {
   animation-play-state: paused;
 }
 
 @media (max-width: 767px) {
-  .marquee-track {
+  .marquee-track,
+  .marquee-track-right {
     animation: none !important;
     transform: none !important;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track {
+  .marquee-track,
+  .marquee-track-right {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }

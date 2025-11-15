@@ -72,7 +72,7 @@ export default function BookmarksPage() {
     e.stopPropagation();
     
     if (!currentUser) {
-      alert('請先登入');
+      notify.warning("提示", "請先登入");
       return;
     }
     

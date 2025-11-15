@@ -1,5 +1,6 @@
 // components/common/MusicFilterPanel.jsx
 import { GENRE_MAP, MUSIC_GENRES } from "@/constants/musicCategories";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function MusicFilterPanel({
   levelFilters,
@@ -14,7 +15,7 @@ export default function MusicFilterPanel({
     e.preventDefault();
     e.stopPropagation();
     if (label === "18+ 音樂" && !currentUser) {
-      alert("請先登入才能查看 18+ 音樂");
+      notify.warning("提示", "請先登入才能查看 18+ 音樂");
       return;
     }
     toggleLevelFilter(label);

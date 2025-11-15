@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 const REASON_LABELS = {
   policy_violation: "站規違規",
@@ -67,7 +68,7 @@ export default function AdminWarningsPage() {
         setItems(j.items || []);
         setTotal(j.total || 0);
       } catch (e) {
-        alert(e.message || "載入失敗");
+        notify.error("載入失敗", e.message || "請稍後再試");
       } finally {
         setLoading(false);
       }
@@ -80,7 +81,8 @@ export default function AdminWarningsPage() {
   };
 
   async function revokeWarning(id) {
-    if (!confirm("確定要撤銷這則警告嗎？")) return;
+    const confirmed = await notify.confirm("確認撤銷", "確定要撤銷這則警告嗎？");
+    if (!confirmed) return;
     try {
       const r = await fetch(`/api/warnings/${id}`, {
         method: "PATCH",
@@ -92,14 +94,20 @@ export default function AdminWarningsPage() {
       if (!r.ok || j?.ok === false) throw new Error(j?.message || `HTTP ${r.status}`);
       refresh();
     } catch (e) {
-      alert(e.message || "撤銷失敗");
+      notify.error("撤銷失敗", e.message || "請稍後再試");
     }
   }
 
   // 直接新增警告（支援一次送多筆）
   async function createWarnings(times = 1) {
-    if (!email.trim()) return alert("請輸入 Email");
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) return alert("Email 格式不正確");
+    if (!email.trim()) {
+      notify.warning("提示", "請輸入 Email");
+      return;
+    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+      notify.warning("提示", "Email 格式不正確");
+      return;
+    }
     try {
       setLoading(true);
       const token = document.cookie.match(/token=([^;]+)/)?.[1];
@@ -120,12 +128,12 @@ export default function AdminWarningsPage() {
         const j = await r.json().catch(() => ({}));
         if (!r.ok || j?.ok === false) throw new Error(j?.message || `HTTP ${r.status}`);
       }
-      alert(`✅ 已新增 ${times} 次警告${times >= 3 ? "（應已觸發永久鎖）" : ""}`);
+      notify.success("成功", `已新增 ${times} 次警告${times >= 3 ? "（應已觸發永久鎖）" : ""}`);
       setCreateOpen(false);
       // 若你正在用 userId 過濾別人，可直接把搜尋改為該使用者（此步可選）
       refresh();
     } catch (e) {
-      alert(e.message || "新增失敗");
+      notify.error("新增失敗", e.message || "請稍後再試");
     } finally {
       setLoading(false);
     }
@@ -372,9 +380,14 @@ export default function AdminWarningsPage() {
                   className="px-3 py-2 rounded bg-rose-600 hover:bg-rose-500 disabled:opacity-50"
                   disabled={loading}
                   onClick={() => {
-                    if (confirm("確定要一次新增 3 支警告？（將可能直接觸發永久鎖）")) {
-                      createWarnings(3);
-                    }
+                    notify.confirm(
+                      "確認新增警告",
+                      "確定要一次新增 3 支警告？（將可能直接觸發永久鎖）"
+                    ).then((confirmed) => {
+                      if (confirmed) {
+                        createWarnings(3);
+                      }
+                    });
                   }}
                   title="一次新增三支（用於測試封鎖）"
                 >

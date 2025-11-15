@@ -21,7 +21,11 @@ export default function SettingsPage() {
 
   
   const cancelSubscription = async (subscriptionType, name) => {
-    if (!confirm(`確定要取消「${name}」訂閱嗎？\n\n⚠️ 取消後不會立即失效，您可以繼續使用到本期到期日。`)) {
+    const confirmed = await notify.confirm(
+      "確認取消訂閱",
+      `確定要取消「${name}」訂閱嗎？\n\n⚠️ 取消後不會立即失效，您可以繼續使用到本期到期日。`
+    );
+    if (!confirmed) {
       return;
     }
     

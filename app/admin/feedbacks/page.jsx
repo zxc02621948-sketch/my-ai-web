@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function FeedbackListPage() {
   const [feedbacks, setFeedbacks] = useState([]);
@@ -26,8 +27,8 @@ export default function FeedbackListPage() {
   }, []);
 
   const handleDelete = async (id) => {
-    const confirm = window.confirm("確定要刪除這筆回報嗎？");
-    if (!confirm) return;
+    const confirmed = await notify.confirm("確認刪除", "確定要刪除這筆回報嗎？");
+    if (!confirmed) return;
 
     try {
       const res = await fetch(`/api/delete-feedback/${id}`, {
@@ -37,10 +38,10 @@ export default function FeedbackListPage() {
       if (result.success) {
         setFeedbacks((prev) => prev.filter((fb) => fb._id !== id));
       } else {
-        alert("❌ 刪除失敗：" + result.error);
+        notify.error("刪除失敗", result.error);
       }
     } catch (err) {
-      alert("❌ 刪除時發生錯誤");
+      notify.error("錯誤", "刪除時發生錯誤");
     }
   };
 

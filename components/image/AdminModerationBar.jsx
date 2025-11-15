@@ -3,6 +3,7 @@
 
 import { useState, useMemo } from "react";
 import CATEGORIES from "@/constants/categories";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 // 🔧 只有「刪除」會顯示的理由選單（先保留一個正式代碼，避免超出後端支援）
 const DELETE_REASONS = [
@@ -34,11 +35,20 @@ export default function AdminModerationBar({ image, onDone }) {
   }, [image?.category]);
 
   async function submit() {
-    if (!image?._id) return alert("找不到圖片 ID");
+    if (!image?._id) {
+      notify.warning("提示", "找不到圖片 ID");
+      return;
+    }
 
     // 驗證
-    if (action === "reclassify" && !newCategory) return alert("請選擇新分類");
-    if (action === "rerate" && !newRating) return alert("請選擇新分級");
+    if (action === "reclassify" && !newCategory) {
+      notify.warning("提示", "請選擇新分類");
+      return;
+    }
+    if (action === "rerate" && !newRating) {
+      notify.warning("提示", "請選擇新分級");
+      return;
+    }
 
     // reasonCode：刪除用選單；其餘動作用固定代碼
     const reasonCode =
@@ -69,11 +79,11 @@ export default function AdminModerationBar({ image, onDone }) {
       });
       const data = await res.json();
       if (!res.ok || data?.ok === false) throw new Error(data?.message || "操作失敗");
-      alert(data.summary || "✅ 已完成");
+      notify.success("成功", data.summary || "已完成");
       onDone?.(data);
     } catch (e) {
       console.error(e);
-      alert("❌ 操作失敗：" + e.message);
+      notify.error("操作失敗", e.message || "請稍後再試");
     } finally {
       setLoading(false);
     }

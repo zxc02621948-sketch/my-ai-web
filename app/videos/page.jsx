@@ -10,6 +10,7 @@ import { usePlayer } from '@/components/context/PlayerContext';
 import { useFilterContext, labelToRating } from '@/components/context/FilterContext';
 import usePinnedPlayerBootstrap from '@/hooks/usePinnedPlayerBootstrap';
 import usePaginatedResource from '@/hooks/usePaginatedResource';
+import { notify } from '@/components/common/GlobalNotificationManager';
 
 const PAGE_SIZE = 20;
 
@@ -189,11 +190,11 @@ const VideosPage = () => {
       } else {
         const error = await response.json();
         console.error('❌ 刪除影片失敗:', error);
-        alert('刪除失敗：' + (error.error || '未知錯誤'));
+        notify.error('刪除失敗', error.error || '未知錯誤');
       }
     } catch (error) {
       console.error('❌ 刪除影片錯誤:', error);
-      alert('刪除失敗，請稍後再試');
+      notify.error('刪除失敗', '請稍後再試');
     }
   };
 

@@ -5,6 +5,7 @@ import { Dialog } from "@headlessui/react";
 import { X } from "lucide-react";
 import axios from "axios";
 import ForgotPasswordModal from "./ForgotPasswordModal";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function LoginModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -49,10 +50,10 @@ export default function LoginModal() {
   const handleResendVerification = async () => {
     try {
       await axios.post("/api/auth/resend-verification", { email });
-      alert("驗證信已重新寄出，請至信箱確認。");
+      notify.success("成功", "驗證信已重新寄出，請至信箱確認。");
       setCooldown(60); // 開始冷卻倒數
     } catch (err) {
-      alert("重新寄送驗證信失敗，請稍後再試。\n錯誤訊息：" + (err.response?.data?.message || "未知錯誤"));
+      notify.error("失敗", `重新寄送驗證信失敗，請稍後再試。\n錯誤訊息：${err.response?.data?.message || "未知錯誤"}`);
     }
   };
 

@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function PowerCouponButton({ imageId, imageTitle, onSuccess }) {
   const [userCoupons, setUserCoupons] = useState([]);
@@ -35,7 +36,7 @@ export default function PowerCouponButton({ imageId, imageTitle, onSuccess }) {
       });
 
       if (response.data.success) {
-        alert("權力券使用成功！圖片已重新獲得新圖加乘效果！");
+        notify.success("成功", "權力券使用成功！圖片已重新獲得新圖加乘效果！");
         setShowModal(false);
         if (onSuccess) onSuccess();
         // 重新獲取權力券列表
@@ -44,11 +45,11 @@ export default function PowerCouponButton({ imageId, imageTitle, onSuccess }) {
           setUserCoupons(couponsResponse.data.coupons);
         }
       } else {
-        alert(response.data.message || "使用失敗，請稍後再試。");
+        notify.error("使用失敗", response.data.message || "請稍後再試");
       }
     } catch (error) {
       console.error("使用權力券失敗:", error);
-      alert("使用失敗，請稍後再試。");
+      notify.error("使用失敗", "請稍後再試");
     } finally {
       setLoading(false);
     }

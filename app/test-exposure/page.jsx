@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function TestExposurePage() {
   const [userInfo, setUserInfo] = useState(null);
@@ -33,14 +34,14 @@ export default function TestExposurePage() {
       });
 
       if (response.data.success) {
-        alert("訂閱激活成功！已獲得曝光分數加成！");
+        notify.success("成功", "訂閱激活成功！已獲得曝光分數加成！");
         fetchUserInfo();
       } else {
-        alert(response.data.message || "訂閱激活失敗");
+        notify.error("激活失敗", response.data.message || "請稍後再試");
       }
     } catch (error) {
       console.error("訂閱激活失敗:", error);
-      alert("訂閱激活失敗，請稍後再試");
+      notify.error("激活失敗", "請稍後再試");
     } finally {
       setLoading(false);
     }
@@ -55,14 +56,14 @@ export default function TestExposurePage() {
       });
 
       if (response.data.success) {
-        alert("權力券購買成功！");
+        notify.success("成功", "權力券購買成功！");
         fetchUserInfo();
       } else {
-        alert(response.data.message || "購買失敗");
+        notify.error("購買失敗", response.data.message || "請稍後再試");
       }
     } catch (error) {
       console.error("購買失敗:", error);
-      alert("購買失敗，請稍後再試");
+      notify.error("購買失敗", "請稍後再試");
     } finally {
       setLoading(false);
     }

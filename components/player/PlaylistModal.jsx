@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import Modal from "@/components/common/Modal";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function PlaylistModal({
   isOpen,
@@ -36,15 +37,15 @@ export default function PlaylistModal({
   // 上傳 MP3 文件（私人使用，不公開）
   const handleUpload = async () => {
     if (!uploadFile) {
-      alert("請選擇音樂檔案");
+      notify.warning("提示", "請選擇音樂檔案");
       return;
     }
     if (!uploadTitle.trim()) {
-      alert("請輸入標題");
+      notify.warning("提示", "請輸入標題");
       return;
     }
     if (!canAddMore) {
-      alert(`播放清單已達上限（${maxItems} 首）`);
+      notify.warning("提示", `播放清單已達上限（${maxItems} 首）`);
       return;
     }
 
@@ -93,11 +94,11 @@ export default function PlaylistModal({
         setUploadTitle("");
         setUploadTags("");
       } else {
-        alert(response.data.error || "上傳失敗");
+        notify.error("上傳失敗", response.data.error || "請稍後再試");
       }
     } catch (error) {
       console.error("上傳失敗:", error);
-      alert(error.response?.data?.error || "上傳失敗，請重試");
+      notify.error("上傳失敗", error.response?.data?.error || "請重試");
     } finally {
       setUploading(false);
     }
@@ -134,7 +135,7 @@ export default function PlaylistModal({
       "audio/x-m4a",
     ];
     if (!validTypes.includes(selectedFile.type)) {
-      alert("❌ 只支持 MP3、WAV、FLAC、M4A 格式！");
+      notify.warning("文件格式不支持", "只支持 MP3、WAV、FLAC、M4A 格式！");
       e.target.value = "";
       return;
     }
@@ -142,9 +143,7 @@ export default function PlaylistModal({
     // 驗證檔案大小（10MB）
     const maxSize = 10 * 1024 * 1024;
     if (selectedFile.size > maxSize) {
-      alert(
-        `❌ 檔案過大！最大 10MB，當前：${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
-      );
+      notify.warning("文件太大", `最大 10MB，當前：${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`);
       e.target.value = "";
       return;
     }

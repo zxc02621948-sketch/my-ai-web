@@ -6,6 +6,7 @@ import { DEFAULT_AVATAR_IDS } from "@/lib/constants";
 import { Trash2, Reply, Flag } from "lucide-react";
 import ReportModal from "@/components/common/ReportModal";
 import NotificationModal from "@/components/common/NotificationModal";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function DiscussionCommentBox({ postId, currentUser, onCommentCountChange }) {
   const [comments, setComments] = useState([]);
@@ -139,7 +140,7 @@ export default function DiscussionCommentBox({ postId, currentUser, onCommentCou
 
   const handleSubmit = async () => {
     if (!currentUser) {
-      alert('請先登入');
+      notify.warning("提示", "請先登入");
       return;
     }
     
@@ -191,18 +192,19 @@ export default function DiscussionCommentBox({ postId, currentUser, onCommentCou
         setReplyTo(null);
         onCommentCountChange?.(comments.length + 1);
       } else {
-        alert(result.error || '評論失敗');
+        notify.error("評論失敗", result.error || "請稍後再試");
       }
     } catch (error) {
       console.error('評論錯誤:', error);
-      alert('評論失敗');
+      notify.error("評論失敗", "請稍後再試");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (commentId) => {
-    if (!confirm('確定要刪除此評論嗎？')) return;
+    const confirmed = await notify.confirm("確認刪除", "確定要刪除此評論嗎？");
+    if (!confirmed) return;
     
     try {
       const response = await fetch(`/api/discussion/comments/${commentId}`, {
@@ -215,11 +217,11 @@ export default function DiscussionCommentBox({ postId, currentUser, onCommentCou
         setComments(comments.filter(c => c._id !== commentId));
         onCommentCountChange?.(Math.max(0, comments.length - 1));
       } else {
-        alert(result.error || '刪除失敗');
+        notify.error("刪除失敗", result.error || "請稍後再試");
       }
     } catch (error) {
       console.error('刪除錯誤:', error);
-      alert('刪除失敗');
+      notify.error("刪除失敗", "請稍後再試");
     }
   };
 

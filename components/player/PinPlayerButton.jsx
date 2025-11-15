@@ -159,11 +159,10 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
       
       // 檢查是否需要訂閱
       if (error.response?.data?.needSubscription) {
-        const goToStore = confirm(
-          '釘選播放器需要訂閱才能使用。\n\n' +
-          '💰 每月僅需 200 積分（可通過互動免費獲得）\n' +
-          '✨ 累積制續費，剩餘時間會延長\n\n' +
-          '是否前往積分商店開通訂閱？'
+        const goToStore = await notify.confirm(
+          '需要訂閱',
+          '釘選播放器需要訂閱才能使用。\n\n💰 每月僅需 200 積分（可通過互動免費獲得）\n✨ 累積制續費，剩餘時間會延長\n\n是否前往積分商店開通訂閱？',
+          { confirmText: '前往商店', cancelText: '取消' }
         );
         
         if (goToStore) {
@@ -172,11 +171,10 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
       } 
       // 檢查是否需要續費
       else if (error.response?.data?.needRenew) {
-        const goToStore = confirm(
-          '您的釘選播放器訂閱已過期！\n\n' +
-          '💰 續費僅需 200 積分\n' +
-          '✨ 累積制續費，剩餘時間會延長\n\n' +
-          '是否前往積分商店續費？'
+        const goToStore = await notify.confirm(
+          '訂閱已過期',
+          '您的釘選播放器訂閱已過期！\n\n💰 續費僅需 200 積分\n✨ 累積制續費，剩餘時間會延長\n\n是否前往積分商店續費？',
+          { confirmText: '前往續費', cancelText: '取消' }
         );
         
         if (goToStore) {
@@ -242,8 +240,13 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         onMouseLeave={() => setShowTooltip(false)}
       >
         <button
-          onClick={() => {
-            if (confirm('釘選播放器需要訂閱才能使用。\n\n💰 每月僅需 200 積分（可通過互動免費獲得）\n✨ 累積制續費，剩餘時間會延長\n\n是否前往積分商店開通訂閱？')) {
+          onClick={async () => {
+            const goToStore = await notify.confirm(
+              '需要訂閱',
+              '釘選播放器需要訂閱才能使用。\n\n💰 每月僅需 200 積分（可通過互動免費獲得）\n✨ 累積制續費，剩餘時間會延長\n\n是否前往積分商店開通訂閱？',
+              { confirmText: '前往商店', cancelText: '取消' }
+            );
+            if (goToStore) {
               router.push('/store');
             }
           }}

@@ -113,13 +113,25 @@ export async function POST(request) {
     // 計算完整度分數
     const completenessScore = computeVideoCompleteness(metadata);
     
+    // ✅ 處理 tags：如果是字符串，則分割成數組（支援逗號、中文逗號和空格分隔）
+    let processedTags = [];
+    if (metadata.tags) {
+      if (typeof metadata.tags === 'string') {
+        // ✅ 支援逗號、中文逗號和空格分隔（與編輯功能一致）
+        processedTags = metadata.tags.split(/[,，\s]+/).map(t => t.trim()).filter(Boolean);
+      } else if (Array.isArray(metadata.tags)) {
+        // ✅ 如果已經是數組，直接使用
+        processedTags = metadata.tags.map(t => typeof t === 'string' ? t.trim() : String(t).trim()).filter(Boolean);
+      }
+    }
+    
     // 建立影片記錄
     const video = await Video.create({
       title: metadata.title,
       description: metadata.description,
       category: metadata.category,
       rating: metadata.rating,
-      tags: metadata.tags || [],
+      tags: processedTags,
       videoUrl: publicUrl,
       videoKey: key,
       thumbnailUrl,

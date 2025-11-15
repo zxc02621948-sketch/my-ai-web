@@ -49,13 +49,10 @@ const ContentMenuButtons = () => {
     router.push(path);
   };
 
-  const isActive = (itemPath) => {
-    return pathname.startsWith(itemPath);
-  };
-
-  // 過濾掉當前頁面對應的按鈕
+  // 過濾掉當前頁面對應的按鈕（只在完全匹配時隱藏，子路徑不隱藏）
   const filteredMenuItems = menuItems.filter((item) => {
-    return !pathname.startsWith(item.path); // 其他頁面不顯示對應的按鈕
+    // 完全匹配時才隱藏，例如 /images 匹配 /images，但 /images/create 不匹配 /images
+    return pathname !== item.path;
   });
 
   return (
@@ -73,10 +70,7 @@ const ContentMenuButtons = () => {
             transition-all active:translate-y-[1px] shrink-0 whitespace-nowrap text-xs md:text-sm
             bg-gradient-to-r ${item.gradient} text-white 
             shadow-[0_6px_20px_-6px_rgba(0,0,0,0.3)]
-            ${isActive(item.path)
-              ? 'ring-2 ring-white/70 shadow-[0_8px_24px_-6px_rgba(0,0,0,0.4)] brightness-110'
-              : 'opacity-90 hover:opacity-100 hover:shadow-[0_8px_24px_-6px_rgba(0,0,0,0.4)] hover:brightness-110'
-            }`}
+            opacity-90 hover:opacity-100 hover:shadow-[0_8px_24px_-6px_rgba(0,0,0,0.4)] hover:brightness-110`}
           title={item.label}
         >
           <span className="hidden md:inline text-sm md:text-lg">{item.icon}</span>

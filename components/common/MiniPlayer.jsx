@@ -1196,7 +1196,8 @@ export default function MiniPlayer() {
               data-no-drag="true"
               onClick={async (e) => {
                 e.stopPropagation();
-                if (confirm('確定要解除釘選嗎？')) {
+                const confirmed = await notify.confirm("確認解除釘選", "確定要解除釘選嗎？");
+                if (confirmed) {
                   try {
                     await axios.delete('/api/player/pin');
                     setIsPinned(false);

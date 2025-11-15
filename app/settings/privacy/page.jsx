@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { useRouter } from "next/navigation";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function PrivacySettingsPage() {
   const { currentUser } = useCurrentUser();
@@ -48,13 +49,13 @@ export default function PrivacySettingsPage() {
       });
 
       if (res.ok) {
-        alert("✅ 隱私設定已保存");
+        notify.success("成功", "隱私設定已保存");
       } else {
-        alert("❌ 保存失敗，請稍後再試");
+        notify.error("保存失敗", "請稍後再試");
       }
     } catch (error) {
       console.error("保存隱私設定錯誤：", error);
-      alert("❌ 發生錯誤");
+      notify.error("錯誤", "發生錯誤");
     } finally {
       setIsSaving(false);
     }

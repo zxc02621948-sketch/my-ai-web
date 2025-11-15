@@ -45,7 +45,7 @@ export default function AdminSuspensionsPage() {
         setItems(j.items || []);
         setTotal(j.total || 0);
       } catch (e) {
-        alert(e.message || "載入失敗");
+        notify.error("載入失敗", e.message || "請稍後再試");
       } finally {
         setLoading(false);
       }
@@ -58,7 +58,8 @@ export default function AdminSuspensionsPage() {
   };
 
   async function unlockUser(userId) {
-    if (!confirm("確定要解鎖這個帳號嗎？")) return;
+    const confirmed = await notify.confirm("確認解鎖", "確定要解鎖這個帳號嗎？");
+    if (!confirmed) return;
     try {
       const r = await fetch(`/api/admin/suspensions/${userId}`, {
         method: "PATCH",
@@ -69,7 +70,7 @@ export default function AdminSuspensionsPage() {
       if (!r.ok || j?.ok === false) throw new Error(j?.message || `HTTP ${r.status}`);
       refresh();
     } catch (e) {
-      alert(e.message || "解鎖失敗");
+      notify.error("解鎖失敗", e.message || "請稍後再試");
     }
   }
 

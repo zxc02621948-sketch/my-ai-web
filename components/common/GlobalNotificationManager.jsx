@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import NotificationModal from "./NotificationModal";
+import ConfirmModal from "./ConfirmModal";
 
 let globalNotificationManager = null;
+let globalConfirmManager = null;
 
 export class NotificationManager {
   constructor() {
@@ -46,13 +48,47 @@ export class NotificationManager {
   }
 }
 
+export class ConfirmManager {
+  constructor() {
+    this.listeners = [];
+    this.currentConfirm = null;
+    this.resolveCallback = null;
+  }
+
+  subscribe(callback) {
+    this.listeners.push(callback);
+    return () => {
+      this.listeners = this.listeners.filter(listener => listener !== callback);
+    };
+  }
+
+  confirm(confirmData) {
+    return new Promise((resolve) => {
+      this.resolveCallback = resolve;
+      this.currentConfirm = confirmData;
+      this.listeners.forEach(callback => callback(confirmData));
+    });
+  }
+
+  resolve(value) {
+    if (this.resolveCallback) {
+      this.resolveCallback(value);
+      this.resolveCallback = null;
+    }
+    this.currentConfirm = null;
+    this.listeners.forEach(callback => callback(null));
+  }
+}
+
 // 全局實例
 if (typeof window !== "undefined") {
   globalNotificationManager = new NotificationManager();
+  globalConfirmManager = new ConfirmManager();
 }
 
 export default function GlobalNotificationManager() {
   const [notification, setNotification] = useState(null);
+  const [confirm, setConfirm] = useState(null);
 
   useEffect(() => {
     if (globalNotificationManager) {
@@ -61,21 +97,48 @@ export default function GlobalNotificationManager() {
     }
   }, []);
 
+  useEffect(() => {
+    if (globalConfirmManager) {
+      const unsubscribe = globalConfirmManager.subscribe(setConfirm);
+      return unsubscribe;
+    }
+  }, []);
+
   return (
-    <NotificationModal
-      isOpen={!!notification}
-      onClose={() => {
-        setNotification(null);
-        if (globalNotificationManager) {
-          globalNotificationManager.close();
-        }
-      }}
-      type={notification?.type}
-      title={notification?.title}
-      message={notification?.message}
-      autoClose={notification?.autoClose}
-      autoCloseDelay={notification?.autoCloseDelay}
-    />
+    <>
+      <NotificationModal
+        isOpen={!!notification}
+        onClose={() => {
+          setNotification(null);
+          if (globalNotificationManager) {
+            globalNotificationManager.close();
+          }
+        }}
+        type={notification?.type}
+        title={notification?.title}
+        message={notification?.message}
+        autoClose={notification?.autoClose}
+        autoCloseDelay={notification?.autoCloseDelay}
+      />
+      <ConfirmModal
+        isOpen={!!confirm}
+        onConfirm={() => {
+          if (globalConfirmManager) {
+            globalConfirmManager.resolve(true);
+          }
+        }}
+        onCancel={() => {
+          if (globalConfirmManager) {
+            globalConfirmManager.resolve(false);
+          }
+        }}
+        title={confirm?.title}
+        message={confirm?.message}
+        confirmText={confirm?.confirmText}
+        cancelText={confirm?.cancelText}
+        confirmType={confirm?.confirmType}
+      />
+    </>
   );
 }
 
@@ -100,5 +163,18 @@ export const notify = {
     if (globalNotificationManager) {
       globalNotificationManager.info(title, message, options);
     }
+  },
+  // 確認對話框 - 返回 Promise<boolean>
+  confirm: (title, message, options = {}) => {
+    if (globalConfirmManager) {
+      return globalConfirmManager.confirm({
+        title,
+        message,
+        confirmText: options.confirmText || "確定",
+        cancelText: options.cancelText || "取消",
+        confirmType: options.confirmType || "danger"
+      });
+    }
+    return Promise.resolve(false);
   }
 };

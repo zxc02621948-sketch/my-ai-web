@@ -1004,7 +1004,7 @@ export default function UploadStep2({
       }
 
       if (!storedMessage) {
-        alert(`✅ 上傳成功！\n\n${successBody}`);
+        notify.success("上傳成功", successBody);
       }
 
       setStep(1);
@@ -1012,7 +1012,7 @@ export default function UploadStep2({
       location.reload();
     } catch (err) {
       console.error("upload failed", err);
-      alert("上傳失敗，請稍後再試！");
+      notify.error("上傳失敗", "請稍後再試！");
       if (imageId) {
         try {
           await fetch(`/api/delete-cloudflare-image?id=${imageId}`, { method: "DELETE" });
@@ -1082,7 +1082,7 @@ export default function UploadStep2({
               // 验证文件类型
               const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
               if (!validTypes.includes(f.type.toLowerCase())) {
-                alert('❌ 只支持 PNG、JPG、JPEG、WebP 格式的图片！');
+                notify.warning("文件格式不支持", "只支持 PNG、JPG、JPEG、WebP 格式的图片！");
                 e.target.value = ''; // 清空选择
                 return;
               }
@@ -1090,7 +1090,7 @@ export default function UploadStep2({
               // 验证文件大小（最大 20MB）
               const maxSize = 20 * 1024 * 1024; // 20MB
               if (f.size > maxSize) {
-                alert(`❌ 文件太大！最大支持 20MB，当前文件: ${(f.size / 1024 / 1024).toFixed(2)}MB`);
+                notify.warning("文件太大", `最大支持 20MB，当前文件: ${(f.size / 1024 / 1024).toFixed(2)}MB`);
                 e.target.value = ''; // 清空选择
                 return;
               }
@@ -1656,9 +1656,9 @@ Steps: 30, Sampler: Euler a, CFG scale: 7, Seed: 12345, Size: 768x1024, Clip ski
                       const parsed = parseA1111Parameters(pasteInfo);
                       if (parsed) {
                         applyParsed(parsed);
-                        alert("已解析並填入欄位");
+                        notify.success("成功", "已解析並填入欄位");
                       } else {
-                        alert("解析失敗，請確認格式。");
+                        notify.error("解析失敗", "請確認格式。");
                       }
                       scrollAreaRef.current?.scrollTo({ top: 0, behavior: "smooth" });
                     }}

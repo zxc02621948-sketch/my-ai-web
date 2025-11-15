@@ -10,6 +10,7 @@ import AuthorCard from "@/components/discussion/AuthorCard";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import ReportModal from "@/components/common/ReportModal";
 import NotificationModal from "@/components/common/NotificationModal";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -47,7 +48,7 @@ export default function PostDetailPage() {
         if (result.success) {
           setPost(result.data);
         } else {
-          alert(result.error || '載入失敗');
+          notify.error("載入失敗", result.error || "請稍後再試");
           router.push('/discussion');
         }
       })
@@ -74,7 +75,7 @@ export default function PostDetailPage() {
 
   const handleLike = async () => {
     if (!currentUser) {
-      alert('請先登入');
+      notify.warning("提示", "請先登入");
       return;
     }
     
@@ -95,7 +96,7 @@ export default function PostDetailPage() {
 
   const handleBookmark = async () => {
     if (!currentUser) {
-      alert('請先登入');
+      notify.warning("提示", "請先登入");
       return;
     }
     
@@ -118,14 +119,15 @@ export default function PostDetailPage() {
     const url = window.location.href;
     try {
       await navigator.clipboard.writeText(url);
-      alert('鏈接已複製到剪貼板！');
+      notify.success("成功", "鏈接已複製到剪貼板！");
     } catch (error) {
-      alert('複製失敗');
+      notify.error("複製失敗", "請稍後再試");
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm('確定要刪除此帖子嗎？')) return;
+    const confirmed = await notify.confirm("確認刪除", "確定要刪除此帖子嗎？");
+    if (!confirmed) return;
     
     try {
       const response = await fetch(`/api/discussion/posts/${params.id}`, {
@@ -135,14 +137,14 @@ export default function PostDetailPage() {
       const result = await response.json();
       
       if (result.success) {
-        alert('帖子已刪除');
+        notify.success("成功", "帖子已刪除");
         router.push('/discussion');
       } else {
-        alert(result.error || '刪除失敗');
+        notify.error("刪除失敗", result.error || "請稍後再試");
       }
     } catch (error) {
       console.error('刪除錯誤:', error);
-      alert('刪除失敗');
+      notify.error("刪除失敗", "請稍後再試");
     }
   };
 

@@ -19,6 +19,7 @@ import PowerCouponModal from "@/components/user/PowerCouponModal";
 import { usePlayer } from "@/components/context/PlayerContext";
 import UnpinReminderModal from "@/components/player/UnpinReminderModal";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { notify } from "@/components/common/GlobalNotificationManager";
 // 重複 import 修正：axios 已在檔案頂部引入
 
 const labelToRating = {
@@ -1145,11 +1146,11 @@ export default function UserProfilePage() {
                 } else {
                   const error = await response.json();
                   console.error('❌ 刪除音樂失敗:', error);
-                  alert('刪除失敗：' + (error.error || '未知錯誤'));
+                  notify.error('刪除失敗', error.error || '未知錯誤');
                 }
               } catch (error) {
                 console.error('❌ 刪除音樂錯誤:', error);
-                alert('刪除失敗，請稍後再試');
+                notify.error('刪除失敗', '請稍後再試');
               }
             }}
             canEdit={currentUser && selectedMusic?.author?._id && String(currentUser._id) === String(selectedMusic.author._id)}
@@ -1247,11 +1248,11 @@ export default function UserProfilePage() {
                   } else {
                     const error = await response.json();
                     console.error('❌ 刪除影片失敗:', error);
-                    alert('刪除失敗：' + (error.error || '未知錯誤'));
+                    notify.error('刪除失敗', error.error || '未知錯誤');
                   }
                 } catch (error) {
                   console.error('❌ 刪除影片錯誤:', error);
-                  alert('刪除失敗，請稍後再試');
+                  notify.error('刪除失敗', '請稍後再試');
                 }
               }}
               canEdit={currentUser && selectedImage?.author?._id && String(currentUser._id) === String(selectedImage.author._id)}

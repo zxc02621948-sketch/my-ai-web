@@ -7,6 +7,7 @@ import { Slider } from "@mui/material";
 import Image from "next/image";
 import AvatarFrame from "@/components/common/AvatarFrame";
 import FrameTierSelector from "./FrameTierSelector";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function AvatarSelectorModal({ 
   isOpen, 
@@ -61,7 +62,7 @@ export default function AvatarSelectorModal({
       onClose();
     } catch (error) {
       console.error("處理圖片時發生錯誤:", error);
-      alert("處理圖片時發生錯誤，請重試");
+      notify.error("錯誤", "處理圖片時發生錯誤，請重試");
     }
   };
 

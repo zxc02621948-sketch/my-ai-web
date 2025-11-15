@@ -9,6 +9,7 @@ import DesktopRightPane from "@/components/image/DesktopRightPane";
 import axios from "axios";
 import { getLikesFromCache } from "@/lib/likeSync";
 import EditImageModal from "@/components/image/EditImageModal"; // ← 你的編輯彈窗
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 const getOwnerId = (img) => {
   if (!img) return null;
@@ -255,7 +256,8 @@ export default function ImageModal({
 
   // 刪除圖片（作者本人）
   const handleDelete = async (id) => {
-    if (!window.confirm("你確定要刪除這張圖片嗎？")) return;
+    const confirmed = await notify.confirm("確認刪除", "你確定要刪除這張圖片嗎？");
+    if (!confirmed) return;
     try {
       const res = await fetch("/api/delete-image", {
         method: "DELETE",
@@ -263,12 +265,12 @@ export default function ImageModal({
         body: JSON.stringify({ imageId: id }),
       });
       if (!res.ok) throw new Error("刪除失敗");
-      alert("圖片刪除成功！");
+      notify.success("成功", "圖片刪除成功！");
       window.location.reload();
       onClose?.();
     } catch (err) {
       console.error("刪除圖片錯誤：", err);
-      alert("刪除失敗，請稍後再試。");
+      notify.error("刪除失敗", "請稍後再試。");
     }
   };
 
@@ -287,13 +289,13 @@ export default function ImageModal({
       });
       
       if (!res?.data?.success) {
-        alert('獲取權力券失敗');
+        notify.error('錯誤', '獲取權力券失敗');
         return;
       }
       
       const coupons = res.data.coupons || [];
       if (coupons.length === 0) {
-        alert('你沒有可用的權力券！請先到積分商店購買。');
+        notify.warning('提示', '你沒有可用的權力券！請先到積分商店購買。');
         return;
       }
       
@@ -303,14 +305,14 @@ export default function ImageModal({
       setIsPowerCouponModalOpen(true);
     } catch (error) {
       console.error('獲取權力券失敗:', error);
-      alert('獲取權力券失敗，請稍後再試');
+      notify.error('錯誤', '獲取權力券失敗，請稍後再試');
     }
   };
 
   // 確認使用權力券
   const confirmUseCoupon = async () => {
     if (!selectedCouponId) {
-      alert('請選擇要使用的權力券');
+      notify.warning('提示', '請選擇要使用的權力券');
       return;
     }
     
@@ -324,16 +326,16 @@ export default function ImageModal({
       });
       
       if (useRes?.data?.success) {
-        alert('權力券使用成功！圖片曝光度已提升。');
+        notify.success('成功', '權力券使用成功！圖片曝光度已提升。');
         setIsPowerCouponModalOpen(false);
         // 刷新圖片數據
         window.location.reload();
       } else {
-        alert(useRes?.data?.message || '使用失敗');
+        notify.error('使用失敗', useRes?.data?.message || '請稍後再試');
       }
     } catch (error) {
       console.error('使用權力券失敗:', error);
-      alert('使用失敗，請稍後再試');
+      notify.error('使用失敗', '請稍後再試');
     } finally {
       setIsUsingCoupon(false);
     }

@@ -2,6 +2,7 @@ import { useRef, useState, useMemo, useEffect } from "react";
 import axios from "axios";
 import { X, Trash2, Download, Clipboard, Pencil, AlertTriangle, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 // —— JSON 工具：最小化 & 精簡（去私密路徑、移除 base64 影像）——
 function minifyJson(text) {
@@ -154,7 +155,7 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
       );
     } catch (err) {
       setIsFollowing((prev) => !prev); // 失敗回滾
-      alert(err?.response?.data?.message || err?.message || "追蹤操作失敗");
+      notify.error("錯誤", err?.response?.data?.message || err?.message || "追蹤操作失敗");
     } finally {
       setFollowLoading(false);
     }
@@ -172,11 +173,11 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
   const handleReportSubmit = async () => {
     if (!image?._id) return;
     if (currentUser && String(currentUser._id) === String(image.user?._id)) {
-      alert("不能檢舉自己的作品");
+      notify.warning("提示", "不能檢舉自己的作品");
       return;
     }
     if (reportType === "other" && !reportMsg.trim()) {
-      alert("請填寫說明");
+      notify.warning("提示", "請填寫說明");
       return;
     }
     setReportLoading(true);
@@ -189,29 +190,29 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j?.ok) throw new Error(j?.message || `HTTP ${res.status}`);
-      alert("已收到你的檢舉，感謝協助！");
+      notify.success("成功", "已收到你的檢舉，感謝協助！");
       setShowReport(false);
       setReportType("category_wrong");
       setReportMsg("");
     } catch (e) {
-      alert(e.message || "提交失敗");
+      notify.error("提交失敗", e.message || "請稍後再試");
     } finally {
       setReportLoading(false);
     }
   };
 
   const handleDelete = async () => {
-    const confirmed = window.confirm("你確定要刪除這張圖片嗎？");
+    const confirmed = await notify.confirm("確認刪除", "你確定要刪除這張圖片嗎？");
     if (!confirmed) return;
 
     if (!image || !image._id) {
-      alert("找不到圖片資訊，無法刪除！");
+      notify.error("錯誤", "找不到圖片資訊，無法刪除！");
       return;
     }
 
     const token = document.cookie.match(/(?:^|;\s*)token=([^;]+)/)?.[1];
     if (!token) {
-      alert("未登入或憑證過期，請先登入。");
+      notify.warning("提示", "未登入或憑證過期，請先登入。");
       return;
     }
 
@@ -228,17 +229,17 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data?.ok) {
-        alert("圖片刪除成功！");
+        notify.success("成功", "圖片刪除成功！");
         onClose?.();
         window.scrollTo(0, 0);
         setTimeout(() => window.location.reload(), 50);
       } else {
         console.warn("刪除回應：", data);
-        alert(`刪除失敗：${data?.error || res.statusText || "請稍後再試"}`);
+        notify.error("刪除失敗", data?.error || res.statusText || "請稍後再試");
       }
     } catch (err) {
       console.error("❌ 刪除圖片失敗", err);
-      alert("刪除失敗，請稍後再試。");
+      notify.error("刪除失敗", "請稍後再試。");
     }
   };
 

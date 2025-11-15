@@ -273,6 +273,38 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     };
   }, []);
 
+  // 監聽全局預覽切換事件，檢查自己的音頻狀態並更新
+  useEffect(() => {
+    const handlePreviewSwitch = () => {
+      // 使用 setTimeout 確保在停止其他預覽的操作完成後再檢查
+      setTimeout(() => {
+        const audio = audioRef.current;
+        // 檢查音頻是否已被停止（沒有 data-music-preview 屬性或已暫停）
+        if (audio && (audio.paused || !audio.hasAttribute("data-music-preview"))) {
+          // 音頻已被停止，更新組件狀態
+          if (isPlayingRef.current || isPlaying) {
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+            isStartingRef.current = false;
+            detachTimeUpdate();
+            // 清理相關狀態
+            playEndTime.current = null;
+            audioPlayStartTimeRef.current = null;
+            playStartTimeRef.current = null;
+            lastPlayTimeRef.current = 0;
+            hasInitializedRef.current = false;
+            setPlayStartTime(null);
+          }
+        }
+      }, 50); // 短暫延遲確保狀態更新完成
+    };
+
+    window.addEventListener("music-preview-switched", handlePreviewSwitch);
+    return () => {
+      window.removeEventListener("music-preview-switched", handlePreviewSwitch);
+    };
+  }, [isPlaying]);
+
   // ✅ 監聽播放器播放狀態變化，記錄播放/暫停
   useEffect(() => {
     // 監聽播放器狀態變化事件（用戶操作）
@@ -339,7 +371,17 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   // 當 music 變化時，重置顯示時長並停止當前播放
   useEffect(() => {
     setDisplayDuration(music.duration || 0);
-    stopPreview({ restore: false });
+    
+    // 檢查是否有正在播放的預覽
+    if (isPlayingRef.current || isPlaying || audioRef.current?.hasAttribute("data-music-preview")) {
+      stopPreview({ restore: false });
+      
+      // 確保 audioManager 狀態被正確清理
+      // 如果當前音頻不是 audioManager 管理的音頻，強制清理 audioManager
+      if (audioRef.current && audioManager.getCurrentAudio() !== audioRef.current) {
+        audioManager.release(); // 強制釋放所有音頻
+      }
+    }
   }, [music._id, music.duration]);
 
 
@@ -370,11 +412,12 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   const handleMouseLeave = () => {
     if (!isMobile) {
       const musicId = music?._id?.substring(0, 8) || 'unknown';
-      // 離開 hover，停止預覽
+      // 離開 hover，只更新 hover 狀態，不停止預覽播放
       setIsHovered(false);
-      if (isPlayingRef.current || isPlaying) {
-        stopPreview({ restore: true });
-      }
+      // 移除停止預覽的邏輯，讓預覽播放繼續直到完成或手動停止
+      // if (isPlayingRef.current || isPlaying) {
+      //   stopPreview({ restore: true });
+      // }
     }
   };
 
@@ -407,14 +450,19 @@ const MusicPreview = ({ music, className = "", onClick }) => {
             try {
               audioElement.pause();
               audioElement.currentTime = 0;
+              audioElement.removeAttribute("data-music-preview");
               if (audioManager && typeof audioManager.release === "function") {
                 audioManager.release(audioElement);
               }
+              // 觸發事件通知其他組件停止預覽
+              audioElement.dispatchEvent(new CustomEvent("preview-stopped", { bubbles: true }));
             } catch (err) {
               console.warn("停止其他預覽失敗:", err);
             }
           }
         });
+        // 觸發全局事件，通知所有 MusicPreview 組件檢查狀態
+        window.dispatchEvent(new CustomEvent("music-preview-switched"));
       }
     } catch (err) {
       console.warn("處理預覽切換時出錯:", err);

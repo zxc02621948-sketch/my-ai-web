@@ -5,17 +5,57 @@ import Link from "next/link";
 const MUSIC_PLATFORMS = [
   {
     id: "suno",
-    name: "Suno.ai",
-    description: "（待補）主打歌詞驅動的 AI 音樂平台。",
-    pricing: "（待補）定價與免費額度說明",
-    guidePoints: [
-      "如何建立帳號與初次設定（待補）",
-      "生成歌曲的步驟流程（待補）",
-      "匯出與授權須知（待補）",
-    ],
+    name: "🚀 推薦 AI 音樂創作平台：Suno AI",
+    description: "目前歌曲品質、樂器層次、完整性與可編輯能力最強的平台之一。支援完整歌曲創作，並提供專業工作流程等級的進階工具。",
+    features: {
+      title: "✨ Suno 功能亮點",
+      items: [
+        "生成完整歌曲（Verse / Chorus / Bridge）",
+        "自然人聲、多種歌手聲線可選",
+        "可用多種語言自然演唱（中文 / 英文 / 日文 / 韓文 / 台語）",
+        "多樂器層次與高品質混音",
+        "可延長歌曲、替換段落、續寫與細節修正",
+        "內建線上編輯器",
+        "可分離人聲、可分軌分離所有樂器",
+        "可單獨下載各樂器音軌，支援混音與二次製作",
+        "支援下載 MP3 / WAV / MV 音訊視覺化影片",
+        "支援分享、重製與多版本對比",
+      ],
+    },
+    formats: {
+      title: "🎧 下載格式與輸出能力",
+      items: [
+        { name: "MP3", supported: true },
+        { name: "WAV", supported: true },
+        { name: "MV 視覺化影片輸出", supported: true },
+        { name: "分軌下載（Drums / Bass / Guitar / Vocal / etc）", supported: true },
+        { name: "單獨人聲 / 伴奏", supported: true },
+        { name: "STEM 多軌混音", supported: true },
+      ],
+    },
+    recommendations: {
+      title: "🥁 功能推薦給誰？",
+      items: [
+        { user: "想快速完成完整歌曲", reason: "生成快速、可修正、可續寫" },
+        { user: "影片配樂製作者", reason: "可下載無人聲版、可依畫面延長" },
+        { user: "Vtuber / 實況主 / 配音者", reason: "可自製主題曲與背景音樂" },
+        { user: "音樂製作人", reason: "可分軌混音、可做二次創作" },
+      ],
+    },
+    pricing: {
+      title: "💰 訂閱成本與產能",
+      items: [
+        { plan: "月訂閱", price: "約 10 美金 / 月", capacity: "約 500 首歌曲份額（含完整版續寫能力）" },
+        { plan: "免費方案", price: "提供少量測試", capacity: "生成次數與功能受限" },
+      ],
+    },
     links: [
-      { label: "官方網站", href: "https://suno.ai" },
+      { label: "🔗 前往 Suno AI 創作", href: "https://suno.ai" },
     ],
+    cta: {
+      title: "🎶 立即開始 AI 音樂創作",
+      description: "點擊前往 Suno AI，開始你的第一首 AI 歌曲👇",
+    },
   },
   {
     id: "udio",
@@ -62,100 +102,281 @@ export default function MusicCreationHubPage() {
           </h1>
           <p className="max-w-3xl text-sm text-zinc-300 sm:text-base">
             這裡整理了常見的 AI 音樂生成平台，包含特色、定價、操作流程與授權注意事項。
-            首次建置以架構為主，細節內容將逐步補完，歡迎先行閱讀並提供回饋。
           </p>
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-6 py-10 sm:px-10 sm:py-16 space-y-12">
         <section className="rounded-2xl border border-white/10 bg-black/30 p-6 sm:p-8 shadow-xl shadow-black/20">
-          <h2 className="text-2xl font-semibold text-white">如何挑選適合的平台？</h2>
-          <p className="mt-3 text-sm text-zinc-300 sm:text-base">
-            建議依照創作目的、授權需求、預算與輸出格式等面向來評估。以下為待補充的指引重點：
-          </p>
-          <ul className="mt-4 list-disc space-y-2 pl-6 text-sm text-zinc-300 sm:text-base">
-            <li>作品用途（商業 / 非商業）、授權與著作權規範（待補）</li>
-            <li>平台產出品質、速度與可控性比較（待補）</li>
-            <li>支援的語言、歌詞輸入與合作功能（待補）</li>
-            <li>匯出格式、後製流程與與本地工作流程整合（待補）</li>
-          </ul>
+          <h2 className="text-2xl font-semibold text-white mb-6">🎵 AI 音樂創作說明</h2>
+          
+          <div className="space-y-4 text-sm text-zinc-300 sm:text-base">
+            <p>
+              目前 AI 音樂無法像 AI 圖片 / 影片一樣在本地生成。
+            </p>
+            
+            <p className="font-medium text-white">原因是：</p>
+            
+            <ul className="space-y-2 pl-6 list-disc">
+              <li>音樂模型的製作難度極高（需要旋律、和弦、節奏、人聲、混音、多階段結構）</li>
+              <li>版權限制複雜（涉及唱片、作曲、編曲、人聲授權等）</li>
+              <li>沒有成熟的開放模型社群（不像 Stable Diffusion 那樣能下載並本地運行）</li>
+            </ul>
+            
+            <p className="pt-2">
+              因此目前全球的 AI 音樂創作都必須依靠雲端平台。
+            </p>
+          </div>
         </section>
 
         <section className="space-y-8">
-          {MUSIC_PLATFORMS.map((platform) => (
-            <article
-              key={platform.id}
-              className="rounded-2xl border border-white/10 bg-zinc-900/70 p-6 sm:p-8 shadow-lg shadow-black/20"
-            >
-              <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-xl font-semibold text-white sm:text-2xl">
-                    {platform.name}
-                  </h3>
-                  <p className="text-sm text-zinc-300 sm:text-base">
-                    {platform.description}
-                  </p>
-                </div>
-              </header>
-
-              <div className="mt-5 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="text-sm font-semibold uppercase tracking-wide text-orange-200">
-                      使用指南重點
-                    </h4>
-                    <ul className="mt-3 space-y-2 rounded-lg bg-black/30 p-4 text-sm text-zinc-300">
-                      {platform.guidePoints.map((point, index) => (
-                        <li key={index} className="flex items-start gap-2">
-                          <span className="mt-1 text-orange-300">•</span>
-                          <span>{point}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div>
-                    <h4 className="text-sm font-semibold uppercase tracking-wide text-orange-200">
-                      定價與方案（待補）
-                    </h4>
-                    <p className="mt-2 rounded-lg bg-black/30 p-4 text-sm text-zinc-300">
-                      {platform.pricing}
+          {MUSIC_PLATFORMS.map((platform) => {
+            // Suno AI 特殊渲染
+            if (platform.id === "suno") {
+              return (
+                <article
+                  key={platform.id}
+                  className="rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900/90 via-zinc-900/70 to-black/50 p-8 sm:p-10 shadow-xl shadow-black/40"
+                >
+                  <header className="mb-8">
+                    <h3 className="text-3xl font-bold text-white sm:text-4xl mb-4">
+                      {platform.name}
+                    </h3>
+                    <p className="text-base text-zinc-200 sm:text-lg leading-relaxed max-w-4xl">
+                      {platform.description}
                     </p>
-                  </div>
-                </div>
+                  </header>
 
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="text-sm font-semibold uppercase tracking-wide text-orange-200">
-                      快速連結
-                    </h4>
-                    <div className="mt-3 grid gap-3">
-                      {platform.links.map((link) => (
-                        <Link
-                          key={link.href}
-                          href={link.href}
-                          target="_blank"
-                          className="inline-flex items-center justify-between rounded-lg border border-orange-400/30 bg-orange-500/5 px-4 py-3 text-sm font-medium text-orange-100 transition hover:bg-orange-500/20 hover:text-white"
-                        >
-                          <span>{link.label}</span>
-                          <span aria-hidden className="text-lg">↗</span>
-                        </Link>
-                      ))}
+                  <div className="grid gap-8 lg:grid-cols-2">
+                    {/* 左側：功能亮點 */}
+                    <div className="space-y-8">
+                      {/* 功能亮點 */}
+                      {platform.features && (
+                        <div className="rounded-xl border border-orange-400/20 bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-transparent p-6">
+                          <h4 className="text-xl font-bold text-orange-200 mb-5 flex items-center gap-2">
+                            <span className="text-2xl">{platform.features.title.split(" ")[0]}</span>
+                            <span>{platform.features.title.split(" ").slice(1).join(" ")}</span>
+                          </h4>
+                          <ul className="space-y-3 text-sm text-zinc-200 sm:text-base">
+                            {platform.features.items.map((item, index) => (
+                              <li key={index} className="flex items-start gap-3">
+                                <span className="mt-1.5 text-orange-400 text-lg shrink-0">•</span>
+                                <span className="leading-relaxed">{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* 功能推薦給誰？ */}
+                      {platform.recommendations && (
+                        <div className="rounded-xl border border-purple-400/20 bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-transparent p-6">
+                          <h4 className="text-xl font-bold text-purple-200 mb-5 flex items-center gap-2">
+                            <span className="text-2xl">{platform.recommendations.title.split(" ")[0]}</span>
+                            <span>{platform.recommendations.title.split(" ").slice(1).join(" ")}</span>
+                          </h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-sm sm:text-base">
+                              <thead>
+                                <tr className="border-b border-purple-400/30">
+                                  <th className="text-left py-3 px-4 font-semibold text-white bg-purple-500/20">使用者類型</th>
+                                  <th className="text-left py-3 px-4 font-semibold text-white bg-purple-500/20">適合原因</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {platform.recommendations.items.map((item, index) => (
+                                  <tr key={index} className="border-b border-white/5 hover:bg-purple-500/10 transition-colors">
+                                    <td className="py-3 px-4 text-zinc-200 font-medium">{item.user}</td>
+                                    <td className="py-3 px-4 text-zinc-300">{item.reason}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 右側：格式、價格、CTA */}
+                    <div className="space-y-8">
+                      {/* 下載格式與輸出能力 */}
+                      {platform.formats && (
+                        <div className="rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-500/10 via-cyan-500/5 to-transparent p-6">
+                          <h4 className="text-xl font-bold text-blue-200 mb-5 flex items-center gap-2">
+                            <span className="text-2xl">{platform.formats.title.split(" ")[0]}</span>
+                            <span>{platform.formats.title.split(" ").slice(1).join(" ")}</span>
+                          </h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-sm sm:text-base">
+                              <thead>
+                                <tr className="border-b border-blue-400/30">
+                                  <th className="text-left py-3 px-4 font-semibold text-white bg-blue-500/20">內容</th>
+                                  <th className="text-center py-3 px-4 font-semibold text-white bg-blue-500/20">支援</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {platform.formats.items.map((item, index) => (
+                                  <tr key={index} className="border-b border-white/5 hover:bg-blue-500/10 transition-colors">
+                                    <td className="py-3 px-4 text-zinc-200">{item.name}</td>
+                                    <td className="py-3 px-4 text-center">
+                                      {item.supported ? (
+                                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-sm">✔</span>
+                                      ) : (
+                                        <span className="text-zinc-500">✗</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 訂閱成本與產能 */}
+                      {platform.pricing && (
+                        <div className="rounded-xl border border-emerald-400/20 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent p-6">
+                          <h4 className="text-xl font-bold text-emerald-200 mb-5 flex items-center gap-2">
+                            <span className="text-2xl">{platform.pricing.title.split(" ")[0]}</span>
+                            <span>{platform.pricing.title.split(" ").slice(1).join(" ")}</span>
+                          </h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-sm sm:text-base">
+                              <thead>
+                                <tr className="border-b border-emerald-400/30">
+                                  <th className="text-left py-3 px-4 font-semibold text-white bg-emerald-500/20">方案</th>
+                                  <th className="text-left py-3 px-4 font-semibold text-white bg-emerald-500/20">大約價格</th>
+                                  <th className="text-left py-3 px-4 font-semibold text-white bg-emerald-500/20">可創作數量</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {platform.pricing.items.map((item, index) => (
+                                  <tr key={index} className="border-b border-white/5 hover:bg-emerald-500/10 transition-colors">
+                                    <td className="py-3 px-4 text-zinc-200 font-medium">{item.plan}</td>
+                                    <td className="py-3 px-4 text-zinc-300">{item.price}</td>
+                                    <td className="py-3 px-4 text-zinc-300">{item.capacity}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* CTA */}
+                      {platform.cta && (
+                        <div className="rounded-xl border-2 border-orange-400/40 bg-gradient-to-r from-orange-500/20 via-amber-500/15 to-red-500/20 p-6 shadow-lg shadow-orange-500/20">
+                          <h4 className="text-xl font-bold text-orange-200 mb-3 flex items-center gap-2">
+                            <span>{platform.cta.title.split(" ")[0]}</span>
+                            <span className="text-base">{platform.cta.title.split(" ").slice(1).join(" ")}</span>
+                          </h4>
+                          <p className="text-sm text-zinc-200 mb-4">
+                            {platform.cta.description}
+                          </p>
+                          {platform.links && platform.links.length > 0 && (
+                            <div className="flex gap-3 flex-wrap">
+                              {platform.links.map((link) => (
+                                <Link
+                                  key={link.href}
+                                  href={link.href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 rounded-xl border-2 border-orange-400/70 bg-gradient-to-r from-orange-500/50 via-amber-500/40 to-red-500/50 px-6 py-3 text-base font-bold text-white shadow-xl shadow-orange-500/30 transition-all hover:border-orange-400 hover:from-orange-500/60 hover:via-amber-500/50 hover:to-red-500/60 hover:shadow-2xl hover:shadow-orange-500/40 hover:scale-105 active:scale-100"
+                                >
+                                  <span>{link.label}</span>
+                                  <span className="text-lg">→</span>
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
+                </article>
+              );
+            }
 
+            // 其他平台保持原有渲染
+            return (
+              <article
+                key={platform.id}
+                className="rounded-2xl border border-white/10 bg-zinc-900/70 p-6 sm:p-8 shadow-lg shadow-black/20"
+              >
+                <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h4 className="text-sm font-semibold uppercase tracking-wide text-orange-200">
-                      備註 / 資源（待補）
-                    </h4>
-                    <p className="mt-2 rounded-lg bg-black/30 p-4 text-sm text-zinc-300">
-                      可補充社群討論區、教學影片或官方文件等參考資訊。
+                    <h3 className="text-xl font-semibold text-white sm:text-2xl">
+                      {platform.name}
+                    </h3>
+                    <p className="text-sm text-zinc-300 sm:text-base">
+                      {platform.description}
                     </p>
                   </div>
+                </header>
+
+                <div className="mt-5 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-semibold uppercase tracking-wide text-orange-200">
+                        使用指南重點
+                      </h4>
+                      <ul className="mt-3 space-y-2 rounded-lg bg-black/30 p-4 text-sm text-zinc-300">
+                        {platform.guidePoints?.map((point, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <span className="mt-1 text-orange-300">•</span>
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {platform.pricing && (
+                      <div>
+                        <h4 className="text-sm font-semibold uppercase tracking-wide text-orange-200">
+                          定價與方案（待補）
+                        </h4>
+                        <p className="mt-2 rounded-lg bg-black/30 p-4 text-sm text-zinc-300">
+                          {platform.pricing}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    {platform.links && platform.links.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold uppercase tracking-wide text-orange-200">
+                          快速連結
+                        </h4>
+                        <div className="mt-3 grid gap-3">
+                          {platform.links.map((link) => (
+                            <Link
+                              key={link.href}
+                              href={link.href}
+                              target="_blank"
+                              className="inline-flex items-center justify-between rounded-lg border border-orange-400/30 bg-orange-500/5 px-4 py-3 text-sm font-medium text-orange-100 transition hover:bg-orange-500/20 hover:text-white"
+                            >
+                              <span>{link.label}</span>
+                              <span aria-hidden className="text-lg">↗</span>
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <h4 className="text-sm font-semibold uppercase tracking-wide text-orange-200">
+                        備註 / 資源（待補）
+                      </h4>
+                      <p className="mt-2 rounded-lg bg-black/30 p-4 text-sm text-zinc-300">
+                        可補充社群討論區、教學影片或官方文件等參考資訊。
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </section>
       </main>
     </div>

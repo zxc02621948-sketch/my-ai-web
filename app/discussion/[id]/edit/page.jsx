@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Upload, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 const categories = [
   { id: "announcement", name: "官方公告", icon: "📢", adminOnly: true },
@@ -61,12 +62,12 @@ export default function EditDiscussionPost() {
             setUploadedImage(postData.uploadedImage);
           }
         } else {
-          alert("載入帖子失敗");
+          notify.error("載入失敗", "載入帖子失敗");
           router.push("/discussion");
         }
       } catch (error) {
         console.error("載入帖子錯誤:", error);
-        alert("載入帖子失敗");
+        notify.error("載入失敗", "載入帖子失敗");
         router.push("/discussion");
       } finally {
         setLoading(false);
@@ -83,7 +84,7 @@ export default function EditDiscussionPost() {
       const isAdmin = currentUser.role === 'admin' || currentUser.isAdmin;
       
       if (!isAuthor && !isAdmin) {
-        alert("無權限編輯此帖子");
+        notify.warning("權限不足", "無權限編輯此帖子");
         router.push(`/discussion/${params.id}`);
       }
     }
@@ -172,11 +173,11 @@ export default function EditDiscussionPost() {
         router.push(`/discussion/${params.id}`);
       } else {
         console.error("❌ 更新失敗:", result.error);
-        alert(result.error || "更新帖子失敗");
+        notify.error("更新失敗", result.error || "請稍後再試");
       }
     } catch (error) {
       console.error("❌ 提交錯誤:", error);
-      alert("提交失敗，請稍後再試");
+      notify.error("提交失敗", "請稍後再試");
     } finally {
       setSubmitting(false);
     }

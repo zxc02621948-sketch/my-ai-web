@@ -498,9 +498,8 @@ export default function UploadMusicModal() {
                       placeholder="請選擇平台"
                       options={[
                         { value: "Suno", label: "Suno" },
-                        { value: "Udio", label: "Udio" },
-                        { value: "MusicGen", label: "MusicGen" },
-                        { value: "Stable Audio", label: "Stable Audio" },
+                        { value: "TopMediai", label: "TopMediai" },
+                        { value: "Mureka.ai", label: "Mureka.ai" },
                         { value: "其他", label: "其他" },
                       ]}
                     />

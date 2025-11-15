@@ -1,6 +1,7 @@
 import { useRef, useState, useMemo } from "react";
 import { X, Trash2, Download, Clipboard, AlertTriangle, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function VideoInfoBox({ 
   video, 
@@ -101,9 +102,14 @@ export default function VideoInfoBox({
                   ? '⚠️ 管理員權限：確定要刪除這部影片嗎？此操作無法復原。'
                   : '確定要刪除這部影片嗎？此操作無法復原。';
                 
-                if (window.confirm(confirmMessage)) {
-                  onDelete(video._id);
-                }
+                notify.confirm(
+                  "確認刪除",
+                  confirmMessage
+                ).then((confirmed) => {
+                  if (confirmed) {
+                    onDelete(video._id);
+                  }
+                });
               }}
               className="p-2 hover:bg-red-600/20 rounded-lg transition-colors"
               title={isAdmin && !isOwner ? "管理員刪除影片" : "刪除影片"}

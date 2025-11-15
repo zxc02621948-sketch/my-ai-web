@@ -1,6 +1,7 @@
 // /components/image/ReportButton.jsx
 "use client";
 import { useState } from "react";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 const OPTIONS = [
   { value: "category_wrong", label: "分類錯誤" },
@@ -18,8 +19,14 @@ export default function ReportButton({ imageId }) {
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
-    if (!imageId) return alert("圖片不存在");
-    if (type === "other" && !message.trim()) return alert("請填寫說明");
+    if (!imageId) {
+      notify.warning("提示", "圖片不存在");
+      return;
+    }
+    if (type === "other" && !message.trim()) {
+      notify.warning("提示", "請填寫說明");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -31,12 +38,12 @@ export default function ReportButton({ imageId }) {
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j?.ok) throw new Error(j?.message || `HTTP ${res.status}`);
-      alert("已收到你的檢舉，感謝協助！");
+      notify.success("成功", "已收到你的檢舉，感謝協助！");
       setOpen(false);
       setType("category_wrong");
       setMessage("");
     } catch (e) {
-      alert(e.message || "提交失敗");
+      notify.error("提交失敗", e.message || "請稍後再試");
     } finally {
       setLoading(false);
     }

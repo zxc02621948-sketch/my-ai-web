@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Upload, X, Search, Image as ImageIcon, Camera, Link as LinkIcon } from "lucide-react";
 import Link from "next/link";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function CreatePostPage() {
   const router = useRouter();
@@ -180,19 +181,19 @@ export default function CreatePostPage() {
         
         // 顯示成功提示
         if (result.pointsCost > 0) {
-          alert(`✅ 發布成功！已消耗 ${result.pointsCost} 積分\n💡 收到的愛心會回饋積分給你！`);
+          notify.success("發布成功", `已消耗 ${result.pointsCost} 積分\n💡 收到的愛心會回饋積分給你！`);
         } else {
-          alert('✅ 發布成功！');
+          notify.success("發布成功", "發布成功！");
         }
         
         router.push(`/discussion/${result.data._id}`);
       } else {
         console.error("❌ 創建失敗:", result.error);
-        alert(result.error || "創建帖子失敗");
+        notify.error("創建失敗", result.error || "請稍後再試");
       }
     } catch (error) {
       console.error("❌ 提交錯誤:", error);
-      alert("提交失敗，請稍後再試");
+      notify.error("提交失敗", "請稍後再試");
     } finally {
       setLoading(false);
     }
@@ -215,7 +216,7 @@ export default function CreatePostPage() {
     
     // 檢查總數量限制
     if (formData.uploadedImages.length + files.length > 9) {
-      alert(`最多只能上傳 9 張圖片！當前已有 ${formData.uploadedImages.length} 張`);
+      notify.warning("提示", `最多只能上傳 9 張圖片！當前已有 ${formData.uploadedImages.length} 張`);
       return;
     }
     
@@ -226,13 +227,13 @@ export default function CreatePostPage() {
     files.forEach((file, index) => {
       // 檢查檔案類型
       if (!file.type.startsWith('image/')) {
-        alert(`文件 ${file.name} 不是圖片`);
+        notify.warning("文件格式不支持", `文件 ${file.name} 不是圖片`);
         return;
       }
       
       // 檢查檔案大小 (10MB限制)
       if (file.size > 10 * 1024 * 1024) {
-        alert(`圖片 ${file.name} 超過 10MB`);
+        notify.warning("文件太大", `圖片 ${file.name} 超過 10MB`);
         return;
       }
       
