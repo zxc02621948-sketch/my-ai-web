@@ -123,6 +123,9 @@ export function PlayerProvider({
   const wasPlayingBeforeHiddenRef = useRef(false); // ✅ 追蹤頁面隱藏前是否在播放
   const wasPausedByAudioManagerRef = useRef(false); // ✅ 追蹤是否被 AudioManager 暫停（不應自動恢復）
   const playbackAttemptRef = useRef(null);
+  const backgroundPauseTimerRef = useRef(null); // ✅ 非釘選背景延時自動暫停計時器
+  const backgroundHiddenSinceRef = useRef(null); // ✅ 記錄背景開始的時間
+  const backgroundPollIntervalRef = useRef(null); // ✅ 循環輪詢，避免事件漏發
 
   const cancelPlaybackAttempt = useCallback(() => {
     const attempt = playbackAttemptRef.current;
@@ -617,6 +620,13 @@ export function PlayerProvider({
     setCurrentTime(0);
     currentTimeRef.current = 0;
 
+    // ✅ 保守限制：非釘選 + 分頁在背景 → 不自動播放下一首，避免被當成免費背景電台使用
+    try {
+      if (!pinnedOwnerRef.current && typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+    } catch {}
+
     // ✅ 如果有播放清單且有多首歌曲，自動播放下一首
     if (currentPlaylist.length > 1) {
       console.log('🎵 [onEnded] 準備播放下一首');
@@ -716,6 +726,43 @@ export function PlayerProvider({
       console.warn("⚠️ [PlayerContext.play] 優先度不夠，無法播放");
       return false;
     }
+
+    // ✅ 強化保守版：若分頁當下為隱藏且未釘選，啟動 30s 自動暫停與輪詢保險
+    try {
+      if (typeof document !== "undefined" && document.hidden && !pinnedOwnerRef.current) {
+        if (!backgroundHiddenSinceRef.current) {
+          backgroundHiddenSinceRef.current = Date.now();
+        }
+        if (backgroundPauseTimerRef.current) {
+          clearTimeout(backgroundPauseTimerRef.current);
+        }
+        backgroundPauseTimerRef.current = setTimeout(() => {
+          try {
+            if (document.hidden && !pinnedOwnerRef.current && audioRef.current && !audioRef.current.paused) {
+              audioRef.current.pause();
+              setIsPlaying(false);
+              console.log('⏸️ 非釘選背景超時（play 啟動），自動暫停');
+            }
+          } catch {}
+        }, 30000);
+        if (!backgroundPollIntervalRef.current) {
+          backgroundPollIntervalRef.current = setInterval(() => {
+            try {
+              if (!document.hidden || pinnedOwnerRef.current) {
+                return;
+              }
+              const started = backgroundHiddenSinceRef.current || Date.now();
+              const elapsed = Date.now() - started;
+              if (elapsed >= 30000 && audioRef.current && !audioRef.current.paused) {
+                audioRef.current.pause();
+                setIsPlaying(false);
+                console.log('⏸️ 非釘選背景輪詢自動暫停（play 啟動）');
+              }
+            } catch {}
+          }, 5000);
+        }
+      }
+    } catch {}
 
     // ✅ 停止所有視頻元素（視頻不受 AudioManager 管理）
     try {
@@ -1271,12 +1318,51 @@ export function PlayerProvider({
         // 頁面隱藏時，記錄播放狀態（基於實際音頻元素狀態和 isPlaying 狀態）
         wasPlayingBeforeHiddenRef.current = !audioRef.current.paused && isPlaying;
         console.log('👁️ 頁面隱藏，記錄播放狀態:', wasPlayingBeforeHiddenRef.current);
+        if (!backgroundHiddenSinceRef.current) {
+          backgroundHiddenSinceRef.current = Date.now();
+        }
         
         // 清除之前的恢復定時器
         if (restoreTimeout) {
           clearTimeout(restoreTimeout);
           restoreTimeout = null;
         }
+
+        // ✅ 保守限制：非釘選時在背景延時自動暫停（例如 30 秒）
+        try {
+          if (!pinnedOwnerRef.current) {
+            if (backgroundPauseTimerRef.current) {
+              clearTimeout(backgroundPauseTimerRef.current);
+            }
+            backgroundPauseTimerRef.current = setTimeout(() => {
+              try {
+                if (document.hidden && !pinnedOwnerRef.current && audioRef.current && !audioRef.current.paused) {
+                  audioRef.current.pause();
+                  setIsPlaying(false);
+                  console.log('⏸️ 非釘選背景超時，自動暫停');
+                }
+              } catch {}
+            }, 30000); // 30s，可依需求調整
+
+            // ✅ 啟動輪詢保險：每 5 秒檢查一次是否超過 30 秒
+            if (!backgroundPollIntervalRef.current) {
+              backgroundPollIntervalRef.current = setInterval(() => {
+                try {
+                  if (!document.hidden || pinnedOwnerRef.current) {
+                    return;
+                  }
+                  const started = backgroundHiddenSinceRef.current || Date.now();
+                  const elapsed = Date.now() - started;
+                  if (elapsed >= 30000 && audioRef.current && !audioRef.current.paused) {
+                    audioRef.current.pause();
+                    setIsPlaying(false);
+                    console.log('⏸️ 非釘選背景輪詢自動暫停');
+                  }
+                } catch {}
+              }, 5000);
+            }
+          }
+        } catch {}
       } else {
         // 頁面重新可見時，延遲檢查並恢復播放（避免與其他邏輯衝突）
         restoreTimeout = setTimeout(async () => {
@@ -1344,6 +1430,19 @@ export function PlayerProvider({
             }
           }
         }, 200); // ✅ 延遲 200ms 檢查，給其他邏輯時間完成
+
+        // ✅ 回到前台：清除背景延時暫停計時器
+        try {
+          if (backgroundPauseTimerRef.current) {
+            clearTimeout(backgroundPauseTimerRef.current);
+            backgroundPauseTimerRef.current = null;
+          }
+          if (backgroundPollIntervalRef.current) {
+            clearInterval(backgroundPollIntervalRef.current);
+            backgroundPollIntervalRef.current = null;
+          }
+          backgroundHiddenSinceRef.current = null;
+        } catch {}
       }
     };
 
@@ -1353,6 +1452,15 @@ export function PlayerProvider({
       if (restoreTimeout) {
         clearTimeout(restoreTimeout);
       }
+      if (backgroundPauseTimerRef.current) {
+        clearTimeout(backgroundPauseTimerRef.current);
+        backgroundPauseTimerRef.current = null;
+      }
+      if (backgroundPollIntervalRef.current) {
+        clearInterval(backgroundPollIntervalRef.current);
+        backgroundPollIntervalRef.current = null;
+      }
+      backgroundHiddenSinceRef.current = null;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [src, isPlaying]); // ✅ 依賴 src 和 isPlaying，確保狀態正確

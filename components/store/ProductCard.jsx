@@ -21,7 +21,8 @@ export default function ProductCard({
   billingCycle = null,
   isSubscribed = false, // 是否已訂閱
   subscriptionInfo = null, // 訂閱詳情（包含 expiresAt, daysRemaining 等）
-  playlistExpansionInfo = null // 播放清單擴充詳情
+  playlistExpansionInfo = null, // 播放清單擴充詳情
+  isLoggedIn = true,
 }) {
   return (
     <div className="bg-zinc-800/40 border border-zinc-700/60 rounded-lg p-6 relative">
@@ -162,10 +163,18 @@ export default function ProductCard({
       
       {/* 購買/續費按鈕 */}
       <button
-        onClick={() => onPurchase()}
-        disabled={loading || isPurchased || isLimitedPurchase}
+        onClick={() => {
+          if (!isLoggedIn) {
+            try { window.dispatchEvent(new Event("openLoginModal")); } catch {}
+            return;
+          }
+          onPurchase();
+        }}
+        disabled={loading || isPurchased || isLimitedPurchase || !isLoggedIn}
         className={`w-full py-2 px-4 rounded-lg font-medium transition-all ${
-          isPurchased || isSubscribed
+          !isLoggedIn
+            ? "bg-zinc-700 text-gray-400 cursor-not-allowed"
+            : isPurchased || isSubscribed
             ? "bg-zinc-700 text-gray-400 cursor-not-allowed"
             : isLimitedPurchase
             ? "bg-gray-600 text-gray-400 cursor-not-allowed"
@@ -174,7 +183,9 @@ export default function ProductCard({
             : "bg-blue-600 hover:bg-blue-700 text-white"
         }`}
       >
-        {isPurchased 
+        {!isLoggedIn
+          ? "請先登入"
+          : isPurchased 
           ? (type === "playlist-expansion" ? "已達上限" : "已購買")
           : isLimitedPurchase 
           ? "限購中" 

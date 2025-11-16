@@ -498,10 +498,10 @@ export default function ImagesPage() {
       )}
 
       {/* ✅ 畫廊/作品集標籤切換 */}
-      <div className="max-w-6xl mx-auto mb-4">
-        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-6">
-          {/* 左側：模式切換標籤 */}
-          <div className="flex gap-3">
+      <div className="max-w-6xl mx-auto mb-4 px-4">
+        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-0 justify-between w-full">
+          {/* 左側：模式切換標籤 - 靠左 */}
+          <div className="flex gap-3 shrink-0 self-start sm:self-center">
             <button
               onClick={() => setDisplayMode("gallery")}
               className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
@@ -535,36 +535,35 @@ export default function ImagesPage() {
             </button>
           </div>
 
-          {/* 中間：關於本站、版本資訊和法律連結（手機版隱藏） */}
-          <div className="hidden md:flex items-center gap-4 text-xs text-gray-400 flex-1 justify-center flex-wrap">
-            <div className="flex items-center gap-2">
+          {/* 中間：關於本站、版本資訊和法律連結（手機版隱藏）- 居中，有足夠空間 */}
+          <div className="hidden md:flex items-center justify-center gap-6 text-xs text-gray-400 flex-1 px-8 py-2 min-w-0">
+            <div className="flex items-center gap-4 flex-wrap justify-center">
               <a
                 href="/about"
-                className="hover:text-white transition text-sm font-medium text-blue-400"
+                className="hover:text-white transition text-sm font-medium text-blue-400 whitespace-nowrap"
               >
                 我們的故事
               </a>
               <span className="text-gray-600">•</span>
-              <span className="text-sm text-yellow-400">
+              <span className="text-sm text-yellow-400 whitespace-nowrap">
                 版本 v0.8.0（2025-10-15）🎉
               </span>
-              <a href="/changelog" className="text-sm underline hover:text-white">
+              <a href="/changelog" className="text-sm underline hover:text-white whitespace-nowrap">
                 查看更新內容
               </a>
-            </div>
-            <div className="flex items-center gap-2">
-              <a href="/privacy" className="hover:text-white transition">
+              <span className="text-gray-600">•</span>
+              <a href="/privacy" className="hover:text-white transition whitespace-nowrap">
                 隱私政策
               </a>
               <span className="text-gray-600">•</span>
-              <a href="/terms" className="hover:text-white transition">
+              <a href="/terms" className="hover:text-white transition whitespace-nowrap">
                 服務條款
               </a>
             </div>
           </div>
 
-          {/* 右側：排序 + 前往創作 */}
-          <div className="flex items-center gap-3">
+          {/* 右側：排序 + 前往創作 - 靠右 */}
+          <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
             <SortSelect value={sort} onChange={setSort} />
             <a
               href="/images/create"

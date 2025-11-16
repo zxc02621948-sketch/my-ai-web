@@ -483,26 +483,8 @@ export default function UserProfilePage() {
           player?.setActiveIndex?.(0);
         }
       } else {
-        // 沒有播放清單，檢查是否有單首預設音樂（只在沒有釘選時載入）
-        const url = String(u.defaultMusicUrl || "");
-        if (url) {
-          player?.setSrc?.(url);
-          player?.setOriginUrl?.(url);
-          try {
-            const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
-            const t = o?.data?.title;
-            player?.setTrackTitle?.(t || url);
-            player?.setPlaylist?.([{ url, title: t || url }]);
-            player?.setActiveIndex?.(0);
-          } catch {
-            player?.setTrackTitle?.(url);
-            player?.setPlaylist?.([{ url, title: url }]);
-            player?.setActiveIndex?.(0);
-          }
-        } else {
-          // ✅ 即使沒有播放清單和預設音樂，也設置空的播放清單，這樣釘選按鈕才能顯示
-          player?.setPlaylist?.([]);
-        }
+        // ✅ 即使沒有播放清單，也設置空的播放清單，這樣釘選按鈕才能顯示
+        player?.setPlaylist?.([]);
       }
     }
   } catch (error) {
@@ -588,26 +570,8 @@ export default function UserProfilePage() {
                       player?.setActiveIndex?.(0);
                     }
                   } else {
-                    // 沒有播放清單，檢查是否有單首預設音樂（只在沒有釘選時載入）
-                    const url = String(backup.defaultMusicUrl || "");
-                    if (url) {
-                      player?.setSrc?.(url);
-                      player?.setOriginUrl?.(url);
-                      try {
-                        const o = await axios.get(`/api/youtube-oembed?url=${encodeURIComponent(url)}`);
-                        const t = o?.data?.title;
-                        player?.setTrackTitle?.(t || url);
-                        player?.setPlaylist?.([{ url, title: t || url }]);
-                        player?.setActiveIndex?.(0);
-                      } catch {
-                        player?.setTrackTitle?.(url);
-                        player?.setPlaylist?.([{ url, title: url }]);
-                        player?.setActiveIndex?.(0);
-                      }
-                    } else {
-                      // ✅ 即使沒有播放清單和預設音樂，也設置空的播放清單，這樣釘選按鈕才能顯示
-                      player?.setPlaylist?.([]);
-                    }
+                    // ✅ 沒有播放清單：設置空清單即可（不再支援單首預設音樂 URL）
+                    player?.setPlaylist?.([]);
                   }
                 }
               } catch {}

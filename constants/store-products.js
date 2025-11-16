@@ -24,7 +24,7 @@ export const STORE_PRODUCTS = {
     {
       id: "pin-player-subscription",
       title: "釘選播放器（月租）",
-      description: "全站播放你喜歡的音樂！釘選後在任何頁面都能持續播放，讓音樂陪你瀏覽整個網站。",
+      description: "全站播放你喜歡的音樂！釘選後可在任何頁面與背景持續連播（不受 30 秒限制），讓音樂陪你瀏覽整個網站。",
       icon: "📌",
       price: 200,
       originalPrice: 300,
@@ -34,9 +34,10 @@ export const STORE_PRODUCTS = {
       type: "subscription", // 月租類型
       billingCycle: "monthly", // 每月
       features: [
-        "全站跨頁面播放",
-        "30 天有效期",
-        "累積制續費",
+        "全站跨頁面播放，背景可連播",
+        "釘選後：背景播放不受 30 秒限制，支援自動下一首",
+        "未釘選：背景超過 30 秒將自動暫停，且不會自動下一首",
+        "30 天有效期（累積制續費）",
         "到期前 3 天提醒",
         "每月 200 積分"
       ]

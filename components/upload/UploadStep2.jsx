@@ -33,6 +33,8 @@ export default function UploadStep2({
   setDescription,
   category,
   setCategory,
+  categories = [],
+  setCategories,
   tags,
   setTags,
   positivePrompt,
@@ -792,8 +794,12 @@ export default function UploadStep2({
       notify.warning("提示", "請輸入圖片標題！");
       return;
     }
-    if (!category) {
-      notify.warning("提示", "請選擇圖片分類！");
+    if (!categories || categories.length === 0) {
+      notify.warning("提示", "請選擇至少一個分類（最多3個）！");
+      return;
+    }
+    if (categories.length > 3) {
+      notify.warning("提示", "最多只能選擇3個分類！");
       return;
     }
     if (modelLink && !allowedModelRegex.test(modelLink)) {
@@ -880,7 +886,8 @@ export default function UploadStep2({
         imageUrl,
         title: title?.trim() || "",
         author: mobileSimple ? "" : (author?.trim() || ""),
-        category: category || "",
+        category: categories.length > 0 ? categories[0] : (category || ""), // 保持向後兼容
+        categories: categories || [],
         rating: normalizedRating,
         platform: platform?.trim() || "",
         modelName: mobileSimple ? "" : (modelName?.trim() || ""),
@@ -1248,20 +1255,53 @@ export default function UploadStep2({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className={`text-sm font-semibold ${category === "" ? "text-red-400" : "text-zinc-400"}`}>
-              📁 圖片分類（必選）
+            <label className={`text-sm font-semibold ${categories.length === 0 ? "text-red-400" : "text-zinc-400"}`}>
+              📁 圖片分類（可複選，最多3個）
             </label>
-          <SelectField
-            value={category}
-            onChange={setCategory}
-            invalid={!category}
-            placeholder="請選擇分類"
-            options={CATEGORIES.map((cat) => ({
-              value: cat,
-              label: cat,
-            }))}
-            buttonClassName="bg-zinc-700 text-white"
-          />
+          <div
+            className={`max-h-32 overflow-y-auto rounded p-2 bg-zinc-700 ${
+              categories.length === 0 ? "border border-red-500" : categories.length >= 3 ? "border border-yellow-500/50" : "border border-white/10"
+            }`}
+          >
+            {CATEGORIES.map((categoryKey) => {
+              const isSelected = categories.includes(categoryKey);
+              const isDisabled = !isSelected && categories.length >= 3;
+              
+              return (
+                <label
+                  key={categoryKey}
+                  className={`flex items-center gap-2 py-1 cursor-pointer hover:bg-zinc-600/50 rounded px-2 ${
+                    isDisabled ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    value={categoryKey}
+                    checked={isSelected}
+                    disabled={isDisabled}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        if (categories.length < 3) {
+                          setCategories([...categories, categoryKey]);
+                        }
+                      } else {
+                        setCategories(categories.filter((c) => c !== categoryKey));
+                      }
+                    }}
+                    className="rounded"
+                  />
+                  <span className="text-white text-sm">
+                    {categoryKey}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          {categories.length > 0 && (
+            <div className="mt-1 text-xs text-zinc-400">
+              已選擇 {categories.length} / 3 個分類
+            </div>
+          )}
             
             {/* 移除自動分級功能 - 改為用戶手動選擇 */}
           </div>

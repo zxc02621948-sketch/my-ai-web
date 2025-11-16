@@ -34,9 +34,9 @@ export default function PlayerSelfTestPage() {
 
   const playlist = useMemo(
     () => [
-      { url: "https://youtu.be/dQw4w9WgXcQ", title: "T1" },
-      { url: "https://youtu.be/3GwjfUFyY6M", title: "T2" },
-      { url: "https://youtu.be/oHg5SJYRHA0", title: "T3" },
+      { url: "https://example.com/audio1.mp3", title: "T1" },
+      { url: "https://example.com/audio2.mp3", title: "T2" },
+      { url: "https://example.com/audio3.mp3", title: "T3" },
     ],
     []
   );

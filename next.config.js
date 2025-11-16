@@ -90,10 +90,12 @@ const nextConfig = {
   //   ];
   // },
   
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
       "@": path.resolve(__dirname),
+      // 避免將 Node 專用的 ffmpeg 安裝套件打進瀏覽器端，消除 Critical dependency 警告
+      ...(!isServer ? { "@ffmpeg-installer/ffmpeg": false } : {}),
     };
     return config;
   },

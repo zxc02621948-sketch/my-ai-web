@@ -4,11 +4,17 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { usePlayer } from "@/components/context/PlayerContext";
 import MiniPlayer from "./MiniPlayer";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import usePinnedPlayerBootstrap from "@/hooks/usePinnedPlayerBootstrap";
 
 export default function ConditionalPlayer() {
   const pathname = usePathname();
   const player = usePlayer();
   const [isPinned, setIsPinned] = useState(false);
+  const { currentUser } = useCurrentUser();
+  
+  // 全域啟用釘選播放器的啟動流程（任何頁面刷新都能恢復）
+  usePinnedPlayerBootstrap({ player, currentUser, disableOnUnpinned: true });
   
   // 只監聽事件，不做 API 調用（由 MiniPlayer 負責）
   useEffect(() => {

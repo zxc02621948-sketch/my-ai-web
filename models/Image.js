@@ -10,6 +10,7 @@ const ImageSchema = new mongoose.Schema(
     negativePrompt: String,
     rating: { type: String, enum: ["sfw", "15", "18"], default: "sfw" },
     category: String,
+    categories: [String],
     description: String,
     author: { type: String, default: "" },
     username: { type: String, default: "" },
@@ -182,7 +183,9 @@ const ImageSchema = new mongoose.Schema(
 ImageSchema.index({ createdAt: -1 });
 ImageSchema.index({ rating: 1, createdAt: -1 });
 ImageSchema.index({ category: 1, createdAt: -1 });
+ImageSchema.index({ categories: 1, createdAt: -1 });
 ImageSchema.index({ rating: 1, category: 1, createdAt: -1 });
+ImageSchema.index({ rating: 1, categories: 1, createdAt: -1 });
 ImageSchema.index({ user: 1 });
 ImageSchema.index({ tags: 1 });
 ImageSchema.index({ imageId: 1 });

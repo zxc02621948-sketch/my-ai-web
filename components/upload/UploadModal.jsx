@@ -20,7 +20,8 @@ export default function UploadModal() {
   const [platform, setPlatform] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState(""); // 保持向後兼容
+  const [categories, setCategories] = useState([]);
   const [tags, setTags] = useState("");
   const [positivePrompt, setPositivePrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
@@ -115,6 +116,7 @@ export default function UploadModal() {
       setTitle("");
       setDescription("");
       setCategory("");
+      setCategories([]);
       setTags("");
       setPositivePrompt("");
       setNegativePrompt("");
@@ -219,6 +221,8 @@ export default function UploadModal() {
                     setDescription={setDescription}
                     category={category}
                     setCategory={setCategory}
+                    categories={categories}
+                    setCategories={setCategories}
                     tags={tags}
                     setTags={setTags}
                     rating={rating}

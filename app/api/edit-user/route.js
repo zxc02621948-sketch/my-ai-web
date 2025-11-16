@@ -12,7 +12,7 @@ import { apiError, apiSuccess, withErrorHandling } from "@/lib/errorHandler";
 export const PUT = requireAuth(
   withErrorHandling(async (req, context) => {
     const { user } = context;
-    const { username, bio, backupEmail, defaultMusicUrl } = await req.json();
+    const { username, bio, backupEmail } = await req.json();
     
     await dbConnect();
     
@@ -46,26 +46,7 @@ export const PUT = requireAuth(
       }
     }
 
-    // ✅ 音樂連結（僅允許 YouTube / youtu.be，且必須為 https）
-    if (defaultMusicUrl !== undefined) {
-      const val = String(defaultMusicUrl || "").trim();
-      if (val === "") {
-        userRecord.defaultMusicUrl = ""; // 清空設定
-      } else {
-        try {
-          const u = new URL(val);
-          const host = u.hostname.toLowerCase();
-          const allowedHosts = ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"]; 
-          const isHttps = u.protocol === "https:";
-          if (!isHttps || !allowedHosts.includes(host)) {
-            return apiError("音樂連結僅接受 https 的 YouTube 或 youtu.be 連結", 400);
-          }
-          userRecord.defaultMusicUrl = val;
-        } catch {
-          return apiError("音樂連結格式不正確", 400);
-        }
-      }
-    }
+    // 移除 defaultMusicUrl 支援（現僅支援本地上傳）
     
     // 其他欄位
     if (typeof username === "string") {

@@ -36,7 +36,7 @@ const STORE_CATEGORIES = [
 ];
 
 export default function StorePage() {
-  const { subscriptions, updateSubscriptions } = useCurrentUser(); // 使用 Context
+  const { currentUser, subscriptions, updateSubscriptions } = useCurrentUser(); // 使用 Context
   const [activeCategory, setActiveCategory] = useState("features");
   const [activeSubCategory, setActiveSubCategory] = useState("all"); // 子分類：all, frames, skins
   const [loading, setLoading] = useState(false);
@@ -54,16 +54,23 @@ export default function StorePage() {
 
   // 檢查權力券限購狀態（一次查詢所有類型）
   const checkPowerCouponLimits = async () => {
+    // 未登入時跳過查詢（API 需要授權）
+    if (!currentUser) return;
     try {
-      const res = await axios.post("/api/power-coupon/check-limit", { 
-        types: ["7day", "30day"] 
-      });
+      const res = await axios.post(
+        "/api/power-coupon/check-limit",
+        { types: ["7day", "30day"] },
+        { withCredentials: true }
+      );
       
       if (res.data.success && res.data.limits) {
         setPowerCouponLimits(res.data.limits);
       }
     } catch (error) {
-      console.error("檢查權力券限購狀態失敗:", error);
+      // 未登入或授權失敗時忽略
+      if (error?.response?.status !== 401) {
+        console.warn("檢查權力券限購狀態失敗:", error?.message || error);
+      }
     }
   };
 
@@ -90,10 +97,20 @@ export default function StorePage() {
           setPurchasedItems(purchasedSet);
         }
 
-        // 獲取用戶已擁有的頭像框
-        const framesResponse = await axios.get("/api/user/owned-frames");
-        if (framesResponse.data.success) {
-          setUserOwnedFrames(framesResponse.data.data || []);
+        // 獲取用戶已擁有的頭像框（需登入）
+        if (currentUser) {
+          try {
+            const framesResponse = await axios.get("/api/user/owned-frames", {
+              withCredentials: true
+            });
+            if (framesResponse.data.success) {
+              setUserOwnedFrames(framesResponse.data.data || []);
+            }
+          } catch (err) {
+            if (err?.response?.status !== 401) {
+              console.warn("獲取已擁有頭像框失敗:", err?.message || err);
+            }
+          }
         }
         
       } catch (error) {
@@ -104,7 +121,7 @@ export default function StorePage() {
     };
     fetchUserInfo();
     checkPowerCouponLimits();
-  }, []);
+  }, [currentUser]);
 
   const handlePurchase = async (productId, options) => {
     setLoading(true);
@@ -247,10 +264,17 @@ export default function StorePage() {
           notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
         }
       } else if (productId === "player-1day-coupon") {
-        const res = await axios.post("/api/points/purchase-feature", { 
-          productId: "player-1day-coupon", 
-          cost: 0 
-        });
+        // 未登入直接中止（按鈕層已提示並開啟登入窗）
+        if (!currentUser) {
+          setLoading(false);
+          setPurchaseStatus(prev => ({ ...prev, [productId]: false }));
+          return;
+        }
+        const res = await axios.post(
+          "/api/points/purchase-feature",
+          { productId: "player-1day-coupon", cost: 0 },
+          { withCredentials: true }
+        );
         
         if (res?.data?.success) {
           notify.success("體驗券已激活！", "播放器 1 日免費體驗券已激活！");
@@ -598,6 +622,7 @@ export default function StorePage() {
                 key={product.id}
                 {...product}
                 price={dynamicPrice}
+                isLoggedIn={!!userInfo?._id}
                 loading={loading && purchaseStatus[product.id]}
                 isPurchased={isPurchased}
                 isLimitedPurchase={isLimited}

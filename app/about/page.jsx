@@ -1,5 +1,3 @@
-import { Metadata } from 'next';
-
 export const metadata = {
   title: '關於本站 - AI創界',
   description: '了解AI創界的誕生故事、目標願景，以及人與AI協作的開發歷程。',

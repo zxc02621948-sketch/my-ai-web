@@ -129,7 +129,8 @@ export async function POST(request) {
     const video = await Video.create({
       title: metadata.title,
       description: metadata.description,
-      category: metadata.category,
+      category: metadata.categories && metadata.categories.length > 0 ? metadata.categories[0] : (metadata.category || ""), // 保持向後兼容
+      categories: metadata.categories || [],
       rating: metadata.rating,
       tags: processedTags,
       videoUrl: publicUrl,
@@ -140,6 +141,7 @@ export async function POST(request) {
       negativePrompt: metadata.negativePrompt,
       fps: metadata.fps,
       resolution: metadata.resolution,
+      aspectRatio: metadata.aspectRatio || '',
       steps: metadata.steps,
       cfgScale: metadata.cfgScale,
       seed: metadata.seed,

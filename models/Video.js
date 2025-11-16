@@ -99,6 +99,10 @@ const VideoSchema = new mongoose.Schema({
     type: String,
     default: '', // e.g., '1920x1080', '1280x720'
   },
+  aspectRatio: {
+    type: String,
+    default: '', // e.g., '16:9', '9:16', '1:1'
+  },
   width: {
     type: Number,
     default: 1920,
@@ -130,6 +134,10 @@ const VideoSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  categories: [{
+    type: String,
+    trim: true,
+  }],
   
   // ✅ 完整度與分數
   completenessScore: {
@@ -254,6 +262,8 @@ VideoSchema.index({ tags: 1 });
 VideoSchema.index({ rating: 1, uploadDate: -1 });
 VideoSchema.index({ hasMetadata: 1 });
 VideoSchema.index({ popScore: -1 });
+VideoSchema.index({ categories: 1 });
+VideoSchema.index({ rating: 1, categories: 1, uploadDate: -1 });
 
 // ===== 內容生命週期管理索引（預留） =====
 VideoSchema.index({ status: 1, popScore: -1 });

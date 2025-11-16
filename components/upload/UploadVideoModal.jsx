@@ -25,7 +25,8 @@ export default function UploadVideoModal({
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
   const [rating, setRating] = useState('sfw');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState(''); // 保持向後兼容
+  const [categories, setCategories] = useState([]);
   const [videoWidth, setVideoWidth] = useState(null);
   const [videoHeight, setVideoHeight] = useState(null);
   
@@ -38,9 +39,7 @@ export default function UploadVideoModal({
   const [duration, setDuration] = useState(null);
   const [fps, setFps] = useState('');
   const [resolution, setResolution] = useState('');
-  const [steps, setSteps] = useState('');
-  const [cfgScale, setCfgScale] = useState('');
-  const [seed, setSeed] = useState('');
+  const [aspectRatio, setAspectRatio] = useState('');
   
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -115,9 +114,7 @@ export default function UploadVideoModal({
     setNegativePrompt('');
     setFps('');
     setResolution('');
-    setSteps('');
-    setCfgScale('');
-    setSeed('');
+    setAspectRatio('');
     setShowAdvanced(false);
     setUploading(false);
     setConfirmAdult(false);
@@ -148,11 +145,41 @@ export default function UploadVideoModal({
     // 生成預覽縮圖並取得影片尺寸
     const video = document.createElement('video');
     video.preload = 'metadata';
+    const videoUrl = URL.createObjectURL(selectedFile);
     
-    video.onerror = (err) => {
-      console.error('影片載入失敗:', err);
-      toast.error('影片載入失敗，請重試');
-      URL.revokeObjectURL(video.src);
+    video.onerror = () => {
+      const error = video.error;
+      let errorMessage = '影片載入失敗';
+      
+      if (error) {
+        switch (error.code) {
+          case MediaError.MEDIA_ERR_ABORTED:
+            errorMessage = '影片載入被中止';
+            break;
+          case MediaError.MEDIA_ERR_NETWORK:
+            errorMessage = '影片載入時發生網絡錯誤';
+            break;
+          case MediaError.MEDIA_ERR_DECODE:
+            errorMessage = '影片解碼失敗，可能格式不支援或檔案損壞';
+            break;
+          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            errorMessage = '不支援的影片格式或編碼';
+            break;
+          default:
+            errorMessage = `影片載入失敗 (錯誤代碼: ${error.code})`;
+        }
+        console.error('影片載入失敗:', {
+          code: error.code,
+          message: errorMessage
+        });
+      } else {
+        console.error('影片載入失敗: 無法讀取影片檔案');
+      }
+      
+      toast.error(errorMessage);
+      URL.revokeObjectURL(videoUrl);
+      setFile(null);
+      setPreview(null);
     };
     
     video.onloadedmetadata = () => {
@@ -167,8 +194,32 @@ export default function UploadVideoModal({
       
       // 自動填入解析度欄位和時長
       if (width && height) {
-        setResolution(`${width}x${height}`);
-        console.log('✅ 自動填入解析度:', `${width}x${height}`);
+        // 以影像的垂直像素作為 p 值（例：1080p、720p）
+        setResolution(`${height}p`);
+        console.log('✅ 自動填入解析度:', `${height}p`);
+        
+        // 自動填入縱橫比（化簡，例如 1920x1080 -> 16:9）
+        try {
+          const gcd = (a, b) => {
+            let x = Math.abs(a), y = Math.abs(b);
+            while (y) {
+              const t = y;
+              y = x % y;
+              x = t;
+            }
+            return x || 1;
+          };
+          if (width > 0 && height > 0) {
+            const g = gcd(width, height);
+            const simpleW = Math.round(width / g);
+            const simpleH = Math.round(height / g);
+            const ratio = `${simpleW}:${simpleH}`;
+            setAspectRatio((prev) => prev ? prev : ratio);
+            console.log('✅ 自動填入縱橫比:', ratio);
+          }
+        } catch (e) {
+          console.warn('計算縱橫比失敗:', e);
+        }
       }
       
       // 獲取時長
@@ -182,16 +233,22 @@ export default function UploadVideoModal({
     };
     
     video.onseeked = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0);
-      setPreview(canvas.toDataURL());
-      URL.revokeObjectURL(video.src);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        setPreview(canvas.toDataURL());
+      } catch (err) {
+        console.error('生成預覽圖失敗:', err);
+        toast.error('生成預覽圖失敗');
+      } finally {
+        URL.revokeObjectURL(videoUrl);
+      }
     };
     
-    video.src = URL.createObjectURL(selectedFile);
+    video.src = videoUrl;
   };
 
   const handleUpload = async () => {
@@ -203,8 +260,12 @@ export default function UploadVideoModal({
       toast.error('請輸入標題');
       return;
     }
-    if (!category) {
-      toast.error('請選擇分類');
+    if (!categories || categories.length === 0) {
+      toast.error('請選擇至少一個分類（最多3個）');
+      return;
+    }
+    if (categories.length > 3) {
+      toast.error('最多只能選擇3個分類');
       return;
     }
     if (!platform) {
@@ -227,16 +288,15 @@ export default function UploadVideoModal({
         title,
         description,
         tags,
-        category,
+        category: categories.length > 0 ? categories[0] : '', // 保持向後兼容
+        categories,
         rating,
         platform,
         prompt,
         negativePrompt,
         fps,
         resolution,
-        steps,
-        cfgScale,
-        seed,
+        aspectRatio,
         width: videoWidth,
         height: videoHeight,
         duration,
@@ -423,19 +483,21 @@ export default function UploadVideoModal({
             {step === 2 && (
               <>
                 {/* 顯示已選分級 */}
-                <div className="flex items-center justify-between border-b border-zinc-700 pb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-zinc-400">已選分級:</span>
-                    <div className={`text-sm font-bold px-3 py-1 rounded text-white ${getRatingColor()}`}>
-                      {rating === 'sfw' ? '一般 All' : rating === '15' ? '15+ 清涼' : '18+ 限制'}
+                <div className="pt-4 border-b border-zinc-700 pb-3">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-4 flex-shrink-0">
+                      <span className="text-sm text-zinc-400 whitespace-nowrap">已選分級:</span>
+                      <div className={`text-sm font-bold px-3 py-1 rounded text-white whitespace-nowrap ${getRatingColor()}`}>
+                        {rating === 'sfw' ? '一般 All' : rating === '15' ? '15+ 清涼' : '18+ 限制'}
+                      </div>
                     </div>
+                    <button
+                      onClick={() => setStep(1)}
+                      className="text-sm text-purple-400 hover:text-purple-300 whitespace-nowrap flex-shrink-0"
+                    >
+                      重新選擇
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setStep(1)}
-                    className="text-sm text-purple-400 hover:text-purple-300"
-                  >
-                    重新選擇
-                  </button>
                 </div>
 
                 {/* 18+ 成年聲明 */}
@@ -523,20 +585,76 @@ export default function UploadVideoModal({
                   onChange={(e) => setDescription(e.target.value)}
                 />
 
+                {/* 提示詞與負面提示詞 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-zinc-400">提示詞（Prompt）</label>
+                    <textarea
+                      className="w-full p-2 rounded bg-zinc-700 text-white h-24"
+                      placeholder="描述你想要的畫面、風格、動作等"
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-zinc-400">負面提示詞（Negative Prompt）</label>
+                    <textarea
+                      className="w-full p-2 rounded bg-zinc-700 text-white h-24"
+                      placeholder="不想要出現的元素（如：模糊、雜訊、扭曲等）"
+                      value={negativePrompt}
+                      onChange={(e) => setNegativePrompt(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className={`text-sm font-semibold ${category === '' ? 'text-red-400' : 'text-zinc-400'}`}>
-                    📁 影片分類（必選）
+                  <label className={`text-sm font-semibold ${categories.length === 0 ? 'text-red-400' : 'text-zinc-400'}`}>
+                    📁 影片分類（可複選，最多3個）
                   </label>
-                  <SelectField
-                    value={category}
-                    onChange={setCategory}
-                    invalid={category === ''}
-                    placeholder="請選擇分類"
-                    options={VIDEO_CATEGORIES.map((cat) => ({
-                      value: cat,
-                      label: cat,
-                    }))}
-                  />
+                  <div
+                    className={`max-h-32 overflow-y-auto rounded p-2 bg-zinc-700 ${
+                      categories.length === 0 ? 'border border-red-500' : categories.length >= 3 ? 'border border-yellow-500/50' : 'border border-white/10'
+                    }`}
+                  >
+                    {VIDEO_CATEGORIES.map((categoryKey) => {
+                      const isSelected = categories.includes(categoryKey);
+                      const isDisabled = !isSelected && categories.length >= 3;
+                      
+                      return (
+                        <label
+                          key={categoryKey}
+                          className={`flex items-center gap-2 py-1 cursor-pointer hover:bg-zinc-600/50 rounded px-2 ${
+                            isDisabled ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            value={categoryKey}
+                            checked={isSelected}
+                            disabled={isDisabled}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                if (categories.length < 3) {
+                                  setCategories([...categories, categoryKey]);
+                                }
+                              } else {
+                                setCategories(categories.filter((c) => c !== categoryKey));
+                              }
+                            }}
+                            className="rounded"
+                          />
+                          <span className="text-white text-sm">
+                            {categoryKey}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {categories.length > 0 && (
+                    <div className="mt-1 text-xs text-zinc-400">
+                      已選擇 {categories.length} / 3 個分類
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -549,9 +667,10 @@ export default function UploadVideoModal({
                     invalid={!platform}
                     placeholder="請選擇平台"
                     options={[
-                      { value: 'Runway', label: 'Runway' },
-                      { value: 'Pika', label: 'Pika' },
+                      { value: 'SeaArt.ai', label: 'SeaArt.ai' },
+                      { value: 'deevid.ai', label: 'deevid.ai' },
                       { value: 'Stable Video Diffusion', label: 'Stable Video Diffusion' },
+                      { value: '即夢AI', label: '即夢AI' },
                       { value: '其他', label: '其他' },
                     ]}
                   />
@@ -562,72 +681,53 @@ export default function UploadVideoModal({
                   <button
                     type="button"
                     onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="flex items-center gap-2 text-sm text-zinc-300 hover:text-white"
+                    className="flex w-full items-center justify-between text-sm text-zinc-300 hover:text-white"
                   >
-                    <span>{showAdvanced ? '▼' : '▶'}</span>
-                    <span>進階參數（提升完整度）</span>
+                    <span className="flex items-center gap-2">
+                      進階參數（提升完整度）
+                      <span className="inline-flex items-center gap-1 text-xs text-green-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                          <path d="M16.707 5.293a1 1 0 010 1.414l-7.071 7.071a1 1 0 01-1.414 0L3.293 9.85a1 1 0 111.414-1.414l3.182 3.182 6.364-6.364a1 1 0 011.414 0z" />
+                        </svg>
+                        已自動偵測：解析度 / 縱橫比
+                      </span>
+                    </span>
+                    <span className="text-xs text-zinc-500">{showAdvanced ? '收合' : '展開'}</span>
                   </button>
-                  
                   {showAdvanced && (
-                    <div className="mt-4 space-y-3">
-                      <textarea
-                        placeholder="生成提示詞（Prompt）"
-                        className="w-full p-2 rounded bg-zinc-700 text-white h-24"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                      />
-                      
-                      <textarea
-                        placeholder="負面提示詞（Negative Prompt）"
-                        className="w-full p-2 rounded bg-zinc-700 text-white h-20"
-                        value={negativePrompt}
-                        onChange={(e) => setNegativePrompt(e.target.value)}
-                      />
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                        <input
-                          type="number"
-                          placeholder="FPS（幀率）"
-                          className="p-2 rounded bg-zinc-700 text-white"
-                          value={fps}
-                          onChange={(e) => setFps(e.target.value)}
-                        />
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {/* 已移除 Steps / CFG / Seed 欄位；保留可編輯的解析度與 FPS */}
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-400">解析度（可修改，例如 720p、1024p）</label>
                         <input
                           type="text"
-                          placeholder="解析度（如 1920x1080）"
-                          className="p-2 rounded bg-zinc-700 text-white"
+                          className="w-full p-2 rounded bg-zinc-700 text-white"
+                          placeholder="例如：720p、1024p"
                           value={resolution}
                           onChange={(e) => setResolution(e.target.value)}
                         />
                       </div>
-                      
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-400">FPS（可選）</label>
                         <input
                           type="number"
-                          placeholder="Steps"
-                          className="p-2 rounded bg-zinc-700 text-white"
-                          value={steps}
-                          onChange={(e) => setSteps(e.target.value)}
-                        />
-                        <input
-                          type="number"
-                          step="0.1"
-                          placeholder="CFG Scale"
-                          className="p-2 rounded bg-zinc-700 text-white"
-                          value={cfgScale}
-                          onChange={(e) => setCfgScale(e.target.value)}
-                        />
-                        <input
-                          type="text"
-                          placeholder="Seed"
-                          className="p-2 rounded bg-zinc-700 text-white"
-                          value={seed}
-                          onChange={(e) => setSeed(e.target.value)}
+                          min="1"
+                          max="240"
+                          className="w-full p-2 rounded bg-zinc-700 text-white"
+                          placeholder="例如：30"
+                          value={fps}
+                          onChange={(e) => setFps(e.target.value)}
                         />
                       </div>
-                      
-                      <div className="text-xs text-zinc-400 bg-blue-500/10 border border-blue-500/30 rounded p-2">
-                        💡 填寫越多參數，完整度分數越高，作品會在「創作參考」中獲得更多曝光！
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-400">縱橫比（Aspect Ratio）</label>
+                        <input
+                          type="text"
+                          className="w-full p-2 rounded bg-zinc-700 text-white"
+                          placeholder="例如：16:9、9:16、1:1"
+                          value={aspectRatio}
+                          onChange={(e) => setAspectRatio(e.target.value)}
+                        />
                       </div>
                     </div>
                   )}

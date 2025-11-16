@@ -52,8 +52,6 @@ export async function GET(req) {
       totalEarnedPoints: user.totalEarnedPoints ?? 0,
       // ✅ 討論區待領取積分
       discussionPendingPoints: user.discussionPendingPoints ?? 0,
-      // ✅ 播放器：使用者預設音樂 URL
-      defaultMusicUrl: user.defaultMusicUrl || '',
       // ✅ 播放清單：完整播放清單
       playlist: user.playlist || [],
       // ✅ 播放清單是否允許隨機播放

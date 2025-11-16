@@ -258,6 +258,12 @@ export default function MiniPlayer() {
             ? { allowShuffle: cached.allowShuffle }
             : {}),
         });
+        // 標記釘選擁有者（解除背景限制）
+        ref.setPinnedOwnerInfo?.({
+          userId: cached.userId,
+          allowShuffle: typeof cached.allowShuffle === "boolean" ? cached.allowShuffle : null,
+          shuffleEnabled: null,
+        });
       }
 
       window.dispatchEvent(
@@ -314,21 +320,8 @@ export default function MiniPlayer() {
     
     const t = (player?.trackTitle || "").trim();
     const u = (player?.originUrl || player?.src || "").trim();
-    
     if (t) return t;
     if (!u) return "未設定音源";
-    
-    // 嘗試從 YouTube URL 提取標題
-    try {
-      const url = new URL(u, typeof window !== "undefined" ? window.location.origin : undefined);
-      if (url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be')) {
-        const videoId = url.searchParams.get('v') || url.pathname.split('/').pop();
-        return `YouTube: ${videoId || '未知'}`;
-      }
-    } catch (e) {
-      // URL 解析失敗，忽略
-    }
-    
     return "未知音源";
   }, [player?.trackTitle, player?.originUrl, player?.src, isLoadingPlaylist, player?.playlist]);
   
@@ -831,6 +824,12 @@ export default function MiniPlayer() {
                     ? { allowShuffle: pinned.allowShuffle }
                     : {}),
                 });
+                // 標記釘選擁有者（解除背景限制）
+                playerRef.current.setPinnedOwnerInfo?.({
+                  userId: pinned.userId,
+                  allowShuffle: typeof pinned.allowShuffle === "boolean" ? pinned.allowShuffle : null,
+                  shuffleEnabled: null,
+                });
 
                 if (Array.isArray(latestPlaylist)) {
                   playerRef.current.setPlaylist?.(latestPlaylist);
@@ -867,6 +866,12 @@ export default function MiniPlayer() {
                   ...(typeof pinned.allowShuffle === "boolean"
                     ? { allowShuffle: pinned.allowShuffle }
                     : {}),
+                });
+                // 標記釘選擁有者（解除背景限制）
+                playerRef.current.setPinnedOwnerInfo?.({
+                  userId: pinned.userId,
+                  allowShuffle: typeof pinned.allowShuffle === "boolean" ? pinned.allowShuffle : null,
+                  shuffleEnabled: null,
                 });
                 if (Array.isArray(pinned.playlist)) {
                   playerRef.current.setPlaylist?.(pinned.playlist);
@@ -914,6 +919,12 @@ export default function MiniPlayer() {
               ...(typeof pinned.allowShuffle === "boolean"
                 ? { allowShuffle: pinned.allowShuffle }
                 : {}),
+            });
+            // 標記釘選擁有者（解除背景限制）
+            playerRef.current.setPinnedOwnerInfo?.({
+              userId: pinned.userId,
+              allowShuffle: typeof pinned.allowShuffle === "boolean" ? pinned.allowShuffle : null,
+              shuffleEnabled: null,
             });
 
             if (Array.isArray(pinned.playlist)) {
@@ -1046,6 +1057,12 @@ export default function MiniPlayer() {
             ownerPayload.allowShuffle = allowShuffle;
           }
           playerRef.current.setPlayerOwner?.(ownerPayload);
+          // 標記釘選擁有者（解除背景限制）
+          playerRef.current.setPinnedOwnerInfo?.({
+            userId: pinnedData.userId,
+            allowShuffle: typeof allowShuffle === "boolean" ? allowShuffle : null,
+            shuffleEnabled: null,
+          });
           
           // ✅ 設置播放清單（即使是空的）
           if (Array.isArray(pinnedData.playlist)) {
@@ -1089,6 +1106,8 @@ export default function MiniPlayer() {
           playerRef.current.setShuffleAllowed?.(false);
           playerRef.current.setShuffleEnabled?.(false);
           playerRef.current.setPlayerOwner?.(null);
+          // 清除釘選擁有者（恢復背景限制）
+          playerRef.current.setPinnedOwnerInfo?.(null);
         }
         clearPinnedPlayerCache();
         needsPinnedRefreshRef.current = false;
@@ -1135,24 +1154,6 @@ export default function MiniPlayer() {
   // ✅ 當播放器隱藏時（未釘選且離開用戶頁面），停止播放並觸發暫停事件
   useEffect(() => {
     if (!showMini && !isPinned && player?.shareMode !== "page" && player?.isPlaying) {
-      
-      // ✅ 先使用 postMessage 暫停 YouTube 播放器（在清空 originUrl 之前）
-      try {
-        const iframes = document.querySelectorAll('iframe[src*="youtube.com"]');
-        if (iframes.length > 0) {
-          const iframe = iframes[iframes.length - 1];
-          if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage(JSON.stringify({
-              event: 'command',
-              func: 'pauseVideo',
-              args: []
-            }), '*');
-          }
-        }
-      } catch (error) {
-        console.error('❌ [MiniPlayer] YouTube 暫停失敗:', error);
-      }
-      
       // 調用 player.pause()，觸發 playerStateChanged 事件（記錄為暫停狀態）
       player?.pause?.();
     }
@@ -1223,6 +1224,8 @@ export default function MiniPlayer() {
                       playerRef.current.setSrcWithAudio?.('', [], 0, '');
                       // 禁用播放器，確保 MiniPlayer 消失
                       playerRef.current.setMiniPlayerEnabled?.(false);
+                      // 清除釘選擁有者（恢復背景限制）
+                      playerRef.current.setPinnedOwnerInfo?.(null);
                     }
                     
                     window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 

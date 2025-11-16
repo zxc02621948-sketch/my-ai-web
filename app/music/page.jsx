@@ -248,27 +248,27 @@ const MusicPage = () => {
       {/* 頁面標題 */}
       <div className="bg-zinc-900 shadow-sm border-b border-zinc-700">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-3 sm:gap-6">
-            {/* 左側：標題和描述 */}
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-white">🎵 音樂專區</h1>
-                <p className="mt-1 text-gray-400">探索精彩的 AI 生成音樂</p>
+          <div className="flex flex-col md:flex-row items-center gap-6 md:gap-40 justify-center w-full">
+            {/* 左邊區塊：標題和描述 */}
+            <div className="flex flex-col items-center md:items-start text-center md:text-left shrink-0">
+              <h1 className="text-3xl font-bold text-white">🎵 音樂專區</h1>
+              <p className="mt-1 text-gray-400">探索精彩的 AI 生成音樂</p>
+            </div>
+
+            {/* 中間區塊：提示文字 */}
+            <div className="text-yellow-400 text-sm text-center shrink-0">
+              <div className="md:hidden">
+                💡 點擊「播放」或「預覽」按鈕即可開始試聽。
               </div>
-              {/* 提示文字 */}
-              <div className="text-yellow-400 text-sm">
-                <div className="md:hidden">
-                  💡 點擊「播放」或「預覽」按鈕即可開始試聽。
-                </div>
-                <div className="hidden md:block">
-                  💡 點擊「播放」或「預覽」按鈕即可開始試聽，滑鼠移開卡片時預覽會立即結束。
-                </div>
+              <div className="hidden md:block">
+                💡 點擊「播放」或「預覽」按鈕即可開始試聽。<br />
+                滑鼠移開卡片時預覽會立即結束。
               </div>
             </div>
 
-            {/* 中間：版本資訊和法律連結（手機版隱藏） */}
-            <div className="hidden md:flex items-center gap-4 text-xs text-gray-400 flex-1 justify-center flex-wrap">
-              <div className="flex items-center gap-2">
+            {/* 右邊區塊：版本資訊和法律連結（手機版隱藏） */}
+            <div className="hidden md:flex flex-col items-center gap-2 text-xs text-gray-400 shrink-0 text-center">
+              <div className="flex items-center gap-2 justify-center">
                 <a
                   href="/about"
                   className="hover:text-white transition text-sm font-medium text-blue-400"
@@ -279,14 +279,15 @@ const MusicPage = () => {
                 <span className="text-sm text-yellow-400">
                   版本 v0.8.0（2025-10-15）🎉
                 </span>
+              </div>
+              <div className="flex items-center gap-2 justify-center">
                 <a
                   href="/changelog"
                   className="text-sm underline hover:text-white"
                 >
                   查看更新內容
                 </a>
-              </div>
-              <div className="flex items-center gap-2">
+                <span className="text-gray-600">•</span>
                 <a href="/privacy" className="hover:text-white transition">
                   隱私政策
                 </a>

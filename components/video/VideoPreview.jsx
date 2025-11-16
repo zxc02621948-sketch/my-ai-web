@@ -593,32 +593,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
               <span className="text-xs text-gray-300">@{video.author.username}</span>
             </div>
           )}
-          
-          {/* 標籤 */}
-          {video.tags && video.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mb-2">
-              {video.tags.slice(0, 3).map((tag, index) => (
-                <span 
-                  key={index}
-                  className="text-xs bg-white/20 px-2 py-1 rounded-full"
-                >
-                  #{tag}
-                </span>
-              ))}
-              {video.tags.length > 3 && (
-                <span className="text-xs text-gray-300">
-                  +{video.tags.length - 3} 更多
-                </span>
-              )}
-            </div>
-          )}
-          
-          {/* 解析度資訊 */}
-          {video.width && video.height && (
-            <div className="text-xs text-gray-300">
-              {video.width} × {video.height}
-            </div>
-          )}
+
         </div>
       </div>
     </div>

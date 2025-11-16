@@ -118,6 +118,7 @@ export async function POST(req) {
       negativePrompt,
       rating,
       category,
+      categories,
       description,
       tags,
       userId,
@@ -156,9 +157,21 @@ export async function POST(req) {
       return NextResponse.json({ message: "缺少图片 ID 或标题" }, { status: 400 });
     }
     
-    if (!category || !category.trim()) {
-      return NextResponse.json({ message: "请选择图片分类" }, { status: 400 });
+    // 验证分类：优先使用 categories 数组，否则使用单个 category（向后兼容）
+    const categoriesArray = Array.isArray(categories) && categories.length > 0 
+      ? categories.filter(c => c && typeof c === 'string' && c.trim())
+      : (category && typeof category === 'string' && category.trim() ? [category.trim()] : []);
+    
+    if (categoriesArray.length === 0) {
+      return NextResponse.json({ message: "請選擇至少一個分類（最多3個）" }, { status: 400 });
     }
+    
+    if (categoriesArray.length > 3) {
+      return NextResponse.json({ message: "最多只能選擇3個分類" }, { status: 400 });
+    }
+    
+    // 使用第一个分类作为主分类（向后兼容）
+    const primaryCategory = categoriesArray[0];
     
     if (!normalizedRating) {
       return NextResponse.json({ message: "请选择有效的分级" }, { status: 400 });
@@ -236,7 +249,8 @@ export async function POST(req) {
       positivePrompt: positivePrompt || "",
       negativePrompt: negativePrompt || "",
       rating: normalizedRating,
-      category,
+      category: primaryCategory, // 保持向后兼容
+      categories: categoriesArray, // 新的多选分类
       description: description || "",
       tags: Array.isArray(tags) ? tags : [],
       author: author || "",

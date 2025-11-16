@@ -272,11 +272,12 @@ const VideosPage = () => {
                   <a href="/about" className="hover:text-white transition text-sm font-medium text-blue-400">我們的故事</a>
               <span className="text-gray-600">•</span>
               <span className="text-sm text-yellow-400">版本 v0.8.0（2025-10-15）🎉</span>
-              <a href="/changelog" className="text-sm underline hover:text-white">
-                查看更新內容
-              </a>
             </div>
               <div className="flex items-center gap-2">
+                <a href="/changelog" className="text-sm underline hover:text-white">
+                  查看更新內容
+                </a>
+                <span className="text-gray-600">•</span>
                 <a href="/privacy" className="hover:text-white transition">隱私政策</a>
                 <span className="text-gray-600">•</span>
                 <a href="/terms" className="hover:text-white transition">服務條款</a>
