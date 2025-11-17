@@ -558,15 +558,6 @@ export function PlayerProvider({
             }
           }
           
-          // ✅ 調試日志（開發模式）
-          if (process.env.NODE_ENV === "development") {
-            console.debug("[MediaSession] onPlay - 設置 metadata 和 playbackState:", {
-              paused: audio.paused,
-              duration: audio.duration,
-              currentTime: audio.currentTime,
-              attempts,
-            });
-          }
         } catch (error) {
           console.warn("[MediaSession] 更新播放狀態失敗:", error);
         }
@@ -1317,7 +1308,6 @@ export function PlayerProvider({
       if (document.hidden) {
         // 頁面隱藏時，記錄播放狀態（基於實際音頻元素狀態和 isPlaying 狀態）
         wasPlayingBeforeHiddenRef.current = !audioRef.current.paused && isPlaying;
-        console.log('👁️ 頁面隱藏，記錄播放狀態:', wasPlayingBeforeHiddenRef.current);
         if (!backgroundHiddenSinceRef.current) {
           backgroundHiddenSinceRef.current = Date.now();
         }
@@ -1339,7 +1329,6 @@ export function PlayerProvider({
                 if (document.hidden && !pinnedOwnerRef.current && audioRef.current && !audioRef.current.paused) {
                   audioRef.current.pause();
                   setIsPlaying(false);
-                  console.log('⏸️ 非釘選背景超時，自動暫停');
                 }
               } catch {}
             }, 30000); // 30s，可依需求調整
@@ -1356,7 +1345,6 @@ export function PlayerProvider({
                   if (elapsed >= 30000 && audioRef.current && !audioRef.current.paused) {
                     audioRef.current.pause();
                     setIsPlaying(false);
-                    console.log('⏸️ 非釘選背景輪詢自動暫停');
                   }
                 } catch {}
               }, 5000);
@@ -1372,40 +1360,34 @@ export function PlayerProvider({
           
           // 如果音頻沒有暫停，說明還在播放，不需要恢復
           if (!audioPaused) {
-            console.log('👁️ 頁面重新可見，音頻仍在播放，無需恢復');
             wasPlayingBeforeHiddenRef.current = false; // 清除標記
             return;
           }
           
           // 如果之前沒有在播放，不需要恢復
           if (!wasPlayingBeforeHiddenRef.current) {
-            console.log('👁️ 頁面重新可見，之前未在播放');
             return;
           }
           
           // 如果狀態顯示不應該在播放，不需要恢復
           if (!isPlaying) {
-            console.log('👁️ 頁面重新可見，播放狀態為暫停');
             wasPlayingBeforeHiddenRef.current = false; // 清除標記
             return;
           }
           
           // ✅ 如果播放器是被 AudioManager 暫停的，不自動恢復播放
           if (wasPausedByAudioManagerRef.current) {
-            console.log('👁️ 頁面重新可見，但播放器是被 AudioManager 暫停的，不自動恢復');
             wasPlayingBeforeHiddenRef.current = false; // 清除標記
             return;
           }
           
           // ✅ 只有當所有條件都滿足時才恢復播放
           if (audioRef.current.readyState > 0) {
-            console.log('🔄 頁面重新可見，恢復播放（音頻確實被暫停）');
             try {
               // 確保音頻已載入
               if (audioRef.current.readyState >= 2) {
                 await audioRef.current.play();
                 setIsPlaying(true);
-                console.log('✅ 播放已恢復');
               } else {
                 // 等待音頻載入完成後播放
                 const handleCanPlay = async () => {
@@ -1414,7 +1396,6 @@ export function PlayerProvider({
                     if (audioRef.current.paused && isPlaying) {
                       await audioRef.current.play();
                       setIsPlaying(true);
-                      console.log('✅ 播放已恢復（延遲載入）');
                     }
                   } catch (error) {
                     console.warn('⚠️ 恢復播放失敗:', error);
@@ -1473,7 +1454,6 @@ export function PlayerProvider({
       if (audio && audio === audioRef.current) {
         // 音頻元素已經被 AudioManager 暫停，但需要確保 React 狀態也更新
         if (isPlaying && audio.paused) {
-          console.log("🎵 [PlayerContext] AudioManager 暫停了播放器，同步狀態");
           setIsPlaying(false);
           // 標記播放器是被 AudioManager 暫停的
           wasPausedByAudioManagerRef.current = true;
@@ -1681,21 +1661,6 @@ export function PlayerProvider({
           artwork: artwork.length > 0 ? artwork : undefined,
         });
         
-        // ✅ 調試日志（開發模式）
-        if (process.env.NODE_ENV === "development") {
-          console.debug("[MediaSession] 設置基本 metadata:", {
-            title: finalTitle,
-            artist: finalArtist,
-            album: metadataAlbum,
-            artworkCount: artwork.length,
-            hasCurrentTrack: !!currentTrack,
-            playlistLength: Array.isArray(playlist) ? playlist.length : 0,
-            activeIndex,
-            musicUrl,
-            isMusicStreamUrl,
-            trackTitle,
-          });
-        }
       } catch (error) {
         console.warn("[MediaSession] 設定 metadata 失敗:", error);
       }
@@ -1739,21 +1704,11 @@ export function PlayerProvider({
                     artwork: cachedArtwork.length > 0 ? cachedArtwork : undefined,
                   });
                   
-                  // ✅ 調試日志（開發模式）
-                  if (process.env.NODE_ENV === "development") {
-                    console.debug("[MediaSession] 使用緩存更新 metadata:", {
-                      title: cachedMetadataTitle,
-                      artist: cachedMetadataArtist,
-                      album: cachedMetadataAlbum,
-                      artworkCount: cachedArtwork.length,
-                    });
-                  }
                 } catch (error) {
                   console.warn("[MediaSession] 更新 metadata 失敗:", error);
                 }
               } catch (error) {
                 // 緩存解析失敗，繼續獲取
-                console.debug("[MediaSession] 緩存解析失敗:", error);
               }
             } else {
               // ✅ 異步獲取音樂完整信息（不阻塞 UI）
@@ -1797,15 +1752,6 @@ export function PlayerProvider({
                         artwork: artwork.length > 0 ? artwork : undefined,
                       });
                       
-                      // ✅ 調試日志（開發模式）
-                      if (process.env.NODE_ENV === "development") {
-                        console.debug("[MediaSession] 更新完整 metadata:", {
-                          title: metadataTitle,
-                          artist: metadataArtist,
-                          album: metadataAlbum,
-                          artworkCount: artwork.length,
-                        });
-                      }
                     } catch (error) {
                       console.warn("[MediaSession] 更新 metadata 失敗:", error);
                     }
@@ -1813,12 +1759,10 @@ export function PlayerProvider({
                 })
                 .catch((error) => {
                   // 忽略錯誤，繼續使用基本信息
-                  console.debug("[MediaSession] 獲取音樂信息失敗:", error);
                 });
             }
           } catch (error) {
             // sessionStorage 訪問失敗，跳過緩存
-            console.debug("[MediaSession] sessionStorage 訪問失敗:", error);
           }
         }
       }
@@ -1972,15 +1916,6 @@ export function PlayerProvider({
                   // ✅ 立即更新 position state（Android 需要）
                   updatePositionState();
                   
-                  // ✅ 調試日志（開發模式）
-                  if (process.env.NODE_ENV === "development") {
-                    console.debug("[MediaSession] handlePlayAction - 設置 metadata 和 playbackState:", {
-                      paused: audio.paused,
-                      duration: audio.duration,
-                      currentTime: audio.currentTime,
-                      attempts,
-                    });
-                  }
                 } catch (error) {
                   console.warn("[MediaSession] 更新播放狀態失敗:", error);
                 }

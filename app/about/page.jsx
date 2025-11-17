@@ -21,7 +21,7 @@ export default function AboutPage() {
               <div className="flex items-center gap-2">
                 <a href="/about" className="hover:text-white transition">關於本站</a>
                 <span className="text-gray-600">•</span>
-                <span className="text-sm text-yellow-400">版本 v0.8.0（2025-10-15）🎉</span>
+                <span className="text-sm text-yellow-400">版本 v0.8.0（2025-11-05）🎉</span>
                 <a href="/changelog" className="text-sm underline hover:text-white">
                   查看更新內容
                 </a>

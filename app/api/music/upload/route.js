@@ -19,14 +19,6 @@ export async function POST(request) {
     // 驗證用戶
     const user = await getCurrentUserFromRequest(request);
     if (!user) {
-      // 檢查是否有 cookie
-      const cookieHeader = request.headers.get("cookie") || "";
-      const hasToken = cookieHeader.includes("token=");
-      console.log("❌ 音樂上傳認證失敗:", {
-        hasCookie: !!cookieHeader,
-        hasToken,
-        cookieLength: cookieHeader.length,
-      });
       return NextResponse.json({ error: "請先登入" }, { status: 401 });
     }
 

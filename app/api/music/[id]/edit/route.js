@@ -3,6 +3,8 @@ import { dbConnect } from "@/lib/db";
 import Music from "@/models/Music";
 import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
 import { computeMusicCompleteness } from "@/utils/scoreMusic";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { s3Client, R2_BUCKET_NAME, R2_PUBLIC_URL } from "@/lib/r2";
 
 // 工具函數
 function normalizeTags(input) {
@@ -65,13 +67,44 @@ export async function PATCH(req, { params }) {
       );
     }
 
-    // 解析 body
+    // 解析 body（支持 JSON 和 FormData）
     let body = {};
+    let isFormData = false;
+    let coverFile = null;
+    let coverPosition = null;
+    
     try {
-      body = await req.json();
-    } catch {
+      const contentType = req.headers.get("content-type") || "";
+      if (contentType.includes("multipart/form-data")) {
+        // FormData 請求（有封面文件時）
+        isFormData = true;
+        const formData = await req.formData();
+        
+        // 提取所有表單欄位
+        // 先處理 genres 陣列（使用 getAll 獲取所有值）
+        const genresArray = formData.getAll("genre").filter((g) => g);
+        if (genresArray.length > 0) {
+          body.genre = genresArray;
+        }
+        
+        // 然後處理其他欄位
+        for (const [key, value] of formData.entries()) {
+          if (key === "cover" && value instanceof File) {
+            coverFile = value;
+          } else if (key === "coverPosition") {
+            coverPosition = value;
+          } else if (key !== "genre") {
+            // 跳過 genre，因為已經處理過了
+            body[key] = value;
+          }
+        }
+      } else {
+        // JSON 請求
+        body = await req.json();
+      }
+    } catch (error) {
       return NextResponse.json(
-        { ok: false, message: "請提供 JSON 請求內容" },
+        { ok: false, message: "請提供有效的請求內容" },
         { status: 400 }
       );
     }
@@ -141,6 +174,57 @@ export async function PATCH(req, { params }) {
       if (k in updates) {
         updates[k] = String(updates[k] || "").trim();
       }
+    }
+
+    // 處理封面圖片上傳（如果有新封面）
+    if (coverFile && coverFile instanceof File) {
+      try {
+        const coverBuffer = Buffer.from(await coverFile.arrayBuffer());
+        const coverMimeType = coverFile.type || "image/jpeg";
+        
+        // 驗證 MIME type
+        const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+        if (validTypes.includes(coverMimeType)) {
+          // 獲取文件擴展名
+          const extMap = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/gif": "gif",
+            "image/webp": "webp",
+          };
+          const ext = extMap[coverMimeType] || "jpg";
+          
+          // 生成封面檔案名稱
+          const timestamp = Date.now();
+          const coverFileName = `music/${currentUser._id}/${timestamp}-cover-edit.${ext}`;
+          
+          // 上傳封面到 R2
+          const coverUploadCommand = new PutObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: coverFileName,
+            Body: coverBuffer,
+            ContentType: coverMimeType,
+          });
+          
+          await s3Client.send(coverUploadCommand);
+          
+          // 生成封面公開 URL
+          music.coverImageUrl = `${R2_PUBLIC_URL}/${coverFileName}`;
+          
+          // 如果有提供位置資訊，使用它；否則保持原有位置或使用預設值
+          if (coverPosition && typeof coverPosition === "string") {
+            music.coverPosition = coverPosition.trim() || "center";
+          } else if (!music.coverPosition) {
+            music.coverPosition = "center";
+          }
+        }
+      } catch (coverError) {
+        console.warn("⚠️ 上傳封面失敗:", coverError.message);
+        // 繼續執行，不影響其他欄位更新
+      }
+    } else if (coverPosition && typeof coverPosition === "string") {
+      // 如果只更新位置（沒有新文件），也要更新位置
+      music.coverPosition = coverPosition.trim() || music.coverPosition || "center";
     }
 
     // 更新音樂資料

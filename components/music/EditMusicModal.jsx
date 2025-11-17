@@ -46,6 +46,13 @@ export default function EditMusicModal({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [confirmAdult, setConfirmAdult] = useState(false);
 
+  // 封面圖相關狀態
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState(null);
+  const [coverPosition, setCoverPosition] = useState("50% 50%");
+  const [isDragging, setIsDragging] = useState(false);
+  const [currentCoverUrl, setCurrentCoverUrl] = useState(null);
+
   // 載入音樂數據
   useEffect(() => {
     if (!music || !isOpen) return;
@@ -74,6 +81,13 @@ export default function EditMusicModal({
     });
 
     setConfirmAdult(music.rating === "18");
+    
+    // 初始化封面圖狀態
+    setCurrentCoverUrl(music.coverImageUrl || null);
+    setCoverPreview(music.coverImageUrl || null);
+    setCoverPosition(music.coverPosition || "50% 50%");
+    setCoverFile(null);
+    setIsDragging(false);
   }, [music, isOpen]);
 
   const handleSave = async () => {
@@ -87,16 +101,62 @@ export default function EditMusicModal({
       return;
     }
 
+    // ✅ 如果有新封面或現有封面，且音樂分級不是 18+，再次提醒並確認
+    const hasCover = coverFile !== null || (currentCoverUrl && !coverFile);
+    if (hasCover && (form.rating === "all" || form.rating === "15")) {
+      // 檢查分級是否有變更（從 18+ 改為較低分級）
+      const ratingChanged = music.rating === "18" && form.rating !== "18";
+      const message = ratingChanged
+        ? `⚠️ 您將音樂分級從「18+」改為「${form.rating === "all" ? "全年齡" : "15+"}」，請確認封面內容符合新的分級規範。\n\n是否繼續保存？`
+        : `⚠️ 此音樂分級為「${form.rating === "all" ? "全年齡" : "15+"}」，請確認封面內容符合分級規範。\n\n是否繼續保存？`;
+      
+      const confirmed = window.confirm(message);
+      if (!confirmed) {
+        return;
+      }
+    }
+
     setSaving(true);
 
     try {
-      const response = await fetch(`/api/music/${music._id}/edit`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
+      // 如果有新封面文件，使用 FormData；否則使用 JSON
+      const hasNewCover = coverFile !== null;
+      
+      let response;
+      if (hasNewCover) {
+        // 使用 FormData 上傳（包含封面文件）
+        const formData = new FormData();
+        formData.append("title", form.title.trim());
+        formData.append("description", form.description.trim());
+        formData.append("tags", form.tags);
+        formData.append("category", form.category);
+        formData.append("rating", form.rating);
+        formData.append("platform", form.platform.trim());
+        formData.append("prompt", form.prompt.trim());
+        formData.append("modelName", form.modelName.trim());
+        formData.append("modelLink", form.modelLink.trim());
+        form.genre.forEach((g) => formData.append("genre", g));
+        formData.append("language", form.language);
+        formData.append("mood", form.mood.trim());
+        if (form.tempo) formData.append("tempo", String(form.tempo));
+        formData.append("key", form.key.trim());
+        formData.append("lyrics", form.lyrics.trim());
+        formData.append("singerGender", form.singerGender);
+        formData.append("seed", form.seed.trim());
+        formData.append("excludeStyles", form.excludeStyles.trim());
+        if (form.styleInfluence) formData.append("styleInfluence", String(form.styleInfluence));
+        if (form.weirdness) formData.append("weirdness", String(form.weirdness));
+        formData.append("cover", coverFile);
+        formData.append("coverPosition", coverPosition);
+
+        response = await fetch(`/api/music/${music._id}/edit`, {
+          method: "PATCH",
+          credentials: "include",
+          body: formData,
+        });
+      } else {
+        // 使用 JSON（沒有新封面，但可能更新位置）
+        const body = {
           title: form.title.trim(),
           description: form.description.trim(),
           tags: form.tags,
@@ -117,8 +177,37 @@ export default function EditMusicModal({
           excludeStyles: form.excludeStyles.trim(),
           styleInfluence: form.styleInfluence ? Number(form.styleInfluence) : null,
           weirdness: form.weirdness ? Number(form.weirdness) : null,
-        }),
-      });
+        };
+        
+        // 如果位置有變化，也發送位置（但沒有新文件，API 需要特殊處理）
+        // 注意：如果只更新位置而沒有新文件，我們需要通過 FormData 發送
+        if (coverPosition !== (music.coverPosition || "50% 50%")) {
+          const formData = new FormData();
+          Object.keys(body).forEach((key) => {
+            if (Array.isArray(body[key])) {
+              body[key].forEach((item) => formData.append(key, item));
+            } else if (body[key] !== null && body[key] !== undefined) {
+              formData.append(key, String(body[key]));
+            }
+          });
+          formData.append("coverPosition", coverPosition);
+          
+          response = await fetch(`/api/music/${music._id}/edit`, {
+            method: "PATCH",
+            credentials: "include",
+            body: formData,
+          });
+        } else {
+          response = await fetch(`/api/music/${music._id}/edit`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify(body),
+          });
+        }
+      }
 
       const result = await response.json();
 
@@ -145,6 +234,118 @@ export default function EditMusicModal({
       return { ...prev, genre: newGenres };
     });
   };
+
+  // 處理封面圖上傳
+  const handleCoverChange = (e) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) {
+      setCoverFile(null);
+      setCoverPreview(currentCoverUrl);
+      return;
+    }
+
+    // 驗證檔案類型
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!validTypes.includes(selectedFile.type)) {
+      toast.error("❌ 封面只支持 JPG、PNG、WebP、GIF 格式！");
+      e.target.value = "";
+      return;
+    }
+
+    // 驗證檔案大小（5MB）
+    const maxSize = 5 * 1024 * 1024;
+    if (selectedFile.size > maxSize) {
+      toast.error(
+        `❌ 封面過大！最大 5MB，當前：${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
+      );
+      e.target.value = "";
+      return;
+    }
+
+    // ✅ 檢查音樂分級，提醒用戶封面需符合分級規範
+    if (form.rating === "all" || form.rating === "15") {
+      toast.warning(
+        `⚠️ 此音樂分級為「${form.rating === "all" ? "全年齡" : "15+"}」，請確保封面內容符合分級規範！`,
+        { duration: 5000 }
+      );
+    }
+
+    setCoverFile(selectedFile);
+    
+    // 生成預覽
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setCoverPreview(reader.result);
+    };
+    reader.readAsDataURL(selectedFile);
+    // 重置位置為居中
+    setCoverPosition("50% 50%");
+  };
+
+  // 處理拖曳調整封面位置
+  const handleCoverDrag = (e) => {
+    if (!coverPreview) return;
+    
+    const container = e.currentTarget || document.querySelector('[data-cover-container-edit]');
+    if (!container) return;
+    
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // 計算百分比（0-100%）
+    const percentX = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    const percentY = Math.max(0, Math.min(100, (y / rect.height) * 100));
+    
+    setCoverPosition(`${percentX}% ${percentY}%`);
+  };
+
+  const handleCoverMouseDown = (e) => {
+    setIsDragging(true);
+    handleCoverDrag(e);
+  };
+
+  const handleCoverMouseMove = (e) => {
+    if (isDragging) {
+      handleCoverDrag(e);
+    }
+  };
+
+  const handleCoverMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // 監聽全局滑鼠事件（用於拖曳超出容器時）
+  useEffect(() => {
+    if (isDragging) {
+      const handleGlobalMouseMove = (e) => {
+        if (!coverPreview) return;
+        const container = document.querySelector('[data-cover-container-edit]');
+        if (!container) return;
+        
+        const rect = container.getBoundingClientRect();
+        const x = Math.max(rect.left, Math.min(rect.right, e.clientX)) - rect.left;
+        const y = Math.max(rect.top, Math.min(rect.bottom, e.clientY)) - rect.top;
+        
+        const percentX = Math.max(0, Math.min(100, (x / rect.width) * 100));
+        const percentY = Math.max(0, Math.min(100, (y / rect.height) * 100));
+        
+        setCoverPosition(`${percentX}% ${percentY}%`);
+      };
+
+      const handleGlobalMouseUp = () => {
+        setIsDragging(false);
+      };
+
+      window.addEventListener("mousemove", handleGlobalMouseMove);
+      window.addEventListener("mouseup", handleGlobalMouseUp);
+
+      return () => {
+        window.removeEventListener("mousemove", handleGlobalMouseMove);
+        window.removeEventListener("mouseup", handleGlobalMouseUp);
+      };
+    }
+  }, [isDragging, coverPreview]);
 
   if (!isOpen) return null;
 
@@ -181,6 +382,70 @@ export default function EditMusicModal({
               rows={3}
               maxLength={500}
             />
+          </div>
+
+          {/* 自訂封面編輯 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              🖼️ 自訂封面（選填）
+            </label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleCoverChange}
+              className="w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"
+            />
+            <p className="text-xs text-zinc-400 mt-1">
+              支援 JPG、PNG、WebP、GIF，最大 5MB。未上傳則保持原有封面
+            </p>
+            {coverPreview && (
+              <div className="mt-3 space-y-2">
+                {/* ✅ 分級提示 */}
+                {(form.rating === "all" || form.rating === "15") && (
+                  <div className="bg-yellow-500/20 border border-yellow-500/50 rounded p-2 text-xs text-yellow-300">
+                    ⚠️ 此音樂分級為「{form.rating === "all" ? "全年齡" : "15+"}」，封面內容需符合分級規範
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-400">
+                    拖曳圖片調整顯示位置：
+                  </label>
+                  <div
+                    data-cover-container-edit
+                    className="relative w-32 h-32 rounded-lg border-2 border-purple-500/50 overflow-hidden bg-zinc-800 cursor-move"
+                    onMouseDown={handleCoverMouseDown}
+                    onMouseMove={handleCoverMouseMove}
+                    onMouseUp={handleCoverMouseUp}
+                    onMouseLeave={() => {
+                      if (!isDragging) return;
+                    }}
+                  >
+                    <img
+                      src={coverPreview}
+                      alt="封面預覽"
+                      className="w-full h-full object-cover pointer-events-none select-none"
+                      style={{ objectPosition: coverPosition }}
+                      draggable={false}
+                    />
+                    {/* 拖曳提示覆蓋層 */}
+                    <div
+                      className={`absolute inset-0 flex items-center justify-center transition-opacity ${
+                        isDragging
+                          ? "opacity-0"
+                          : "opacity-0 hover:opacity-100"
+                      }`}
+                    >
+                      <div className="bg-black/60 backdrop-blur-sm text-white text-xs px-2 py-1 rounded">
+                        拖曳調整位置
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-zinc-500">
+                    點擊並拖曳圖片來調整在正方形框中的顯示位置
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

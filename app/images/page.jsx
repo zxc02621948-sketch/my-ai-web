@@ -546,7 +546,7 @@ export default function ImagesPage() {
               </a>
               <span className="text-gray-600">•</span>
               <span className="text-sm text-yellow-400 whitespace-nowrap">
-                版本 v0.8.0（2025-10-15）🎉
+                版本 v0.8.0（2025-11-05）🎉
               </span>
               <a href="/changelog" className="text-sm underline hover:text-white whitespace-nowrap">
                 查看更新內容

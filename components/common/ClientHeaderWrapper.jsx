@@ -88,8 +88,15 @@ export default function ClientHeaderWrapper({ currentUser, setCurrentUser }) {
       try {
         if (done) return;
         const token = getToken();
-        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+        if (!token) return; // 沒有 token 就不調用 API
+        const headers = { Authorization: `Bearer ${token}` };
         const res = await fetch("/api/points/daily-login", { method: "POST", headers, credentials: "include" });
+        
+        // 靜默處理 401 錯誤（可能是 token 無效，屬於正常情況）
+        if (!res.ok && res.status === 401) {
+          return; // 靜默返回，不處理
+        }
+        
         // 之後無論每日登入是否加分，都抓取最新使用者資訊並廣播（避免個人頁面顯示舊值 0）
         try {
           const uid = effectiveUser?._id || effectiveUser?.id;

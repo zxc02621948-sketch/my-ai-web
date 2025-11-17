@@ -78,7 +78,6 @@ class AudioManager {
       }
     } else {
       // 如果沒有提供 audio 參數，強制釋放所有音頻（用於清理）
-      debugLog("🎵 [AudioManager] 強制釋放所有音頻");
       this.currentAudio = null;
       this.currentPriority = 0;
     }

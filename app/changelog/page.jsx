@@ -18,7 +18,7 @@ export default function ChangelogPage() {
 
       {/* v0.8.0 - 大版本更新 */}
       <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-2 text-yellow-400">v0.8.0（2025-01-20）🎉 大版本更新</h2>
+        <h2 className="text-xl font-semibold mb-2 text-yellow-400">v0.8.0（2025-11-05）🎉 大版本更新</h2>
         
         <div className="mb-4">
           <h3 className="text-lg font-semibold text-purple-400 mb-2">🎬 影片系統</h3>
@@ -201,22 +201,6 @@ export default function ChangelogPage() {
       </div>
 
       {/* 下面是舊版本的更新日誌，保留不動 */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-2">v0.7.51（2025-08-01）</h2>
-        <ul className="list-disc list-inside space-y-1 text-gray-300">
-          <li>🐛 修復部分圖片無法正常顯示的問題</li>
-          <li>⚡ 提升頁面載入速度</li>
-        </ul>
-      </div>
-
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-2">v0.7.41（2025-07-20）</h2>
-        <ul className="list-disc list-inside space-y-1 text-gray-300">
-          <li>🆕 新增標籤篩選功能</li>
-          <li>🎯 優化搜尋結果排序</li>
-        </ul>
-      </div>
-
         {/* v0.7.5 - 新增 */}
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-2">v0.7.5（2025-08-07）</h2>
@@ -224,6 +208,8 @@ export default function ChangelogPage() {
             <li>🐞 多項視覺錯誤與結構異常修正，提升穩定性</li>
             <li>📝 可自訂已追蹤名單的備註說明</li>
             <li>🏷️ 點擊大圖的標籤可自動索引並搜尋相關圖片</li>
+            <li>🐛 修復部分圖片無法正常顯示的問題</li>
+            <li>⚡ 提升頁面載入速度</li>
           </ul>
         </div>
 
@@ -235,6 +221,8 @@ export default function ChangelogPage() {
             <li>🖼️ 頁面底部加入廣告預留區，高度與位置模擬實際廣告</li>
             <li>🧭 所有頁面新增「回首頁」按鈕導引</li>
             <li>🛠️ 回報按鈕位置調整，避免被廣告遮住</li>
+            <li>🆕 新增標籤篩選功能</li>
+            <li>🎯 優化搜尋結果排序</li>
           </ul>
         </div>
 

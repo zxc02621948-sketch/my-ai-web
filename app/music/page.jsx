@@ -277,7 +277,7 @@ const MusicPage = () => {
                 </a>
                 <span className="text-gray-600">•</span>
                 <span className="text-sm text-yellow-400">
-                  版本 v0.8.0（2025-10-15）🎉
+                  版本 v0.8.0（2025-11-05）🎉
                 </span>
               </div>
               <div className="flex items-center gap-2 justify-center">
