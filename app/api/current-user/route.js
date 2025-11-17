@@ -1,6 +1,6 @@
 // app/api/current-user/route.js
 import { dbConnect } from "@/lib/db";
-import { verifyJWT } from "@/lib/jwt";
+import { verifyToken } from "@/lib/serverAuth";
 import User from "@/models/User";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
@@ -21,7 +21,7 @@ export async function GET() {
     return NextResponse.json(null, { status: 200 });
   }
 
-  const decoded = verifyJWT(token);
+  const decoded = verifyToken(token);
   if (!decoded) {
     return NextResponse.json(null, { status: 200 });
   }

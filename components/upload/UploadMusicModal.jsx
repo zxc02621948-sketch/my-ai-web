@@ -28,6 +28,12 @@ export default function UploadMusicModal() {
   const [category, setCategory] = useState(""); // 'bgm' or 'song'
   const [language, setLanguage] = useState("");
 
+  // 自訂封面
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState(null);
+  const [coverPosition, setCoverPosition] = useState("50% 50%"); // 圖片在預覽框中的位置（百分比格式，例如 "50% 50%" 表示居中）
+  const [isDragging, setIsDragging] = useState(false);
+
   // 歌曲專用欄位
   const [lyrics, setLyrics] = useState("");
   const [singerGender, setSingerGender] = useState(""); // 'male', 'female', 'mixed', 'n/a'
@@ -106,6 +112,10 @@ export default function UploadMusicModal() {
       setShowAdvanced(false);
       setUploading(false);
       setConfirmAdult(false);
+      setCoverFile(null);
+      setCoverPreview(null);
+      setCoverPosition("50% 50%");
+      setIsDragging(false);
     }
   }, [isOpen]);
 
@@ -140,6 +150,107 @@ export default function UploadMusicModal() {
 
     setFile(selectedFile);
   };
+
+  const handleCoverChange = (e) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) {
+      setCoverFile(null);
+      setCoverPreview(null);
+      return;
+    }
+
+    // 驗證檔案類型
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!validTypes.includes(selectedFile.type)) {
+      toast.error("❌ 封面只支持 JPG、PNG、WebP、GIF 格式！");
+      e.target.value = "";
+      return;
+    }
+
+    // 驗證檔案大小（5MB）
+    const maxSize = 5 * 1024 * 1024;
+    if (selectedFile.size > maxSize) {
+      toast.error(
+        `❌ 封面過大！最大 5MB，當前：${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
+      );
+      e.target.value = "";
+      return;
+    }
+
+    setCoverFile(selectedFile);
+    
+    // 生成預覽
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setCoverPreview(reader.result);
+    };
+    reader.readAsDataURL(selectedFile);
+    // 重置位置為居中
+    setCoverPosition("50% 50%");
+  };
+
+  // 處理拖曳調整封面位置
+  const handleCoverDrag = (e) => {
+    if (!coverPreview) return;
+    
+    const container = e.currentTarget;
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // 計算百分比（0-100%）
+    const percentX = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    const percentY = Math.max(0, Math.min(100, (y / rect.height) * 100));
+    
+    setCoverPosition(`${percentX}% ${percentY}%`);
+  };
+
+  const handleCoverMouseDown = (e) => {
+    setIsDragging(true);
+    handleCoverDrag(e);
+  };
+
+  const handleCoverMouseMove = (e) => {
+    if (isDragging) {
+      handleCoverDrag(e);
+    }
+  };
+
+  const handleCoverMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // 監聽全局滑鼠事件（用於拖曳超出容器時）
+  useEffect(() => {
+    if (isDragging) {
+      const handleGlobalMouseMove = (e) => {
+        if (!coverPreview) return;
+        const container = document.querySelector('[data-cover-container]');
+        if (!container) return;
+        
+        const rect = container.getBoundingClientRect();
+        const x = Math.max(rect.left, Math.min(rect.right, e.clientX)) - rect.left;
+        const y = Math.max(rect.top, Math.min(rect.bottom, e.clientY)) - rect.top;
+        
+        const percentX = Math.max(0, Math.min(100, (x / rect.width) * 100));
+        const percentY = Math.max(0, Math.min(100, (y / rect.height) * 100));
+        
+        setCoverPosition(`${percentX}% ${percentY}%`);
+      };
+
+      const handleGlobalMouseUp = () => {
+        setIsDragging(false);
+      };
+
+      window.addEventListener("mousemove", handleGlobalMouseMove);
+      window.addEventListener("mouseup", handleGlobalMouseUp);
+
+      return () => {
+        window.removeEventListener("mousemove", handleGlobalMouseMove);
+        window.removeEventListener("mouseup", handleGlobalMouseUp);
+      };
+    }
+  }, [isDragging, coverPreview]);
 
   const handleUpload = async () => {
     if (!file) {
@@ -186,6 +297,10 @@ export default function UploadMusicModal() {
       formData.append("rating", rating);
       formData.append("category", category);
       if (language) formData.append("language", language);
+      if (coverFile) {
+        formData.append("cover", coverFile);
+        formData.append("coverPosition", coverPosition);
+      }
 
       // 歌曲專用欄位
       if (category === "song") {
@@ -360,6 +475,65 @@ export default function UploadMusicModal() {
                     </div>
                   </div>
                 )}
+
+                {/* 自訂封面（選填） */}
+                <div className="space-y-2">
+                  <label className="text-sm text-zinc-300 font-semibold">
+                    🖼️ 自訂封面（選填）
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={handleCoverChange}
+                    className="w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"
+                  />
+                  <p className="text-xs text-zinc-400">
+                    支援 JPG、PNG、WebP、GIF，最大 5MB。未上傳則使用 MP3 內嵌封面（如有）
+                  </p>
+                  {coverPreview && (
+                    <div className="mt-2 space-y-2">
+                      <div className="space-y-1">
+                        <label className="text-xs text-zinc-400">
+                          拖曳圖片調整顯示位置：
+                        </label>
+                        <div
+                          data-cover-container
+                          className="relative w-32 h-32 rounded-lg border-2 border-purple-500/50 overflow-hidden bg-zinc-800 cursor-move"
+                          onMouseDown={handleCoverMouseDown}
+                          onMouseMove={handleCoverMouseMove}
+                          onMouseUp={handleCoverMouseUp}
+                          onMouseLeave={() => {
+                            if (!isDragging) return;
+                            // 拖曳離開容器時不停止，讓全局監聽處理
+                          }}
+                        >
+                          <img
+                            src={coverPreview}
+                            alt="封面預覽"
+                            className="w-full h-full object-cover pointer-events-none select-none"
+                            style={{ objectPosition: coverPosition }}
+                            draggable={false}
+                          />
+                          {/* 拖曳提示覆蓋層 */}
+                          <div
+                            className={`absolute inset-0 flex items-center justify-center transition-opacity ${
+                              isDragging
+                                ? "opacity-0"
+                                : "opacity-0 hover:opacity-100"
+                            }`}
+                          >
+                            <div className="bg-black/60 backdrop-blur-sm text-white text-xs px-2 py-1 rounded">
+                              拖曳調整位置
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-xs text-zinc-500">
+                          點擊並拖曳圖片來調整在正方形框中的顯示位置
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* 分級（只在歌曲時顯示） */}
                 {category === "song" && (

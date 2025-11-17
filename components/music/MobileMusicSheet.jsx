@@ -318,7 +318,7 @@ export default function MobileMusicSheet({
                   ? {
                       backgroundImage: `url(${music.coverImageUrl})`,
                       backgroundSize: "cover",
-                      backgroundPosition: "center",
+                      backgroundPosition: music.coverPosition || "center",
                       backgroundRepeat: "no-repeat",
                     }
                   : {}
@@ -329,6 +329,7 @@ export default function MobileMusicSheet({
                   src={music.coverImageUrl}
                   alt={music.title || "音樂封面"}
                   className="w-full h-full object-cover"
+                  style={{ objectPosition: music.coverPosition || "center" }}
                 />
               )}
 

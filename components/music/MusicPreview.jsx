@@ -580,7 +580,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
           ...(music.coverImageUrl ? {
             backgroundImage: `url(${music.coverImageUrl})`,
             backgroundSize: "cover",
-            backgroundPosition: "center",
+            backgroundPosition: music.coverPosition || "center",
             backgroundRepeat: "no-repeat",
           } : {}),
           filter: isHovered

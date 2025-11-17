@@ -19,6 +19,14 @@ export async function POST(request) {
     // 驗證用戶
     const user = await getCurrentUserFromRequest(request);
     if (!user) {
+      // 檢查是否有 cookie
+      const cookieHeader = request.headers.get("cookie") || "";
+      const hasToken = cookieHeader.includes("token=");
+      console.log("❌ 音樂上傳認證失敗:", {
+        hasCookie: !!cookieHeader,
+        hasToken,
+        cookieLength: cookieHeader.length,
+      });
       return NextResponse.json({ error: "請先登入" }, { status: 401 });
     }
 
@@ -120,19 +128,74 @@ export async function POST(request) {
     // 生成公開 URL
     const musicUrl = `${R2_PUBLIC_URL}/${fileName}`;
 
-    // ✅ 嘗試提取 MP3 封面圖片
+    // ✅ 處理封面圖片（優先使用自訂封面，否則提取 MP3 內嵌封面）
     let coverImageUrl = "";
+    let coverPosition = "center"; // 預設位置
     let duration = 0;
+    const coverFile = formData.get("cover");
+    const coverPositionInput = formData.get("coverPosition");
+
+    // 優先處理自訂封面
+    if (coverFile && coverFile instanceof File) {
+      try {
+        const coverBuffer = Buffer.from(await coverFile.arrayBuffer());
+        const coverMimeType = coverFile.type || "image/jpeg";
+        
+        // 驗證 MIME type
+        const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+        if (validTypes.includes(coverMimeType)) {
+          // 獲取文件擴展名
+          const extMap = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/gif": "gif",
+            "image/webp": "webp",
+          };
+          const ext = extMap[coverMimeType] || "jpg";
+          
+          // 生成封面檔案名稱
+          const coverFileName = `music/${user._id}/${timestamp}-cover-custom.${ext}`;
+          
+          // 上傳封面到 R2
+          const coverUploadCommand = new PutObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: coverFileName,
+            Body: coverBuffer,
+            ContentType: coverMimeType,
+          });
+          
+          await s3Client.send(coverUploadCommand);
+          
+          // 生成封面公開 URL
+          coverImageUrl = `${R2_PUBLIC_URL}/${coverFileName}`;
+          
+          // 如果有提供位置資訊，使用它；否則使用預設值
+          if (coverPositionInput && typeof coverPositionInput === "string") {
+            coverPosition = coverPositionInput.trim() || "center";
+          }
+          
+          console.log(`✅ 成功上傳自訂封面: ${coverImageUrl}，位置: ${coverPosition}`);
+        } else {
+          console.warn("⚠️ 不支援的封面格式:", coverMimeType);
+        }
+      } catch (coverError) {
+        console.warn("⚠️ 上傳自訂封面失敗:", coverError.message);
+        // 繼續執行，稍後嘗試提取 MP3 內嵌封面
+      }
+    }
+
+    // ✅ 無論是否有自訂封面，都要提取 MP3 元數據（特別是 duration）
     try {
       const metadata = await parseBuffer(buffer);
       
-      // 提取時長
+      // 提取時長（優先）
       if (metadata.format.duration) {
         duration = Math.round(metadata.format.duration);
+        console.log(`✅ 成功提取音樂時長: ${duration} 秒`);
       }
 
-      // 提取封面圖片
-      if (metadata.common.picture && metadata.common.picture.length > 0) {
+      // 如果沒有自訂封面，才提取 MP3 內嵌封面
+      if (!coverImageUrl && metadata.common.picture && metadata.common.picture.length > 0) {
         const picture = metadata.common.picture[0]; // 使用第一張圖片
         const coverBuffer = picture.data;
         let coverMimeType = picture.format || "image/jpeg";
@@ -168,8 +231,8 @@ export async function POST(request) {
         // 生成封面公開 URL
         coverImageUrl = `${R2_PUBLIC_URL}/${coverFileName}`;
         
-        console.log(`✅ 成功提取並上傳封面: ${coverImageUrl} (${coverMimeType})`);
-      } else {
+        console.log(`✅ 成功提取並上傳 MP3 內嵌封面: ${coverImageUrl} (${coverMimeType})`);
+      } else if (!coverImageUrl) {
         console.log("ℹ️ 此 MP3 檔案沒有嵌入封面圖片");
       }
     } catch (metadataError) {
@@ -226,7 +289,8 @@ export async function POST(request) {
             .filter((t) => t)
         : [],
       musicUrl,
-      coverImageUrl, // 從 MP3 提取的封面圖片
+      coverImageUrl, // 從 MP3 提取的封面圖片或自訂封面
+      coverPosition, // 封面顯示位置
       duration, // 從 MP3 提取的時長
       author: user._id,
       authorName: user.username,

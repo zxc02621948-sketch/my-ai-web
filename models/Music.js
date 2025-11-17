@@ -27,6 +27,10 @@ const MusicSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    coverPosition: {
+      type: String,
+      default: "center", // CSS object-position 值，例如 "center", "50% 50%", "top left" 等
+    },
     duration: {
       type: Number,
       default: 0, // 秒數
