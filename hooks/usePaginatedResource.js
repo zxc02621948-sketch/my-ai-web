@@ -24,8 +24,9 @@ export default function usePaginatedResource({
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(enabled);
   const [loadingMore, setLoadingMore] = useState(false);
-  const isFetchingRef = useRef(false);
   const itemsRef = useRef([]);
+  const appendFetchingRef = useRef(false);
+  const fetchIdRef = useRef(0);
 
   const resetState = useCallback(() => {
     itemsRef.current = [];
@@ -110,16 +111,19 @@ export default function usePaginatedResource({
   const load = useCallback(
     async (targetPage, append) => {
       if (!enabled) return;
-      if (isFetchingRef.current) return;
-      isFetchingRef.current = true;
+      if (append && appendFetchingRef.current) return;
+
+      const requestId = append ? fetchIdRef.current : ++fetchIdRef.current;
+      const requestDepsKey = depsKeyRef.current;
+
+      if (append) {
+        appendFetchingRef.current = true;
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
 
       try {
-        if (append) {
-          setLoadingMore(true);
-        } else {
-          setLoading(true);
-        }
-
         const result = await fetchPage(targetPage);
         const incoming = Array.isArray(result?.items)
           ? result.items
@@ -127,16 +131,26 @@ export default function usePaginatedResource({
             ? result
             : [];
 
-        mergeItems(incoming, append);
-
         const derivedHasMore =
           typeof result?.hasMore === "boolean"
             ? result.hasMore
             : incoming.length > 0;
 
+        const depsStillMatch = requestDepsKey === depsKeyRef.current;
+        const isLatestNonAppend =
+          append || requestId === fetchIdRef.current;
+
+        if (!depsStillMatch || !isLatestNonAppend) {
+          return;
+        }
+
+        mergeItems(incoming, append);
         setHasMore(derivedHasMore);
         setPage(targetPage);
       } catch (error) {
+        if (error?.name === "AbortError") {
+          return;
+        }
         console.error("usePaginatedResource load error:", error);
         if (!append) {
           itemsRef.current = [];
@@ -145,11 +159,11 @@ export default function usePaginatedResource({
         setHasMore(false);
       } finally {
         if (append) {
+          appendFetchingRef.current = false;
           setLoadingMore(false);
-        } else {
+        } else if (requestId === fetchIdRef.current) {
           setLoading(false);
         }
-        isFetchingRef.current = false;
       }
     },
     [enabled, fetchPage, mergeItems],
@@ -169,6 +183,10 @@ export default function usePaginatedResource({
     if (!Array.isArray(deps) || deps.length === 0) return "__no_deps__";
     return deps.map((token) => String(token ?? "")).join("||");
   }, [deps]);
+  const depsKeyRef = useRef(depsKey);
+  useEffect(() => {
+    depsKeyRef.current = depsKey;
+  }, [depsKey]);
 
   useEffect(() => {
     if (!enabled) {
@@ -181,7 +199,7 @@ export default function usePaginatedResource({
   }, [enabled, refresh, depsKey, resetState]);
 
   const loadMore = useCallback(() => {
-    if (!enabled || loadingMore || !hasMore || isFetchingRef.current) return;
+    if (!enabled || loadingMore || !hasMore || appendFetchingRef.current) return;
     load(page + 1, true);
   }, [enabled, hasMore, load, loadingMore, page]);
 
