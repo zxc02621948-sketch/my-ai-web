@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 
 export async function POST(req) {
   try {
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const token = process.env.CLOUDFLARE_API_TOKEN;
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
+    const token = process.env.CLOUDFLARE_API_TOKEN?.trim();
 
     if (!accountId || !token) {
       console.error("❌ 環境變數缺失：", { 
@@ -15,6 +15,18 @@ export async function POST(req) {
         success: false, 
         error: "環境變數未設定",
         details: "CLOUDFLARE_ACCOUNT_ID 或 CLOUDFLARE_API_TOKEN 未設置"
+      }, { status: 500 });
+    }
+
+    // ✅ 驗證 Account ID 格式（應該是 32 個字符的十六進制字符串）
+    if (!/^[a-f0-9]{32}$/i.test(accountId)) {
+      console.error("❌ Account ID 格式錯誤：", {
+        accountId: accountId ? `${accountId.substring(0, 8)}...` : "未設置",
+        length: accountId?.length
+      });
+      return NextResponse.json({ 
+        success: false, 
+        error: "CLOUDFLARE_ACCOUNT_ID 格式不正確（應為 32 個字符的十六進制字符串）"
       }, { status: 500 });
     }
     
@@ -49,10 +61,14 @@ export async function POST(req) {
 
     const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v2/direct_upload`;
 
+    // ✅ 確保 token 沒有多餘的空格或換行
+    const cleanToken = token.replace(/\s+/g, '');
+
     const res = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        "Authorization": `Bearer ${cleanToken}`,
+        "Content-Type": "application/json",
       },
     });
 
@@ -61,24 +77,40 @@ export async function POST(req) {
     // ✅ 無論開發或生產環境都記錄錯誤（成功時只在開發環境記錄）
     if (!result.success || !result.result?.uploadURL) {
       const errorMessage = result.errors?.[0]?.message || "無法取得上傳 URL";
+      const httpStatus = res.status;
+      
       console.error("❌ Cloudflare API 錯誤：", {
-        status: res.status,
-        accountId: accountId ? `${accountId.substring(0, 8)}...` : "未設置",
-        hasToken: !!token,
+        httpStatus,
+        accountId: `${accountId.substring(0, 8)}...`,
+        tokenLength: cleanToken.length,
+        tokenPrefix: cleanToken.substring(0, 10) + "...",
         errors: result.errors,
         messages: result.messages,
+        // ✅ 只在開發環境記錄完整響應
         fullResponse: process.env.NODE_ENV === "development" ? result : undefined
       });
+
+      // ✅ 根據 HTTP 狀態碼提供更具體的錯誤訊息
+      let userFriendlyError = errorMessage;
+      if (httpStatus === 401 || httpStatus === 403) {
+        userFriendlyError = "Cloudflare API 認證失敗。請檢查 CLOUDFLARE_API_TOKEN 是否正確且有效，並確保 Token 有 Cloudflare Images 的權限。";
+      } else if (httpStatus === 404) {
+        userFriendlyError = "Cloudflare Account ID 不存在或無效。請檢查 CLOUDFLARE_ACCOUNT_ID 是否正確。";
+      }
+
       return NextResponse.json({ 
         success: false, 
-        error: errorMessage,
+        error: userFriendlyError,
         cloudflareError: result.errors?.[0],
+        httpStatus,
         // ✅ 在開發環境返回更多調試信息
         ...(process.env.NODE_ENV === "development" && {
           debug: {
-            status: res.status,
+            status: httpStatus,
             errors: result.errors,
-            messages: result.messages
+            messages: result.messages,
+            accountId: `${accountId.substring(0, 8)}...`,
+            tokenLength: cleanToken.length
           }
         })
       }, { status: 500 });
