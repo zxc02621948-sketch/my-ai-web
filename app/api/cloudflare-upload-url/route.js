@@ -6,8 +6,16 @@ export async function POST(req) {
     const token = process.env.CLOUDFLARE_API_TOKEN;
 
     if (!accountId || !token) {
-      console.error("❌ 環境變數缺失：", { accountId, token });
-      return NextResponse.json({ success: false, error: "環境變數未設定" }, { status: 500 });
+      console.error("❌ 環境變數缺失：", { 
+        hasAccountId: !!accountId, 
+        hasToken: !!token,
+        nodeEnv: process.env.NODE_ENV 
+      });
+      return NextResponse.json({ 
+        success: false, 
+        error: "環境變數未設定",
+        details: "CLOUDFLARE_ACCOUNT_ID 或 CLOUDFLARE_API_TOKEN 未設置"
+      }, { status: 500 });
     }
     
     // 可选：从请求中获取文件信息进行预验证
@@ -48,18 +56,37 @@ export async function POST(req) {
       },
     });
 
-    console.log("🐞 Cloudflare 狀態碼：", res.status);
-
     const result = await res.json();
-    console.log("🐞 Cloudflare 回傳內容：", result);
+    
+    if (process.env.NODE_ENV === "development") {
+      console.log("🐞 Cloudflare 狀態碼：", res.status);
+      console.log("🐞 Cloudflare 回傳內容：", result);
+    }
 
     if (!result.success || !result.result?.uploadURL) {
-      return NextResponse.json({ success: false, error: "無法取得上傳 URL", cloudflare: result }, { status: 500 });
+      const errorMessage = result.errors?.[0]?.message || "無法取得上傳 URL";
+      console.error("❌ Cloudflare API 錯誤：", {
+        status: res.status,
+        errors: result.errors,
+        messages: result.messages
+      });
+      return NextResponse.json({ 
+        success: false, 
+        error: errorMessage,
+        cloudflareError: result.errors?.[0] 
+      }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, uploadURL: result.result.uploadURL });
   } catch (err) {
-    console.error("❌ Cloudflare 請求異常：", err);
-    return NextResponse.json({ success: false, error: "伺服器錯誤" }, { status: 500 });
+    console.error("❌ Cloudflare 請求異常：", {
+      message: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined
+    });
+    return NextResponse.json({ 
+      success: false, 
+      error: "伺服器錯誤",
+      message: err.message 
+    }, { status: 500 });
   }
 }
