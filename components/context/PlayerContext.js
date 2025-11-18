@@ -666,7 +666,7 @@ export function PlayerProvider({
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [audioRef.current]); // audio 元素就緒後掛載事件
+  }, [onLoaded, onTime, onPlay, onPause, onEnded]);
 
   useEffect(() => {
     return () => {
@@ -687,7 +687,7 @@ export function PlayerProvider({
   }, [volume]);
 
   // ✅ 播放音樂 - 只使用本地音頻播放器
-  const play = async () => {
+  const play = useCallback(async () => {
     if (!src && !originUrl) {
       console.warn("⚠️ [PlayerContext.play] 沒有設置音樂來源");
       return false;
@@ -798,10 +798,10 @@ export function PlayerProvider({
     }
 
     return false;
-  };
+  }, [cancelPlaybackAttempt, originUrl, src]);
 
   // ✅ 暫停播放 - 只使用本地音頻播放器
-  const pause = () => {
+  const pause = useCallback(() => {
     console.log("🎵 [PlayerContext] pause() 被調用");
 
     cancelPlaybackAttempt();
@@ -862,14 +862,14 @@ export function PlayerProvider({
         detail: { isPlaying: false, action: "pause" },
       }),
     );
-  };
+  }, [cancelPlaybackAttempt]);
 
-  const seekTo = (time) => {
+  const seekTo = useCallback((time) => {
     // ✅ 只使用本地音頻播放器
     if (audioRef.current) {
       audioRef.current.currentTime = time;
     }
-  };
+  }, []);
 
   // ✅ 更新當前播放時間
   const updateCurrentTime = useCallback(() => {
@@ -1012,7 +1012,7 @@ export function PlayerProvider({
   );
 
   // ✅ 下一首音樂
-  const next = async () => {
+  const next = useCallback(async () => {
     const list = playlistRef.current || [];
     if (list.length === 0) {
       return;
@@ -1129,10 +1129,18 @@ export function PlayerProvider({
     } finally {
       // ✅ 不再需要延遲清除轉換標記，因為已經在上面的代碼中清除了
     }
-  };
+  }, [
+    cancelPlaybackAttempt,
+    playCurrentWithRetry,
+    regenerateShuffleQueue,
+    setActiveIndex,
+    setOriginUrl,
+    setTrackTitle,
+    setSrcWithAudio,
+  ]);
 
   // ✅ 上一首音樂
-  const previous = async () => {
+  const previous = useCallback(async () => {
     const list = playlistRef.current || [];
     if (list.length === 0) {
       return;
@@ -1232,10 +1240,17 @@ export function PlayerProvider({
         isTransitioningRef.current = false;
       }, 1000);
     }
-  };
+  }, [
+    cancelPlaybackAttempt,
+    playCurrentWithRetry,
+    setActiveIndex,
+    setOriginUrl,
+    setTrackTitle,
+    setSrcWithAudio,
+  ]);
 
   // ✅ setSrc 的包裝函數
-  const setSrcWithAudio = (newSrc) => {
+  const setSrcWithAudio = useCallback((newSrc) => {
     const audio = audioRef.current;
 
     const resolveSrc = (value) => {
@@ -1291,7 +1306,7 @@ export function PlayerProvider({
     } catch (error) {
       console.warn("🔧 設置音頻源失敗", error);
     }
-  };
+  }, [setCurrentTime, setDuration, setSrc]);
 
   // ✅ 更新 nextRef 引用，確保使用最新的 next 函數
   useEffect(() => {
@@ -1564,6 +1579,10 @@ export function PlayerProvider({
       shareMode,
       miniPlayerEnabled,
       seekable,
+      play,
+      pause,
+      seekTo,
+      updateCurrentTime,
       next,
       previous,
       playlist,
@@ -1572,6 +1591,20 @@ export function PlayerProvider({
       shuffleEnabled,
       playerOwner,
       pageOwnerSkin,
+      setSrcWithAudio,
+      setVolume,
+      setOriginUrl,
+      setTrackTitle,
+      setShareMode,
+      setMiniPlayerEnabled,
+      setSeekable,
+      setPlaylist,
+      setActiveIndex,
+      setShuffleAllowed,
+      setShuffleEnabled,
+      setPlayerOwner,
+      setPinnedOwnerInfo,
+      setPageOwnerSkin,
     ],
   );
 

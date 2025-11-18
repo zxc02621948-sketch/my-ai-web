@@ -97,6 +97,13 @@ const nextConfig = {
       // 避免將 Node 專用的 ffmpeg 安裝套件打進瀏覽器端，消除 Critical dependency 警告
       ...(!isServer ? { "@ffmpeg-installer/ffmpeg": false } : {}),
     };
+
+    if (isServer) {
+      // 將 ffmpeg 套件標記為外部依賴，避免 Next.js 嘗試在 server bundle 中解析
+      config.externals = config.externals || [];
+      config.externals.push({ "@ffmpeg-installer/ffmpeg": "commonjs @ffmpeg-installer/ffmpeg" });
+    }
+
     return config;
   },
 };

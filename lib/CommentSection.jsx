@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import { dbConnect } from "@/lib/db";
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -11,7 +10,8 @@ export async function GET(request) {
   }
 
   try {
-    const db = await connectToDatabase();
+    const mongoose = await dbConnect();
+    const db = mongoose.connection.db;
     const comments = await db
       .collection("comments")
       .find({ imageId })
@@ -33,7 +33,8 @@ export async function POST(request) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
 
-    const db = await connectToDatabase();
+    const mongoose = await dbConnect();
+    const db = mongoose.connection.db;
     const newComment = {
       imageId,
       text,

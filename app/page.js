@@ -314,11 +314,14 @@ function ImageShowcaseCard({ item, onSelect }) {
     >
       <div className="relative h-40 w-full overflow-hidden">
         {item.imageUrl ? (
-          <img
+          <Image
             src={item.imageUrl}
             alt={item.title}
+            fill
+            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 25vw"
             loading="lazy"
-            className="h-full w-full object-cover transition duration-700 group-hover/card:scale-105"
+            unoptimized
+            className="object-cover transition duration-700 group-hover/card:scale-105"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-zinc-900 text-zinc-500">
@@ -363,11 +366,14 @@ function MusicShowcaseCard({ item, onSelect, isActive }) {
     >
       <div className="relative h-40 w-full overflow-hidden">
         {item.cover ? (
-          <img
+          <Image
             src={item.cover}
             alt={title}
+            fill
+            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 25vw"
             loading="lazy"
-            className="h-full w-full object-cover transition duration-700 group-hover/card:scale-105"
+            unoptimized
+            className="object-cover transition duration-700 group-hover/card:scale-105"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-purple-600/40 to-blue-600/30 text-purple-100">
@@ -417,11 +423,14 @@ function VideoShowcaseCard({ item, onSelect }) {
     >
       <div className="relative h-40 w-full overflow-hidden">
         {thumb ? (
-          <img
+          <Image
             src={thumb}
             alt={title}
+            fill
+            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 25vw"
             loading="lazy"
-            className="h-full w-full object-cover transition duration-700 group-hover/card:scale-105"
+            unoptimized
+            className="object-cover transition duration-700 group-hover/card:scale-105"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-sky-500/40 to-emerald-500/30 text-sky-100">
@@ -1112,7 +1121,7 @@ const musicPreviewStateRef = useRef({
         />
       ),
     }),
-    [handleOpenImage, startMusicPreview, handleOpenVideo],
+    [handleOpenImage, startMusicPreview, handleOpenVideo, activeMusicPreviewId],
   );
 
   return (
