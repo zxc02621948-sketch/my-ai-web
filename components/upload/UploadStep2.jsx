@@ -836,79 +836,29 @@ export default function UploadStep2({
     let imageId = null;
 
     try {
-      // 获取要上传的文件信息（用于后端验证）
+      // 获取要上传的文件信息
       const fileToUpload = useOriginal ? imageFile : compressedImage;
       
-      // ✅ 先嘗試使用 v2 API（direct_upload）
-      let useServerUpload = false;
-      try {
-        const urlRes = await fetch("/api/cloudflare-upload-url", { 
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fileType: fileToUpload?.type,
-            fileSize: fileToUpload?.size
-          })
-        });
-        
-        if (!urlRes.ok) {
-          const errorData = await urlRes.json();
-          // ✅ 如果認證失敗，改用服務器端上傳
-          if (errorData.httpStatus === 401 || errorData.httpStatus === 403) {
-            console.warn("⚠️ v2 API 認證失敗，改用服務器端上傳（v1 API）");
-            useServerUpload = true;
-          } else {
-            throw new Error(errorData.error || "Cloudflare upload URL API error");
-          }
-        } else {
-          const urlData = await urlRes.json();
-          if (!urlData.success || !urlData.uploadURL) {
-            // ✅ 如果沒有 uploadURL，改用服務器端上傳
-            console.warn("⚠️ 未獲得上傳 URL，改用服務器端上傳（v1 API）");
-            useServerUpload = true;
-          } else {
-            // ✅ v2 API 成功，使用 direct_upload
-            const formData = new FormData();
-            formData.append("file", fileToUpload);
-            const cloudflareRes = await fetch(urlData.uploadURL, { method: "POST", body: formData });
-            const cloudflareData = await cloudflareRes.json();
-            imageId = cloudflareData?.result?.id;
-            if (!imageId) throw new Error("Cloudflare upload failed");
-          }
-        }
-      } catch (v2Error) {
-        // ✅ v2 API 失敗，改用服務器端上傳
-        console.warn("⚠️ v2 API 失敗，改用服務器端上傳（v1 API）:", v2Error);
-        useServerUpload = true;
+      // ✅ 直接使用服務器端上傳（v1 API）
+      const serverFormData = new FormData();
+      serverFormData.append("file", fileToUpload);
+      
+      const serverRes = await fetch("/api/cloudflare-upload", {
+        method: "POST",
+        body: serverFormData,
+      });
+      
+      if (!serverRes.ok) {
+        const serverError = await serverRes.json();
+        throw new Error(serverError.message || "服務器端上傳失敗");
       }
-
-      // ✅ 如果 v2 API 失敗，使用服務器端上傳（v1 API）
-      if (useServerUpload) {
-        const serverFormData = new FormData();
-        serverFormData.append("file", fileToUpload);
-        
-        const serverRes = await fetch("/api/cloudflare-upload", {
-          method: "POST",
-          body: serverFormData,
-        });
-        
-        if (!serverRes.ok) {
-          const serverError = await serverRes.json();
-          throw new Error(serverError.message || "服務器端上傳失敗");
-        }
-        
-        const serverData = await serverRes.json();
-        if (!serverData.success || !serverData.imageId) {
-          throw new Error("服務器端上傳失敗：未獲取到圖片 ID");
-        }
-        
-        imageId = serverData.imageId;
+      
+      const serverData = await serverRes.json();
+      if (!serverData.success || !serverData.imageId) {
+        throw new Error("服務器端上傳失敗：未獲取到圖片 ID");
       }
-
-      if (!imageId) {
-        throw new Error("上傳失敗：未獲取到圖片 ID");
-      }
-
+      
+      imageId = serverData.imageId;
       const imageUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageId}/public`;
 
       const token = document.cookie.match(/token=([^;]+)/)?.[1];
