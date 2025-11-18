@@ -36,54 +36,54 @@ export async function GET(req) {
     let apiTest = null;
     if (accountIdValid && tokenValid) {
       try {
-        // ✅ 測試 1：使用 Account API 驗證 Token（最簡單的測試）
-        const accountTestUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
-        const accountTestRes = await fetch(accountTestUrl, {
-          method: "GET",
+        // ✅ 直接測試 v2 direct_upload API（這是上傳時實際使用的）
+        const v2TestUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v2/direct_upload`;
+        const v2TestRes = await fetch(v2TestUrl, {
+          method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
-
-        const accountTestResult = await accountTestRes.json();
         
-        // ✅ 測試 2：如果 Account API 成功，再測試 Images API
-        let imagesTest = null;
-        if (accountTestRes.status === 200 && accountTestResult.success) {
-          // 測試 v2 direct_upload API（這是上傳時使用的）
-          const v2TestUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v2/direct_upload`;
-          const v2TestRes = await fetch(v2TestUrl, {
-            method: "POST",
+        const v2TestResult = await v2TestRes.json();
+        
+        // ✅ 如果 v2 失敗，測試 v1 API
+        let v1Test = null;
+        if (v2TestRes.status !== 200) {
+          // 測試 v1 API（使用一個小的測試請求）
+          // 注意：v1 需要 FormData，所以我們只測試是否能訪問
+          const v1TestUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1?per_page=1`;
+          const v1TestRes = await fetch(v1TestUrl, {
+            method: "GET",
             headers: {
               Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
             },
           });
           
-          const v2TestResult = await v2TestRes.json();
-          imagesTest = {
-            v2Status: v2TestRes.status,
-            v2Success: v2TestResult.success,
-            v2Error: v2TestResult.errors?.[0]?.message || null,
+          const v1TestResult = await v1TestRes.json();
+          v1Test = {
+            httpStatus: v1TestRes.status,
+            success: v1TestResult.success,
+            authenticated: v1TestRes.status === 200 || v1TestRes.status === 404,
+            error: v1TestResult.errors?.[0]?.message || null,
           };
         }
 
         apiTest = {
-          accountApi: {
-            httpStatus: accountTestRes.status,
-            success: accountTestResult.success,
-            authenticated: accountTestRes.status === 200,
-            error: accountTestResult.errors?.[0]?.message || null,
+          v2Api: {
+            httpStatus: v2TestRes.status,
+            success: v2TestResult.success,
+            authenticated: v2TestRes.status === 200 || v2TestRes.status === 401 || v2TestRes.status === 403,
+            hasUploadUrl: !!v2TestResult.result?.uploadURL,
+            error: v2TestResult.errors?.[0]?.message || null,
           },
-          imagesApi: imagesTest,
-          message: accountTestRes.status === 200
-            ? (imagesTest?.v2Status === 200 || imagesTest?.v2Status === 400
-                ? "✅ Token 有效，但 v2 API 可能需要額外權限"
-                : imagesTest?.v2Status === 401 || imagesTest?.v2Status === 403
-                ? "⚠️ Token 有效，但沒有 Cloudflare Images v2 API 權限（可以使用 v1 API fallback）"
-                : "✅ Token 有效，API 連接正常")
-            : accountTestRes.status === 401 || accountTestRes.status === 403
-            ? "❌ Token 認證失敗，請檢查 Token 是否有效"
+          v1Api: v1Test,
+          message: v2TestRes.status === 200
+            ? "✅ v2 API 正常，可以使用客戶端直接上傳"
+            : v2TestRes.status === 401 || v2TestRes.status === 403
+            ? (v1Test?.authenticated 
+                ? "⚠️ v2 API 無權限，但 v1 API 可用（將使用服務器端上傳 fallback）"
+                : "❌ Token 認證失敗，請檢查 Token 是否有效或有 Cloudflare Images 權限")
             : "⚠️ API 連接異常"
         };
       } catch (apiError) {
