@@ -783,6 +783,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
         onFrameSelect={handleFrameSelect}
         onImageUpload={handleImageUpload}
         userPoints={userData?.pointsBalance || 0}
+        userTotalEarnedPoints={userData?.totalEarnedPoints || 0}
         userAvatar={imageUrl}
         frameSettings={userData?.frameSettings || {}}
         frameColorEditorUnlocked={userData?.frameColorEditorUnlocked || false}

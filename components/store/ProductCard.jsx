@@ -174,12 +174,14 @@ export default function ProductCard({
         className={`w-full py-2 px-4 rounded-lg font-medium transition-all ${
           !isLoggedIn
             ? "bg-zinc-700 text-gray-400 cursor-not-allowed"
-            : isPurchased || isSubscribed
+            : isPurchased
             ? "bg-zinc-700 text-gray-400 cursor-not-allowed"
             : isLimitedPurchase
             ? "bg-gray-600 text-gray-400 cursor-not-allowed"
             : loading
             ? "bg-blue-600 opacity-70 cursor-wait"
+            : type === "subscription" && isSubscribed
+            ? "bg-blue-600 hover:bg-blue-700 text-white"
             : "bg-blue-600 hover:bg-blue-700 text-white"
         }`}
       >

@@ -158,14 +158,19 @@ export default function VideoInfoBox({
           <div className="text-sm text-gray-300 mb-2">標籤</div>
           <div className="flex flex-wrap gap-2">
             {video.tags.map((tag, index) => (
-              <span
+              <button
                 key={index}
                 className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors cursor-pointer"
-                onClick={() => copyToClipboard(tag, "標籤")}
-                title="點擊複製"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // ✅ 跳轉到影片專區的搜尋頁面
+                  router.push(`/videos?search=${encodeURIComponent(tag)}`);
+                  onClose?.();
+                }}
+                title="點擊搜尋此標籤"
               >
                 #{tag}
-              </span>
+              </button>
             ))}
           </div>
         </div>

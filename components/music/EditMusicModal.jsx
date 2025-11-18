@@ -9,6 +9,7 @@ import {
   MUSIC_LANGUAGES,
   LANGUAGE_MAP,
 } from "@/constants/musicCategories";
+import SelectField from "@/components/common/SelectField";
 
 export default function EditMusicModal({
   music,
@@ -37,7 +38,6 @@ export default function EditMusicModal({
     key: "",
     lyrics: "",
     singerGender: "",
-    seed: "",
     excludeStyles: "",
     styleInfluence: "",
     weirdness: "",
@@ -74,7 +74,6 @@ export default function EditMusicModal({
       key: music.key || "",
       lyrics: music.lyrics || "",
       singerGender: music.singerGender || "",
-      seed: music.seed || "",
       excludeStyles: music.excludeStyles || "",
       styleInfluence: music.styleInfluence ? String(music.styleInfluence) : "",
       weirdness: music.weirdness ? String(music.weirdness) : "",
@@ -142,7 +141,6 @@ export default function EditMusicModal({
         formData.append("key", form.key.trim());
         formData.append("lyrics", form.lyrics.trim());
         formData.append("singerGender", form.singerGender);
-        formData.append("seed", form.seed.trim());
         formData.append("excludeStyles", form.excludeStyles.trim());
         if (form.styleInfluence) formData.append("styleInfluence", String(form.styleInfluence));
         if (form.weirdness) formData.append("weirdness", String(form.weirdness));
@@ -173,7 +171,6 @@ export default function EditMusicModal({
           key: form.key.trim(),
           lyrics: form.lyrics.trim(),
           singerGender: form.singerGender,
-          seed: form.seed.trim(),
           excludeStyles: form.excludeStyles.trim(),
           styleInfluence: form.styleInfluence ? Number(form.styleInfluence) : null,
           weirdness: form.weirdness ? Number(form.weirdness) : null,
@@ -264,9 +261,16 @@ export default function EditMusicModal({
 
     // ✅ 檢查音樂分級，提醒用戶封面需符合分級規範
     if (form.rating === "all" || form.rating === "15") {
-      toast.warning(
+      toast(
         `⚠️ 此音樂分級為「${form.rating === "all" ? "全年齡" : "15+"}」，請確保封面內容符合分級規範！`,
-        { duration: 5000 }
+        {
+          duration: 5000,
+          icon: "⚠️",
+          style: {
+            background: "#fbbf24",
+            color: "#1f2937",
+          },
+        }
       );
     }
 
@@ -295,56 +299,75 @@ export default function EditMusicModal({
     
     // 計算百分比（0-100%）
     const percentX = Math.max(0, Math.min(100, (x / rect.width) * 100));
-    const percentY = Math.max(0, Math.min(100, (y / rect.height) * 100));
+    // ✅ 反轉 Y 軸：向上拖曳時，圖片向下移動（顯示圖片上半部分）
+    const percentY = Math.max(0, Math.min(100, 100 - (y / rect.height) * 100));
     
     setCoverPosition(`${percentX}% ${percentY}%`);
   };
 
   const handleCoverMouseDown = (e) => {
+    e.preventDefault(); // 防止默認行為（避免禁止圖標）
+    e.stopPropagation(); // 防止事件冒泡
     setIsDragging(true);
     handleCoverDrag(e);
   };
 
   const handleCoverMouseMove = (e) => {
-    if (isDragging) {
-      handleCoverDrag(e);
-    }
+    // ✅ 只在拖曳時處理，避免移動滑鼠就移動位置
+    if (!isDragging) return;
+    e.preventDefault();
+    handleCoverDrag(e);
   };
 
-  const handleCoverMouseUp = () => {
+  const handleCoverMouseUp = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setIsDragging(false);
   };
 
   // 監聽全局滑鼠事件（用於拖曳超出容器時）
   useEffect(() => {
-    if (isDragging) {
-      const handleGlobalMouseMove = (e) => {
-        if (!coverPreview) return;
-        const container = document.querySelector('[data-cover-container-edit]');
-        if (!container) return;
-        
-        const rect = container.getBoundingClientRect();
-        const x = Math.max(rect.left, Math.min(rect.right, e.clientX)) - rect.left;
-        const y = Math.max(rect.top, Math.min(rect.bottom, e.clientY)) - rect.top;
-        
-        const percentX = Math.max(0, Math.min(100, (x / rect.width) * 100));
-        const percentY = Math.max(0, Math.min(100, (y / rect.height) * 100));
-        
-        setCoverPosition(`${percentX}% ${percentY}%`);
-      };
+    if (!isDragging) return;
+    
+    let dragging = true; // ✅ 使用局部變量追蹤拖曳狀態，避免閉包問題
+    
+    const handleGlobalMouseMove = (e) => {
+      if (!coverPreview || !dragging) return; // ✅ 確保只在拖曳時處理
+      const container = document.querySelector('[data-cover-container-edit]');
+      if (!container) return;
+      
+      e.preventDefault(); // 防止默認行為
+      
+      const rect = container.getBoundingClientRect();
+      const x = Math.max(rect.left, Math.min(rect.right, e.clientX)) - rect.left;
+      const y = Math.max(rect.top, Math.min(rect.bottom, e.clientY)) - rect.top;
+      
+      const percentX = Math.max(0, Math.min(100, (x / rect.width) * 100));
+      // ✅ 反轉 Y 軸：向上拖曳時，圖片向下移動（顯示圖片上半部分）
+      const percentY = Math.max(0, Math.min(100, 100 - (y / rect.height) * 100));
+      
+      setCoverPosition(`${percentX}% ${percentY}%`);
+    };
 
-      const handleGlobalMouseUp = () => {
-        setIsDragging(false);
-      };
+    const handleGlobalMouseUp = (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      dragging = false; // ✅ 更新局部變量
+      setIsDragging(false);
+    };
 
-      window.addEventListener("mousemove", handleGlobalMouseMove);
-      window.addEventListener("mouseup", handleGlobalMouseUp);
+    window.addEventListener("mousemove", handleGlobalMouseMove);
+    window.addEventListener("mouseup", handleGlobalMouseUp);
 
-      return () => {
-        window.removeEventListener("mousemove", handleGlobalMouseMove);
-        window.removeEventListener("mouseup", handleGlobalMouseUp);
-      };
-    }
+    return () => {
+      dragging = false; // ✅ 清理時重置
+      window.removeEventListener("mousemove", handleGlobalMouseMove);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
   }, [isDragging, coverPreview]);
 
   if (!isOpen) return null;
@@ -412,12 +435,17 @@ export default function EditMusicModal({
                   </label>
                   <div
                     data-cover-container-edit
-                    className="relative w-32 h-32 rounded-lg border-2 border-purple-500/50 overflow-hidden bg-zinc-800 cursor-move"
+                    className={`relative w-32 h-32 rounded-lg border-2 border-purple-500/50 overflow-hidden bg-zinc-800 ${
+                      isDragging ? 'cursor-grabbing' : 'cursor-grab'
+                    }`}
                     onMouseDown={handleCoverMouseDown}
                     onMouseMove={handleCoverMouseMove}
                     onMouseUp={handleCoverMouseUp}
-                    onMouseLeave={() => {
-                      if (!isDragging) return;
+                    onMouseLeave={(e) => {
+                      // ✅ 如果離開容器且正在拖曳，停止拖曳
+                      if (isDragging) {
+                        handleCoverMouseUp(e);
+                      }
                     }}
                   >
                     <img
@@ -514,15 +542,24 @@ export default function EditMusicModal({
           <h3 className="text-lg font-semibold text-white">AI 生成資訊</h3>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
+            <label
+              className={`block text-sm font-medium mb-1 ${
+                form.platform ? "text-gray-300" : "text-red-400"
+              }`}
+            >
               生成平台 <span className="text-red-400">*</span>
             </label>
-            <input
-              type="text"
+            <SelectField
               value={form.platform}
-              onChange={(e) => setForm({ ...form, platform: e.target.value })}
-              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-white"
-              placeholder="例如：Suno, Udio, MusicGen"
+              onChange={(value) => setForm({ ...form, platform: value })}
+              invalid={!form.platform}
+              placeholder="請選擇平台"
+              options={[
+                { value: "Suno", label: "Suno" },
+                { value: "TopMediai", label: "TopMediai" },
+                { value: "Mureka.ai", label: "Mureka.ai" },
+                { value: "其他", label: "其他" },
+              ]}
             />
           </div>
 
@@ -725,19 +762,6 @@ export default function EditMusicModal({
             <div className="space-y-4 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Seed
-                </label>
-                <input
-                  type="text"
-                  value={form.seed}
-                  onChange={(e) => setForm({ ...form, seed: e.target.value })}
-                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-white"
-                  placeholder="Seed"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
                   排除風格
                 </label>
                 <input
@@ -754,13 +778,15 @@ export default function EditMusicModal({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">
-                    風格影響力 (%)
+                    🎭 怪異度
+                    <br />
+                    <span className="text-xs text-gray-400">（Weirdness）</span>
                   </label>
                   <input
                     type="number"
-                    value={form.styleInfluence}
+                    value={form.weirdness}
                     onChange={(e) =>
-                      setForm({ ...form, styleInfluence: e.target.value })
+                      setForm({ ...form, weirdness: e.target.value })
                     }
                     className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-white"
                     placeholder="0-100"
@@ -771,13 +797,15 @@ export default function EditMusicModal({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">
-                    怪異度 (%)
+                    🎨 風格影響力
+                    <br />
+                    <span className="text-xs text-gray-400">（Style Influence）</span>
                   </label>
                   <input
                     type="number"
-                    value={form.weirdness}
+                    value={form.styleInfluence}
                     onChange={(e) =>
-                      setForm({ ...form, weirdness: e.target.value })
+                      setForm({ ...form, styleInfluence: e.target.value })
                     }
                     className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-white"
                     placeholder="0-100"

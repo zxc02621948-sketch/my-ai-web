@@ -36,7 +36,7 @@ const STORE_CATEGORIES = [
 ];
 
 export default function StorePage() {
-  const { currentUser, subscriptions, updateSubscriptions } = useCurrentUser(); // 使用 Context
+  const { currentUser, subscriptions, updateSubscriptions, setCurrentUser } = useCurrentUser(); // 使用 Context
   const [activeCategory, setActiveCategory] = useState("features");
   const [activeSubCategory, setActiveSubCategory] = useState("all"); // 子分類：all, frames, skins
   const [loading, setLoading] = useState(false);
@@ -202,15 +202,68 @@ export default function StorePage() {
               headers: { 'Cache-Control': 'no-cache' }
             });
             setUserInfo(info.data);
+            // ✅ 更新 currentUser（確保 MiniPlayer 能獲取最新的狀態）
+            const currentUserInfo = await axios.get("/api/current-user", {
+              headers: { 'Cache-Control': 'no-cache' }
+            });
+            if (currentUserInfo.data) {
+              setCurrentUser(currentUserInfo.data);
+            }
           } else {
             notify.error("取消訂閱失敗", res.data.error || "取消訂閱失敗");
           }
         } 
         // 開通/續費訂閱
         else {
-          const res = await axios.post("/api/subscriptions/subscribe", {
-            subscriptionType
-          });
+          // ✅ 檢查是否為續費（使用 subscriptions 狀態，而不是 userInfo）
+          const pinPlayerSub = subscriptions?.pinPlayer;
+          const isRenewal = pinPlayerSub?.isActive && pinPlayerSub?.expiresAt && new Date(pinPlayerSub.expiresAt) > new Date();
+          
+          // 如果是續費，顯示確認對話框
+          if (isRenewal) {
+            const expiresAt = pinPlayerSub.expiresAt 
+              ? new Date(pinPlayerSub.expiresAt).toLocaleDateString('zh-TW')
+              : '';
+            
+            // 計算剩餘天數
+            const now = new Date();
+            const expiresAtDate = new Date(pinPlayerSub.expiresAt);
+            const daysRemaining = Math.ceil((expiresAtDate - now) / (1000 * 60 * 60 * 24));
+            const newDaysRemaining = daysRemaining + 30;
+            
+            const confirmed = await notify.confirm(
+              "確認續費釘選播放器訂閱",
+              `💰 費用：200 積分\n\n` +
+              `📅 目前到期：${expiresAt}\n` +
+              `⏳ 剩餘天數：${daysRemaining} 天\n\n` +
+              `✨ 續費後剩餘時間會累積，將變成 ${newDaysRemaining} 天\n\n` +
+              `是否確認續費？`
+            );
+            
+            if (!confirmed) {
+              setLoading(false);
+              setPurchaseStatus(prev => ({ ...prev, [productId]: false }));
+              return;
+            }
+          }
+          
+          let res;
+          try {
+            res = await axios.post("/api/subscriptions/subscribe", {
+              subscriptionType
+            });
+          } catch (error) {
+            // ✅ 處理 API 錯誤（例如積分不足）
+            if (error.response?.status === 400) {
+              const errorMessage = error.response?.data?.error || "訂閱失敗";
+              notify.error("訂閱失敗", errorMessage);
+            } else {
+              notify.error("訂閱失敗", error.response?.data?.error || "訂閱失敗，請稍後再試");
+            }
+            setLoading(false);
+            setPurchaseStatus(prev => ({ ...prev, [productId]: false }));
+            return;
+          }
           
           if (res.data.success) {
             const expiresDate = new Date(res.data.expiresAt);
@@ -230,6 +283,33 @@ export default function StorePage() {
               headers: { 'Cache-Control': 'no-cache' }
             });
             setUserInfo(info.data);
+            
+            // ✅ 更新 currentUser（確保 MiniPlayer 能獲取最新的 pinnedPlayer.expiresAt）
+            const currentUserInfo = await axios.get("/api/current-user", {
+              headers: { 'Cache-Control': 'no-cache' }
+            });
+            if (currentUserInfo.data) {
+              setCurrentUser(currentUserInfo.data);
+              console.log('🔄 [Store] 已更新 currentUser，pinnedPlayer.expiresAt:', currentUserInfo.data?.pinnedPlayer?.expiresAt);
+            }
+            
+            // ✅ 更新 subscriptions（確保 MiniPlayer 能獲取最新的 subscriptions.pinPlayer.expiresAt）
+            if (updateSubscriptions) {
+              await updateSubscriptions();
+              console.log('🔄 [Store] 已更新 subscriptions');
+            }
+            
+            // ✅ 觸發全局事件，通知 MiniPlayer 更新 pinnedPlayer 數據
+            if (typeof window !== "undefined") {
+              const expiresAtToSend = res.data.expiresAt || currentUserInfo.data?.pinnedPlayer?.expiresAt;
+              console.log('🔄 [Store] 觸發 subscriptionRenewed 事件，expiresAt:', expiresAtToSend);
+              window.dispatchEvent(new CustomEvent("subscriptionRenewed", {
+                detail: {
+                  subscriptionType: "pinPlayer",
+                  expiresAt: expiresAtToSend
+                }
+              }));
+            }
           } else {
             notify.error("訂閱失敗", res.data.error || "訂閱失敗，請檢查積分是否足夠");
           }

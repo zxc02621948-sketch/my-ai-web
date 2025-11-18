@@ -4,6 +4,7 @@ import axios from "axios";
 import { GENRE_MAP } from "@/constants/musicCategories";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { useRouter } from "next/navigation";
 
 export default function MusicInfoBox({
   music,
@@ -18,6 +19,7 @@ export default function MusicInfoBox({
   const contextUser = useCurrentUser();
   const { currentUser: contextCurrentUser, setCurrentUser } = contextUser || {};
   const currentUser = propCurrentUser || contextCurrentUser;
+  const router = useRouter();
   const [copiedField, setCopiedField] = useState(null);
   const [copyTip, setCopyTip] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -305,14 +307,19 @@ export default function MusicInfoBox({
           <div className="text-sm text-gray-300 mb-2">標籤</div>
           <div className="flex flex-wrap gap-2">
             {music.tags.map((tag, index) => (
-              <span
+              <button
                 key={index}
                 className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors cursor-pointer"
-                onClick={() => copyToClipboard(tag, "標籤")}
-                title="點擊複製"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // ✅ 跳轉到音樂專區的搜尋頁面
+                  router.push(`/music?search=${encodeURIComponent(tag)}`);
+                  onClose?.();
+                }}
+                title="點擊搜尋此標籤"
               >
                 #{tag}
-              </span>
+              </button>
             ))}
           </div>
         </div>
@@ -482,14 +489,22 @@ export default function MusicInfoBox({
               )}
               {music.weirdness !== null && music.weirdness !== undefined && (
                 <div className="p-2 bg-zinc-800 rounded">
-                  <div className="text-gray-400 mb-1">怪異度</div>
+                  <div className="text-gray-400 mb-1">
+                    🎭 怪異度
+                    <br />
+                    <span className="text-xs">（Weirdness）</span>
+                  </div>
                   <div className="text-white">{music.weirdness}%</div>
                 </div>
               )}
               {music.styleInfluence !== null &&
                 music.styleInfluence !== undefined && (
                   <div className="p-2 bg-zinc-800 rounded">
-                    <div className="text-gray-400 mb-1">風格影響力</div>
+                    <div className="text-gray-400 mb-1">
+                      🎨 風格影響力
+                      <br />
+                      <span className="text-xs">（Style Influence）</span>
+                    </div>
                     <div className="text-white">{music.styleInfluence}%</div>
                   </div>
                 )}

@@ -76,13 +76,6 @@ export async function POST(request) {
       existingSub.isActive = true;
       existingSub.lastRenewedAt = now;
       existingSub.cancelledAt = null; // 清除取消標記
-      
-      console.log(`🔄 [訂閱-累積] ${user.username} 續費了 ${config.name}`, {
-        原到期: currentExpiresAt.toISOString(),
-        新到期: newExpiresAt.toISOString(),
-        累積天數: config.durationDays || `${config.durationMinutes}分鐘`,
-        剩餘積分: user.pointsBalance
-      });
     } 
     // 首次購買
     else {
@@ -102,22 +95,14 @@ export async function POST(request) {
       }
       user.subscriptions.push(newSubscription);
       existingSub = newSubscription; // 用於後續返回
-      
-      console.log(`✅ [訂閱-新購] ${user.username} 開通了 ${config.name}`, {
-        到期時間: expiresAt.toISOString(),
-        剩餘積分: user.pointsBalance
-      });
     }
 
-    console.log(`💾 [訂閱] 準備保存訂閱數據:`, {
-      userId: user._id,
-      subscriptionType,
-      subscriptionsCount: user.subscriptions.length
-    });
+    // ✅ 如果用戶已經有釘選播放器，同步更新 pinnedPlayer.expiresAt
+    if (subscriptionType === 'pinPlayer' && user.pinnedPlayer) {
+      user.pinnedPlayer.expiresAt = existingSub.expiresAt;
+    }
 
     await user.save();
-    
-    console.log(`✅ [訂閱] 訂閱數據已保存到數據庫`);
 
     // 記錄積分交易
     const dateKey = now.toISOString().split('T')[0];

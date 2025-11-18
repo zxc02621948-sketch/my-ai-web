@@ -54,7 +54,12 @@ export async function GET() {
         username: user.pinnedPlayer.username,
         playlist: user.pinnedPlayer.playlist || [],
         pinnedAt: user.pinnedPlayer.pinnedAt,
-        expiresAt: user.pinnedPlayer.expiresAt,
+        // ✅ 確保 expiresAt 是 ISO 字符串格式
+        expiresAt: user.pinnedPlayer.expiresAt 
+          ? (user.pinnedPlayer.expiresAt instanceof Date 
+              ? user.pinnedPlayer.expiresAt.toISOString() 
+              : user.pinnedPlayer.expiresAt)
+          : null,
         currentIndex: user.pinnedPlayer.currentIndex || 0,
         isPlaying: user.pinnedPlayer.isPlaying || false,
         allowShuffle:

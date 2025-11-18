@@ -28,9 +28,12 @@ export async function POST(req) {
       return NextResponse.json({ error: "用戶不存在" }, { status: 404 });
     }
 
-    // 檢查是否達到 LV2（150 積分）
+    // ✅ 檢查是否達到 LV2（150 積分）
+    // 檢查方式：字段已設置 OR 等級達到 LV2（索引 >= 1）
     const userLevel = getLevelIndex(user.totalEarnedPoints || 0);
-    if (userLevel < 1) { // LV2 的索引是 1
+    const isUnlocked = user.frameColorEditorUnlocked || userLevel >= 1; // LV2 的索引是 1
+    
+    if (!isUnlocked) {
       return NextResponse.json({ 
         error: "此功能需要達到 LV2 才能使用",
         needLevel: "LV2"

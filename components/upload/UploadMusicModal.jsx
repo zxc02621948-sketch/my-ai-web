@@ -200,56 +200,75 @@ export default function UploadMusicModal() {
     
     // 計算百分比（0-100%）
     const percentX = Math.max(0, Math.min(100, (x / rect.width) * 100));
-    const percentY = Math.max(0, Math.min(100, (y / rect.height) * 100));
+    // ✅ 反轉 Y 軸：向上拖曳時，圖片向下移動（顯示圖片上半部分）
+    const percentY = Math.max(0, Math.min(100, 100 - (y / rect.height) * 100));
     
     setCoverPosition(`${percentX}% ${percentY}%`);
   };
 
   const handleCoverMouseDown = (e) => {
+    e.preventDefault(); // 防止默認行為（避免禁止圖標）
+    e.stopPropagation(); // 防止事件冒泡
     setIsDragging(true);
     handleCoverDrag(e);
   };
 
   const handleCoverMouseMove = (e) => {
-    if (isDragging) {
-      handleCoverDrag(e);
-    }
+    // ✅ 只在拖曳時處理，避免移動滑鼠就移動位置
+    if (!isDragging) return;
+    e.preventDefault();
+    handleCoverDrag(e);
   };
 
-  const handleCoverMouseUp = () => {
+  const handleCoverMouseUp = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setIsDragging(false);
   };
 
   // 監聽全局滑鼠事件（用於拖曳超出容器時）
   useEffect(() => {
-    if (isDragging) {
-      const handleGlobalMouseMove = (e) => {
-        if (!coverPreview) return;
-        const container = document.querySelector('[data-cover-container]');
-        if (!container) return;
-        
-        const rect = container.getBoundingClientRect();
-        const x = Math.max(rect.left, Math.min(rect.right, e.clientX)) - rect.left;
-        const y = Math.max(rect.top, Math.min(rect.bottom, e.clientY)) - rect.top;
-        
-        const percentX = Math.max(0, Math.min(100, (x / rect.width) * 100));
-        const percentY = Math.max(0, Math.min(100, (y / rect.height) * 100));
-        
-        setCoverPosition(`${percentX}% ${percentY}%`);
-      };
+    if (!isDragging) return;
+    
+    let dragging = true; // ✅ 使用局部變量追蹤拖曳狀態，避免閉包問題
+    
+    const handleGlobalMouseMove = (e) => {
+      if (!coverPreview || !dragging) return; // ✅ 確保只在拖曳時處理
+      const container = document.querySelector('[data-cover-container]');
+      if (!container) return;
+      
+      e.preventDefault(); // 防止默認行為
+      
+      const rect = container.getBoundingClientRect();
+      const x = Math.max(rect.left, Math.min(rect.right, e.clientX)) - rect.left;
+      const y = Math.max(rect.top, Math.min(rect.bottom, e.clientY)) - rect.top;
+      
+      const percentX = Math.max(0, Math.min(100, (x / rect.width) * 100));
+      // ✅ 反轉 Y 軸：向上拖曳時，圖片向下移動（顯示圖片上半部分）
+      const percentY = Math.max(0, Math.min(100, 100 - (y / rect.height) * 100));
+      
+      setCoverPosition(`${percentX}% ${percentY}%`);
+    };
 
-      const handleGlobalMouseUp = () => {
-        setIsDragging(false);
-      };
+    const handleGlobalMouseUp = (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      dragging = false; // ✅ 更新局部變量
+      setIsDragging(false);
+    };
 
-      window.addEventListener("mousemove", handleGlobalMouseMove);
-      window.addEventListener("mouseup", handleGlobalMouseUp);
+    window.addEventListener("mousemove", handleGlobalMouseMove);
+    window.addEventListener("mouseup", handleGlobalMouseUp);
 
-      return () => {
-        window.removeEventListener("mousemove", handleGlobalMouseMove);
-        window.removeEventListener("mouseup", handleGlobalMouseUp);
-      };
-    }
+    return () => {
+      dragging = false; // ✅ 清理時重置
+      window.removeEventListener("mousemove", handleGlobalMouseMove);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
   }, [isDragging, coverPreview]);
 
   const handleUpload = async () => {
@@ -498,13 +517,17 @@ export default function UploadMusicModal() {
                         </label>
                         <div
                           data-cover-container
-                          className="relative w-32 h-32 rounded-lg border-2 border-purple-500/50 overflow-hidden bg-zinc-800 cursor-move"
+                          className={`relative w-32 h-32 rounded-lg border-2 border-purple-500/50 overflow-hidden bg-zinc-800 ${
+                            isDragging ? 'cursor-grabbing' : 'cursor-grab'
+                          }`}
                           onMouseDown={handleCoverMouseDown}
                           onMouseMove={handleCoverMouseMove}
                           onMouseUp={handleCoverMouseUp}
-                          onMouseLeave={() => {
-                            if (!isDragging) return;
-                            // 拖曳離開容器時不停止，讓全局監聽處理
+                          onMouseLeave={(e) => {
+                            // ✅ 如果離開容器且正在拖曳，停止拖曳
+                            if (isDragging) {
+                              handleCoverMouseUp(e);
+                            }
                           }}
                         >
                           <img
@@ -619,19 +642,17 @@ export default function UploadMusicModal() {
                   </div>
                 )}
 
-                {platform && (
-                  <div className="space-y-2">
-                    <label className="text-sm text-zinc-400">
-                      💭 提示詞（Prompt）
-                    </label>
-                    <textarea
-                      placeholder="描述您想要的音樂風格、情緒、樂器等"
-                      className="w-full p-2 rounded bg-zinc-700 text-white h-24"
-                      value={prompt}
-                      onChange={(e) => setPrompt(e.target.value)}
-                    />
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <label className="text-sm text-zinc-400">
+                    💭 提示詞（Prompt）
+                  </label>
+                  <textarea
+                    placeholder="描述您想要的音樂風格、情緒、樂器等"
+                    className="w-full p-2 rounded bg-zinc-700 text-white h-24"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                  />
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   {/* 語言欄位（只顯示在歌曲類型） */}

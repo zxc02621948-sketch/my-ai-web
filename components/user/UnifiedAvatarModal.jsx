@@ -19,6 +19,7 @@ export default function UnifiedAvatarModal({
   onFrameSelect,
   onImageUpload,
   userPoints = 0,
+  userTotalEarnedPoints = 0, // 新增：總賺取積分（用於等級計算）
   userAvatar = null,
   frameSettings: initialFrameSettings = {},
   frameColorEditorUnlocked = false
@@ -224,19 +225,30 @@ export default function UnifiedAvatarModal({
                 </p>
                 
                 {/* 顏色編輯按鈕 */}
-                {previewFrame !== "default" && frameColorEditorUnlocked && (
-                  <button
-                    onClick={() => setShowColorEditor(true)}
-                    className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                  >
-                    🎨 編輯顏色
-                  </button>
-                )}
-                {previewFrame !== "default" && !frameColorEditorUnlocked && (
-                  <div className="mt-3 px-4 py-2 bg-gray-600 text-gray-300 rounded-lg text-sm text-center">
-                    🔒 需要解鎖調色盤功能
-                  </div>
-                )}
+                {(() => {
+                  // ✅ 檢查是否解鎖：字段已設置 OR 等級達到 LV2（索引 >= 1）
+                  const userLevel = getLevelIndex(userTotalEarnedPoints || 0);
+                  const isUnlocked = frameColorEditorUnlocked || userLevel >= 1; // LV2 的索引是 1
+                  
+                  if (previewFrame !== "default" && isUnlocked) {
+                    return (
+                      <button
+                        onClick={() => setShowColorEditor(true)}
+                        className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                      >
+                        🎨 編輯顏色
+                      </button>
+                    );
+                  }
+                  if (previewFrame !== "default" && !isUnlocked) {
+                    return (
+                      <div className="mt-3 px-4 py-2 bg-gray-600 text-gray-300 rounded-lg text-sm text-center">
+                        🔒 需要達到 LV2 才能使用調色盤功能
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* 頭像框選擇 */}
@@ -448,7 +460,7 @@ export default function UnifiedAvatarModal({
           frameId={previewFrame}
           userAvatar={userAvatar}
           userPoints={userPoints}
-          isLevelUnlocked={frameColorEditorUnlocked}
+          isLevelUnlocked={frameColorEditorUnlocked || getLevelIndex(userTotalEarnedPoints || 0) >= 1}
           onSave={async (settings) => {
             // 顯示確認彈窗
             setConfirmCallback(() => async () => {
