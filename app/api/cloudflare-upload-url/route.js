@@ -59,11 +59,12 @@ export async function POST(req) {
       // 如果没有 body 或解析失败，继续执行（向后兼容）
     }
 
-    const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v2/direct_upload`;
-
     // ✅ 確保 token 沒有多餘的空格或換行
     const cleanToken = token.replace(/\s+/g, '');
 
+    // ✅ 先嘗試使用 v2 API（direct_upload），如果失敗則回退到 v1
+    let url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v2/direct_upload`;
+    
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -72,12 +73,32 @@ export async function POST(req) {
       },
     });
 
-    const result = await res.json();
+    let result = await res.json();
+    let httpStatus = res.status;
+    
+    // ✅ 如果 v2 API 失敗（認證錯誤或 404），說明 Token 可能沒有 v2 權限
+    // 這種情況下，我們建議用戶檢查 Token 權限，或者使用服務器端上傳
+    if ((httpStatus === 401 || httpStatus === 403) && !result.success) {
+      const errorMsg = result.errors?.[0]?.message || "認證失敗";
+      console.error("❌ Cloudflare v2 API 認證失敗，可能的原因：", {
+        httpStatus,
+        error: errorMsg,
+        suggestion: "Token 可能沒有 Cloudflare Images v2 API 的權限，請在 Cloudflare Dashboard 檢查 Token 權限設置"
+      });
+      
+      // ✅ 返回詳細的錯誤信息，建議檢查 Token 權限
+      return NextResponse.json({ 
+        success: false,
+        error: "Cloudflare API 認證失敗",
+        details: errorMsg,
+        suggestion: "請檢查 CLOUDFLARE_API_TOKEN 是否有 Cloudflare Images 的權限（特別是 v2 API）。如果沒有 v2 權限，可以考慮使用服務器端上傳（/api/cloudflare-upload）",
+        httpStatus
+      }, { status: 500 });
+    }
     
     // ✅ 無論開發或生產環境都記錄錯誤（成功時只在開發環境記錄）
     if (!result.success || !result.result?.uploadURL) {
       const errorMessage = result.errors?.[0]?.message || "無法取得上傳 URL";
-      const httpStatus = res.status;
       
       console.error("❌ Cloudflare API 錯誤：", {
         httpStatus,
@@ -93,7 +114,7 @@ export async function POST(req) {
       // ✅ 根據 HTTP 狀態碼提供更具體的錯誤訊息
       let userFriendlyError = errorMessage;
       if (httpStatus === 401 || httpStatus === 403) {
-        userFriendlyError = "Cloudflare API 認證失敗。請檢查 CLOUDFLARE_API_TOKEN 是否正確且有效，並確保 Token 有 Cloudflare Images 的權限。";
+        userFriendlyError = "Cloudflare API 認證失敗。請檢查 CLOUDFLARE_API_TOKEN 是否正確且有效，並確保 Token 有 Cloudflare Images 的權限（特別是 v2 API 權限）。";
       } else if (httpStatus === 404) {
         userFriendlyError = "Cloudflare Account ID 不存在或無效。請檢查 CLOUDFLARE_ACCOUNT_ID 是否正確。";
       }
