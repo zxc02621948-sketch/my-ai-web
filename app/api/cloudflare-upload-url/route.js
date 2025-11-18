@@ -58,23 +58,34 @@ export async function POST(req) {
 
     const result = await res.json();
     
-    if (process.env.NODE_ENV === "development") {
-      console.log("🐞 Cloudflare 狀態碼：", res.status);
-      console.log("🐞 Cloudflare 回傳內容：", result);
-    }
-
+    // ✅ 無論開發或生產環境都記錄錯誤（成功時只在開發環境記錄）
     if (!result.success || !result.result?.uploadURL) {
       const errorMessage = result.errors?.[0]?.message || "無法取得上傳 URL";
       console.error("❌ Cloudflare API 錯誤：", {
         status: res.status,
+        accountId: accountId ? `${accountId.substring(0, 8)}...` : "未設置",
+        hasToken: !!token,
         errors: result.errors,
-        messages: result.messages
+        messages: result.messages,
+        fullResponse: process.env.NODE_ENV === "development" ? result : undefined
       });
       return NextResponse.json({ 
         success: false, 
         error: errorMessage,
-        cloudflareError: result.errors?.[0] 
+        cloudflareError: result.errors?.[0],
+        // ✅ 在開發環境返回更多調試信息
+        ...(process.env.NODE_ENV === "development" && {
+          debug: {
+            status: res.status,
+            errors: result.errors,
+            messages: result.messages
+          }
+        })
       }, { status: 500 });
+    }
+    
+    if (process.env.NODE_ENV === "development") {
+      console.log("✅ Cloudflare 上傳 URL 獲取成功");
     }
 
     return NextResponse.json({ success: true, uploadURL: result.result.uploadURL });
