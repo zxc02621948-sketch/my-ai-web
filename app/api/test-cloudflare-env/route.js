@@ -48,17 +48,39 @@ export async function GET(req) {
         const testForm = new FormData();
         testForm.append("file", testFile);
         
+        // ✅ 確保 token 沒有多餘的空格或換行（與 cloudflare-upload 一致）
+        const cleanToken = token.replace(/\s+/g, '');
+        
         const uploadUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`;
         const testRes = await fetch(uploadUrl, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${cleanToken}`,
           },
           body: testForm,
         });
         
-        const testResult = await testRes.json();
         const httpStatus = testRes.status;
+        let testResult;
+        
+        // ✅ 嘗試解析 JSON 響應，如果失敗則使用原始文本
+        try {
+          const responseText = await testRes.text();
+          try {
+            testResult = JSON.parse(responseText);
+          } catch (parseError) {
+            // 如果不是 JSON，創建一個錯誤對象
+            testResult = {
+              success: false,
+              errors: [{ message: responseText || "Unknown error" }]
+            };
+          }
+        } catch (readError) {
+          testResult = {
+            success: false,
+            errors: [{ message: "無法讀取 API 響應" }]
+          };
+        }
         
         apiTest = {
           httpStatus,
@@ -67,6 +89,7 @@ export async function GET(req) {
           hasImageId: !!testResult.result?.id,
           error: testResult.errors?.[0]?.message || null,
           errors: testResult.errors,
+          tokenLength: cleanToken.length,
           // ✅ 如果上傳成功，刪除測試圖片
           ...(testResult.result?.id && {
             testImageId: testResult.result.id,

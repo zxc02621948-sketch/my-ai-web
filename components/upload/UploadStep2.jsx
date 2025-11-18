@@ -849,8 +849,18 @@ export default function UploadStep2({
       });
       
       if (!serverRes.ok) {
-        const serverError = await serverRes.json();
-        throw new Error(serverError.message || "服務器端上傳失敗");
+        let serverError;
+        try {
+          serverError = await serverRes.json();
+        } catch (parseError) {
+          // 如果響應不是 JSON，使用狀態文本
+          serverError = { 
+            message: `服務器錯誤 (${serverRes.status}): ${serverRes.statusText || "未知錯誤"}` 
+          };
+        }
+        // ✅ 優先使用詳細的錯誤訊息
+        const errorMessage = serverError.error || serverError.message || "服務器端上傳失敗";
+        throw new Error(errorMessage);
       }
       
       const serverData = await serverRes.json();

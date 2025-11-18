@@ -53,8 +53,32 @@ export async function POST(req) {
       body: cfForm,
     });
 
-    const result = await response.json();
     const httpStatus = response.status;
+    let result;
+    
+    // ✅ 嘗試解析 JSON 響應，如果失敗則使用原始文本
+    try {
+      const responseText = await response.text();
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        // 如果不是 JSON，創建一個錯誤對象
+        console.error("❌ Cloudflare API 返回非 JSON 響應：", {
+          httpStatus,
+          responseText: responseText.substring(0, 500)
+        });
+        result = {
+          success: false,
+          errors: [{ message: responseText || "Unknown error" }]
+        };
+      }
+    } catch (readError) {
+      console.error("❌ 無法讀取 Cloudflare API 響應：", readError);
+      result = {
+        success: false,
+        errors: [{ message: "無法讀取 API 響應" }]
+      };
+    }
 
     if (!result.success) {
       const errorMsg = result.errors?.[0]?.message || "Cloudflare upload failed";
@@ -65,21 +89,22 @@ export async function POST(req) {
         tokenPrefix: cleanToken.substring(0, 10) + "...",
         errors: result.errors,
         messages: result.messages,
-        // ✅ 只在開發環境記錄完整響應
-        fullResponse: process.env.NODE_ENV === "development" ? result : undefined
+        // ✅ 記錄完整響應以便調試（生產環境也記錄，但只記錄錯誤部分）
+        fullResponse: result
       });
 
-      // ✅ 根據 HTTP 狀態碼提供更具體的錯誤訊息
+      // ✅ 根據 HTTP 狀態碼和錯誤訊息提供更具體的錯誤訊息
       let userFriendlyError = errorMsg;
-      if (httpStatus === 401 || httpStatus === 403) {
-        userFriendlyError = "Cloudflare API 認證失敗。請檢查 CLOUDFLARE_API_TOKEN 是否正確且有效，並確保 Token 有 Cloudflare Images 的權限。";
+      if (httpStatus === 401 || httpStatus === 403 || errorMsg.includes("authenticate") || errorMsg.includes("Unauthorized")) {
+        userFriendlyError = "Cloudflare API 認證失敗。請檢查部署環境的 CLOUDFLARE_API_TOKEN 是否正確且有效，並確保 Token 有 Cloudflare Images 的 Edit 權限。";
       } else if (httpStatus === 404) {
-        userFriendlyError = "Cloudflare Account ID 不存在或無效。請檢查 CLOUDFLARE_ACCOUNT_ID 是否正確。";
+        userFriendlyError = "Cloudflare Account ID 不存在或無效。請檢查部署環境的 CLOUDFLARE_ACCOUNT_ID 是否正確。";
       }
 
       return NextResponse.json({ 
         success: false, 
         message: userFriendlyError,
+        error: errorMsg, // ✅ 保留原始錯誤訊息
         errors: result.errors,
         httpStatus
       }, { status: 500 });
