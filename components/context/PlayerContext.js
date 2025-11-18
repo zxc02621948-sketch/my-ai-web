@@ -1011,6 +1011,65 @@ export function PlayerProvider({
     [cancelPlaybackAttempt, setIsPlaying],
   );
 
+  // ✅ setSrc 的包裝函數（必須在 next 和 previous 之前定義）
+  const setSrcWithAudio = useCallback((newSrc) => {
+    const audio = audioRef.current;
+
+    const resolveSrc = (value) => {
+      if (typeof window === "undefined") {
+        return value || "";
+      }
+      if (!value) {
+        return "";
+      }
+      try {
+        return new URL(value, window.location.origin).href;
+      } catch {
+        return value;
+      }
+    };
+
+    const resolvedNewSrc = resolveSrc(newSrc);
+    const currentHref =
+      audio && (audio.currentSrc || audio.src)
+        ? audio.currentSrc || audio.src
+        : "";
+    const isSameSource =
+      !!audio && !!resolvedNewSrc && resolvedNewSrc === currentHref;
+
+    if (!isSameSource) {
+      setCurrentTime(0);
+      setDuration(0);
+    }
+
+    setSrc(newSrc);
+
+    if (!audio) {
+      return;
+    }
+
+    try {
+      audio.dataset.progressReported = "";
+      audio.dataset.startTime = "";
+
+      if (isSameSource) {
+        // 保留現有音源，無需重新載入
+        return;
+      }
+
+      if (!audio.paused) {
+        audio.pause();
+      }
+      audio.currentTime = 0;
+      audio.src = newSrc || "";
+      audio.load();
+
+      // 設置新的音源
+    } catch (error) {
+      console.warn("🔧 設置音頻源失敗", error);
+    }
+  }, [setCurrentTime, setDuration, setSrc]);
+
   // ✅ 下一首音樂
   const next = useCallback(async () => {
     const list = playlistRef.current || [];
@@ -1248,65 +1307,6 @@ export function PlayerProvider({
     setTrackTitle,
     setSrcWithAudio,
   ]);
-
-  // ✅ setSrc 的包裝函數
-  const setSrcWithAudio = useCallback((newSrc) => {
-    const audio = audioRef.current;
-
-    const resolveSrc = (value) => {
-      if (typeof window === "undefined") {
-        return value || "";
-      }
-      if (!value) {
-        return "";
-      }
-      try {
-        return new URL(value, window.location.origin).href;
-      } catch {
-        return value;
-      }
-    };
-
-    const resolvedNewSrc = resolveSrc(newSrc);
-    const currentHref =
-      audio && (audio.currentSrc || audio.src)
-        ? audio.currentSrc || audio.src
-        : "";
-    const isSameSource =
-      !!audio && !!resolvedNewSrc && resolvedNewSrc === currentHref;
-
-    if (!isSameSource) {
-      setCurrentTime(0);
-      setDuration(0);
-    }
-
-    setSrc(newSrc);
-
-    if (!audio) {
-      return;
-    }
-
-    try {
-      audio.dataset.progressReported = "";
-      audio.dataset.startTime = "";
-
-      if (isSameSource) {
-        // 保留現有音源，無需重新載入
-        return;
-      }
-
-      if (!audio.paused) {
-        audio.pause();
-      }
-      audio.currentTime = 0;
-      audio.src = newSrc || "";
-      audio.load();
-
-      // 設置新的音源
-    } catch (error) {
-      console.warn("🔧 設置音頻源失敗", error);
-    }
-  }, [setCurrentTime, setDuration, setSrc]);
 
   // ✅ 更新 nextRef 引用，確保使用最新的 next 函數
   useEffect(() => {
