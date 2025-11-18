@@ -27,12 +27,25 @@ export async function PUT(req) {
     const isNotDefault = oldImageId !== "b479a9e9-6c1a-4c6a-94ff-283541062d00";
 
     if (isRealImageId && isNotDefault) {
-      await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/images/v1/${oldImageId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
-        },
-      });
+      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
+      const apiToken = process.env.CLOUDFLARE_API_TOKEN?.trim();
+
+      if (accountId && apiToken && /^[a-f0-9]{32}$/i.test(accountId)) {
+        const cleanToken = apiToken.replace(/\s+/g, '');
+        const deleteUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1/${oldImageId}`;
+        
+        try {
+          await fetch(deleteUrl, {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${cleanToken}`,
+            },
+          });
+        } catch (deleteError) {
+          // 忽略刪除錯誤，不影響更新流程
+          console.warn("⚠️ 刪除舊頭像失敗（不影響更新）:", deleteError);
+        }
+      }
     }
 
     return NextResponse.json({ success: true });

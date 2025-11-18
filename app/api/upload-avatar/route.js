@@ -3,8 +3,6 @@ import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 
 const CLOUDFLARE_ACCOUNT_HASH = "qQdazZfBAN4654_waTSV7A"; // ⬅️ 你的 Cloudflare 資訊
-const CLOUDFLARE_UPLOAD_URL = `https://api.cloudflare.com/client/v4/accounts/5c6250a0576aa4ca0bb9cdf32be0bee1/images/v1`;
-const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || "NKLeyPVUMWLGI4MTFmPNnDZj0ZgWA5xj0tS2bQEA"; // ⬅️ 你必須在 .env 設定
 
 export async function POST(req) {
   const { searchParams } = new URL(req.url);
@@ -25,35 +23,82 @@ export async function POST(req) {
   }
 
   try {
+    // ✅ 使用環境變數（與 cloudflare-upload 一致）
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN?.trim();
+
+    if (!accountId || !apiToken) {
+      console.error("❌ 環境變數缺失：", { 
+        hasAccountId: !!accountId, 
+        hasToken: !!apiToken,
+        nodeEnv: process.env.NODE_ENV 
+      });
+      return NextResponse.json({ 
+        error: "環境變數未設定",
+        details: "CLOUDFLARE_ACCOUNT_ID 或 CLOUDFLARE_API_TOKEN 未設置"
+      }, { status: 500 });
+    }
+
+    // ✅ 驗證 Account ID 格式
+    if (!/^[a-f0-9]{32}$/i.test(accountId)) {
+      console.error("❌ Account ID 格式錯誤：", {
+        accountId: accountId ? `${accountId.substring(0, 8)}...` : "未設置",
+        length: accountId?.length
+      });
+      return NextResponse.json({ 
+        error: "CLOUDFLARE_ACCOUNT_ID 格式不正確（應為 32 個字符的十六進制字符串）"
+      }, { status: 500 });
+    }
+
+    // ✅ 確保 token 沒有多餘的空格或換行
+    const cleanToken = apiToken.replace(/\s+/g, '');
+
     console.log("🔧 開始上傳到 Cloudflare:", { 
       fileName: file.name, 
       fileSize: file.size, 
       fileType: file.type,
-      hasToken: !!CLOUDFLARE_API_TOKEN 
+      hasToken: !!cleanToken,
+      accountIdPrefix: `${accountId.substring(0, 8)}...`
     });
 
     // 1. 上傳到 Cloudflare
-    const cloudflareRes = await fetch(CLOUDFLARE_UPLOAD_URL, {
+    const uploadUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`;
+    const cfForm = new FormData();
+    cfForm.append("file", file);
+
+    const cloudflareRes = await fetch(uploadUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+        Authorization: `Bearer ${cleanToken}`,
       },
-      body: (() => {
-        const cfForm = new FormData();
-        cfForm.append("file", file);
-        return cfForm;
-      })(),
+      body: cfForm,
     });
 
-    console.log("🔧 Cloudflare 響應狀態:", cloudflareRes.status);
+    const httpStatus = cloudflareRes.status;
     const cfResult = await cloudflareRes.json();
-    console.log("🔧 Cloudflare 響應結果:", cfResult);
 
     if (!cfResult.success) {
-      console.error("Cloudflare 上傳失敗", cfResult);
+      const errorMsg = cfResult.errors?.[0]?.message || "Cloudflare upload failed";
+      console.error("❌ Cloudflare 上傳失敗：", {
+        httpStatus,
+        accountId: `${accountId.substring(0, 8)}...`,
+        tokenLength: cleanToken.length,
+        errors: cfResult.errors,
+        messages: cfResult.messages,
+      });
+
+      // ✅ 根據 HTTP 狀態碼提供更具體的錯誤訊息
+      let userFriendlyError = errorMsg;
+      if (httpStatus === 401 || httpStatus === 403) {
+        userFriendlyError = "Cloudflare API 認證失敗。請檢查 CLOUDFLARE_API_TOKEN 是否正確且有效，並確保 Token 有 Cloudflare Images 的權限。";
+      } else if (httpStatus === 404) {
+        userFriendlyError = "Cloudflare Account ID 不存在或無效。請檢查 CLOUDFLARE_ACCOUNT_ID 是否正確。";
+      }
+
       return NextResponse.json({ 
-        error: "上傳失敗", 
-        details: cfResult.errors || "未知錯誤" 
+        error: userFriendlyError,
+        details: cfResult.errors || "未知錯誤",
+        httpStatus
       }, { status: 500 });
     }
 
