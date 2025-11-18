@@ -37,14 +37,37 @@ export async function POST(req) {
       return NextResponse.json({ success: false, message: "Invalid file upload" }, { status: 400 });
     }
 
-    // ✅ 確保 token 沒有多餘的空格或換行
-    const cleanToken = apiToken.replace(/\s+/g, '');
+    // ✅ 確保 token 沒有多餘的空格或換行，並移除所有不可見字符
+    const cleanToken = apiToken.replace(/[\s\uFEFF\u200B-\u200D\u2060]/g, '').trim();
+    
+    // ✅ 診斷：檢查 Token 格式
+    console.log("🔍 [診斷] Token 檢查：", {
+      originalLength: apiToken.length,
+      cleanedLength: cleanToken.length,
+      tokenPrefix: cleanToken.substring(0, 10) + "...",
+      tokenSuffix: "..." + cleanToken.substring(cleanToken.length - 5),
+      hasSpecialChars: /[^a-zA-Z0-9_-]/.test(cleanToken),
+      // Cloudflare API Token 通常是 40 字符，但有些可能是 39
+      expectedLength: "通常為 40 字符"
+    });
 
     // ✅ 使用原生 FormData（與 upload-avatar 一致）
     const cfForm = new FormData();
     cfForm.append("file", file);
 
     const uploadUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`;
+    
+    // ✅ 診斷：記錄請求詳情（不記錄完整 token）
+    console.log("🔍 [診斷] 準備發送請求：", {
+      uploadUrl: uploadUrl,
+      method: "POST",
+      hasFile: !!file,
+      fileSize: file?.size,
+      fileName: file?.name,
+      fileType: file?.type,
+      authorizationHeaderPrefix: `Bearer ${cleanToken.substring(0, 10)}...`
+    });
+    
     const response = await fetch(uploadUrl, {
       method: "POST",
       headers: {
@@ -95,7 +118,10 @@ export async function POST(req) {
 
       // ✅ 根據 HTTP 狀態碼和錯誤訊息提供更具體的錯誤訊息
       let userFriendlyError = errorMsg;
-      if (httpStatus === 401 || httpStatus === 403 || errorMsg.includes("authenticate") || errorMsg.includes("Unauthorized")) {
+      if (httpStatus === 400 && errorMsg.includes("authenticate")) {
+        // HTTP 400 + 認證錯誤通常表示 Token 格式或權限問題
+        userFriendlyError = "Cloudflare API 認證失敗（HTTP 400）。可能的原因：1) Token 格式不正確 2) Token 沒有 Cloudflare Images 的 Edit 權限 3) Token 已過期或被撤銷。請在 Cloudflare Dashboard 檢查 Token 權限，確保有 'Cloudflare Images:Edit' 權限。";
+      } else if (httpStatus === 401 || httpStatus === 403 || errorMsg.includes("authenticate") || errorMsg.includes("Unauthorized")) {
         userFriendlyError = "Cloudflare API 認證失敗。請檢查部署環境的 CLOUDFLARE_API_TOKEN 是否正確且有效，並確保 Token 有 Cloudflare Images 的 Edit 權限。";
       } else if (httpStatus === 404) {
         userFriendlyError = "Cloudflare Account ID 不存在或無效。請檢查部署環境的 CLOUDFLARE_ACCOUNT_ID 是否正確。";
