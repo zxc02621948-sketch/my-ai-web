@@ -610,35 +610,65 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
 }
 
 function HeroSection() {
+  const { currentUser } = useCurrentUser();
+  
+  const handleLoginClick = () => {
+    window.dispatchEvent(new Event("openLoginModal"));
+  };
+  
+  const handleRegisterClick = () => {
+    window.dispatchEvent(new Event("openRegisterModal"));
+  };
+  
   return (
     <header className="border-b border-white/10 bg-gradient-to-br from-emerald-500/10 via-purple-600/5 to-sky-500/10">
       <div className="mx-auto flex max-w-[1536px] flex-col gap-3 px-6 py-6 sm:px-10 sm:py-8">
         {/* Logo、標題與「我們的故事」捷徑（同一行） */}
-        <div className="flex items-center gap-2 md:gap-3 shrink-0 mb-3">
-          <Link
-            href="/"
-            className="flex items-center gap-2 md:gap-3"
-            aria-label="回首頁"
-          >
-            <Image
-              src="/ai_logo_icon.png"
-              alt="AI 創界 Logo"
-              width={40}
-              height={40}
-              className="rounded-lg md:w-[48px] md:h-[48px]"
-              priority
-            />
-            <span className="text-white text-lg md:text-2xl font-extrabold tracking-wide">
-              AI 創界
-            </span>
-          </Link>
-          <Link
-            href="/about"
-            className="hidden sm:inline-flex items-center gap-2 rounded-xl border-2 border-emerald-400/70 bg-emerald-500/10 px-4 py-2 text-sm font-bold text-emerald-200 hover:bg-emerald-500/20 hover:border-emerald-400 transition-all shadow-sm"
-          >
-            <span className="text-emerald-300">✨</span>
-            我們的故事
-          </Link>
+        <div className="flex items-center justify-between gap-2 md:gap-3 shrink-0 mb-3">
+          <div className="flex items-center gap-2 md:gap-3">
+            <Link
+              href="/"
+              className="flex items-center gap-2 md:gap-3"
+              aria-label="回首頁"
+            >
+              <Image
+                src="/ai_logo_icon.png"
+                alt="AI 創界 Logo"
+                width={40}
+                height={40}
+                className="rounded-lg md:w-[48px] md:h-[48px]"
+                priority
+              />
+              <span className="text-white text-lg md:text-2xl font-extrabold tracking-wide">
+                AI 創界
+              </span>
+            </Link>
+            <Link
+              href="/about"
+              className="hidden sm:inline-flex items-center gap-2 rounded-xl border-2 border-emerald-400/70 bg-emerald-500/10 px-4 py-2 text-sm font-bold text-emerald-200 hover:bg-emerald-500/20 hover:border-emerald-400 transition-all shadow-sm"
+            >
+              <span className="text-emerald-300">✨</span>
+              我們的故事
+            </Link>
+          </div>
+          
+          {/* ✅ 登錄/註冊按鈕（未登錄時顯示） */}
+          {!currentUser && (
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button
+                onClick={handleLoginClick}
+                className="rounded-lg border border-blue-500/50 bg-blue-600/20 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold text-blue-200 hover:bg-blue-600/30 hover:border-blue-500 transition-all"
+              >
+                登錄
+              </button>
+              <button
+                onClick={handleRegisterClick}
+                className="rounded-lg border-2 border-purple-400/70 bg-gradient-to-r from-purple-600/90 to-pink-600/90 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-bold text-white hover:from-purple-600 hover:to-pink-600 hover:border-purple-400 transition-all shadow-sm"
+              >
+                註冊
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
