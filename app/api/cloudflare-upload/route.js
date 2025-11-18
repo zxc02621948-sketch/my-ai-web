@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import FormData from "form-data";
-import fetch from "node-fetch";
 
 export async function POST(req) {
   try {
@@ -35,26 +33,22 @@ export async function POST(req) {
     const formData = await req.formData();
     const file = formData.get("file");
 
-    if (!file || !file.name || !file.arrayBuffer) {
+    if (!file || typeof file === "string" || !file.name) {
       return NextResponse.json({ success: false, message: "Invalid file upload" }, { status: 400 });
     }
 
-    // 將 file 轉為 Buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    const cfForm = new FormData();
-    cfForm.append("file", buffer, file.name);
-
     // ✅ 確保 token 沒有多餘的空格或換行
     const cleanToken = apiToken.replace(/\s+/g, '');
+
+    // ✅ 使用原生 FormData（與 upload-avatar 一致）
+    const cfForm = new FormData();
+    cfForm.append("file", file);
 
     const uploadUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`;
     const response = await fetch(uploadUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${cleanToken}`,
-        ...cfForm.getHeaders(),
       },
       body: cfForm,
     });
