@@ -42,7 +42,6 @@ export async function GET(req) {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
           },
         });
 

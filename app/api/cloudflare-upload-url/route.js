@@ -69,7 +69,6 @@ export async function POST(req) {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${cleanToken}`,
-        "Content-Type": "application/json",
       },
     });
 
