@@ -452,18 +452,25 @@ export function PlayerProvider({
   }, [src]);
 
   // ✅ 更新 Media Session metadata 的輔助函數（用於在播放時確保 metadata 已設置）
-  const updateMediaSessionMetadata = useCallback(() => {
+  // ✅ 可以接受可選的 track 參數，用於立即更新特定歌曲的 metadata（切換歌曲時使用）
+  const updateMediaSessionMetadata = useCallback((trackOverride = null) => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
       return;
     }
 
-    // ✅ 獲取當前播放的音樂信息
-    const currentTrack =
+    // ✅ 如果提供了 trackOverride，優先使用它（用於切換歌曲時立即更新）
+    // ✅ 否則獲取當前播放的音樂信息
+    const currentTrack = trackOverride || (
       Array.isArray(playlist) && playlist.length > 0 && activeIndex >= 0 && activeIndex < playlist.length
         ? playlist[activeIndex]
-        : null;
+        : null
+    );
 
-    const hasMusic = src || (currentTrack && currentTrack.url) || trackTitle;
+    // ✅ 如果提供了 trackOverride，使用它提供的 URL 和標題
+    const trackUrl = trackOverride ? (trackOverride.url || trackOverride.musicUrl) : src;
+    const trackTitleOverride = trackOverride ? (trackOverride.title || trackOverride.trackTitle) : trackTitle;
+
+    const hasMusic = trackUrl || (currentTrack && (currentTrack.url || currentTrack.musicUrl)) || trackTitleOverride;
     if (!hasMusic) {
       return;
     }
@@ -471,9 +478,9 @@ export function PlayerProvider({
     // ✅ 構建基本的 metadata
     const metadataTitle =
       (currentTrack && (currentTrack.title || currentTrack.trackTitle)) ||
-      trackTitle ||
-      (currentTrack && currentTrack.url) ||
-      src ||
+      trackTitleOverride ||
+      (currentTrack && (currentTrack.url || currentTrack.musicUrl)) ||
+      trackUrl ||
       "音樂作品";
     const metadataArtist =
       (currentTrack && (currentTrack.artist || currentTrack.authorName)) ||
@@ -482,7 +489,7 @@ export function PlayerProvider({
     const metadataAlbum =
       (currentTrack && currentTrack.album) || playerOwner?.username || "";
 
-    // ✅ 構建 artwork
+    // ✅ 構建 artwork（優先使用 trackOverride 的封面）
     const artwork = [];
     const coverCandidate =
       (currentTrack && (currentTrack.coverImageUrl || currentTrack.cover || currentTrack.imageUrl || currentTrack.thumbnailUrl)) ||
@@ -497,7 +504,7 @@ export function PlayerProvider({
       artwork.push({ src: coverCandidate, sizes: "512x512", type: "image/png" });
     }
 
-    // ✅ 設置 metadata
+    // ✅ 設置 metadata（立即更新，不等待 useEffect）
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: metadataTitle || "音樂作品",
@@ -1178,6 +1185,10 @@ export function PlayerProvider({
       setOriginUrl(nextItem.url);
       setTrackTitle(nextItem.title);
       
+      // ✅ 立即更新 Media Session metadata（使用新歌曲信息，確保背景播放顯示正確）
+      // ✅ 這很重要，因為 useEffect 的更新可能有延遲，導致顯示不匹配
+      updateMediaSessionMetadata(nextItem);
+      
       // ✅ 清除轉換標記（在播放前清除，避免 play() 被跳過）
       isTransitioningRef.current = false;
       
@@ -1196,6 +1207,7 @@ export function PlayerProvider({
     setOriginUrl,
     setTrackTitle,
     setSrcWithAudio,
+    updateMediaSessionMetadata,
   ]);
 
   // ✅ 上一首音樂
@@ -1284,6 +1296,10 @@ export function PlayerProvider({
       setOriginUrl(prevItem.url);
       setTrackTitle(prevItem.title);
 
+      // ✅ 立即更新 Media Session metadata（使用新歌曲信息，確保背景播放顯示正確）
+      // ✅ 這很重要，因為 useEffect 的更新可能有延遲，導致顯示不匹配
+      updateMediaSessionMetadata(prevItem);
+
       // ✅ 清除 AudioManager 暫停標記（用戶主動切歌）
       wasPausedByAudioManagerRef.current = false;
 
@@ -1306,6 +1322,7 @@ export function PlayerProvider({
     setOriginUrl,
     setTrackTitle,
     setSrcWithAudio,
+    updateMediaSessionMetadata,
   ]);
 
   // ✅ 更新 nextRef 引用，確保使用最新的 next 函數
