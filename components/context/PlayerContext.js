@@ -550,6 +550,22 @@ export function PlayerProvider({
         coverCandidate = `${coverCandidate}${separator}_t=${Date.now()}`;
       }
       
+      // ✅ 預加載圖片，確保圖片已加載完成後再設置 metadata
+      // ✅ 這對於恢復播放時正確顯示 artwork 非常重要
+      const preloadImage = (src) => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+          img.src = src;
+        });
+      };
+      
+      // ✅ 預加載圖片（不阻塞，但確保圖片開始加載）
+      preloadImage(coverCandidate).catch(() => {
+        // 圖片加載失敗不影響 metadata 設置
+      });
+      
       artwork.push({ src: coverCandidate, sizes: "96x96", type: "image/png" });
       artwork.push({ src: coverCandidate, sizes: "128x128", type: "image/png" });
       artwork.push({ src: coverCandidate, sizes: "192x192", type: "image/png" });
@@ -609,57 +625,99 @@ export function PlayerProvider({
     // ✅ 立即更新 Media Session metadata（確保封面立即顯示，不等待異步操作）
     if (typeof navigator !== "undefined" && navigator.mediaSession) {
       try {
-        // ✅ 關鍵修復：先清除現有的 metadata 和 playbackState，然後重新設置
-        // ✅ 這對於從暫停狀態恢復播放特別重要，可以防止顯示 LOGO
-        try {
-          navigator.mediaSession.playbackState = "none";
-          navigator.mediaSession.metadata = null;
-        } catch (e) {
-          // 忽略清除錯誤
+        // ✅ 關鍵修復：先預加載 artwork 圖片，確保圖片已加載完成
+        // ✅ 獲取當前 track 信息以預加載圖片
+        const list = playlistRef.current || [];
+        const idx = activeIndexRef.current;
+        let currentTrackForPreload = currentTrackRef.current;
+        if (!currentTrackForPreload && Array.isArray(list) && list.length > 0 && idx >= 0 && idx < list.length) {
+          currentTrackForPreload = list[idx];
         }
         
-        // ✅ 等待一小段時間，確保清除操作完成
-        setTimeout(() => {
-          if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-            try {
-              // ✅ 立即更新 metadata（必須在 playbackState 之前設置）
-              updateMediaSessionMetadata();
-              
-              // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState
-              // ✅ 這很重要：Android 需要 metadata 完全設置好後才能正確顯示 artwork
-              setTimeout(() => {
-                if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                  try {
-                    // ✅ 再次確保 metadata 已設置（特別是 artwork）
-                    // ✅ 這對於從暫停狀態恢復播放特別重要
-                    updateMediaSessionMetadata();
-                    
-                    // ✅ 再等待一小段時間，確保 artwork 已完全渲染
-                    setTimeout(() => {
-                      if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                        try {
-                          // ✅ 第三次確保 metadata 已設置（確保 artwork 不會丟失）
-                          updateMediaSessionMetadata();
-                          
-                          // ✅ 現在才設置 playbackState（必須在 metadata 之後）
-                          navigator.mediaSession.playbackState = "playing";
-                        } catch (error) {
-                          // 忽略錯誤
-                        }
-                      }
-                    }, 150); // ✅ 增加延遲時間，確保 artwork 已完全加載
-                  } catch (error) {
-                    // 忽略錯誤
-                  }
-                }
-              }, 150); // ✅ 增加延遲時間，確保 metadata 已完全設置
-            } catch (error) {
-              // 忽略錯誤
-            }
+        const coverUrl = currentTrackForPreload && (
+          currentTrackForPreload.coverImageUrl || 
+          currentTrackForPreload.cover || 
+          currentTrackForPreload.imageUrl || 
+          currentTrackForPreload.thumbnailUrl
+        );
+        
+        // ✅ 如果有多個圖片，預加載它們
+        const preloadArtwork = (url) => {
+          if (!url) return Promise.resolve();
+          return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve();
+            img.onerror = () => resolve(); // 即使失敗也繼續
+            img.src = url;
+            // 設置超時，避免無限等待
+            setTimeout(() => resolve(), 500);
+          });
+        };
+        
+        // ✅ 預加載圖片，然後再設置 metadata
+        preloadArtwork(coverUrl).then(() => {
+          if (!audioRef.current || audioRef.current.paused || !navigator.mediaSession) {
+            return;
           }
-        }, 50); // ✅ 等待清除操作完成
+          
+          try {
+            // ✅ 關鍵修復：先清除現有的 metadata 和 playbackState，然後重新設置
+            // ✅ 這對於從暫停狀態恢復播放特別重要，可以防止顯示 LOGO
+            try {
+              navigator.mediaSession.playbackState = "none";
+              navigator.mediaSession.metadata = null;
+            } catch (e) {
+              // 忽略清除錯誤
+            }
+            
+            // ✅ 等待一小段時間，確保清除操作完成
+            setTimeout(() => {
+              if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                try {
+                  // ✅ 立即更新 metadata（必須在 playbackState 之前設置）
+                  updateMediaSessionMetadata();
+                  
+                  // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState
+                  // ✅ 這很重要：Android 需要 metadata 完全設置好後才能正確顯示 artwork
+                  setTimeout(() => {
+                    if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                      try {
+                        // ✅ 再次確保 metadata 已設置（特別是 artwork）
+                        // ✅ 這對於從暫停狀態恢復播放特別重要
+                        updateMediaSessionMetadata();
+                        
+                        // ✅ 再等待一小段時間，確保 artwork 已完全渲染
+                        setTimeout(() => {
+                          if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                            try {
+                              // ✅ 第三次確保 metadata 已設置（確保 artwork 不會丟失）
+                              updateMediaSessionMetadata();
+                              
+                              // ✅ 現在才設置 playbackState（必須在 metadata 之後）
+                              navigator.mediaSession.playbackState = "playing";
+                            } catch (error) {
+                              // 忽略錯誤
+                            }
+                          }
+                        }, 200); // ✅ 增加延遲時間，確保 artwork 已完全加載
+                      } catch (error) {
+                        // 忽略錯誤
+                      }
+                    }
+                  }, 200); // ✅ 增加延遲時間，確保 metadata 已完全設置
+                } catch (error) {
+                  // 忽略錯誤
+                }
+              }
+            }, 50); // ✅ 等待清除操作完成
+          } catch (error) {
+            console.warn("[MediaSession] 立即更新播放狀態失敗:", error);
+          }
+        });
       } catch (error) {
-        console.warn("[MediaSession] 立即更新播放狀態失敗:", error);
+        console.warn("[MediaSession] 預加載 artwork 失敗:", error);
+        // 即使預加載失敗，也嘗試設置 metadata
+        updateMediaSessionMetadata();
       }
     }
 
