@@ -750,7 +750,7 @@ export function PlayerProvider({
               console.warn("[MediaSession] ⚠️ 重置狀態失敗:", e);
             }
             
-            // ✅ 等待一小段時間，確保重置完成
+            // ✅ 等待一小段時間，確保重置完成（移動設備可能需要更長時間）
             setTimeout(() => {
               if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
                 // ✅ 如果保存了 artwork，先恢復它，然後再更新 metadata
@@ -764,83 +764,120 @@ export function PlayerProvider({
                     }
                     
                     // ✅ 先設置一個臨時的 metadata，包含保存的 artwork（添加時間戳強制刷新）
+                    const timestamp = Date.now();
                     const refreshedArtwork = savedArtwork.map(a => {
                       const url = a.src;
                       if (url) {
                         try {
                           const urlObj = new URL(url, window.location.origin);
-                          urlObj.searchParams.set('_t', Date.now().toString());
+                          urlObj.searchParams.set('_t', timestamp.toString());
                           return { ...a, src: urlObj.toString() };
                         } catch (e) {
                           const separator = url.includes('?') ? '&' : '?';
-                          return { ...a, src: `${url}${separator}_t=${Date.now()}` };
+                          return { ...a, src: `${url}${separator}_t=${timestamp}` };
                         }
                       }
                       return a;
                     });
                     
-                    navigator.mediaSession.metadata = new MediaMetadata({
-                      title: currentTrackForResume.title || "音樂作品",
-                      artist: currentTrackForResume.authorName || "未知創作者",
-                      artwork: refreshedArtwork,
-                    });
-                    console.log("[MediaSession] 🔍 已恢復保存的 artwork（已強制刷新）");
+                    // ✅ 先完全清除 metadata，然後再設置（移動設備可能需要）
+                    try {
+                      navigator.mediaSession.metadata = null;
+                    } catch (e) {
+                      // 忽略錯誤
+                    }
+                    
+                    // ✅ 等待一小段時間，確保清除完成
+                    setTimeout(() => {
+                      navigator.mediaSession.metadata = new MediaMetadata({
+                        title: currentTrackForResume.title || "音樂作品",
+                        artist: currentTrackForResume.authorName || "未知創作者",
+                        artwork: refreshedArtwork,
+                      });
+                      console.log("[MediaSession] 🔍 已恢復保存的 artwork（已強制刷新）");
+                      
+                      // ✅ 等待一小段時間，確保 metadata 已設置，然後再次更新（移動設備可能需要多次設置）
+                      setTimeout(() => {
+                        if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                          // ✅ 像 next 函數那樣，立即更新 metadata（傳入完整的 track 信息，現在應該包含 coverImageUrl）
+                          console.log("[MediaSession] 🔍 第一次更新 metadata");
+                          updateMediaSessionMetadata(currentTrackForResume, true);
+                          
+                          // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState（移動設備需要更長時間）
+                          setTimeout(() => {
+                            if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                              try {
+                                // ✅ 再次確保 metadata 已設置（特別是 artwork）
+                                console.log("[MediaSession] 🔍 第二次更新 metadata");
+                                updateMediaSessionMetadata(currentTrackForResume, true);
+                                
+                                // ✅ 檢查設置後的 metadata
+                                const currentMetadata = navigator.mediaSession.metadata;
+                                console.log("[MediaSession] 🔍 當前 metadata 狀態:", {
+                                  title: currentMetadata?.title,
+                                  artist: currentMetadata?.artist,
+                                  artworkCount: currentMetadata?.artwork?.length || 0,
+                                  artworkSrcs: currentMetadata?.artwork?.map(a => a.src) || [],
+                                });
+                                
+                                // ✅ 再等待更長時間，確保 artwork 已完全加載（移動設備需要更長時間）
+                                setTimeout(() => {
+                                  if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                                    try {
+                                      // ✅ 最後一次確認 metadata 正確設置
+                                      const finalCheckMetadata = navigator.mediaSession.metadata;
+                                      if (!finalCheckMetadata || !finalCheckMetadata.artwork || finalCheckMetadata.artwork.length === 0) {
+                                        console.warn("[MediaSession] ⚠️ artwork 丟失，重新設置");
+                                        updateMediaSessionMetadata(currentTrackForResume, true);
+                                      }
+                                      
+                                      // ✅ 現在才設置 playbackState（必須在 metadata 之後）
+                                      console.log("[MediaSession] 🔍 設置 playbackState = 'playing'");
+                                      navigator.mediaSession.playbackState = "playing";
+                                      
+                                      // ✅ 設置後再次檢查 metadata
+                                      setTimeout(() => {
+                                        const finalMetadata = navigator.mediaSession.metadata;
+                                        console.log("[MediaSession] 🔍 設置 playbackState 後的 metadata:", {
+                                          title: finalMetadata?.title,
+                                          artist: finalMetadata?.artist,
+                                          artworkCount: finalMetadata?.artwork?.length || 0,
+                                          artworkSrcs: finalMetadata?.artwork?.map(a => a.src) || [],
+                                        });
+                                      }, 100);
+                                    } catch (error) {
+                                      console.warn("[MediaSession] ⚠️ 設置 playbackState 失敗:", error);
+                                    }
+                                  }
+                                }, 200); // 增加延遲時間，確保移動設備有足夠時間加載 artwork
+                              } catch (error) {
+                                console.warn("[MediaSession] ⚠️ 更新 metadata 失敗:", error);
+                              }
+                            }
+                          }, 150); // 增加延遲時間
+                        }
+                      }, 100);
+                    }, 50);
                   } catch (e) {
                     console.warn("[MediaSession] ⚠️ 恢復 artwork 失敗:", e);
                   }
-                }
-                
-                // ✅ 像 next 函數那樣，立即更新 metadata（傳入完整的 track 信息，現在應該包含 coverImageUrl）
-                console.log("[MediaSession] 🔍 第一次更新 metadata");
-                updateMediaSessionMetadata(currentTrackForResume, true);
-                
-                // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState
-                setTimeout(() => {
-                  if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                    try {
-                      // ✅ 再次確保 metadata 已設置（特別是 artwork）
-                      console.log("[MediaSession] 🔍 第二次更新 metadata");
-                      updateMediaSessionMetadata(currentTrackForResume, true);
-                      
-                      // ✅ 檢查設置後的 metadata
-                      const currentMetadata = navigator.mediaSession.metadata;
-                      console.log("[MediaSession] 🔍 當前 metadata 狀態:", {
-                        title: currentMetadata?.title,
-                        artist: currentMetadata?.artist,
-                        artworkCount: currentMetadata?.artwork?.length || 0,
-                        artworkSrcs: currentMetadata?.artwork?.map(a => a.src) || [],
-                      });
-                      
-                      // ✅ 再等待一小段時間，確保 artwork 已完全加載
-                      setTimeout(() => {
-                        if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                          try {
-                            // ✅ 現在才設置 playbackState（必須在 metadata 之後）
-                            console.log("[MediaSession] 🔍 設置 playbackState = 'playing'");
-                            navigator.mediaSession.playbackState = "playing";
-                            
-                            // ✅ 設置後再次檢查 metadata
-                            setTimeout(() => {
-                              const finalMetadata = navigator.mediaSession.metadata;
-                              console.log("[MediaSession] 🔍 設置 playbackState 後的 metadata:", {
-                                title: finalMetadata?.title,
-                                artist: finalMetadata?.artist,
-                                artworkCount: finalMetadata?.artwork?.length || 0,
-                                artworkSrcs: finalMetadata?.artwork?.map(a => a.src) || [],
-                              });
-                            }, 50);
-                          } catch (error) {
-                            console.warn("[MediaSession] ⚠️ 設置 playbackState 失敗:", error);
-                          }
-                        }
-                      }, 100);
-                    } catch (error) {
-                      console.warn("[MediaSession] ⚠️ 更新 metadata 失敗:", error);
+                } else {
+                  // ✅ 如果沒有保存的 artwork，直接更新 metadata
+                  console.log("[MediaSession] 🔍 沒有保存的 artwork，直接更新 metadata");
+                  updateMediaSessionMetadata(currentTrackForResume, true);
+                  
+                  setTimeout(() => {
+                    if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                      try {
+                        navigator.mediaSession.playbackState = "playing";
+                      } catch (error) {
+                        console.warn("[MediaSession] ⚠️ 設置 playbackState 失敗:", error);
+                      }
                     }
-                  }
-                }, 100);
+                  }, 200);
+                }
               }
-            }, 50);
+            }, 100); // 增加初始延遲時間
           } else {
             // ✅ 如果沒有播放列表，使用原有邏輯
             console.warn("[MediaSession] ⚠️ 從暫停恢復時沒有找到 track 信息");
