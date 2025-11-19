@@ -84,16 +84,22 @@ export default function UploadModal() {
       
       if (e?.detail?.user) {
         setCurrentUser(e.detail.user);
-        // 獲取上傳限制信息
-        try {
-          const response = await fetch('/api/upload-limits');
-          if (response.ok) {
-            const data = await response.json();
-            setUploadLimits(data);
-          }
-        } catch (error) {
-          console.error('獲取上傳限制失敗：', error);
+      }
+      
+      // ✅ 總是嘗試獲取上傳限制信息（不依賴 user 參數）
+      try {
+        const response = await fetch('/api/upload-limits', {
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setUploadLimits(data);
+        } else if (response.status === 401) {
+          // 未登入：清空配額顯示
+          setUploadLimits(null);
         }
+      } catch (error) {
+        console.error('獲取上傳限制失敗：', error);
       }
       
       // 所有模式都需要先選擇分級（step 1）
@@ -170,14 +176,13 @@ export default function UploadModal() {
                 <div>
                   <Dialog.Title className="text-lg md:text-xl font-bold">圖片上傳</Dialog.Title>
                   {uploadLimits && (
-                    <div className="text-sm text-zinc-400 mt-1">
-                      今日上傳：{uploadLimits.todayUploads}/{uploadLimits.dailyLimit} 張
-                      {uploadLimits.isLimitReached && (
-                        <span className="text-red-400 ml-2">（已達上限）</span>
-                      )}
-                      <span className="ml-2 text-xs bg-zinc-700 px-2 py-1 rounded">
-                        {uploadLimits.levelInfo.display}
+                    <div className="text-xs text-zinc-400 mt-1">
+                      <span className={`font-medium ${(uploadLimits.dailyLimit - uploadLimits.todayUploads) > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        今日配額：{uploadLimits.todayUploads} / {uploadLimits.dailyLimit} 張
                       </span>
+                      {uploadLimits.isLimitReached && (
+                        <span className="text-red-400 ml-2">（已達上限，明天重置）</span>
+                      )}
                     </div>
                   )}
                 </div>

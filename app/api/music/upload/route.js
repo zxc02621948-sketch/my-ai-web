@@ -4,6 +4,8 @@ import { s3Client, R2_BUCKET_NAME, R2_PUBLIC_URL } from "@/lib/r2";
 import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
 import { dbConnect } from "@/lib/db";
 import Music from "@/models/Music";
+import User from "@/models/User";
+import { getDailyUploadLimit } from "@/utils/pointsLevels";
 import {
   computeMusicCompleteness,
   computeMusicInitialBoostFromTop,
@@ -24,6 +26,40 @@ export async function POST(request) {
 
     // 連接資料庫
     await dbConnect();
+
+    // ✅ 檢查每日上傳限制（在上傳文件前檢查，避免不必要的流量消耗）
+    // 音樂有獨立的配額系統，使用與圖片相同的等級計算方式
+    const userDoc = await User.findById(user._id).select('totalEarnedPoints subscriptions').lean();
+    if (userDoc) {
+      const totalEarnedPoints = userDoc.totalEarnedPoints || 0;
+      const baseDailyLimit = getDailyUploadLimit(totalEarnedPoints); // 基礎配額（按等級計算：LV1=5, LV2=6, ...）
+      
+      // 檢查 VIP 狀態
+      const hasVIP = userDoc.subscriptions?.some(
+        sub => sub.isActive && sub.type === 'premiumFeatures' && sub.expiresAt > new Date()
+      );
+      const finalDailyLimit = hasVIP ? 20 : baseDailyLimit; // VIP 用戶有 20 部/天配額
+      
+      // ✅ 計算今日已上傳音樂數量（音樂有獨立的配額）
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const todayMusicUploads = await Music.countDocuments({
+        author: user._id,
+        createdAt: {
+          $gte: today,
+          $lt: tomorrow
+        }
+      });
+      
+      if (todayMusicUploads >= finalDailyLimit) {
+        return NextResponse.json({ 
+          error: `今日音樂上傳限制為 ${finalDailyLimit} 部，請明天再試` 
+        }, { status: 429 });
+      }
+    }
 
     // 解析表單資料
     const formData = await request.formData();

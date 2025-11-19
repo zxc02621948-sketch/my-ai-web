@@ -836,6 +836,41 @@ export default function UploadStep2({
     let imageId = null;
 
     try {
+      // ✅ 先檢查每日上傳限制（避免不必要的上傳和流量消耗）
+      const token = document.cookie.match(/token=([^;]+)/)?.[1];
+      if (!token) {
+        // 未登入：直接阻止上傳
+        throw new Error("請先登入後再上傳");
+      }
+      
+      try {
+        const limitRes = await fetch("/api/upload-limits", {
+          credentials: "include",
+        });
+        
+        if (limitRes.status === 401) {
+          // 未登入：直接阻止上傳
+          throw new Error("請先登入後再上傳");
+        }
+        
+        if (limitRes.ok) {
+          const limitData = await limitRes.json();
+          if (limitData.isLimitReached) {
+            throw new Error(`今日上傳限制為 ${limitData.dailyLimit} 張，請明天再試`);
+          }
+        } else {
+          // 其他錯誤（500等）：記錄但不阻止（避免檢查服務故障導致無法上傳）
+          console.warn("⚠️ 上傳限制檢查失敗（繼續上傳）：", limitRes.status);
+        }
+      } catch (limitErr) {
+        // 如果檢查失敗，記錄但不阻止（避免檢查服務故障導致無法上傳）
+        // 但如果是明確的限制錯誤或登入錯誤，直接拋出
+        if (limitErr.message?.includes("今日上傳限制") || limitErr.message?.includes("請先登入")) {
+          throw limitErr;
+        }
+        console.warn("⚠️ 上傳限制檢查失敗（繼續上傳）：", limitErr);
+      }
+
       // 获取要上传的文件信息
       const fileToUpload = useOriginal ? imageFile : compressedImage;
       
@@ -858,6 +893,13 @@ export default function UploadStep2({
             message: `服務器錯誤 (${serverRes.status}): ${serverRes.statusText || "未知錯誤"}` 
           };
         }
+        
+        // ✅ 特殊處理 429 錯誤（速率限制）
+        if (serverRes.status === 429) {
+          const errorMessage = serverError.message || "上傳請求過於頻繁，請稍後再試（建議等待 1-2 分鐘後重試）";
+          throw new Error(errorMessage);
+        }
+        
         // ✅ 優先使用詳細的錯誤訊息
         const errorMessage = serverError.error || serverError.message || "服務器端上傳失敗";
         throw new Error(errorMessage);
@@ -871,7 +913,7 @@ export default function UploadStep2({
       imageId = serverData.imageId;
       const imageUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageId}/public`;
 
-      const token = document.cookie.match(/token=([^;]+)/)?.[1];
+      // 使用之前聲明的 token（在第840行）
       const decoded = token ? jwtDecode(token) : null;
       const userId = decoded?._id || decoded?.id || null;
       const username = decoded?.username || decoded?.name || null;
@@ -988,7 +1030,34 @@ export default function UploadStep2({
         body: JSON.stringify(metadata),
         headers: { "Content-Type": "application/json" },
       });
-      if (!metaRes.ok) throw new Error("Metadata API failed");
+      
+      if (!metaRes.ok) {
+        let errorData;
+        try {
+          errorData = await metaRes.json();
+        } catch (parseError) {
+          errorData = { message: `HTTP ${metaRes.status}: ${metaRes.statusText}` };
+        }
+        
+        // ✅ 記錄詳細的錯誤信息（用於調試）
+        console.error("❌ Metadata API 失敗：", {
+          status: metaRes.status,
+          statusText: metaRes.statusText,
+          errorData
+        });
+        
+        // ✅ 特殊處理 429 錯誤（每日上傳限制）
+        if (metaRes.status === 429) {
+          const errorMessage = errorData.message || "今日上傳限制已達上限，請明天再試";
+          // ✅ 圖片已經上傳到 Cloudflare，但 metadata 保存失敗，需要清理
+          console.warn("⚠️ 圖片已上傳但 metadata 保存失敗（429），將清理已上傳的圖片");
+          throw new Error(errorMessage);
+        }
+        
+        // ✅ 其他錯誤
+        const errorMessage = errorData.message || `Metadata API failed (${metaRes.status})`;
+        throw new Error(errorMessage);
+      }
 
       // ✅ 上傳成功提示（根據元數據質量顯示結果）
       const finalQuality = getCurrentMetadataQuality;
@@ -1023,13 +1092,48 @@ export default function UploadStep2({
       onClose?.();
       location.reload();
     } catch (err) {
-      console.error("upload failed", err);
-      notify.error("上傳失敗", "請稍後再試！");
+      console.error("❌ 上傳失敗：", {
+        error: err.message,
+        stack: err.stack,
+        imageId: imageId || "無"
+      });
+      
+      // ✅ 根據錯誤類型顯示不同的錯誤訊息
+      let errorTitle = "上傳失敗";
+      let errorMessage = err.message || "請稍後再試！";
+      
+      // ✅ 特殊處理 429 錯誤（速率限制或每日上傳限制）
+      if (err.message && (err.message.includes("上傳限制") || err.message.includes("上傳請求過於頻繁"))) {
+        if (err.message.includes("上傳限制") && err.message.includes("今日")) {
+          errorTitle = "每日上傳限制";
+          errorMessage = err.message;
+        } else {
+          errorTitle = "請求過多";
+          errorMessage = err.message.includes("上傳請求過於頻繁") 
+            ? err.message 
+            : "操作過於頻繁，請稍後再試（建議等待 1-2 分鐘後重試）！";
+        }
+      } else if (err.message && err.message.includes("Cloudflare")) {
+        errorTitle = "上傳失敗";
+        errorMessage = "圖片上傳服務暫時無法使用，請稍後再試！";
+      }
+      
+      // ✅ 顯示錯誤通知（確保用戶能看到錯誤信息）
+      notify.error(errorTitle, errorMessage);
+      console.error("❌ 錯誤通知已顯示：", { errorTitle, errorMessage });
+      
+      // ✅ 如果圖片已上傳到 Cloudflare，但 metadata 保存失敗，需要清理
       if (imageId) {
+        console.warn("⚠️ 嘗試清理已上傳的圖片：", imageId);
         try {
-          await fetch(`/api/delete-cloudflare-image?id=${imageId}`, { method: "DELETE" });
+          const deleteRes = await fetch(`/api/delete-cloudflare-image?id=${imageId}`, { method: "DELETE" });
+          if (deleteRes.ok) {
+            console.log("✅ 已清理上傳失敗的圖片：", imageId);
+          } else {
+            console.warn("⚠️ 清理圖片失敗：", imageId, deleteRes.status);
+          }
         } catch (delErr) {
-          console.error("cleanup failed", delErr);
+          console.error("❌ 清理圖片異常：", delErr);
         }
       }
     } finally {
@@ -1061,10 +1165,12 @@ export default function UploadStep2({
           <div className="text-center flex-1">
             <div className="text-sm opacity-80">上傳圖片 · 填寫資訊</div>
             {uploadLimits && (
-              <div className="text-xs text-zinc-400 mt-1">
-                今日上傳：{uploadLimits.todayUploads}/{uploadLimits.dailyLimit} 張
+              <div className="text-xs mt-2">
+                <span className={`font-medium ${(uploadLimits.dailyLimit - uploadLimits.todayUploads) > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  今日配額：{uploadLimits.todayUploads} / {uploadLimits.dailyLimit} 張
+                </span>
                 {uploadLimits.isLimitReached && (
-                  <span className="text-red-400 ml-1">（已達上限）</span>
+                  <span className="text-red-400 ml-2">（已達上限，明天重置）</span>
                 )}
               </div>
             )}

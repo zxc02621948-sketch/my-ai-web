@@ -182,13 +182,20 @@ export async function POST(req) {
       return NextResponse.json({ message: "18+ 图片必须勾选成年声明" }, { status: 400 });
     }
 
-    // ✅ 檢查每日上傳限制
+    // ✅ 檢查每日上傳限制（與等級掛鉤）
     if (userId) {
-      const user = await User.findById(userId).select('totalEarnedPoints').lean();
+      const user = await User.findById(userId).select('totalEarnedPoints subscriptions').lean();
       if (user) {
-        const dailyLimit = getDailyUploadLimit(user.totalEarnedPoints || 0);
+        const totalEarnedPoints = user.totalEarnedPoints || 0;
+        const baseDailyLimit = getDailyUploadLimit(totalEarnedPoints); // 基礎配額（按等級計算：LV1=5, LV2=6, ...）
         
-        // 計算今日已上傳數量
+        // ✅ 檢查 VIP 狀態（VIP 用戶有 20 張/天配額）
+        const hasVIP = user.subscriptions?.some(
+          sub => sub.isActive && sub.type === 'premiumFeatures' && sub.expiresAt > new Date()
+        );
+        const finalDailyLimit = hasVIP ? 20 : baseDailyLimit;
+        
+        // 計算今日已上傳圖片數量
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today);
@@ -202,9 +209,9 @@ export async function POST(req) {
           }
         });
         
-        if (todayUploads >= dailyLimit) {
+        if (todayUploads >= finalDailyLimit) {
           return NextResponse.json({ 
-            message: `今日上傳限制為 ${dailyLimit} 張，請明天再試` 
+            message: `今日上傳限制為 ${finalDailyLimit} 張，請明天再試` 
           }, { status: 429 });
         }
       }

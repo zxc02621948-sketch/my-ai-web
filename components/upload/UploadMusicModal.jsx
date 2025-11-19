@@ -60,6 +60,9 @@ export default function UploadMusicModal() {
   const [uploading, setUploading] = useState(false);
   const [confirmAdult, setConfirmAdult] = useState(false);
 
+  // 每日上傳配額
+  const [dailyQuota, setDailyQuota] = useState({ current: 0, limit: 5, remaining: 5 });
+
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
@@ -77,8 +80,25 @@ export default function UploadMusicModal() {
 
   // 監聽開啟事件
   useEffect(() => {
-    const handleOpen = () => {
+    const handleOpen = async () => {
       setIsOpen(true);
+      
+      // 獲取當前每日配額
+      try {
+        const response = await fetch('/api/user/daily-music-quota', {
+          credentials: "include",
+        });
+        const data = await response.json();
+        if (data.success) {
+          setDailyQuota({
+            current: data.current,
+            limit: data.limit,
+            remaining: data.remaining
+          });
+        }
+      } catch (error) {
+        console.error('獲取每日配額失敗:', error);
+      }
     };
     window.addEventListener("openMusicUploadModal", handleOpen);
     return () => window.removeEventListener("openMusicUploadModal", handleOpen);
@@ -305,6 +325,46 @@ export default function UploadMusicModal() {
       return;
     }
 
+    // ✅ 先檢查每日上傳限制（避免不必要的上傳和流量消耗）
+    // 音樂有獨立的配額系統，使用與圖片相同的等級計算方式
+    const token = document.cookie.match(/token=([^;]+)/)?.[1];
+    if (!token) {
+      // 未登入：直接阻止上傳
+      toast.error("請先登入後再上傳");
+      return;
+    }
+    
+    try {
+      const quotaRes = await fetch("/api/user/daily-music-quota", {
+        credentials: "include",
+      });
+      
+      if (quotaRes.status === 401) {
+        // 未登入：直接阻止上傳
+        toast.error("請先登入後再上傳");
+        return;
+      }
+      
+      if (quotaRes.ok) {
+        const quotaData = await quotaRes.json();
+        if (quotaData.isLimitReached || quotaData.remaining <= 0) {
+          toast.error(`今日音樂上傳限制為 ${quotaData.limit} 部，請明天再試`);
+          return;
+        }
+      } else {
+        // 其他錯誤（500等）：記錄但不阻止（避免檢查服務故障導致無法上傳）
+        console.warn("⚠️ 上傳限制檢查失敗（繼續上傳）：", quotaRes.status);
+      }
+    } catch (quotaErr) {
+      // 如果檢查失敗，記錄但不阻止（避免檢查服務故障導致無法上傳）
+      // 但如果是明確的限制錯誤或登入錯誤，直接拋出
+      if (quotaErr.message?.includes("今日") || quotaErr.message?.includes("請先登入")) {
+        toast.error(quotaErr.message);
+        return;
+      }
+      console.warn("⚠️ 上傳限制檢查失敗（繼續上傳）：", quotaErr);
+    }
+
     setUploading(true);
 
     try {
@@ -350,7 +410,28 @@ export default function UploadMusicModal() {
 
       if (result.success) {
         const completeness = result.music?.completenessScore || 0;
-        const successMessage = `✅ 音樂上傳成功！完整度：${completeness}分`;
+        let successMessage = `✅ 音樂上傳成功！完整度：${completeness}分`;
+        
+        // 更新每日配額顯示
+        try {
+          const quotaResponse = await fetch('/api/user/daily-music-quota', {
+            credentials: "include",
+          });
+          if (quotaResponse.ok) {
+            const quotaData = await quotaResponse.json();
+            if (quotaData.success) {
+              setDailyQuota({
+                current: quotaData.current,
+                limit: quotaData.limit,
+                remaining: quotaData.remaining
+              });
+              successMessage += `\n\n今日剩餘：${quotaData.remaining}/${quotaData.limit} 部`;
+            }
+          }
+        } catch (quotaErr) {
+          console.warn("獲取更新後配額失敗:", quotaErr);
+        }
+        
         let storedMessage = false;
         try {
           sessionStorage.setItem(SUCCESS_TOAST_STORAGE_KEY, successMessage);
@@ -404,6 +485,14 @@ export default function UploadMusicModal() {
                 <div className="text-lg font-semibold">🎵 上傳音樂</div>
                 <div className="text-xs text-zinc-400 mt-1">
                   最大 10MB，建議 2-5 分鐘
+                </div>
+                <div className="text-xs mt-2">
+                  <span className={`font-medium ${dailyQuota.remaining > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    今日配額：{dailyQuota.current} / {dailyQuota.limit} 部
+                  </span>
+                  {dailyQuota.remaining === 0 && (
+                    <span className="text-red-400 ml-2">（已達上限，明天重置）</span>
+                  )}
                 </div>
               </div>
               <button

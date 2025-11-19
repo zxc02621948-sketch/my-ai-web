@@ -739,6 +739,12 @@ export default function UserProfilePage() {
   };
 
   const handleSelectImage = async (img) => {
+    // ✅ 檢查 img 是否存在
+    if (!img) {
+      console.warn("⚠️ handleSelectImage: img is undefined");
+      return;
+    }
+    
     // 如果是音樂類型，設置 selectedMusic
     if (img.type === 'music') {
       setSelectedMusic(img);
@@ -853,9 +859,9 @@ export default function UserProfilePage() {
       // 視頻和音樂的評級系統可能不同，需要特殊處理
       let rating = item.rating || "all";
       
-      // 如果是視頻，將 sfw 映射到 all，nsfw 映射到 18
-      if (item.type === 'video') {
-        if (rating === 'sfw') rating = 'all';
+      // ✅ 如果是圖片或視頻，將 sfw 映射到 all，nsfw 映射到 18
+      if (item.type === 'image' || item.type === 'video') {
+        if (rating === 'sfw' || rating === 'general') rating = 'all';
         else if (rating === 'nsfw') rating = '18';
       }
       

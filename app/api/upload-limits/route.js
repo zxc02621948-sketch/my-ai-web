@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import Image from "@/models/Image";
 import User from "@/models/User";
 import { getDailyUploadLimit, getLevelInfo } from "@/utils/pointsLevels";
-import { requireUser } from "@/utils/auth";
+import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +12,11 @@ export async function GET(req) {
   try {
     await dbConnect();
     
-    const { user, error } = await requireUser(req);
-    if (error) return error;
+    // ✅ 使用 getCurrentUserFromRequest（更穩定的認證方式）
+    const user = await getCurrentUserFromRequest(req);
+    if (!user) {
+      return NextResponse.json({ message: "請先登入" }, { status: 401 });
+    }
 
     // 獲取用戶積分信息
     const userData = await User.findById(user._id).select('totalEarnedPoints').lean();
@@ -22,32 +25,43 @@ export async function GET(req) {
     }
 
     const totalEarnedPoints = userData.totalEarnedPoints || 0;
-    const dailyLimit = getDailyUploadLimit(totalEarnedPoints);
+    const baseDailyLimit = getDailyUploadLimit(totalEarnedPoints); // 基礎配額（按等級計算：LV1=5, LV2=6, ...）
     const levelInfo = getLevelInfo(totalEarnedPoints);
 
-    // 計算今日已上傳數量
+    // ✅ 計算今日已上傳圖片數量（圖片有獨立的配額系統）
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    const todayUploads = await Image.countDocuments({
+    const todayImageUploads = await Image.countDocuments({
       userId: user._id,
       createdAt: {
         $gte: today,
         $lt: tomorrow
       }
     });
+    
+    // ✅ 檢查 VIP 狀態（VIP 用戶有 20 張/天配額）
+    const fullUser = await User.findById(user._id).select('subscriptions');
+    const hasVIP = fullUser?.subscriptions?.some(
+      sub => sub.isActive && sub.type === 'premiumFeatures' && sub.expiresAt > new Date()
+    );
+    const finalDailyLimit = hasVIP ? 20 : baseDailyLimit;
+    
+    const todayUploads = todayImageUploads;
 
-    const remaining = Math.max(0, dailyLimit - todayUploads);
-    const isLimitReached = todayUploads >= dailyLimit;
+    const remaining = Math.max(0, finalDailyLimit - todayUploads);
+    const isLimitReached = todayUploads >= finalDailyLimit;
 
     return NextResponse.json({
       ok: true,
-      dailyLimit,
+      dailyLimit: finalDailyLimit, // 返回最終配額（包含VIP加成）
+      baseDailyLimit, // 基礎配額（等級配額）
       todayUploads,
       remaining,
       isLimitReached,
+      isVIP: hasVIP,
       levelInfo: {
         rank: levelInfo.rank,
         title: levelInfo.title,

@@ -4,6 +4,7 @@ import { generateR2Key, R2_PUBLIC_URL, uploadToR2 } from "@/lib/r2";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { dbConnect } from "@/lib/db";
 import Video from "@/models/Video";
+import User from "@/models/User";
 import os from "os";
 import path from "path";
 import fs from "fs/promises";
@@ -31,6 +32,44 @@ export async function POST(request) {
     const user = await getCurrentUserFromRequest(request);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    await dbConnect();
+
+    // ✅ 檢查每日上傳限制（在上傳文件前檢查，避免不必要的流量消耗）
+    const today = new Date().toDateString();
+    const lastUploadDate = user.lastVideoUploadDate?.toDateString();
+
+    // 如果是新的一天，重置計數
+    if (lastUploadDate !== today) {
+      user.dailyVideoUploads = 0;
+    }
+
+    // 計算每日上傳限制（與圖片一致的等級制）
+    const hasVIP = user.subscriptions?.some(
+      sub => sub.isActive && sub.type === 'premiumFeatures' && sub.expiresAt > new Date()
+    );
+    
+    // 使用與圖片相同的等級制計算
+    const userPoints = user.totalEarnedPoints || 0;
+    let levelIndex = 0;
+    const levelThresholds = [0, 150, 500, 1000, 2000, 3500, 5000, 7000, 9000, 10000];
+    for (let i = 0; i < levelThresholds.length; i++) {
+      if (userPoints >= levelThresholds[i]) levelIndex = i;
+    }
+    
+    const baseDailyLimit = 5 + levelIndex; // LV1=5, LV2=6, ..., LV10=14
+    const dailyLimit = hasVIP ? 20 : baseDailyLimit;
+
+    // 檢查是否已達上限
+    if (user.dailyVideoUploads >= dailyLimit) {
+      return NextResponse.json({ 
+        error: `今日上傳已達上限（${dailyLimit}部）`,
+        dailyLimit,
+        currentCount: user.dailyVideoUploads,
+        resetInfo: '明天 00:00 重置配額',
+        isVIP: hasVIP
+      }, { status: 429 });
     }
 
     // ✅ 直接處理檔案上傳（使用 R2 API Token）
@@ -161,19 +200,24 @@ export async function POST(request) {
     video.popScore = popScore;
     await video.save();
 
-    // 檢查每日上傳配額
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // ✅ 更新用戶每日上傳計數
+    const userDoc = await User.findById(user._id);
+    if (userDoc) {
+      const uploadToday = new Date().toDateString();
+      const lastUploadDate = userDoc.lastVideoUploadDate?.toDateString();
+      
+      // 如果是新的一天，重置計數
+      if (lastUploadDate !== uploadToday) {
+        userDoc.dailyVideoUploads = 0;
+      }
+      
+      userDoc.dailyVideoUploads = (userDoc.dailyVideoUploads || 0) + 1;
+      userDoc.lastVideoUploadDate = new Date();
+      await userDoc.save();
+    }
 
-    const todayUploads = await Video.countDocuments({
-      uploader: user._id,
-      createdAt: { $gte: today, $lt: tomorrow }
-    });
-
-    const dailyLimit = 10; // 每日上傳限制
-    const remaining = Math.max(0, dailyLimit - todayUploads);
+    // 計算剩餘配額（用於返回給前端）
+    const remaining = Math.max(0, dailyLimit - (user.dailyVideoUploads || 0) - 1);
 
     // ✅ 返回完整的上傳結果
     return NextResponse.json({

@@ -277,6 +277,44 @@ export default function UploadVideoModal({
       return;
     }
 
+    // ✅ 先檢查每日上傳限制（避免不必要的上傳和流量消耗）
+    const token = document.cookie.match(/token=([^;]+)/)?.[1];
+    if (!token) {
+      // 未登入：直接阻止上傳
+      toast.error('請先登入後再上傳');
+      return;
+    }
+    
+    try {
+      const quotaRes = await fetch("/api/user/daily-video-quota", {
+        credentials: "include",
+      });
+      
+      if (quotaRes.status === 401) {
+        // 未登入：直接阻止上傳
+        toast.error('請先登入後再上傳');
+        return;
+      }
+      
+      if (quotaRes.ok) {
+        const quotaData = await quotaRes.json();
+        if (quotaData.remaining <= 0) {
+          throw new Error(`今日上傳限制為 ${quotaData.limit} 部，請明天再試`);
+        }
+      } else {
+        // 其他錯誤（500等）：記錄但不阻止（避免檢查服務故障導致無法上傳）
+        console.warn("⚠️ 上傳限制檢查失敗（繼續上傳）：", quotaRes.status);
+      }
+    } catch (quotaErr) {
+      // 如果檢查失敗，記錄但不阻止（避免檢查服務故障導致無法上傳）
+      // 但如果是明確的限制錯誤或登入錯誤，直接拋出
+      if (quotaErr.message?.includes("今日上傳限制") || quotaErr.message?.includes("請先登入")) {
+        toast.error(quotaErr.message);
+        return;
+      }
+      console.warn("⚠️ 上傳限制檢查失敗（繼續上傳）：", quotaErr);
+    }
+
     setUploading(true);
 
     try {

@@ -118,7 +118,13 @@ export async function POST(req) {
 
       // ✅ 根據 HTTP 狀態碼和錯誤訊息提供更具體的錯誤訊息
       let userFriendlyError = errorMsg;
-      if (httpStatus === 400 && errorMsg.includes("authenticate")) {
+      let statusCode = 500;
+      
+      if (httpStatus === 429) {
+        // ✅ 特殊處理 429 錯誤（速率限制）
+        userFriendlyError = "上傳請求過於頻繁，請稍後再試（建議等待 1-2 分鐘後重試）";
+        statusCode = 429;
+      } else if (httpStatus === 400 && errorMsg.includes("authenticate")) {
         // HTTP 400 + 認證錯誤通常表示 Token 格式或權限問題
         userFriendlyError = "Cloudflare API 認證失敗（HTTP 400）。可能的原因：1) Token 格式不正確 2) Token 沒有 Cloudflare Images 的 Edit 權限 3) Token 已過期或被撤銷。請在 Cloudflare Dashboard 檢查 Token 權限，確保有 'Cloudflare Images:Edit' 權限。";
       } else if (httpStatus === 401 || httpStatus === 403 || errorMsg.includes("authenticate") || errorMsg.includes("Unauthorized")) {
@@ -133,7 +139,7 @@ export async function POST(req) {
         error: errorMsg, // ✅ 保留原始錯誤訊息
         errors: result.errors,
         httpStatus
-      }, { status: 500 });
+      }, { status: statusCode });
     }
 
     if (process.env.NODE_ENV === "development") {
