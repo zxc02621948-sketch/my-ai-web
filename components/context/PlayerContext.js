@@ -583,10 +583,23 @@ export function PlayerProvider({
           if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
             try {
               // ✅ 再次確保 metadata 已設置（特別是 artwork）
+              // ✅ 這對於從暫停狀態恢復播放特別重要
               updateMediaSessionMetadata();
               
-              // ✅ 現在才設置 playbackState（必須在 metadata 之後）
-              navigator.mediaSession.playbackState = "playing";
+              // ✅ 再等待一小段時間，確保 artwork 已完全渲染
+              setTimeout(() => {
+                if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                  try {
+                    // ✅ 第三次確保 metadata 已設置（確保 artwork 不會丟失）
+                    updateMediaSessionMetadata();
+                    
+                    // ✅ 現在才設置 playbackState（必須在 metadata 之後）
+                    navigator.mediaSession.playbackState = "playing";
+                  } catch (error) {
+                    // 忽略錯誤
+                  }
+                }
+              }, 50);
             } catch (error) {
               // 忽略錯誤
             }
@@ -669,31 +682,45 @@ export function PlayerProvider({
       try {
         const audio = audioRef.current;
         
-        // ✅ 更新 playbackState
-        navigator.mediaSession.playbackState = "paused";
+        // ✅ 重要：暫停時也要更新 metadata，確保封面不會丟失
+        // ✅ 這可以防止某些瀏覽器在暫停時清除 artwork
+        updateMediaSessionMetadata();
         
-        // ✅ 更新 position state（重要：暫停時必須更新，否則進度條會卡死）
-        const currentTime = audio.currentTime || 0;
-        const duration = audio.duration || 0;
-        
-        if (duration > 0 && isFinite(duration) && isFinite(currentTime)) {
+        // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState
+        setTimeout(() => {
           try {
-            if (navigator.mediaSession.setPositionState) {
-              navigator.mediaSession.setPositionState({
-                duration: duration,
-                playbackRate: audio.playbackRate || 1.0,
-                position: currentTime,
-              });
+            // ✅ 再次確保 metadata 已設置（特別是 artwork）
+            updateMediaSessionMetadata();
+            
+            // ✅ 更新 playbackState（必須在 metadata 之後設置）
+            navigator.mediaSession.playbackState = "paused";
+            
+            // ✅ 更新 position state（重要：暫停時必須更新，否則進度條會卡死）
+            const currentTime = audio.currentTime || 0;
+            const duration = audio.duration || 0;
+            
+            if (duration > 0 && isFinite(duration) && isFinite(currentTime)) {
+              try {
+                if (navigator.mediaSession.setPositionState) {
+                  navigator.mediaSession.setPositionState({
+                    duration: duration,
+                    playbackRate: audio.playbackRate || 1.0,
+                    position: currentTime,
+                  });
+                }
+              } catch (error) {
+                // 某些瀏覽器可能不支援 setPositionState，忽略即可
+              }
             }
           } catch (error) {
-            // 某些瀏覽器可能不支援 setPositionState，忽略即可
+            // 忽略錯誤
           }
-        }
+        }, 0);
       } catch (error) {
         // 忽略錯誤
       }
     }
-  }, []);
+  }, [updateMediaSessionMetadata]);
 
   // ✅ 預先聲明 nextRef，將在 next 函數定義後設置
   const nextRef = useRef(null);
