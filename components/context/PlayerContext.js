@@ -729,104 +729,35 @@ export function PlayerProvider({
           });
           
           if (currentTrackForResume) {
-            // ✅ 新策略：不重置 metadata，而是直接更新並預加載圖片
-            // ✅ 從播放列表中獲取封面 URL（如果 track 中沒有）
-            let artworkUrl = currentTrackForResume.coverImageUrl || 
-                            currentTrackForResume.cover || 
-                            currentTrackForResume.imageUrl || 
-                            currentTrackForResume.thumbnailUrl || "";
-            
-            // ✅ 如果 track 中沒有封面，嘗試從現有的 metadata 中獲取
-            if (!artworkUrl || artworkUrl === "") {
-              try {
-                const existingMetadata = navigator.mediaSession.metadata;
-                if (existingMetadata && existingMetadata.artwork && existingMetadata.artwork.length > 0) {
-                  artworkUrl = existingMetadata.artwork[0]?.src || "";
-                  if (artworkUrl) {
-                    currentTrackForResume.coverImageUrl = artworkUrl;
-                    console.log("[MediaSession] 🔍 從現有 metadata 中提取 artwork URL:", artworkUrl);
-                  }
-                }
-              } catch (e) {
-                // 忽略錯誤
-              }
-            } else {
-              // ✅ 如果 track 中有封面，設置到 track 對象中
-              currentTrackForResume.coverImageUrl = artworkUrl;
-            }
-            
-            // ✅ 如果有 artwork URL，先預加載圖片（確保移動設備能正確顯示）
-            if (artworkUrl && artworkUrl !== "") {
-              const preloadImage = new Image();
-              preloadImage.onload = () => {
-                console.log("[MediaSession] 🔍 圖片預加載完成:", artworkUrl);
-                // ✅ 圖片加載完成後，立即更新 metadata
+            // ✅ 移動設備專用：完全重置 Media Session，然後重新設置（模擬第一次播放）
+            // ✅ 這樣可以確保移動設備上的 artwork 正確顯示
+            try {
+              // ✅ 先完全清除 Media Session
+              navigator.mediaSession.playbackState = "none";
+              navigator.mediaSession.metadata = null;
+              
+              // ✅ 等待一小段時間，確保清除完成
+              setTimeout(() => {
                 if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                  // ✅ 重新設置 metadata（就像第一次播放一樣）
                   updateMediaSessionMetadata(currentTrackForResume, true);
                   
                   // ✅ 等待一小段時間，確保 metadata 已設置
                   setTimeout(() => {
                     if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
                       try {
-                        // ✅ 再次確認 metadata 正確設置
-                        const checkMetadata = navigator.mediaSession.metadata;
-                        if (!checkMetadata || !checkMetadata.artwork || checkMetadata.artwork.length === 0) {
-                          console.warn("[MediaSession] ⚠️ 預加載後 artwork 丟失，重新設置");
-                          updateMediaSessionMetadata(currentTrackForResume, true);
-                        }
-                        
-                        // ✅ 設置 playbackState
-                        navigator.mediaSession.playbackState = "playing";
-                        console.log("[MediaSession] 🔍 預加載完成後設置 playbackState = 'playing'");
-                      } catch (error) {
-                        console.warn("[MediaSession] ⚠️ 設置 playbackState 失敗:", error);
-                      }
-                    }
-                  }, 50);
-                }
-              };
-              preloadImage.onerror = () => {
-                console.warn("[MediaSession] ⚠️ 圖片預加載失敗:", artworkUrl);
-                // ✅ 即使預加載失敗，也嘗試更新 metadata
-                if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                  updateMediaSessionMetadata(currentTrackForResume, true);
-                  setTimeout(() => {
-                    if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                      try {
+                        // ✅ 設置 playbackState = "playing"
                         navigator.mediaSession.playbackState = "playing";
                       } catch (error) {
-                        console.warn("[MediaSession] ⚠️ 設置 playbackState 失敗:", error);
+                        // 忽略錯誤
                       }
                     }
-                  }, 50);
+                  }, 100);
                 }
-              };
-              
-              // ✅ 添加時間戳強制刷新
-              try {
-                const urlObj = new URL(artworkUrl, window.location.origin);
-                urlObj.searchParams.set('_t', Date.now().toString());
-                preloadImage.src = urlObj.toString();
-              } catch (e) {
-                const separator = artworkUrl.includes('?') ? '&' : '?';
-                preloadImage.src = `${artworkUrl}${separator}_t=${Date.now()}`;
-              }
-              
-              console.log("[MediaSession] 🔍 開始預加載圖片:", preloadImage.src);
-            } else {
-              // ✅ 如果沒有 artwork URL，直接更新 metadata
-              console.log("[MediaSession] 🔍 沒有 artwork URL，直接更新 metadata");
+              }, 50);
+            } catch (error) {
+              // 如果重置失敗，直接更新 metadata
               updateMediaSessionMetadata(currentTrackForResume, true);
-              
-              setTimeout(() => {
-                if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                  try {
-                    navigator.mediaSession.playbackState = "playing";
-                  } catch (error) {
-                    console.warn("[MediaSession] ⚠️ 設置 playbackState 失敗:", error);
-                  }
-                }
-              }, 100);
             }
           } else {
             // ✅ 如果沒有播放列表，使用原有邏輯
