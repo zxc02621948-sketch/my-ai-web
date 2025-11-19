@@ -601,20 +601,31 @@ export function PlayerProvider({
         const wasPaused = navigator.mediaSession.playbackState === "paused";
         
         if (wasPaused) {
-          // ✅ 從暫停恢復：清除 metadata 並重新設置，確保 artwork 正確顯示
+          // ✅ 從暫停恢復：獲取當前 track 信息，像 next 函數那樣傳入 trackOverride
+          const list = playlistRef.current || [];
+          const idx = activeIndexRef.current;
+          let currentTrackForResume = currentTrackRef.current;
+          
+          // ✅ 如果 currentTrackRef 沒有完整信息，從播放列表中獲取
+          if (!currentTrackForResume && Array.isArray(list) && list.length > 0 && idx >= 0 && idx < list.length) {
+            currentTrackForResume = list[idx];
+          }
+          
+          // ✅ 清除 metadata 並重新設置，確保 artwork 正確顯示
           try {
             navigator.mediaSession.metadata = null;
           } catch (e) {
             // 忽略清除錯誤
           }
           
-          // ✅ 等待清除完成後重新設置
+          // ✅ 等待清除完成後重新設置（傳入 trackOverride 確保使用完整信息）
           setTimeout(() => {
             if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-              updateMediaSessionMetadata();
+              // ✅ 像 next 函數那樣，傳入 trackOverride 確保立即使用完整信息
+              updateMediaSessionMetadata(currentTrackForResume);
               setTimeout(() => {
                 if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                  updateMediaSessionMetadata();
+                  updateMediaSessionMetadata(currentTrackForResume);
                   navigator.mediaSession.playbackState = "playing";
                 }
               }, 100);
