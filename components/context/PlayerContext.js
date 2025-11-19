@@ -525,13 +525,36 @@ export function PlayerProvider({
     }
 
     // ✅ 設置 metadata（立即更新，不等待 useEffect）
+    // ✅ 重要：必須先設置 metadata，再設置 playbackState，且必須確保 artwork 已設置
     try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: metadataTitle || "音樂作品",
-        artist: metadataArtist || "未知創作者",
-        album: metadataAlbum,
-        artwork: artwork.length > 0 ? artwork : undefined,
-      });
+      // ✅ 先確保有 artwork，否則不設置（避免顯示 logo）
+      if (artwork.length > 0) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: metadataTitle || "音樂作品",
+          artist: metadataArtist || "未知創作者",
+          album: metadataAlbum,
+          artwork: artwork,
+        });
+      } else {
+        // ✅ 如果沒有 artwork，嘗試從現有的 metadata 中保留（如果有的話）
+        const existingMetadata = navigator.mediaSession.metadata;
+        if (existingMetadata && existingMetadata.artwork && existingMetadata.artwork.length > 0) {
+          // ✅ 保留現有的 artwork，只更新其他信息
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: metadataTitle || "音樂作品",
+            artist: metadataArtist || "未知創作者",
+            album: metadataAlbum,
+            artwork: existingMetadata.artwork,
+          });
+        } else {
+          // ✅ 如果既沒有新的 artwork 也沒有現有的，設置基本信息但不設置 artwork
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: metadataTitle || "音樂作品",
+            artist: metadataArtist || "未知創作者",
+            album: metadataAlbum,
+          });
+        }
+      }
     } catch (error) {
       console.warn("[MediaSession] 設定 metadata 失敗:", error);
     }
@@ -551,23 +574,24 @@ export function PlayerProvider({
     // ✅ 立即更新 Media Session metadata（確保封面立即顯示，不等待異步操作）
     if (typeof navigator !== "undefined" && navigator.mediaSession) {
       try {
-        // ✅ 先立即更新一次
+        // ✅ 先立即更新 metadata（必須在 playbackState 之前設置）
         updateMediaSessionMetadata();
         
-        // ✅ 立即更新 playbackState（必須在 metadata 之後設置）
-        navigator.mediaSession.playbackState = "playing";
-        
-        // ✅ 短暫延遲後再次更新 metadata（確保狀態已同步，避免暫停後恢復時顯示 logo）
+        // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState
+        // ✅ 這很重要：Android 需要 metadata 完全設置好後才能正確顯示 artwork
         setTimeout(() => {
           if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
             try {
+              // ✅ 再次確保 metadata 已設置（特別是 artwork）
               updateMediaSessionMetadata();
+              
+              // ✅ 現在才設置 playbackState（必須在 metadata 之後）
               navigator.mediaSession.playbackState = "playing";
             } catch (error) {
               // 忽略錯誤
             }
           }
-        }, 100);
+        }, 50);
       } catch (error) {
         console.warn("[MediaSession] 立即更新播放狀態失敗:", error);
       }
@@ -589,26 +613,38 @@ export function PlayerProvider({
           // ✅ 再次確保 metadata 已設置（重要：恢復播放時必須重新設置，避免顯示 logo）
           updateMediaSessionMetadata();
           
-          // ✅ 更新 playbackState（必須在 metadata 之後設置）
-          navigator.mediaSession.playbackState = "playing";
-          
-          // ✅ 立即設置 position state（Android 需要，確保進度條正確顯示）
-          const currentTime = audio.currentTime || 0;
-          const duration = audio.duration || 0;
-          
-          if (duration > 0 && isFinite(duration) && isFinite(currentTime)) {
-            try {
-              if (navigator.mediaSession.setPositionState) {
-                navigator.mediaSession.setPositionState({
-                  duration: duration,
-                  playbackRate: audio.playbackRate || 1.0,
-                  position: currentTime,
-                });
+          // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState
+          setTimeout(() => {
+            if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+              try {
+                // ✅ 再次確保 metadata 已設置（特別是 artwork）
+                updateMediaSessionMetadata();
+                
+                // ✅ 更新 playbackState（必須在 metadata 之後設置）
+                navigator.mediaSession.playbackState = "playing";
+                
+                // ✅ 立即設置 position state（Android 需要，確保進度條正確顯示）
+                const currentTime = audio.currentTime || 0;
+                const duration = audio.duration || 0;
+                
+                if (duration > 0 && isFinite(duration) && isFinite(currentTime)) {
+                  try {
+                    if (navigator.mediaSession.setPositionState) {
+                      navigator.mediaSession.setPositionState({
+                        duration: duration,
+                        playbackRate: audio.playbackRate || 1.0,
+                        position: currentTime,
+                      });
+                    }
+                  } catch (error) {
+                    // 某些瀏覽器可能不支援 setPositionState，忽略即可
+                  }
+                }
+              } catch (error) {
+                console.warn("[MediaSession] 更新播放狀態失敗:", error);
               }
-            } catch (error) {
-              // 某些瀏覽器可能不支援 setPositionState，忽略即可
             }
-          }
+          }, 50);
           
         } catch (error) {
           console.warn("[MediaSession] 更新播放狀態失敗:", error);
@@ -1897,12 +1933,21 @@ export function PlayerProvider({
       }
     }
 
-    // ✅ 及時更新播放狀態
-    try {
-      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-    } catch (error) {
-      // 某些瀏覽器可能不支援 playbackState，忽略即可
-    }
+    // ✅ 及時更新播放狀態（重要：必須在 metadata 設置之後）
+    // ✅ 延遲設置 playbackState，確保 metadata（特別是 artwork）已完全設置
+    setTimeout(() => {
+      try {
+        // ✅ 如果正在播放，再次確保 metadata 已設置
+        if (isPlaying) {
+          updateMediaSessionMetadata();
+        }
+        
+        // ✅ 現在才設置 playbackState
+        navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+      } catch (error) {
+        // 某些瀏覽器可能不支援 playbackState，忽略即可
+      }
+    }, 0);
 
     // ✅ Android 鎖屏控件需要 setPositionState 來正確顯示進度和響應控制
     // updatePositionState 必須在 useEffect 內部，以確保能訪問最新的 audioRef
