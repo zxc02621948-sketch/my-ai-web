@@ -639,24 +639,6 @@ export default function EditMusicModal({
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              語言
-            </label>
-            <select
-              value={form.language}
-              onChange={(e) => setForm({ ...form, language: e.target.value })}
-              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-white"
-            >
-              <option value="">選擇語言</option>
-              {MUSIC_LANGUAGES.map((lang) => (
-                <option key={lang} value={lang}>
-                  {LANGUAGE_MAP[lang] || lang}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* 情緒、BPM、調性：僅 MusicGen / Stable Audio 顯示 */}
           {(form.platform === "MusicGen" ||
             form.platform === "Stable Audio") && (
@@ -713,6 +695,24 @@ export default function EditMusicModal({
         {form.category === "song" && (
           <div className="space-y-4 border-t border-zinc-700 pt-4">
             <h3 className="text-lg font-semibold text-white">歌曲資訊</h3>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                語言 <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={form.language}
+                onChange={(e) => setForm({ ...form, language: e.target.value })}
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-white"
+              >
+                <option value="">選擇語言</option>
+                {MUSIC_LANGUAGES.map((lang) => (
+                  <option key={lang} value={lang}>
+                    {LANGUAGE_MAP[lang] || lang}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">

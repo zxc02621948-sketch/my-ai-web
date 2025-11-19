@@ -958,6 +958,72 @@ export default function UploadMusicModal() {
                           </>
                         )}
 
+                        {platform === "TopMediai" && (
+                          <>
+                            <div>
+                              <label className="text-sm text-zinc-400 flex items-center gap-2">
+                                <span>🎭 怪異度（Weirdness）</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setWeirdness("")}
+                                  className="text-xs text-zinc-500 hover:text-white"
+                                >
+                                  🔄 重置
+                                </button>
+                              </label>
+                              <div className="mt-2">
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  value={weirdness || 0}
+                                  onChange={(e) => setWeirdness(e.target.value)}
+                                  className="w-full h-2 bg-zinc-600 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                />
+                                <div className="flex justify-between text-xs text-zinc-400 mt-1">
+                                  <span>0%</span>
+                                  <span className="font-semibold text-white">
+                                    {weirdness || 0}%
+                                  </span>
+                                  <span>100%</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="text-sm text-zinc-400 flex items-center gap-2">
+                                <span>🎨 風格影響力（Style Influence）</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setStyleInfluence("")}
+                                  className="text-xs text-zinc-500 hover:text-white"
+                                >
+                                  🔄 重置
+                                </button>
+                              </label>
+                              <div className="mt-2">
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  value={styleInfluence || 0}
+                                  onChange={(e) =>
+                                    setStyleInfluence(e.target.value)
+                                  }
+                                  className="w-full h-2 bg-zinc-600 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                />
+                                <div className="flex justify-between text-xs text-zinc-400 mt-1">
+                                  <span>0%</span>
+                                  <span className="font-semibold text-white">
+                                    {styleInfluence || 0}%
+                                  </span>
+                                  <span>100%</span>
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+
                         {(platform === "MusicGen" ||
                           platform === "Stable Audio") && (
                           <>
