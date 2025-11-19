@@ -49,18 +49,15 @@ class AudioManager {
       }
       this.currentAudio = audio;
       this.currentPriority = priority;
-      debugLog("🎵 [AudioManager] ✅ 允許播放，優先度:", priority);
       return true; // 允許播放
     }
 
     // 如果優先度相等或更高，也允許播放（同一個音頻重新請求）
     if (priority === this.currentPriority && this.currentAudio === audio) {
-      debugLog("🎵 [AudioManager] ✅ 允許播放（同一個音頻重新請求），優先度:", priority);
       return true;
     }
 
     // 優先度不夠，不允許播放
-    debugLog("🎵 [AudioManager] ❌ 優先度不夠，無法播放。當前優先度:", this.currentPriority, "請求優先度:", priority);
     return false;
   }
 
@@ -74,7 +71,6 @@ class AudioManager {
       if (this.currentAudio === audio) {
         this.currentAudio = null;
         this.currentPriority = 0;
-        debugLog("🎵 [AudioManager] ✅ 已釋放音頻:", audio);
       }
     } else {
       // 如果沒有提供 audio 參數，強制釋放所有音頻（用於清理）
