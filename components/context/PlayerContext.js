@@ -640,27 +640,22 @@ export function PlayerProvider({
         // ✅ 檢查是否從暫停狀態恢復播放
         const wasPaused = navigator.mediaSession.playbackState === "paused";
         
-        if (wasPaused) {
-          // ✅ 從暫停恢復：直接重新設置 metadata（關鍵修復）
-          // ✅ 問題根因：Resume 時必須重新寫入 metadata，否則系統會 fallback 到預設 artwork
-          // ✅ 像 next 函數那樣，直接從播放列表獲取完整的 track 信息
-          const list = playlistRef.current || [];
-          const idx = activeIndexRef.current;
-          const currentTrackForResume = Array.isArray(list) && list.length > 0 && idx >= 0 && idx < list.length
-            ? list[idx]
-            : null;
-          
-          if (currentTrackForResume) {
-            // ✅ 直接更新 metadata（不重置，直接重新設置）
-            // ✅ 這是最關鍵的修復：Resume 時必須重新寫入 metadata
-            updateMediaSessionMetadata(currentTrackForResume, true);
-          } else {
-            // ✅ 如果沒有播放列表，使用原有邏輯
-            updateMediaSessionMetadata(null, true);
-          }
+        // ✅ 關鍵修復：無論是正常播放還是 resume，都必須重新設置 metadata
+        // ✅ iOS Safari 的 Media Session API 在 resume 時不會記住原本的 artwork
+        // ✅ 如果沒有重新指定，就會 fallback 到預設的網站 LOGO
+        const list = playlistRef.current || [];
+        const idx = activeIndexRef.current;
+        const currentTrack = Array.isArray(list) && list.length > 0 && idx >= 0 && idx < list.length
+          ? list[idx]
+          : null;
+        
+        if (currentTrack) {
+          // ✅ Resume 時：直接重新設置 metadata（使用完整的 track 信息）
+          // ✅ 正常播放時：也重新設置 metadata（確保一致性）
+          updateMediaSessionMetadata(currentTrack, wasPaused);
         } else {
-          // ✅ 正常播放：立即更新 metadata
-          updateMediaSessionMetadata();
+          // ✅ 如果沒有播放列表，使用原有邏輯
+          updateMediaSessionMetadata(null, wasPaused);
         }
       } catch (error) {
         // 忽略錯誤
@@ -2163,7 +2158,6 @@ export function PlayerProvider({
       try {
         const audio = audioRef.current;
         if (!audio) {
-          console.warn("[MediaSession] audio 元素不存在");
           return;
         }
         
@@ -2172,8 +2166,20 @@ export function PlayerProvider({
           // ✅ 请求播放权限
           const canPlay = audioManager.requestPlay(audio, 1);
           if (!canPlay) {
-            console.warn("[MediaSession] 優先度不夠，無法播放");
             return;
+          }
+          
+          // ✅ 關鍵修復：在 resume 時立即重新設置 metadata
+          // ✅ 從播放列表獲取完整的 track 信息
+          const list = playlistRef.current || [];
+          const idx = activeIndexRef.current;
+          const currentTrack = Array.isArray(list) && list.length > 0 && idx >= 0 && idx < list.length
+            ? list[idx]
+            : null;
+          
+          if (currentTrack) {
+            // ✅ Resume 時立即重新設置 metadata（關鍵修復）
+            updateMediaSessionMetadata(currentTrack, true);
           }
           
           try {
@@ -2193,8 +2199,12 @@ export function PlayerProvider({
               // ✅ 檢查音頻元素是否正在播放且 duration 已加載（Android 需要）
               if (!audio.paused && audio.duration > 0 && isFinite(audio.duration)) {
                 try {
-                  // ✅ 確保 metadata 已設置（Android 背景播放面板需要）
-                  updateMetadataInEffect();
+                  // ✅ 再次確保 metadata 已設置（Android 背景播放面板需要）
+                  if (currentTrack) {
+                    updateMediaSessionMetadata(currentTrack, true);
+                  } else {
+                    updateMetadataInEffect();
+                  }
                   
                   // ✅ 更新 playbackState（必須在 metadata 之後設置）
                   navigator.mediaSession.playbackState = "playing";
@@ -2203,7 +2213,7 @@ export function PlayerProvider({
                   updatePositionState();
                   
                 } catch (error) {
-                  console.warn("[MediaSession] 更新播放狀態失敗:", error);
+                  // 忽略錯誤
                 }
               } else if (attempts < maxAttempts) {
                 // ✅ 如果音頻還沒準備好，繼續等待（Android 需要等待 duration 加載）
@@ -2215,11 +2225,11 @@ export function PlayerProvider({
             // ✅ 否則等待 100ms 後重試（Android 需要）
             setTimeout(() => setupMediaSessionForAndroid(0), 100);
           } catch (error) {
-            console.warn("[MediaSession] play() 失敗:", error);
+            // 忽略錯誤
           }
         }
       } catch (error) {
-        console.warn("[MediaSession] play handler 失敗:", error);
+        // 忽略錯誤
       }
     };
 
