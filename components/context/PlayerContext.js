@@ -451,6 +451,28 @@ export function PlayerProvider({
     }
   }, [src]);
 
+  // ✅ 保存當前 track 信息的 ref，避免閉包問題
+  const currentTrackRef = useRef(null);
+  const srcRef = useRef(src);
+  const trackTitleRef = useRef(trackTitle);
+  const playerOwnerRef = useRef(playerOwner);
+
+  // ✅ 更新 ref 的值
+  useEffect(() => {
+    srcRef.current = src;
+    trackTitleRef.current = trackTitle;
+    playerOwnerRef.current = playerOwner;
+    
+    // ✅ 更新當前 track 信息
+    const list = playlistRef.current || [];
+    const idx = activeIndexRef.current;
+    if (Array.isArray(list) && list.length > 0 && idx >= 0 && idx < list.length) {
+      currentTrackRef.current = list[idx];
+    } else {
+      currentTrackRef.current = null;
+    }
+  }, [playlist, activeIndex, src, trackTitle, playerOwner]);
+
   // ✅ 更新 Media Session metadata 的輔助函數（用於在播放時確保 metadata 已設置）
   // ✅ 可以接受可選的 track 參數，用於立即更新特定歌曲的 metadata（切換歌曲時使用）
   const updateMediaSessionMetadata = useCallback((trackOverride = null) => {
@@ -459,23 +481,21 @@ export function PlayerProvider({
     }
 
     // ✅ 如果提供了 trackOverride，優先使用它（用於切換歌曲時立即更新）
-    // ✅ 否則獲取當前播放的音樂信息
-    const currentTrack = trackOverride || (
-      Array.isArray(playlist) && playlist.length > 0 && activeIndex >= 0 && activeIndex < playlist.length
-        ? playlist[activeIndex]
-        : null
-    );
+    // ✅ 否則從 ref 獲取當前播放的音樂信息（避免閉包問題）
+    const currentTrack = trackOverride || currentTrackRef.current;
 
     // ✅ 如果提供了 trackOverride，使用它提供的 URL 和標題
-    const trackUrl = trackOverride ? (trackOverride.url || trackOverride.musicUrl) : src;
-    const trackTitleOverride = trackOverride ? (trackOverride.title || trackOverride.trackTitle) : trackTitle;
+    // ✅ 否則從 ref 獲取最新的 URL 和標題（避免閉包問題）
+    const trackUrl = trackOverride ? (trackOverride.url || trackOverride.musicUrl) : (srcRef.current || audioRef.current?.src || "");
+    const trackTitleOverride = trackOverride ? (trackOverride.title || trackOverride.trackTitle) : trackTitleRef.current;
 
     const hasMusic = trackUrl || (currentTrack && (currentTrack.url || currentTrack.musicUrl)) || trackTitleOverride;
     if (!hasMusic) {
       return;
     }
 
-    // ✅ 構建基本的 metadata
+    // ✅ 構建基本的 metadata（使用 ref 獲取最新的 playerOwner，避免閉包問題）
+    const currentPlayerOwner = playerOwnerRef.current;
     const metadataTitle =
       (currentTrack && (currentTrack.title || currentTrack.trackTitle)) ||
       trackTitleOverride ||
@@ -484,10 +504,10 @@ export function PlayerProvider({
       "音樂作品";
     const metadataArtist =
       (currentTrack && (currentTrack.artist || currentTrack.authorName)) ||
-      playerOwner?.username ||
+      currentPlayerOwner?.username ||
       "未知創作者";
     const metadataAlbum =
-      (currentTrack && currentTrack.album) || playerOwner?.username || "";
+      (currentTrack && currentTrack.album) || currentPlayerOwner?.username || "";
 
     // ✅ 構建 artwork（優先使用 trackOverride 的封面）
     const artwork = [];
@@ -515,7 +535,7 @@ export function PlayerProvider({
     } catch (error) {
       console.warn("[MediaSession] 設定 metadata 失敗:", error);
     }
-  }, [playlist, activeIndex, src, trackTitle, playerOwner]);
+  }, []);
 
   const onPlay = useCallback(() => {
     // ✅ 只處理本地音頻播放器
