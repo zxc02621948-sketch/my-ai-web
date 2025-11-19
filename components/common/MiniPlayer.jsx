@@ -1031,27 +1031,15 @@ export default function MiniPlayer() {
       ? new Date(subscriptions.pinPlayer.expiresAt).getTime()
       : null;
     
-    console.log('🔍 [MiniPlayer] 檢查 expiresAt:', {
-      currentUserExpiresAt: currentExpiresAt ? new Date(currentExpiresAt).toISOString() : null,
-      subscriptionsExpiresAt: subscriptionsExpiresAt ? new Date(subscriptionsExpiresAt).toISOString() : null,
-      displayedExpiresAt: displayedExpiresAt ? new Date(displayedExpiresAt).toISOString() : null,
-      isPinned,
-      hasPinnedPlayerData: !!pinnedPlayerData
-    });
     
     // ✅ 優先使用 subscriptions 的 expiresAt（如果存在），因為它是最新的
     let targetExpiresAt = currentExpiresAt;
     if (subscriptionsExpiresAt && (!targetExpiresAt || subscriptionsExpiresAt > targetExpiresAt)) {
       targetExpiresAt = subscriptionsExpiresAt;
-      console.log('🔄 [MiniPlayer] 使用 subscriptions 的 expiresAt:', new Date(targetExpiresAt).toISOString());
     }
     
     // 如果 targetExpiresAt 與顯示的不同，強制更新
     if (targetExpiresAt && displayedExpiresAt && targetExpiresAt !== displayedExpiresAt) {
-      console.log('🔄 [MiniPlayer] 檢測到 expiresAt 變化，強制更新:', {
-        target: new Date(targetExpiresAt),
-        displayed: new Date(displayedExpiresAt)
-      });
       setPinnedPlayerData(prev => {
         if (!prev) return prev;
         const updated = {
@@ -1063,7 +1051,6 @@ export default function MiniPlayer() {
       });
     } else if (targetExpiresAt && !displayedExpiresAt && isPinned) {
       // 如果有 targetExpiresAt 但沒有顯示的，也更新
-      console.log('🔄 [MiniPlayer] 從 currentUser 同步 expiresAt:', new Date(targetExpiresAt));
       setPinnedPlayerData(prev => {
         if (!prev) return prev;
         const updated = {
@@ -1107,17 +1094,14 @@ export default function MiniPlayer() {
   // 監聽訂閱續費事件（當用戶續費時更新 pinnedPlayer.expiresAt）
   useEffect(() => {
     const handleSubscriptionRenewed = (e) => {
-      console.log('🔄 [MiniPlayer] 收到 subscriptionRenewed 事件:', e.detail);
       if (e.detail.subscriptionType === 'pinPlayer') {
         // 即使 isPinned 為 false，也先更新數據，因為用戶可能已經釘選了
         const newExpiresAt = new Date(e.detail.expiresAt);
-        console.log('🔄 [MiniPlayer] 準備更新 expiresAt:', newExpiresAt, 'isPinned:', isPinned);
         
         // 如果已經有 pinnedPlayerData，直接更新
         if (pinnedPlayerData) {
           setPinnedPlayerData(prev => {
             if (!prev) {
-              console.warn('⚠️ [MiniPlayer] pinnedPlayerData 為 null，無法更新');
               return prev;
             }
             const updated = {
@@ -1126,12 +1110,10 @@ export default function MiniPlayer() {
             };
             // 更新緩存
             writePinnedPlayerCache(updated);
-            console.log('✅ [MiniPlayer] 已更新 pinnedPlayerData.expiresAt:', updated.expiresAt);
             return updated;
           });
         } else {
           // 如果還沒有 pinnedPlayerData，強制重新載入
-          console.log('🔄 [MiniPlayer] 沒有 pinnedPlayerData，強制重新載入');
           loadPinnedPlayer({ force: true });
         }
       }
@@ -1215,7 +1197,6 @@ export default function MiniPlayer() {
             applyPinnedShufflePreference(allowShuffle, ownerId);
           }
         } else {
-          console.warn('⚠️ [MiniPlayer-Event] playerRef 不可用');
         }
 
         needsPinnedRefreshRef.current = false;
@@ -1315,12 +1296,6 @@ export default function MiniPlayer() {
                   const now = new Date();
                   const diffMs = expiresAt.getTime() - now.getTime();
                   const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-                  console.log('📅 [MiniPlayer] 計算剩餘天數:', {
-                    expiresAt: expiresAt.toISOString(),
-                    now: now.toISOString(),
-                    diffMs,
-                    days
-                  });
                   return days > 10000 ? '永久' : `${days}天`;
                 })()})
               </span>
