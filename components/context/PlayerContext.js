@@ -616,69 +616,58 @@ export function PlayerProvider({
         const wasPaused = navigator.mediaSession.playbackState === "paused";
         
         if (wasPaused) {
-          // ✅ 從暫停恢復：獲取當前 track 信息，像 next 函數那樣傳入 trackOverride
+          // ✅ 從暫停恢復：完全重置 Media Session 狀態，然後重新設置
+          // ✅ 像 next 函數那樣，直接從播放列表獲取完整的 track 信息
           const list = playlistRef.current || [];
           const idx = activeIndexRef.current;
-          let currentTrackForResume = currentTrackRef.current;
+          const currentTrackForResume = Array.isArray(list) && list.length > 0 && idx >= 0 && idx < list.length
+            ? list[idx]
+            : null;
           
-          // ✅ 如果 currentTrackRef 沒有完整信息，從播放列表中獲取
-          if (!currentTrackForResume && Array.isArray(list) && list.length > 0 && idx >= 0 && idx < list.length) {
-            currentTrackForResume = list[idx];
-          }
-          
-          // ✅ 獲取 artwork URL 並預加載圖片
-          const coverUrl = currentTrackForResume && (
-            currentTrackForResume.coverImageUrl || 
-            currentTrackForResume.cover || 
-            currentTrackForResume.imageUrl || 
-            currentTrackForResume.thumbnailUrl
-          );
-          
-          // ✅ 預加載圖片，確保圖片已加載完成
-          const preloadArtwork = (url) => {
-            if (!url) return Promise.resolve();
-            return new Promise((resolve) => {
-              const img = new Image();
-              img.onload = () => resolve();
-              img.onerror = () => resolve(); // 即使失敗也繼續
-              img.src = url;
-              // 設置超時，避免無限等待
-              setTimeout(() => resolve(), 300);
-            });
-          };
-          
-          // ✅ 先預加載圖片，然後再設置 metadata
-          preloadArtwork(coverUrl).then(() => {
-            if (!audioRef.current || audioRef.current.paused || !navigator.mediaSession) {
-              return;
-            }
-            
-            // ✅ 清除 metadata 並重新設置，確保 artwork 正確顯示
+          if (currentTrackForResume) {
+            // ✅ 關鍵修復：先完全重置 Media Session 狀態
             try {
+              navigator.mediaSession.playbackState = "none";
               navigator.mediaSession.metadata = null;
             } catch (e) {
               // 忽略清除錯誤
             }
             
-            // ✅ 等待清除完成後重新設置（傳入 trackOverride 和 forceRefresh 確保使用完整信息並強制刷新）
+            // ✅ 等待一小段時間，確保重置完成
             setTimeout(() => {
               if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                // ✅ 像 next 函數那樣，傳入 trackOverride 確保立即使用完整信息
-                // ✅ 同時傳入 forceRefresh=true 強制刷新 artwork
+                // ✅ 像 next 函數那樣，立即更新 metadata（傳入完整的 track 信息）
                 updateMediaSessionMetadata(currentTrackForResume, true);
+                
+                // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState
                 setTimeout(() => {
                   if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                    updateMediaSessionMetadata(currentTrackForResume, true);
-                    setTimeout(() => {
-                      if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                        navigator.mediaSession.playbackState = "playing";
-                      }
-                    }, 50);
+                    try {
+                      // ✅ 再次確保 metadata 已設置（特別是 artwork）
+                      updateMediaSessionMetadata(currentTrackForResume, true);
+                      
+                      // ✅ 再等待一小段時間，確保 artwork 已完全加載
+                      setTimeout(() => {
+                        if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                          try {
+                            // ✅ 現在才設置 playbackState（必須在 metadata 之後）
+                            navigator.mediaSession.playbackState = "playing";
+                          } catch (error) {
+                            // 忽略錯誤
+                          }
+                        }
+                      }, 100);
+                    } catch (error) {
+                      // 忽略錯誤
+                    }
                   }
                 }, 100);
               }
             }, 50);
-          });
+          } else {
+            // ✅ 如果沒有播放列表，使用原有邏輯
+            updateMediaSessionMetadata(null, true);
+          }
         } else {
           // ✅ 正常播放：立即更新 metadata
           updateMediaSessionMetadata();
