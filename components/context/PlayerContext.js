@@ -641,7 +641,8 @@ export function PlayerProvider({
         const wasPaused = navigator.mediaSession.playbackState === "paused";
         
         if (wasPaused) {
-          // ✅ 從暫停恢復：完全重置 Media Session 狀態，然後重新設置
+          // ✅ 從暫停恢復：直接重新設置 metadata（關鍵修復）
+          // ✅ 問題根因：Resume 時必須重新寫入 metadata，否則系統會 fallback 到預設 artwork
           // ✅ 像 next 函數那樣，直接從播放列表獲取完整的 track 信息
           const list = playlistRef.current || [];
           const idx = activeIndexRef.current;
@@ -649,38 +650,10 @@ export function PlayerProvider({
             ? list[idx]
             : null;
           
-          
           if (currentTrackForResume) {
-            // ✅ 移動設備專用：完全重置 Media Session，然後重新設置（模擬第一次播放）
-            // ✅ 這樣可以確保移動設備上的 artwork 正確顯示
-            try {
-              // ✅ 先完全清除 Media Session
-              navigator.mediaSession.playbackState = "none";
-              navigator.mediaSession.metadata = null;
-              
-              // ✅ 等待一小段時間，確保清除完成
-              setTimeout(() => {
-                if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                  // ✅ 重新設置 metadata（就像第一次播放一樣）
-                  updateMediaSessionMetadata(currentTrackForResume, true);
-                  
-                  // ✅ 等待一小段時間，確保 metadata 已設置
-                  setTimeout(() => {
-                    if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
-                      try {
-                        // ✅ 設置 playbackState = "playing"
-                        navigator.mediaSession.playbackState = "playing";
-                      } catch (error) {
-                        // 忽略錯誤
-                      }
-                    }
-                  }, 100);
-                }
-              }, 50);
-            } catch (error) {
-              // 如果重置失敗，直接更新 metadata
-              updateMediaSessionMetadata(currentTrackForResume, true);
-            }
+            // ✅ 直接更新 metadata（不重置，直接重新設置）
+            // ✅ 這是最關鍵的修復：Resume 時必須重新寫入 metadata
+            updateMediaSessionMetadata(currentTrackForResume, true);
           } else {
             // ✅ 如果沒有播放列表，使用原有邏輯
             updateMediaSessionMetadata(null, true);
@@ -690,7 +663,7 @@ export function PlayerProvider({
           updateMediaSessionMetadata();
         }
       } catch (error) {
-        console.warn("[MediaSession] 更新播放狀態失敗:", error);
+        // 忽略錯誤
       }
     }
 
