@@ -531,10 +531,23 @@ export function PlayerProvider({
     // ✅ 立即更新 Media Session metadata（確保封面立即顯示，不等待異步操作）
     if (typeof navigator !== "undefined" && navigator.mediaSession) {
       try {
+        // ✅ 先立即更新一次
         updateMediaSessionMetadata();
         
         // ✅ 立即更新 playbackState（必須在 metadata 之後設置）
         navigator.mediaSession.playbackState = "playing";
+        
+        // ✅ 短暫延遲後再次更新 metadata（確保狀態已同步，避免暫停後恢復時顯示 logo）
+        setTimeout(() => {
+          if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+            try {
+              updateMediaSessionMetadata();
+              navigator.mediaSession.playbackState = "playing";
+            } catch (error) {
+              // 忽略錯誤
+            }
+          }
+        }, 100);
       } catch (error) {
         console.warn("[MediaSession] 立即更新播放狀態失敗:", error);
       }
@@ -553,6 +566,12 @@ export function PlayerProvider({
       // ✅ 檢查音頻元素是否正在播放且 duration 已加載（Android 需要）
       if (!audio.paused && audio.duration > 0 && isFinite(audio.duration)) {
         try {
+          // ✅ 再次確保 metadata 已設置（重要：恢復播放時必須重新設置，避免顯示 logo）
+          updateMediaSessionMetadata();
+          
+          // ✅ 更新 playbackState（必須在 metadata 之後設置）
+          navigator.mediaSession.playbackState = "playing";
+          
           // ✅ 立即設置 position state（Android 需要，確保進度條正確顯示）
           const currentTime = audio.currentTime || 0;
           const duration = audio.duration || 0;
