@@ -597,7 +597,15 @@ export function PlayerProvider({
     // ✅ 立即更新 Media Session metadata（確保封面立即顯示，不等待異步操作）
     if (typeof navigator !== "undefined" && navigator.mediaSession) {
       try {
-        // ✅ 先立即更新 metadata（必須在 playbackState 之前設置）
+        // ✅ 關鍵修復：先清除現有的 metadata，然後重新設置，確保 artwork 被強制重新加載
+        // ✅ 這對於從暫停狀態恢復播放特別重要，可以防止顯示 LOGO
+        try {
+          navigator.mediaSession.metadata = null;
+        } catch (e) {
+          // 忽略清除錯誤
+        }
+        
+        // ✅ 立即更新 metadata（必須在 playbackState 之前設置）
         updateMediaSessionMetadata();
         
         // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState
@@ -622,12 +630,12 @@ export function PlayerProvider({
                     // 忽略錯誤
                   }
                 }
-              }, 50);
+              }, 100); // ✅ 增加延遲時間，確保 artwork 已完全加載
             } catch (error) {
               // 忽略錯誤
             }
           }
-        }, 50);
+        }, 100); // ✅ 增加延遲時間，確保 metadata 已完全設置
       } catch (error) {
         console.warn("[MediaSession] 立即更新播放狀態失敗:", error);
       }
@@ -1579,17 +1587,33 @@ export function PlayerProvider({
                 // ✅ 恢復播放時，立即確保 metadata 已設置（重要：背景暫停後恢復必須重新設置）
                 if (typeof navigator !== "undefined" && navigator.mediaSession) {
                   try {
+                    // ✅ 關鍵修復：先清除現有的 metadata，然後重新設置，確保 artwork 被強制重新加載
+                    try {
+                      navigator.mediaSession.metadata = null;
+                    } catch (e) {
+                      // 忽略清除錯誤
+                    }
+                    
                     updateMeta();
                     setTimeout(() => {
                       if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
                         try {
                           updateMeta();
-                          navigator.mediaSession.playbackState = "playing";
+                          setTimeout(() => {
+                            if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                              try {
+                                updateMeta();
+                                navigator.mediaSession.playbackState = "playing";
+                              } catch (error) {
+                                // 忽略錯誤
+                              }
+                            }
+                          }, 100);
                         } catch (error) {
                           // 忽略錯誤
                         }
                       }
-                    }, 50);
+                    }, 100);
                   } catch (error) {
                     // 忽略錯誤
                   }
@@ -1606,17 +1630,33 @@ export function PlayerProvider({
                       // ✅ 恢復播放時，立即確保 metadata 已設置（重要：背景暫停後恢復必須重新設置）
                       if (typeof navigator !== "undefined" && navigator.mediaSession) {
                         try {
+                          // ✅ 關鍵修復：先清除現有的 metadata，然後重新設置，確保 artwork 被強制重新加載
+                          try {
+                            navigator.mediaSession.metadata = null;
+                          } catch (e) {
+                            // 忽略清除錯誤
+                          }
+                          
                           updateMeta();
                           setTimeout(() => {
                             if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
                               try {
                                 updateMeta();
-                                navigator.mediaSession.playbackState = "playing";
+                                setTimeout(() => {
+                                  if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                                    try {
+                                      updateMeta();
+                                      navigator.mediaSession.playbackState = "playing";
+                                    } catch (error) {
+                                      // 忽略錯誤
+                                    }
+                                  }
+                                }, 100);
                               } catch (error) {
                                 // 忽略錯誤
                               }
                             }
-                          }, 50);
+                          }, 100);
                         } catch (error) {
                           // 忽略錯誤
                         }
