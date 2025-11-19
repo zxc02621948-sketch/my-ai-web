@@ -202,6 +202,8 @@ export async function POST(request) {
 
     // ✅ 更新用戶每日上傳計數
     const userDoc = await User.findById(user._id);
+    let currentUploadCount = user.dailyVideoUploads || 0;
+    
     if (userDoc) {
       const uploadToday = new Date().toDateString();
       const lastUploadDate = userDoc.lastVideoUploadDate?.toDateString();
@@ -209,15 +211,17 @@ export async function POST(request) {
       // 如果是新的一天，重置計數
       if (lastUploadDate !== uploadToday) {
         userDoc.dailyVideoUploads = 0;
+        currentUploadCount = 0;
       }
       
       userDoc.dailyVideoUploads = (userDoc.dailyVideoUploads || 0) + 1;
+      currentUploadCount = userDoc.dailyVideoUploads;
       userDoc.lastVideoUploadDate = new Date();
       await userDoc.save();
     }
 
     // 計算剩餘配額（用於返回給前端）
-    const remaining = Math.max(0, dailyLimit - (user.dailyVideoUploads || 0) - 1);
+    const remaining = Math.max(0, dailyLimit - currentUploadCount);
 
     // ✅ 返回完整的上傳結果
     return NextResponse.json({
@@ -235,7 +239,7 @@ export async function POST(request) {
       thumbnailUrl,
       completenessScore,
       dailyUploads: {
-        current: todayUploads,
+        current: currentUploadCount,
         limit: dailyLimit,
         remaining: remaining
       }
