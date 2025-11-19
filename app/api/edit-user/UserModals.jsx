@@ -23,7 +23,7 @@ export async function POST(req) {
     }
 
     // 安全驗證：最多 60 字簡介
-    const safeBio = typeof bio === "string" ? bio.slice(0, 60) : "";
+    const safeBio = typeof bio === "string" ? bio.slice(0, 200) : "";
 
     // 寫入欄位（email 可之後搭配驗證流程）
     user.username = username || user.username;

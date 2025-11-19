@@ -61,17 +61,17 @@ const UserEditModal = ({ isOpen, onClose, currentUser, onUpdate }) => {
         {/* 簡介 */}
         <div>
           <label className="block text-sm font-medium mb-1">
-            個人簡介（限 60 字）
+            個人簡介（限 200 字）
           </label>
           <textarea
             className="w-full rounded border bg-black/30 p-2"
-            rows={2}
-            maxLength={60}
+            rows={4}
+            maxLength={200}
             value={bio}
             onChange={(e) => setBio(e.target.value)}
           />
           <div className="text-xs text-right text-gray-400">
-            已輸入 {bio.length} / 60 字
+            已輸入 {bio.length} / 200 字
           </div>
         </div>
 

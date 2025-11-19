@@ -24,7 +24,7 @@ export const PUT = requireAuth(
     const originalUsername = userRecord.username;
     
     // 限制 bio 字數
-    const safeBio = typeof bio === "string" ? bio.slice(0, 60) : "";
+    const safeBio = typeof bio === "string" ? bio.slice(0, 200) : "";
     
     // ✅ 備用信箱處理
     if (backupEmail !== undefined) {
