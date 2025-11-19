@@ -482,7 +482,28 @@ export function PlayerProvider({
 
     // ✅ 如果提供了 trackOverride，優先使用它（用於切換歌曲時立即更新）
     // ✅ 否則從 ref 獲取當前播放的音樂信息（避免閉包問題）
-    const currentTrack = trackOverride || currentTrackRef.current;
+    let currentTrack = trackOverride || currentTrackRef.current;
+
+    // ✅ 如果 currentTrackRef 沒有完整信息，嘗試從播放列表中獲取
+    if (!currentTrack || !currentTrack.coverImageUrl) {
+      const list = playlistRef.current || [];
+      const idx = activeIndexRef.current;
+      if (Array.isArray(list) && list.length > 0 && idx >= 0 && idx < list.length) {
+        const trackFromPlaylist = list[idx];
+        if (trackFromPlaylist) {
+          // ✅ 合併信息，優先使用 currentTrack，但用 playlist 中的信息補充缺失的部分
+          currentTrack = {
+            ...currentTrack,
+            ...trackFromPlaylist,
+            // ✅ 確保 artwork 相關字段優先使用 playlist 中的
+            coverImageUrl: trackFromPlaylist.coverImageUrl || trackFromPlaylist.cover || trackFromPlaylist.imageUrl || trackFromPlaylist.thumbnailUrl || currentTrack?.coverImageUrl || currentTrack?.cover || currentTrack?.imageUrl || currentTrack?.thumbnailUrl || "",
+            cover: trackFromPlaylist.cover || trackFromPlaylist.coverImageUrl || currentTrack?.cover || "",
+            imageUrl: trackFromPlaylist.imageUrl || trackFromPlaylist.coverImageUrl || currentTrack?.imageUrl || "",
+            thumbnailUrl: trackFromPlaylist.thumbnailUrl || trackFromPlaylist.coverImageUrl || currentTrack?.thumbnailUrl || "",
+          };
+        }
+      }
+    }
 
     // ✅ 如果提供了 trackOverride，使用它提供的 URL 和標題
     // ✅ 否則從 ref 獲取最新的 URL 和標題（避免閉包問題）
@@ -509,9 +530,10 @@ export function PlayerProvider({
     const metadataAlbum =
       (currentTrack && currentTrack.album) || currentPlayerOwner?.username || "";
 
-    // ✅ 構建 artwork（優先使用 trackOverride 的封面）
+    // ✅ 構建 artwork（優先使用 trackOverride 的封面，然後是 currentTrack，最後嘗試從播放列表獲取）
     const artwork = [];
     const coverCandidate =
+      (trackOverride && (trackOverride.coverImageUrl || trackOverride.cover || trackOverride.imageUrl || trackOverride.thumbnailUrl)) ||
       (currentTrack && (currentTrack.coverImageUrl || currentTrack.cover || currentTrack.imageUrl || currentTrack.thumbnailUrl)) ||
       "";
     
@@ -527,33 +549,34 @@ export function PlayerProvider({
     // ✅ 設置 metadata（立即更新，不等待 useEffect）
     // ✅ 重要：必須先設置 metadata，再設置 playbackState，且必須確保 artwork 已設置
     try {
-      // ✅ 先確保有 artwork，否則不設置（避免顯示 logo）
-      if (artwork.length > 0) {
+      // ✅ 總是設置 metadata，確保信息完整
+      // ✅ 如果有 artwork，使用它；如果沒有，嘗試從現有的 metadata 中保留
+      let finalArtwork = artwork;
+      
+      // ✅ 如果沒有新的 artwork，嘗試從現有的 metadata 中保留（用於恢復播放時）
+      if (finalArtwork.length === 0) {
+        const existingMetadata = navigator.mediaSession.metadata;
+        if (existingMetadata && existingMetadata.artwork && existingMetadata.artwork.length > 0) {
+          finalArtwork = existingMetadata.artwork;
+        }
+      }
+      
+      // ✅ 設置 metadata（總是設置，確保信息完整）
+      if (finalArtwork.length > 0) {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: metadataTitle || "音樂作品",
           artist: metadataArtist || "未知創作者",
           album: metadataAlbum,
-          artwork: artwork,
+          artwork: finalArtwork,
         });
       } else {
-        // ✅ 如果沒有 artwork，嘗試從現有的 metadata 中保留（如果有的話）
-        const existingMetadata = navigator.mediaSession.metadata;
-        if (existingMetadata && existingMetadata.artwork && existingMetadata.artwork.length > 0) {
-          // ✅ 保留現有的 artwork，只更新其他信息
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: metadataTitle || "音樂作品",
-            artist: metadataArtist || "未知創作者",
-            album: metadataAlbum,
-            artwork: existingMetadata.artwork,
-          });
-        } else {
-          // ✅ 如果既沒有新的 artwork 也沒有現有的，設置基本信息但不設置 artwork
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: metadataTitle || "音樂作品",
-            artist: metadataArtist || "未知創作者",
-            album: metadataAlbum,
-          });
-        }
+        // ✅ 如果既沒有新的 artwork 也沒有現有的，設置基本信息但不設置 artwork
+        // ✅ 但這種情況應該很少發生，因為我們已經從播放列表中獲取了 artwork
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: metadataTitle || "音樂作品",
+          artist: metadataArtist || "未知創作者",
+          album: metadataAlbum,
+        });
       }
     } catch (error) {
       console.warn("[MediaSession] 設定 metadata 失敗:", error);
