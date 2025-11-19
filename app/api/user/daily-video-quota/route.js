@@ -43,7 +43,7 @@ export async function GET(req) {
     }
     
     const baseDailyLimit = 5 + levelIndex; // LV1=5, LV2=6, ..., LV10=14
-    const dailyLimit = hasVIP ? 20 : baseDailyLimit;
+    const dailyLimit = hasVIP ? 50 : baseDailyLimit;
 
     return NextResponse.json({
       success: true,

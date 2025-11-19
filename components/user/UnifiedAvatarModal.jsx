@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Cropper from "react-easy-crop";
 import { Slider } from "@mui/material";
 import { getCroppedImg } from "@/lib/cropImage";
@@ -37,6 +38,23 @@ export default function UnifiedAvatarModal({
   const [frameSettings, setFrameSettings] = useState(initialFrameSettings);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [confirmCallback, setConfirmCallback] = useState(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
 
   // 同步初始 frameSettings
   useEffect(() => {
@@ -152,9 +170,9 @@ export default function UnifiedAvatarModal({
     return frameMap[frameId] || frameId;
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  return createPortal(
     <div 
       className="fixed top-0 left-0 right-0 bottom-0 bg-black/50 flex items-center justify-center z-[99999]" 
       style={{ padding: '60px 16px 80px 16px' }}
@@ -556,6 +574,7 @@ export default function UnifiedAvatarModal({
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }

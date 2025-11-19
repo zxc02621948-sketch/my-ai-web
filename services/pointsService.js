@@ -11,8 +11,11 @@ function dateKeyOf(date = new Date()) {
 }
 
 // Phase A 規則（可抽離到環境變數或 config）
+// 注意：上傳數量上限按等級計算（LV1=5, LV2=6, ..., VIP=50/20），但積分上限固定為20分，每種類型獨立計算
 const RULES = {
-  upload: { points: 5, dailyCap: 20, dedupLifetime: false },
+  upload: { points: 5, dailyCap: 20, dedupLifetime: false }, // 圖片上傳：固定+5分，每日積分上限20分（獨立）
+  video_upload: { points: 10, dailyCap: 20, dedupLifetime: false }, // 影片上傳：固定+10分，每日積分上限20分（獨立）
+  music_upload: { points: 10, dailyCap: 20, dedupLifetime: false }, // 音樂上傳：固定+10分，每日積分上限20分（獨立）
   like_received: { points: 1, dailyCap: 10, dedupLifetime: true },
   comment_received: { points: 1, dailyCap: 5, dedupLifetime: false },
   daily_login: { points: 5, dailyCap: 5, dedupLifetime: false }, // 每日一次，不做終身去重

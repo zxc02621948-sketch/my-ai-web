@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import axios from "axios";
 import AvatarCropModal from "./AvatarCropModal";
@@ -16,6 +17,7 @@ import LevelDisplay from "./LevelDisplay";
 import UnifiedAvatarModal from "./UnifiedAvatarModal";
 import LevelRewardsModal from "./LevelRewardsModal";
 import PowerCouponGuideModal from "./PowerCouponGuideModal";
+import PointsEarningModal from "./PointsEarningModal";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
@@ -65,8 +67,20 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
   const [isLevelRewardsModalOpen, setLevelRewardsModalOpen] = useState(false);
   const [isMobileStatsExpanded, setMobileStatsExpanded] = useState(false);
   const [isMobilePointsExpanded, setMobilePointsExpanded] = useState(false);
-  const [isMobileEarningExpanded, setMobileEarningExpanded] = useState(false);
   const [isClaimModalOpen, setClaimModalOpen] = useState(false);
+  const [isPointsEarningModalOpen, setPointsEarningModalOpen] = useState(false);
+
+  // 鎖住背景 scroll（積分提領彈窗）
+  useEffect(() => {
+    if (isClaimModalOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isClaimModalOpen]);
 
   // 同步 userData 的 currentFrame 到本地狀態
   useEffect(() => {
@@ -685,80 +699,23 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                 </div>
               )}
 
-              {/* 積分獲得方式 - 手機版可展開 */}
+              {/* 積分獲得方式 - 改為按鈕 */}
               <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-2">獲得積分</h4>
-                
-                {/* 桌面版完整顯示 */}
-                <div className="hidden md:block space-y-1.5 text-xs text-gray-400">
-                  <div className="flex justify-between">
-                    <span>上傳作品</span>
-                    <span className="text-yellow-400">+5／每日上限 20</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>獲得愛心</span>
-                    <span className="text-yellow-400">+1／每日上限 10</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>給予愛心</span>
-                    <span className="text-yellow-400">+1／每日上限 5（給他人按讚，自讚不計）</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>獲得留言</span>
-                    <span className="text-yellow-400">+1／每日上限 5</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>每日登入</span>
-                    <span className="text-yellow-400">+5／每日一次</span>
-                  </div>
-                </div>
-
-                {/* 手機版簡化顯示和展開按鈕 */}
-                <div className="md:hidden">
-                  <div className="space-y-1.5 text-xs text-gray-400">
-                    <div className="flex justify-between">
-                      <span>上傳作品</span>
-                      <span className="text-yellow-400">+5／日</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>每日登入</span>
-                      <span className="text-yellow-400">+5／日</span>
-                    </div>
-                  </div>
-                  
-                  <button
-                    onClick={() => setMobileEarningExpanded(!isMobileEarningExpanded)}
-                    className="w-full mt-2 py-1.5 px-2 bg-zinc-800/30 hover:bg-zinc-700/30 rounded text-gray-400 text-xs transition-colors flex items-center justify-center gap-1"
+                <button
+                  onClick={() => setPointsEarningModalOpen(true)}
+                  className="w-full py-2 px-3 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 hover:from-yellow-600/30 hover:to-orange-600/30 border border-yellow-500/50 rounded-lg text-gray-200 text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 hover:scale-105"
+                >
+                  <span className="text-lg">💰</span>
+                  <span>獲得積分</span>
+                  <svg 
+                    className="w-4 h-4"
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
                   >
-                    <span>查看全部</span>
-                    <svg 
-                      className={`w-3 h-3 transition-transform ${isMobileEarningExpanded ? 'rotate-180' : ''}`}
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  
-                  {/* 展開的詳細積分獲得方式 */}
-                  {isMobileEarningExpanded && (
-                    <div className="mt-2 space-y-1.5 text-xs text-gray-400 animate-in slide-in-from-top-2 duration-200">
-                      <div className="flex justify-between">
-                        <span>獲得愛心</span>
-                        <span className="text-yellow-400">+1／每日上限 10</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>給予愛心</span>
-                        <span className="text-yellow-400">+1／每日上限 5（給他人按讚，自讚不計）</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>獲得留言</span>
-                        <span className="text-yellow-400">+1／每日上限 5</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
@@ -797,9 +754,15 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
         ownedFrames={userData?.ownedFrames || []}
       />
 
+      {/* 積分獲取途徑彈窗 */}
+      <PointsEarningModal 
+        isOpen={isPointsEarningModalOpen} 
+        onClose={() => setPointsEarningModalOpen(false)}
+      />
+
       {/* 積分提領彈窗 */}
-      {isClaimModalOpen && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      {isClaimModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[99999] p-4">
           <div className="bg-zinc-900 rounded-2xl p-6 max-w-md w-full border border-yellow-500/50 shadow-2xl">
             {/* 標題 */}
             <div className="flex items-center justify-between mb-6">
@@ -883,7 +846,8 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

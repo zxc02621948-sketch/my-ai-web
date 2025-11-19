@@ -4,7 +4,16 @@ import React, { useRef, useEffect, useState, useMemo, memo, useCallback } from '
 import { Heart } from 'lucide-react';
 import NewBadge from '@/components/image/NewBadge';
 
-const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLiked, onToggleLike, onLikeUpdate }) => {
+const VideoPreview = memo(({ 
+  video, 
+  className = '', 
+  onClick, 
+  currentUser, 
+  isLiked, 
+  onToggleLike, 
+  onLikeUpdate,
+  showNewBadge = true,
+}) => {
   const videoRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -415,9 +424,20 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
   }, [isPlaying, video.videoUrl, isMobile, mobilePreviewActive]);
 
   // 計算影片比例
-  const aspectRatio = video?.width && video?.height 
-    ? `${video.width} / ${video.height}`
-    : '16 / 9'; // 預設 16:9
+  // 橫向影片（寬 > 高）使用固定的 1:1 比例（正方形），讓縮圖更有競爭力
+  // 其他比例的影片保持原樣
+  const aspectRatio = (() => {
+    if (video?.width && video?.height) {
+      const isLandscape = video.width > video.height; // 橫向影片
+      if (isLandscape) {
+        return '1 / 1'; // 橫向影片固定為 1:1（正方形）
+      }
+      // 縱向或正方形影片保持原比例
+      return `${video.width} / ${video.height}`;
+    }
+    // 沒有尺寸資訊時，預設為 16:9（橫向），使用 1:1
+    return '1 / 1';
+  })();
 
   // ✅ NEW 圖示判斷（< 10 小時）
   const getCreatedMsFromObjectId = (id) => {
@@ -437,7 +457,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
         <img
           src={currentPoster}
           alt={video.title || '影片縮圖'}
-          className="w-full h-full object-cover transition-all duration-300"
+          className="w-full h-full object-cover object-center transition-all duration-300"
           style={{
             filter: isHovered ? 'brightness(1.1)' : 'brightness(1.05)',
             transform: isHovered ? 'scale(1.02)' : 'scale(1)',
@@ -500,7 +520,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
           key={`${video._id}-${mobilePreviewActive ? 'playing' : 'idle'}`}
           ref={videoRef}
           src={baseVideoSource}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-200 ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           preload="metadata"
           muted
           playsInline
@@ -535,7 +555,7 @@ const VideoPreview = memo(({ video, className = '', onClick, currentUser, isLike
       </button>
 
       {/* NEW 徽章（左上角） */}
-      {isNew && (
+      {showNewBadge && isNew && (
         <div className="absolute left-2 top-2 z-20 pointer-events-none">
           <NewBadge animated />
         </div>

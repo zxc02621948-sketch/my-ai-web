@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import AvatarFrame from "@/components/common/AvatarFrame";
 import axios from "axios";
 
@@ -58,9 +59,16 @@ export default function FrameColorEditor({
   };
 
 
-  if (!isOpen) return null;
+  const [mounted, setMounted] = useState(false);
 
-  return (
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
     <div className="fixed top-0 left-0 right-0 bottom-0 bg-black/50 flex items-center justify-center z-[99999]" style={{ padding: '60px 16px 120px 16px' }}>
       <div className="bg-zinc-800 rounded-xl max-w-4xl w-full max-h-full overflow-y-auto flex flex-col">
         {/* 標題 */}
@@ -285,6 +293,7 @@ export default function FrameColorEditor({
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

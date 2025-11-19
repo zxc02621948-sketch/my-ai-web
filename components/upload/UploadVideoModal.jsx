@@ -455,7 +455,7 @@ export default function UploadVideoModal({
           <div className="sticky top-0 z-20 bg-[#121212]/90 backdrop-blur border-b border-white/10">
             <div className="flex items-center justify-between px-4 py-3">
               <div className="text-center flex-1">
-                <div className="text-lg font-semibold">🎬 上傳影片</div>
+                <div className="text-lg font-semibold">上傳影片 +10／每日上限 {dailyQuota.limit}</div>
                 <div className="text-xs text-zinc-400 mt-1">最大 20MB，建議 10-20 秒短影片</div>
                 <div className="text-xs mt-2">
                   <span className={`font-medium ${dailyQuota.remaining > 0 ? 'text-green-400' : 'text-red-400'}`}>

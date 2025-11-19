@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import axios from "axios";
 import { getLevelInfo } from "@/utils/pointsLevels";
@@ -95,9 +96,16 @@ export default function FreeFrameSelector({
     }
   };
 
-  if (!isOpen) return null;
+  const [mounted, setMounted] = useState(false);
 
-  return (
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
     <div className="fixed top-0 left-0 right-0 bottom-0 bg-black/50 flex items-center justify-center z-[99999]" style={{ padding: '60px 16px 80px 16px' }}>
       <div className="bg-zinc-800 rounded-xl max-w-2xl w-full max-h-full overflow-y-auto">
         {/* 標題 */}
@@ -224,6 +232,7 @@ export default function FreeFrameSelector({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

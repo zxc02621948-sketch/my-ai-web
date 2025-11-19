@@ -379,6 +379,20 @@ export async function POST(request) {
     const music = new Music(musicDoc);
     await music.save();
 
+    // ✅ 積分：上傳成功入帳 +10（固定分數，不按等級）
+    try {
+      const { creditPoints } = await import('@/services/pointsService');
+      await creditPoints({ 
+        userId: user._id.toString(), 
+        type: "music_upload", 
+        sourceId: music._id, 
+        actorUserId: user._id.toString(), 
+        meta: { musicId: music._id } 
+      });
+    } catch (e) {
+      console.warn("[points] 音樂上傳入帳失敗：", e);
+    }
+
     return NextResponse.json({
       success: true,
       music: {

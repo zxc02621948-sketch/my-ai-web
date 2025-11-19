@@ -2,26 +2,44 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export default function PowerCouponGuideModal({ isOpen, onClose, hasNoCoupon, couponCount }) {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  // 鎖住背景 scroll
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
+  if (!isOpen || !mounted) return null;
 
   const handleGoToStore = () => {
     onClose();
     router.push('/store');
   };
 
-  return (
+  return createPortal(
     <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2"
-      style={{ zIndex: 999999 }}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[99999] p-2"
       onClick={onClose}
     >
       <div 
         className="bg-zinc-800 rounded-lg max-w-lg w-full max-h-[70vh] overflow-y-auto shadow-2xl"
-        style={{ zIndex: 999999 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* 標題 */}
@@ -253,7 +271,8 @@ export default function PowerCouponGuideModal({ isOpen, onClose, hasNoCoupon, co
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

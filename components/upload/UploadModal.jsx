@@ -174,7 +174,9 @@ export default function UploadModal() {
             <div className="shrink-0 sticky top-0 z-10 bg-neutral-900/95 backdrop-blur border-b border-white/10">
               <div className="px-6 py-4 flex items-center justify-between">
                 <div>
-                  <Dialog.Title className="text-lg md:text-xl font-bold">圖片上傳</Dialog.Title>
+                  <Dialog.Title className="text-lg md:text-xl font-bold">
+                    上傳圖片 +5／每日上限 {uploadLimits?.dailyLimit || 20}
+                  </Dialog.Title>
                   {uploadLimits && (
                     <div className="text-xs text-zinc-400 mt-1">
                       <span className={`font-medium ${(uploadLimits.dailyLimit - uploadLimits.todayUploads) > 0 ? 'text-green-400' : 'text-red-400'}`}>

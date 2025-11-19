@@ -59,7 +59,7 @@ export async function POST(request) {
     }
     
     const baseDailyLimit = 5 + levelIndex; // LV1=5, LV2=6, ..., LV10=14
-    const dailyLimit = hasVIP ? 20 : baseDailyLimit;
+    const dailyLimit = hasVIP ? 50 : baseDailyLimit;
 
     // 檢查是否已達上限
     if (user.dailyVideoUploads >= dailyLimit) {
@@ -218,6 +218,20 @@ export async function POST(request) {
       currentUploadCount = userDoc.dailyVideoUploads;
       userDoc.lastVideoUploadDate = new Date();
       await userDoc.save();
+    }
+
+    // ✅ 積分：上傳成功入帳 +10（固定分數，不按等級）
+    try {
+      const { creditPoints } = await import('@/services/pointsService');
+      await creditPoints({ 
+        userId: user._id.toString(), 
+        type: "video_upload", 
+        sourceId: video._id, 
+        actorUserId: user._id.toString(), 
+        meta: { videoId: video._id } 
+      });
+    } catch (e) {
+      console.warn("[points] 影片上傳入帳失敗：", e);
     }
 
     // 計算剩餘配額（用於返回給前端）

@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { LEVELS } from "@/utils/pointsLevels";
 import { LEVEL_REWARDS } from "@/utils/levelRewards";
 
 export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, ownedFrames = [] }) {
   const [currentUserLevel, setCurrentUserLevel] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     if (userPoints !== undefined) {
@@ -20,7 +22,23 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
     }
   }, [userPoints]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
+  if (!isOpen || !mounted) return null;
 
   // 點擊空白處關閉
   const handleBackdropClick = (e) => {
@@ -29,7 +47,7 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
     }
   };
 
-  return (
+  return createPortal(
     <div 
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" 
       style={{ padding: '60px 16px 80px 16px' }}
@@ -388,5 +406,5 @@ export default function LevelRewardsModal({ isOpen, onClose, userPoints = 0, own
         </div>
       </div>
     </div>
-  );
+  , document.body);
 }

@@ -204,6 +204,7 @@ export default function ImageCard({
             onToggleLike={onToggleLike}
             onLikeUpdate={onLikeUpdate}
             className="w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg"
+            showNewBadge={false}
           />
         ) : img?.type === 'music' ? (
           /* 使用 MusicPreview 組件顯示音樂 */

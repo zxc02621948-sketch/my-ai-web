@@ -6,7 +6,8 @@ const PointsTransactionSchema = new mongoose.Schema(
     type: { 
       type: String, 
       enum: [
-        "upload", "like_received", "comment_received", "daily_login", "like_given", 
+        "upload", "video_upload", "music_upload", // 上傳類型：圖片+5，影片+10，音樂+10
+        "like_received", "comment_received", "daily_login", "like_given", 
         "admin_gift", "store_purchase", "subscription_purchase", "frame_color_edit",
         "discussion_post_cost",      // 發多圖教學帖消耗積分
         "discussion_like_reward",    // 多圖教學帖收到愛心獎勵

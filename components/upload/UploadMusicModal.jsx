@@ -482,7 +482,7 @@ export default function UploadMusicModal() {
           <div className="sticky top-0 z-20 bg-[#121212]/90 backdrop-blur border-b border-white/10">
             <div className="flex items-center justify-between px-4 py-3">
               <div className="text-center flex-1">
-                <div className="text-lg font-semibold">🎵 上傳音樂</div>
+                <div className="text-lg font-semibold">上傳音樂 +10／每日上限 {dailyQuota.limit}</div>
                 <div className="text-xs text-zinc-400 mt-1">
                   最大 10MB，建議 2-5 分鐘
                 </div>
