@@ -532,12 +532,24 @@ export function PlayerProvider({
 
     // ✅ 構建 artwork（優先使用 trackOverride 的封面，然後是 currentTrack，最後嘗試從播放列表獲取）
     const artwork = [];
-    const coverCandidate =
+    let coverCandidate =
       (trackOverride && (trackOverride.coverImageUrl || trackOverride.cover || trackOverride.imageUrl || trackOverride.thumbnailUrl)) ||
       (currentTrack && (currentTrack.coverImageUrl || currentTrack.cover || currentTrack.imageUrl || currentTrack.thumbnailUrl)) ||
       "";
     
+    // ✅ 關鍵修復：如果 coverCandidate 存在，添加時間戳參數強制重新加載圖片
+    // ✅ 這可以防止瀏覽器使用緩存的圖片，確保 artwork 在恢復播放時正確顯示
     if (coverCandidate) {
+      try {
+        const url = new URL(coverCandidate, window.location.origin);
+        url.searchParams.set('_t', Date.now().toString());
+        coverCandidate = url.toString();
+      } catch (e) {
+        // 如果 URL 解析失敗（可能是相對路徑），嘗試簡單添加參數
+        const separator = coverCandidate.includes('?') ? '&' : '?';
+        coverCandidate = `${coverCandidate}${separator}_t=${Date.now()}`;
+      }
+      
       artwork.push({ src: coverCandidate, sizes: "96x96", type: "image/png" });
       artwork.push({ src: coverCandidate, sizes: "128x128", type: "image/png" });
       artwork.push({ src: coverCandidate, sizes: "192x192", type: "image/png" });
@@ -597,45 +609,55 @@ export function PlayerProvider({
     // ✅ 立即更新 Media Session metadata（確保封面立即顯示，不等待異步操作）
     if (typeof navigator !== "undefined" && navigator.mediaSession) {
       try {
-        // ✅ 關鍵修復：先清除現有的 metadata，然後重新設置，確保 artwork 被強制重新加載
+        // ✅ 關鍵修復：先清除現有的 metadata 和 playbackState，然後重新設置
         // ✅ 這對於從暫停狀態恢復播放特別重要，可以防止顯示 LOGO
         try {
+          navigator.mediaSession.playbackState = "none";
           navigator.mediaSession.metadata = null;
         } catch (e) {
           // 忽略清除錯誤
         }
         
-        // ✅ 立即更新 metadata（必須在 playbackState 之前設置）
-        updateMediaSessionMetadata();
-        
-        // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState
-        // ✅ 這很重要：Android 需要 metadata 完全設置好後才能正確顯示 artwork
+        // ✅ 等待一小段時間，確保清除操作完成
         setTimeout(() => {
           if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
             try {
-              // ✅ 再次確保 metadata 已設置（特別是 artwork）
-              // ✅ 這對於從暫停狀態恢復播放特別重要
+              // ✅ 立即更新 metadata（必須在 playbackState 之前設置）
               updateMediaSessionMetadata();
               
-              // ✅ 再等待一小段時間，確保 artwork 已完全渲染
+              // ✅ 等待一小段時間確保 metadata 已設置，再設置 playbackState
+              // ✅ 這很重要：Android 需要 metadata 完全設置好後才能正確顯示 artwork
               setTimeout(() => {
                 if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
                   try {
-                    // ✅ 第三次確保 metadata 已設置（確保 artwork 不會丟失）
+                    // ✅ 再次確保 metadata 已設置（特別是 artwork）
+                    // ✅ 這對於從暫停狀態恢復播放特別重要
                     updateMediaSessionMetadata();
                     
-                    // ✅ 現在才設置 playbackState（必須在 metadata 之後）
-                    navigator.mediaSession.playbackState = "playing";
+                    // ✅ 再等待一小段時間，確保 artwork 已完全渲染
+                    setTimeout(() => {
+                      if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                        try {
+                          // ✅ 第三次確保 metadata 已設置（確保 artwork 不會丟失）
+                          updateMediaSessionMetadata();
+                          
+                          // ✅ 現在才設置 playbackState（必須在 metadata 之後）
+                          navigator.mediaSession.playbackState = "playing";
+                        } catch (error) {
+                          // 忽略錯誤
+                        }
+                      }
+                    }, 150); // ✅ 增加延遲時間，確保 artwork 已完全加載
                   } catch (error) {
                     // 忽略錯誤
                   }
                 }
-              }, 100); // ✅ 增加延遲時間，確保 artwork 已完全加載
+              }, 150); // ✅ 增加延遲時間，確保 metadata 已完全設置
             } catch (error) {
               // 忽略錯誤
             }
           }
-        }, 100); // ✅ 增加延遲時間，確保 metadata 已完全設置
+        }, 50); // ✅ 等待清除操作完成
       } catch (error) {
         console.warn("[MediaSession] 立即更新播放狀態失敗:", error);
       }
