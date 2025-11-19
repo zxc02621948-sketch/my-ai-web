@@ -1438,6 +1438,9 @@ export function PlayerProvider({
     
     const handleVisibilityChange = async () => {
       if (!audioRef.current || !src) return;
+      
+      // ✅ 確保 updateMediaSessionMetadata 可訪問（從閉包外獲取）
+      const updateMeta = updateMediaSessionMetadata;
 
       if (document.hidden) {
         // 頁面隱藏時，記錄播放狀態（基於實際音頻元素狀態和 isPlaying 狀態）
@@ -1522,6 +1525,25 @@ export function PlayerProvider({
               if (audioRef.current.readyState >= 2) {
                 await audioRef.current.play();
                 setIsPlaying(true);
+                
+                // ✅ 恢復播放時，立即確保 metadata 已設置（重要：背景暫停後恢復必須重新設置）
+                if (typeof navigator !== "undefined" && navigator.mediaSession) {
+                  try {
+                    updateMeta();
+                    setTimeout(() => {
+                      if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                        try {
+                          updateMeta();
+                          navigator.mediaSession.playbackState = "playing";
+                        } catch (error) {
+                          // 忽略錯誤
+                        }
+                      }
+                    }, 50);
+                  } catch (error) {
+                    // 忽略錯誤
+                  }
+                }
               } else {
                 // 等待音頻載入完成後播放
                 const handleCanPlay = async () => {
@@ -1530,6 +1552,25 @@ export function PlayerProvider({
                     if (audioRef.current.paused && isPlaying) {
                       await audioRef.current.play();
                       setIsPlaying(true);
+                      
+                      // ✅ 恢復播放時，立即確保 metadata 已設置（重要：背景暫停後恢復必須重新設置）
+                      if (typeof navigator !== "undefined" && navigator.mediaSession) {
+                        try {
+                          updateMeta();
+                          setTimeout(() => {
+                            if (audioRef.current && !audioRef.current.paused && navigator.mediaSession) {
+                              try {
+                                updateMeta();
+                                navigator.mediaSession.playbackState = "playing";
+                              } catch (error) {
+                                // 忽略錯誤
+                              }
+                            }
+                          }, 50);
+                        } catch (error) {
+                          // 忽略錯誤
+                        }
+                      }
                     }
                   } catch (error) {
                     console.warn('⚠️ 恢復播放失敗:', error);
@@ -1578,7 +1619,7 @@ export function PlayerProvider({
       backgroundHiddenSinceRef.current = null;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [src, isPlaying]); // ✅ 依賴 src 和 isPlaying，確保狀態正確
+  }, [src, isPlaying, updateMediaSessionMetadata]); // ✅ 依賴 src、isPlaying 和 updateMediaSessionMetadata，確保狀態正確
 
   // ✅ 監聽 AudioManager 暫停事件，確保播放器狀態同步
   useEffect(() => {
