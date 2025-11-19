@@ -26,7 +26,9 @@ export default function LoginPage() {
         notify.success("登入成功", "登入成功！");
         router.push("/"); // ✅ 登入成功後跳轉首頁
       } else {
-        notify.error("登入失敗", data.message);
+        // ✅ API 返回的錯誤訊息在 error 欄位，不是 message
+        const errorMessage = data.error || data.message || "登入失敗，請稍後再試";
+        notify.error("登入失敗", errorMessage);
       }
     } catch (err) {
       console.error("登入錯誤：", err);

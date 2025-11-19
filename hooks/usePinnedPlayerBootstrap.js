@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import {
   readPinnedPlayerCache,
   writePinnedPlayerCache,
@@ -73,6 +74,10 @@ export default function usePinnedPlayerBootstrap({
 } = {}) {
   const lastAppliedRef = useRef(null);
   const lastShufflePreferenceRef = useRef(null);
+  const pathname = usePathname();
+  
+  // ✅ 檢查當前是否在用戶頁面（用戶頁面會自己管理播放器啟用狀態）
+  const isUserPage = pathname?.startsWith("/user/") && pathname !== "/user/following";
 
   const applyPinnedState = useCallback(
     (rawPinned) => {
@@ -257,13 +262,15 @@ export default function usePinnedPlayerBootstrap({
     } else {
       debugLog("init no pinned state");
       player.setShareMode?.(shareMode);
-      if (disableOnUnpinned) {
+      // ✅ 如果在用戶頁面，不應該禁用播放器（個人頁面會自己管理播放器啟用狀態）
+      // ✅ 只有在非用戶頁面時才禁用播放器
+      if (disableOnUnpinned && !isUserPage) {
         resetPlayerWhenUnpinned(player, shareMode);
       }
       lastAppliedRef.current = null;
       lastShufflePreferenceRef.current = null;
       player.setPinnedOwnerInfo?.(null);
     }
-  }, [applyPinnedState, currentUser, disableOnUnpinned, player, shareMode]);
+  }, [applyPinnedState, currentUser, disableOnUnpinned, player, shareMode, isUserPage]);
 }
 

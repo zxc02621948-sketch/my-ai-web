@@ -38,7 +38,8 @@ export default function LoginModal() {
         window.location.reload();
       }
     } catch (err) {
-      const message = err.response?.data?.message || "登入失敗，請稍後再試。";
+      // ✅ API 返回的錯誤訊息在 error 欄位，不是 message
+      const message = err.response?.data?.error || err.response?.data?.message || "登入失敗，請稍後再試。";
       setError(message);
       if (message.includes("尚未驗證")) {
         setShowResendButton(true);

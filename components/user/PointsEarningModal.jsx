@@ -2,14 +2,36 @@
 
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import axios from "axios";
 
 export default function PointsEarningModal({ isOpen, onClose }) {
   const [mounted, setMounted] = useState(false);
+  const [dailySummary, setDailySummary] = useState(null);
 
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
   }, []);
+
+  // 載入每日積分統計
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const fetchDailySummary = async () => {
+      try {
+        const res = await axios.get("/api/points/daily-summary", {
+          withCredentials: true,
+        });
+        if (res.data?.ok && res.data?.data) {
+          setDailySummary(res.data.data);
+        }
+      } catch (error) {
+        console.warn("[PointsEarningModal] 載入每日積分統計失敗:", error);
+      }
+    };
+
+    fetchDailySummary();
+  }, [isOpen]);
 
   // 鎖住背景 scroll
   useEffect(() => {
@@ -34,58 +56,65 @@ export default function PointsEarningModal({ isOpen, onClose }) {
 
   const earningMethods = [
     {
+      type: "upload",
       icon: "📸",
       title: "上傳圖片",
-      points: "+5",
-      limit: "每日積分上限 20 分",
+      points: 5,
+      limitValue: 20,
       description: "上傳 AI 生成的圖片作品",
       note: "上傳數量上限按等級計算（LV1=5張，LV2=6張，...，VIP=20張）"
     },
     {
+      type: "video_upload",
       icon: "🎬",
       title: "上傳影片",
-      points: "+10",
-      limit: "每日積分上限 20 分",
+      points: 10,
+      limitValue: 20,
       description: "上傳 AI 生成的影片作品",
       note: "上傳數量上限按等級計算（LV1=5部，LV2=6部，...，VIP=50部）"
     },
     {
+      type: "music_upload",
       icon: "🎵",
       title: "上傳音樂",
-      points: "+10",
-      limit: "每日積分上限 20 分",
+      points: 10,
+      limitValue: 20,
       description: "上傳 AI 生成的音樂作品",
       note: "上傳數量上限按等級計算（LV1=5首，LV2=6首，...，VIP=20首）"
     },
     {
+      type: "like_received",
       icon: "❤️",
       title: "獲得愛心",
-      points: "+1",
-      limit: "每日上限 10 分",
+      points: 1,
+      limitValue: 10,
       description: "你的作品收到其他用戶的讚",
       note: "終身去重（同一作品同一用戶只能獲得一次積分）"
     },
     {
+      type: "like_given",
       icon: "👍",
       title: "給予愛心",
-      points: "+1",
-      limit: "每日上限 5 分",
+      points: 1,
+      limitValue: 5,
       description: "給其他用戶的作品按讚",
       note: "給他人按讚，自讚不計。終身去重（同一作品只能獲得一次積分）"
     },
     {
+      type: "comment_received",
       icon: "💬",
       title: "獲得留言",
-      points: "+1",
-      limit: "每日上限 5 分",
+      points: 1,
+      limitValue: 5,
       description: "你的作品收到其他用戶的留言",
       note: "每日去重（同一作品同一用戶每天只能獲得一次積分）"
     },
     {
+      type: "daily_login",
       icon: "🌅",
       title: "每日登入",
-      points: "+5",
-      limit: "每日一次",
+      points: 5,
+      limitValue: 5,
       description: "每天首次登入網站",
       note: "每日 00:00 重置"
     }
@@ -149,13 +178,15 @@ export default function PointsEarningModal({ isOpen, onClose }) {
                       <h3 className="text-lg font-semibold text-white">
                         {method.title}
                       </h3>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col items-end gap-0.5 text-right">
                         <span className="text-xl font-bold text-yellow-400">
-                          {method.points}
+                          +{method.points}／每日積分上限 {method.limitValue} 分
                         </span>
-                        <span className="text-sm text-gray-400">
-                          {method.limit}
-                        </span>
+                        {dailySummary && dailySummary[method.type] && (
+                          <span className="text-sm text-green-400">
+                            已獲得 {dailySummary[method.type].today} / {dailySummary[method.type].limit} 分
+                          </span>
+                        )}
                       </div>
                     </div>
                     

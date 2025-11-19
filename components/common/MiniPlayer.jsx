@@ -287,15 +287,17 @@ export default function MiniPlayer() {
   
   // 檢查用戶是否有播放器功能（LV3 或體驗券 或 購買過 或 有訂閱）
   // 顯示邏輯：
-  // 1. currentUser 載入中 (undefined) → 不顯示（避免閃爍）
-  // 2. 如果 player.miniPlayerEnabled 為 false → 不顯示
-  // 3. 如果釘選了 → 全站顯示 ✅
-  // 4. 如果在用戶頁面 → 顯示（由頁面主人控制）✅
-  // 5. shareMode === "page" 時顯示（用於分享頁）
+  // 1. 如果釘選了 → 全站顯示 ✅（需要 miniPlayerEnabled 和 currentUser 載入完成）
+  // 2. 如果在用戶頁面 → 顯示（由頁面主人控制，只要頁面主人有播放清單，miniPlayerEnabled 就會被設置為 true）✅
+  //    在用戶頁面時，即使 currentUser 還在載入中，只要 miniPlayerEnabled 為 true 就顯示
+  // 3. shareMode === "page" 時顯示（用於分享頁，需要 miniPlayerEnabled 和 currentUser 載入完成）
+  // 注意：在個人頁面，只要頁面主人有播放清單，就會設置 miniPlayerEnabled 為 true，所有人都可以看到
   const isPageModeActive = player?.shareMode === "page";
-  const showMini = currentUser !== undefined && 
-    player?.miniPlayerEnabled && 
-    (isPinned || isUserPage || isPageModeActive);
+  // ✅ 在用戶頁面時，允許在 currentUser 載入中時也顯示（只要 miniPlayerEnabled 為 true）
+  // ✅ 其他情況（釘選、分享頁）需要等待 currentUser 載入完成
+  const showMini = player?.miniPlayerEnabled && 
+    (isPinned || isUserPage || isPageModeActive) &&
+    (isUserPage || currentUser !== undefined); // 用戶頁面不需要等待 currentUser，其他情況需要
   
   // 確保所有值都是有效數字後才計算進度
   const currentTime = typeof player?.currentTime === 'number' && isFinite(player.currentTime) ? player.currentTime : 0;
