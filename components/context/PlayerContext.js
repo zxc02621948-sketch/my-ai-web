@@ -1696,33 +1696,35 @@ export function PlayerProvider({
       return;
     }
 
-    // ✅ 只要有音樂來源就設置 metadata（即使沒有播放列表）
-    const currentTrack =
-      Array.isArray(playlist) && playlist.length > 0 && activeIndex >= 0 && activeIndex < playlist.length
-        ? playlist[activeIndex]
-        : null;
+    // ✅ 使用 ref 獲取最新的 track 信息（避免閉包問題，確保播放時也能正確獲取封面）
+    const currentTrack = currentTrackRef.current;
+    const currentSrc = srcRef.current || src;
+    const currentTrackTitle = trackTitleRef.current || trackTitle;
 
     // ✅ 即使沒有播放列表，只要有 src 和 trackTitle，也要設置 metadata
-    const hasMusic = src || (currentTrack && currentTrack.url) || trackTitle;
+    const hasMusic = currentSrc || (currentTrack && (currentTrack.url || currentTrack.musicUrl)) || currentTrackTitle;
 
     if (hasMusic) {
       // ✅ 優先使用播放列表中的信息，如果沒有則使用 trackTitle 和 playerOwner
-      const musicUrl = src || (currentTrack && currentTrack.url) || "";
+      const musicUrl = currentSrc || (currentTrack && (currentTrack.url || currentTrack.musicUrl)) || "";
       const isMusicStreamUrl = musicUrl && musicUrl.includes("/api/music/stream/");
+      
+      // ✅ 使用 ref 獲取最新的 playerOwner（避免閉包問題）
+      const currentPlayerOwner = playerOwnerRef.current || playerOwner;
       
       // ✅ 構建基本的 metadata（總是先設置，確保有信息顯示）
       let metadataTitle =
         (currentTrack && (currentTrack.title || currentTrack.trackTitle)) ||
-        trackTitle ||
-        (currentTrack && currentTrack.url) ||
-        src ||
+        currentTrackTitle ||
+        (currentTrack && (currentTrack.url || currentTrack.musicUrl)) ||
+        currentSrc ||
         "音樂作品";
       let metadataArtist =
         (currentTrack && (currentTrack.artist || currentTrack.authorName)) ||
-        playerOwner?.username ||
+        currentPlayerOwner?.username ||
         "未知創作者";
       let metadataAlbum =
-        (currentTrack && currentTrack.album) || playerOwner?.username || "";
+        (currentTrack && currentTrack.album) || currentPlayerOwner?.username || "";
 
       // ✅ 優先使用播放列表中的封面，如果沒有則嘗試其他來源
       let artwork = [];
@@ -1797,10 +1799,12 @@ export function PlayerProvider({
             if (cachedMusic) {
               try {
                 const music = JSON.parse(cachedMusic);
-                // ✅ 使用緩存的音樂信息更新 metadata
-                const cachedMetadataTitle = music.title || trackTitle || "音樂作品";
-                const cachedMetadataArtist = music.authorName || music.author?.username || playerOwner?.username || "未知創作者";
-                const cachedMetadataAlbum = playerOwner?.username || "";
+                // ✅ 使用緩存的音樂信息更新 metadata（使用 ref 獲取最新值）
+                const currentPlayerOwnerForCache = playerOwnerRef.current || playerOwner;
+                const currentTrackTitleForCache = trackTitleRef.current || trackTitle;
+                const cachedMetadataTitle = music.title || currentTrackTitleForCache || "音樂作品";
+                const cachedMetadataArtist = music.authorName || music.author?.username || currentPlayerOwnerForCache?.username || "未知創作者";
+                const cachedMetadataAlbum = currentPlayerOwnerForCache?.username || "";
                 
                 const cachedArtwork = [];
                 if (music.coverImageUrl) {
@@ -1845,10 +1849,12 @@ export function PlayerProvider({
                       // 忽略緩存錯誤
                     }
                     
-                    // ✅ 更新 Media Session metadata（使用完整信息）
-                    const metadataTitle = music.title || trackTitle || "音樂作品";
-                    const metadataArtist = music.authorName || music.author?.username || playerOwner?.username || "未知創作者";
-                    const metadataAlbum = playerOwner?.username || "";
+                    // ✅ 更新 Media Session metadata（使用完整信息，使用 ref 獲取最新值）
+                    const currentPlayerOwnerForFetch = playerOwnerRef.current || playerOwner;
+                    const currentTrackTitleForFetch = trackTitleRef.current || trackTitle;
+                    const metadataTitle = music.title || currentTrackTitleForFetch || "音樂作品";
+                    const metadataArtist = music.authorName || music.author?.username || currentPlayerOwnerForFetch?.username || "未知創作者";
+                    const metadataAlbum = currentPlayerOwnerForFetch?.username || "";
                     
                     const artwork = [];
                     if (music.coverImageUrl) {
