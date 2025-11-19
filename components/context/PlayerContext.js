@@ -528,8 +528,20 @@ export function PlayerProvider({
       audioRef.current.dataset.startTime = startTime.toString();
     }
 
+    // ✅ 立即更新 Media Session metadata（確保封面立即顯示，不等待異步操作）
+    if (typeof navigator !== "undefined" && navigator.mediaSession) {
+      try {
+        updateMediaSessionMetadata();
+        
+        // ✅ 立即更新 playbackState（必須在 metadata 之後設置）
+        navigator.mediaSession.playbackState = "playing";
+      } catch (error) {
+        console.warn("[MediaSession] 立即更新播放狀態失敗:", error);
+      }
+    }
+
     // ✅ Android 背景播放面板必須在音頻真正播放後才顯示
-    // ✅ 使用遞歸檢查確保在音頻元素真正開始播放且 duration 已加載後才設置 metadata
+    // ✅ 使用遞歸檢查確保在音頻元素真正開始播放且 duration 已加載後才設置 position state
     const setupMediaSessionForAndroid = (attempts = 0) => {
       if (typeof navigator === "undefined" || !("mediaSession" in navigator) || !audioRef.current) {
         return;
@@ -541,13 +553,7 @@ export function PlayerProvider({
       // ✅ 檢查音頻元素是否正在播放且 duration 已加載（Android 需要）
       if (!audio.paused && audio.duration > 0 && isFinite(audio.duration)) {
         try {
-          // ✅ 確保 metadata 已設置（Android 背景播放面板需要）
-          updateMediaSessionMetadata();
-          
-          // ✅ 更新 playbackState（必須在 metadata 之後設置）
-          navigator.mediaSession.playbackState = "playing";
-          
-          // ✅ 立即設置 position state（Android 需要）
+          // ✅ 立即設置 position state（Android 需要，確保進度條正確顯示）
           const currentTime = audio.currentTime || 0;
           const duration = audio.duration || 0;
           
@@ -583,10 +589,31 @@ export function PlayerProvider({
     // ✅ 只處理本地音頻播放器
     setIsPlaying(false);
 
-    // ✅ 更新 Media Session playbackState（Android 需要）
-    if (typeof navigator !== "undefined" && navigator.mediaSession) {
+    // ✅ 更新 Media Session playbackState 和 position state（Android 需要）
+    if (typeof navigator !== "undefined" && navigator.mediaSession && audioRef.current) {
       try {
+        const audio = audioRef.current;
+        
+        // ✅ 更新 playbackState
         navigator.mediaSession.playbackState = "paused";
+        
+        // ✅ 更新 position state（重要：暫停時必須更新，否則進度條會卡死）
+        const currentTime = audio.currentTime || 0;
+        const duration = audio.duration || 0;
+        
+        if (duration > 0 && isFinite(duration) && isFinite(currentTime)) {
+          try {
+            if (navigator.mediaSession.setPositionState) {
+              navigator.mediaSession.setPositionState({
+                duration: duration,
+                playbackRate: audio.playbackRate || 1.0,
+                position: currentTime,
+              });
+            }
+          } catch (error) {
+            // 某些瀏覽器可能不支援 setPositionState，忽略即可
+          }
+        }
       } catch (error) {
         // 忽略錯誤
       }
@@ -1841,7 +1868,7 @@ export function PlayerProvider({
       const currentTime = audio.currentTime || 0;
       const duration = audio.duration || 0;
       
-      // 只有在有有效時長時才設置位置狀態
+      // ✅ 無論播放或暫停，都要更新位置狀態（暫停時必須更新，否則進度條會卡死）
       if (duration > 0 && isFinite(duration) && isFinite(currentTime)) {
         try {
           if (navigator.mediaSession.setPositionState) {
@@ -1857,6 +1884,9 @@ export function PlayerProvider({
         }
       }
     };
+
+    // ✅ 立即更新位置狀態（確保進度條正確顯示，無論播放或暫停）
+    updatePositionState();
 
     // ✅ 在 useEffect 內部創建更新 metadata 的函數（可以訪問最新的狀態和 ref）
     const updateMetadataInEffect = () => {
@@ -1917,10 +1947,6 @@ export function PlayerProvider({
       }
     };
 
-    // 初始設置位置狀態（如果有音頻且正在播放）
-    if (audioRef.current && !audioRef.current.paused) {
-      updatePositionState();
-    }
 
     // ✅ Android 背景播放需要直接操作 audio 元素，而不是通过 play/pause 函数
     const handlePlayAction = async () => {
