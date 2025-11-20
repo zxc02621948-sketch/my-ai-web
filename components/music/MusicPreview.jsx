@@ -6,6 +6,36 @@ import NewBadge from "@/components/image/NewBadge";
 import { audioManager } from "@/utils/audioManager";
 import { usePlayer } from "@/components/context/PlayerContext";
 
+// 🔍 監控 audio 元素數量的工具函數
+const logAudioElementCount = (context = "") => {
+  if (typeof document === "undefined") return;
+  
+  const allAudios = document.querySelectorAll("audio");
+  const previewAudios = document.querySelectorAll("audio[data-music-preview]");
+  const modalAudios = document.querySelectorAll("audio[data-music-full-player]");
+  const playerAudios = document.querySelectorAll("audio:not([data-music-preview]):not([data-music-full-player])");
+  
+  console.log(`🔍 [Audio Monitor] ${context}`, {
+    total: allAudios.length,
+    preview: previewAudios.length,
+    modal: modalAudios.length,
+    player: playerAudios.length,
+    timestamp: new Date().toISOString(),
+  });
+  
+  // ⚠️ 如果 audio 元素過多，發出警告
+  if (allAudios.length > 20) {
+    console.warn(`⚠️ [Audio Monitor] 檢測到過多 audio 元素 (${allAudios.length} 個)！可能存在內存泄漏。`);
+  }
+  
+  return {
+    total: allAudios.length,
+    preview: previewAudios.length,
+    modal: modalAudios.length,
+    player: playerAudios.length,
+  };
+};
+
 const MusicPreview = ({ music, className = "", onClick }) => {
   const audioRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -37,6 +67,9 @@ const MusicPreview = ({ music, className = "", onClick }) => {
 
   const stopPreview = ({ restore = true } = {}) => {
     const audio = audioRef.current;
+
+    // 🔍 停止預覽時記錄 audio 數量
+    logAudioElementCount(`停止預覽 [${music?._id?.substring(0, 8) || 'unknown'}]`);
 
     detachTimeUpdate();
 
@@ -193,6 +226,9 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       return;
     }
 
+    // 🔍 開始預覽時記錄 audio 數量
+    logAudioElementCount(`開始預覽 [${music?._id?.substring(0, 8) || 'unknown'}]`);
+
     if (isPlayingRef.current || isPlaying) {
       stopPreview({ restore: false });
     }
@@ -267,11 +303,26 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     
     checkMobile();
     window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
+    
+    // 🔍 定期監控 audio 元素數量（每 5 秒檢查一次）
+    const monitorInterval = setInterval(() => {
+      logAudioElementCount(`定期檢查 [${music?._id?.substring(0, 8) || 'unknown'}]`);
+    }, 5000);
+    
+    return () => {
+      window.removeEventListener("resize", checkMobile);
+      clearInterval(monitorInterval);
+    };
+  }, [music?._id]);
 
   useEffect(() => {
+    // 🔍 組件掛載時記錄 audio 數量
+    logAudioElementCount(`MusicPreview 掛載 [${music?._id?.substring(0, 8) || 'unknown'}]`);
+    
     return () => {
+      // 🔍 組件卸載前記錄 audio 數量
+      logAudioElementCount(`MusicPreview 卸載前 [${music?._id?.substring(0, 8) || 'unknown'}]`);
+      
       stopPreview({ restore: false });
       
       // ✅ 組件卸載時清理 src，釋放內存
@@ -285,8 +336,13 @@ const MusicPreview = ({ music, className = "", onClick }) => {
           console.warn("🎵 [Preview] 組件卸載時清理音頻失敗", error);
         }
       }
+      
+      // 🔍 組件卸載後記錄 audio 數量
+      setTimeout(() => {
+        logAudioElementCount(`MusicPreview 卸載後 [${music?._id?.substring(0, 8) || 'unknown'}]`);
+      }, 100);
     };
-  }, []);
+  }, [music?._id]);
 
   // 監聽全局預覽切換事件，檢查自己的音頻狀態並更新
   useEffect(() => {
@@ -385,6 +441,9 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   
   // 當 music 變化時，重置顯示時長並停止當前播放
   useEffect(() => {
+    // 🔍 music 變化時記錄 audio 數量
+    logAudioElementCount(`music 變化 [${music?._id?.substring(0, 8) || 'unknown'}]`);
+    
     setDisplayDuration(music.duration || 0);
     
     // 檢查是否有正在播放的預覽

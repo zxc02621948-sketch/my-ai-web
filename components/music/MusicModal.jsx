@@ -9,6 +9,36 @@ import { usePlayer } from "@/components/context/PlayerContext";
 import { audioManager } from "@/utils/audioManager";
 import { usePortalContainer } from "@/components/common/usePortal";
 
+// 🔍 監控 audio 元素數量的工具函數
+const logAudioElementCount = (context = "") => {
+  if (typeof document === "undefined") return;
+  
+  const allAudios = document.querySelectorAll("audio");
+  const previewAudios = document.querySelectorAll("audio[data-music-preview]");
+  const modalAudios = document.querySelectorAll("audio[data-music-full-player]");
+  const playerAudios = document.querySelectorAll("audio:not([data-music-preview]):not([data-music-full-player])");
+  
+  console.log(`🔍 [Audio Monitor] ${context}`, {
+    total: allAudios.length,
+    preview: previewAudios.length,
+    modal: modalAudios.length,
+    player: playerAudios.length,
+    timestamp: new Date().toISOString(),
+  });
+  
+  // ⚠️ 如果 audio 元素過多，發出警告
+  if (allAudios.length > 20) {
+    console.warn(`⚠️ [Audio Monitor] 檢測到過多 audio 元素 (${allAudios.length} 個)！可能存在內存泄漏。`);
+  }
+  
+  return {
+    total: allAudios.length,
+    preview: previewAudios.length,
+    modal: modalAudios.length,
+    player: playerAudios.length,
+  };
+};
+
 const MusicModal = ({
   music,
   onClose,
@@ -170,6 +200,9 @@ const MusicModal = ({
 
   // ✅ 關鍵修復：當音樂 ID 改變時（打開新音樂或重新打開），重置進度報告標記和自動播放標記
   useEffect(() => {
+    // 🔍 音樂 ID 改變時記錄 audio 數量
+    logAudioElementCount(`音樂 ID 改變 [${music?._id?.substring(0, 8) || 'unknown'}]`);
+    
     if (audioRef.current && music?._id) {
       audioRef.current.dataset.progressReported = "";
       // ✅ 修復：重置自動播放標記，確保新音樂可以自動播放
@@ -341,6 +374,9 @@ const MusicModal = ({
   const releaseAudioManager = () => {
     const musicId = music?._id?.substring(0, 8) || 'unknown';
     
+    // 🔍 Modal 關閉前記錄 audio 數量
+    logAudioElementCount(`Modal 關閉前 [${musicId}]`);
+    
     // 釋放 AudioManager
     if (audioRef.current) {
       audioManager.release(audioRef.current);
@@ -355,6 +391,11 @@ const MusicModal = ({
       }
     }
     audioManager.release(); // 強制釋放
+    
+    // 🔍 Modal 關閉後記錄 audio 數量
+    setTimeout(() => {
+      logAudioElementCount(`Modal 關閉後 [${musicId}]`);
+    }, 100);
     
     // ✅ 定時器清理
     if (progressCheckIntervalRef.current) {
