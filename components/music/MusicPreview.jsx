@@ -48,6 +48,9 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     if (audio) {
       try {
         audio.pause();
+        // ⚠️ 注意：不清理 src，因為 src 由 React 的 src={music.musicUrl} 管理
+        // 清理 src 會導致 React 無法自動恢復，下次預覽會失敗
+        // 預覽是臨時的，用戶可能會多次預覽同一首歌，所以保留 src
       } catch (error) {
         console.warn("🎵 [Preview] stopPreview: audio.pause 失敗", error);
       }
@@ -270,6 +273,18 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   useEffect(() => {
     return () => {
       stopPreview({ restore: false });
+      
+      // ✅ 組件卸載時清理 src，釋放內存
+      // 只在組件卸載時清理，不影響正常的預覽停止
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+          audioRef.current.removeAttribute("src"); // 完全移除音頻來源
+          audioRef.current.load(); // 立刻釋放解碼緩存
+        } catch (error) {
+          console.warn("🎵 [Preview] 組件卸載時清理音頻失敗", error);
+        }
+      }
     };
   }, []);
 

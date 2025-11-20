@@ -344,8 +344,23 @@ const MusicModal = ({
     // 釋放 AudioManager
     if (audioRef.current) {
       audioManager.release(audioRef.current);
+      
+      // ✅ 新增: audio 元素清理（關鍵修復）
+      try {
+        audioRef.current.pause();
+        audioRef.current.removeAttribute("src"); // 💛 關鍵：完全移除音頻來源，立刻釋放 memory
+        audioRef.current.load(); // 💛 立刻釋放解碼緩存
+      } catch (err) {
+        console.warn("🎵 [Modal] Failed to cleanup audio:", err);
+      }
     }
     audioManager.release(); // 強制釋放
+    
+    // ✅ 定時器清理
+    if (progressCheckIntervalRef.current) {
+      clearInterval(progressCheckIntervalRef.current);
+      progressCheckIntervalRef.current = null;
+    }
     
     const shouldRestorePlayer = wasPlayerPlayingRef.current;
     console.log(`🎵 [Modal] 關閉 Modal [${musicId}], wasPlaying: ${wasPlayerPlayingRef.current}, shouldRestore: ${shouldRestorePlayer}`);
