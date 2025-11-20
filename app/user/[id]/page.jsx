@@ -102,18 +102,14 @@ export default function UserProfilePage() {
   
   // ✅ 當 userData 載入後，檢查並啟用播放器
   useEffect(() => {
-    // ✅ 檢查是否有播放清單
-    const userPlaylist = Array.isArray(userData?.playlist) && userData.playlist.length > 0 ? userData.playlist : [];
-    const hasPlaylist = userPlaylist.length > 0;
-    
     // ✅ 檢查頁面主人是否有有效的播放器功能（購買或體驗券未過期）
     const hasValidPlayer = !!userData?.miniPlayerPurchased || 
       (userData?.playerCouponUsed && 
        userData?.miniPlayerExpiry && 
        new Date(userData.miniPlayerExpiry) > new Date());
     
-    // ✅ 必須同時有播放清單和有效的播放器功能才顯示
-    if (hasPlaylist && hasValidPlayer) {
+    // ✅ 只要有有效的播放器功能就顯示（不需要檢查播放清單）
+    if (hasValidPlayer) {
       try {
         player?.setMiniPlayerEnabled?.(true);
         player?.setShareMode?.("page");
@@ -123,7 +119,7 @@ export default function UserProfilePage() {
         player?.setMiniPlayerEnabled?.(false);
       } catch {}
     }
-  }, [userData?.playlist, userData?.miniPlayerPurchased, userData?.playerCouponUsed, userData?.miniPlayerExpiry]); // 依賴播放清單和播放器權限
+  }, [userData?.miniPlayerPurchased, userData?.playerCouponUsed, userData?.miniPlayerExpiry]); // 依賴播放器權限
   
   // ✅ 設置頁面主人的播放器造型信息（獨立的 useEffect，避免循環）
   useEffect(() => {
@@ -411,18 +407,14 @@ export default function UserProfilePage() {
         if (userJson) {
           const picked = pickUser(userJson);
           setUserData(picked);
-          // ✅ 檢查是否有播放清單
-          const userPlaylist = Array.isArray(picked?.playlist) && picked.playlist.length > 0 ? picked.playlist : [];
-          const hasPlaylist = userPlaylist.length > 0;
-          
           // ✅ 檢查頁面主人是否有有效的播放器功能（購買或體驗券未過期）
           const hasValidPlayer = !!picked?.miniPlayerPurchased || 
             (picked?.playerCouponUsed && 
              picked?.miniPlayerExpiry && 
              new Date(picked.miniPlayerExpiry) > new Date());
           
-          // ✅ 必須同時有播放清單和有效的播放器功能才顯示
-          if (hasPlaylist && hasValidPlayer) {
+          // ✅ 只要有有效的播放器功能就顯示（不需要檢查播放清單）
+          if (hasValidPlayer) {
             try {
               player?.setMiniPlayerEnabled?.(true);
               player?.setShareMode?.("page");
@@ -462,10 +454,9 @@ export default function UserProfilePage() {
       // playerOwner 應該維持釘選的用戶，不應該改為當前頁面的用戶
       // 播放清單應該維持釘選的播放清單，不應該重新載入
     }
-    // ✅ 如果沒有釘選 OR 釘選的就是當前頁面 → 載入當前頁面的播放清單
-    // ✅ 只要有播放清單就載入，不管頁面主人是否有購買播放器功能
-    // ✅ 即使 currentUser 還在載入中（undefined）或未登入（null），也應該載入播放清單
-    else if (userPlaylist.length > 0) {
+    // ✅ 如果沒有釘選 OR 釘選的就是當前頁面 → 設置當前頁面的播放器信息
+    // ✅ 即使沒有播放清單，也應該設置 playerOwner 和空播放清單（只要用戶有權限）
+    else {
       // ✅ 無論是否有播放清單，都設置 playerOwner（用於顯示釘選按鈕）
       if (picked?.username) {
         const allowShuffleRaw =
@@ -494,7 +485,7 @@ export default function UserProfilePage() {
           player?.setActiveIndex?.(0);
         }
       } else {
-        // ✅ 即使沒有播放清單，也設置空的播放清單，這樣釘選按鈕才能顯示
+        // ✅ 即使沒有播放清單，也設置空的播放清單，這樣播放器才能顯示
         player?.setPlaylist?.([]);
       }
     }
@@ -508,18 +499,14 @@ export default function UserProfilePage() {
               const backup = pickUser(r2?.data || r2);
             if (backup) {
               setUserData(backup);
-              // ✅ 檢查是否有播放清單
-              const backupPlaylist = Array.isArray(backup?.playlist) && backup.playlist.length > 0 ? backup.playlist : [];
-              const hasBackupPlaylist = backupPlaylist.length > 0;
-              
               // ✅ 檢查頁面主人是否有有效的播放器功能（購買或體驗券未過期）
               const hasBackupValidPlayer = !!backup?.miniPlayerPurchased || 
                 (backup?.playerCouponUsed && 
                  backup?.miniPlayerExpiry && 
                  new Date(backup.miniPlayerExpiry) > new Date());
               
-              // ✅ 必須同時有播放清單和有效的播放器功能才顯示
-              if (hasBackupPlaylist && hasBackupValidPlayer) {
+              // ✅ 只要有有效的播放器功能就顯示（不需要檢查播放清單）
+              if (hasBackupValidPlayer) {
                 try {
                   player?.setMiniPlayerEnabled?.(true);
                   player?.setShareMode?.("page");
@@ -556,10 +543,9 @@ export default function UserProfilePage() {
                 if (hasPinnedPlayer && !isPinnedThisPage) {
                   // ✅ 什麼都不做，保持釘選的播放器狀態
                 }
-                // ✅ 如果沒有釘選 OR 釘選的就是當前頁面 → 載入當前頁面的播放清單
-                // ✅ 只要有播放清單就載入，不管頁面主人是否有購買播放器功能
-                // ✅ 即使 currentUser 還在載入中（undefined）或未登入（null），也應該載入播放清單
-                else if (userPlaylist.length > 0) {
+                // ✅ 如果沒有釘選 OR 釘選的就是當前頁面 → 設置當前頁面的播放器信息
+                // ✅ 即使沒有播放清單，也應該設置 playerOwner 和空播放清單（只要用戶有權限）
+                else {
                   // ✅ 無論是否有播放清單，都設置 playerOwner（用於顯示釘選按鈕）
                   if (backup?.username) {
                     const allowShuffle =

@@ -357,13 +357,24 @@ export default function StorePage() {
         );
         
         if (res?.data?.success) {
-          notify.success("體驗券已激活！", "播放器 1 日免費體驗券已激活！");
+          notify.success("體驗券已激活！", res?.data?.message || "播放器完整功能體驗券已激活！");
           setPurchasedItems(prev => new Set([...prev, productId]));
+          // ✅ 更新訂閱狀態（重要：體驗券會創建 pinPlayerTest 訂閱）
+          if (updateSubscriptions) {
+            await updateSubscriptions();
+          }
           // 更新用戶信息
           const info = await axios.get("/api/user-info", {
             headers: { 'Cache-Control': 'no-cache' }
           });
           setUserInfo(info.data);
+          // ✅ 更新當前用戶狀態（確保訂閱狀態同步）
+          const currentUserInfo = await axios.get("/api/current-user", {
+            headers: { 'Cache-Control': 'no-cache' }
+          });
+          if (setCurrentUser && currentUserInfo.data) {
+            setCurrentUser(currentUserInfo.data);
+          }
           // 刷新頁面以顯示播放器
           setTimeout(() => {
             window.location.reload();

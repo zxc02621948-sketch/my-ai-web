@@ -2,22 +2,24 @@ export const STORE_PRODUCTS = {
   features: [
     {
       id: "player-1day-coupon",
-      title: "播放器 1 日免費體驗券",
-      description: "體驗個人頁面專屬播放器功能，支援播放列表、音量控制等功能。讓音樂陪伴創作的每一刻！",
+      title: "播放器完整功能體驗券",
+      description: "完整體驗播放器與釘選功能！包含個人頁面專屬播放器與全站釘選播放功能，讓音樂陪伴創作的每一刻！",
       icon: "/store/mini-player.png",
       price: 0,
       originalPrice: 0,
       isLimited: true,
-      expiry: 1, // 1天有效期
+      expiry: 3, // 3天有效期
       category: "features",
       type: "player-coupon",
-      duration: 1,
+      duration: 3,
       maxPurchase: 1, // 終身限購1次
       features: [
         "個人頁面專屬播放器",
         "支援播放列表功能",
         "音量即時控制",
-        "體驗期限 1 天",
+        "全站釘選播放功能（體驗）",
+        "背景播放不受限制（體驗）",
+        "體驗期限 3 天",
         "終身限購 1 次"
       ]
     },

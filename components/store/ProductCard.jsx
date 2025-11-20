@@ -55,12 +55,18 @@ export default function ProductCard({
       {/* 功能列表 */}
       {features.length > 0 && (
         <ul className="space-y-2 mb-4">
-          {features.map((feature, index) => (
-            <li key={index} className="flex items-center text-sm text-gray-300">
-              <span className="mr-2">✓</span>
-              {feature}
-            </li>
-          ))}
+          {features.map((feature, index) => {
+            // ✅ 如果 feature 以"未釘選"開頭，使用打叉符號，否則使用打勾符號
+            const isNegative = feature.startsWith("未釘選");
+            return (
+              <li key={index} className="flex items-center text-sm text-gray-300">
+                <span className={`mr-2 ${isNegative ? 'text-red-400' : 'text-green-400'}`}>
+                  {isNegative ? '✗' : '✓'}
+                </span>
+                {feature}
+              </li>
+            );
+          })}
         </ul>
       )}
       

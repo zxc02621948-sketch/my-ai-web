@@ -496,20 +496,6 @@ export default function UserPlayerPage() {
               <div className="mb-8 w-full max-w-lg mx-auto">
                 <div className="flex items-start justify-center mb-4">
                   <div className="w-full flex flex-col items-center">
-                    {/* 編輯播放清單按鈕 */}
-                    <button
-                      onClick={() => {
-                        setModalOpen(true);
-                      }}
-                      className="mb-3 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm font-medium transition-all transform hover:scale-105 shadow-lg border border-blue-400/30 flex items-center gap-2"
-                      title="編輯播放清單"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                      <span>編輯播放清單</span>
-                    </button>
-                    
                     {playlist.length > 0 ? (
                       <div className="space-y-1 flex flex-col items-center">
                         <div className="text-xs text-gray-400">
@@ -552,7 +538,7 @@ export default function UserPlayerPage() {
                           }}
                           className="w-full px-6 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold text-lg transition-all duration-300 shadow-xl border-2 border-blue-400"
                         >
-                          🎵 立即建立播放清單 🎵
+                          🎵 編輯播放清單 🎵
                         </button>
                         <p className="text-xs text-gray-500 text-center">點擊上方按鈕開始設定你的音樂播放清單</p>
                       </div>

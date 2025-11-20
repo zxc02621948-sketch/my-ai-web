@@ -21,6 +21,10 @@ export default function AdminPanel() {
   const [sendPointsAmount, setSendPointsAmount] = useState(1000);
   const [sendReason, setSendReason] = useState("");
   const [sendLoading, setSendLoading] = useState(false);
+  
+  // 重置體驗券相關狀態
+  const [resetCouponUsername, setResetCouponUsername] = useState("");
+  const [resetCouponLoading, setResetCouponLoading] = useState(false);
 
   const handleCreateTestUser = async () => {
     const res = await fetch("/api/dev-create-user", {
@@ -404,6 +408,66 @@ export default function AdminPanel() {
           
           <div className="text-xs text-zinc-400">
             ⚠️ 僅限管理員使用，用於測試積分系統
+          </div>
+        </div>
+      </div>
+
+      {/* 重置體驗券 */}
+      <div className="mt-3 p-3 rounded border border-green-700 bg-green-900/20">
+        <div className="font-semibold mb-2 text-green-200">🎫 重置播放器體驗券</div>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={resetCouponUsername}
+              onChange={(e) => setResetCouponUsername(e.target.value)}
+              className="px-3 py-1 bg-zinc-800 text-white rounded border border-zinc-600 flex-1"
+              placeholder="用戶名（留空則重置自己的帳號）"
+            />
+            <button
+              onClick={async () => {
+                setResetCouponLoading(true);
+                try {
+                  const body = resetCouponUsername.trim() 
+                    ? { targetUsername: resetCouponUsername.trim() }
+                    : {};
+                  
+                  const res = await fetch("/api/admin/reset-player-coupon", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                  });
+                  
+                  const data = await res.json();
+                  
+                  if (data.success) {
+                    notify.success("重置成功", data.message || "體驗券標記已重置！現在可以再次使用體驗券了。");
+                    // 清空輸入
+                    setResetCouponUsername("");
+                    // 刷新頁面以更新顯示（如果是重置自己的）
+                    if (!resetCouponUsername.trim()) {
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 1000);
+                    }
+                  } else {
+                    notify.error("重置失敗", data.error || "重置失敗，請稍後再試");
+                  }
+                } catch (error) {
+                  console.error("重置體驗券失敗:", error);
+                  notify.error("重置失敗", "發生錯誤，請稍後再試");
+                } finally {
+                  setResetCouponLoading(false);
+                }
+              }}
+              disabled={resetCouponLoading}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+            >
+              {resetCouponLoading ? "重置中..." : "🔄 重置體驗券標記"}
+            </button>
+          </div>
+          <div className="text-xs text-zinc-400">
+            ⚠️ 清除 playerCouponUsed 和 miniPlayerExpiry，移除 pinPlayerTest 訂閱。留空則重置自己的帳號。
           </div>
         </div>
       </div>

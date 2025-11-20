@@ -598,12 +598,89 @@ export default function MiniPlayer() {
     return () => window.removeEventListener('resize', handleResize);
   }, [position]);
 
-  // 處理進度條點擊
+  // 進度條拖動狀態
+  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
+  const progressDragStartRef = useRef(null);
+  const progressDragOffsetRef = useRef(null);
+
+  // 處理進度條點擊/拖動
+  const handleProgressSeek = (e, clientX) => {
+    if (!clientX && typeof clientX !== "number") {
+      const point =
+        (e.touches && e.touches[0]) ||
+        (e.changedTouches && e.changedTouches[0]) ||
+        e;
+      if (!point || typeof point.clientX !== "number") {
+        return;
+      }
+      clientX = point.clientX;
+    }
+
+    // ✅ 確保 target 是有效的 DOM 元素
+    let target = e.currentTarget;
+    if (!target || typeof target.getBoundingClientRect !== 'function') {
+      // 如果 currentTarget 無效，嘗試從 target 查找
+      target = e.target?.closest?.('[data-progress-bar]');
+      if (!target || typeof target.getBoundingClientRect !== 'function') {
+        console.warn("🔧 [進度條] 無法找到有效的目標元素");
+        return;
+      }
+    }
+
+    try {
+      const rect = target.getBoundingClientRect();
+      const clickX = clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+      
+      if (player.duration > 0) {
+        const newTime = percentage * player.duration;
+        
+        // 優先使用外部播放器控制
+        if (player.externalControls && typeof player.externalControls.seekTo === 'function') {
+          try {
+            player.externalControls.seekTo(newTime);
+          } catch (error) {
+            console.error("❌ [進度條] 外部播放器跳轉失敗:", error);
+            // 如果外部播放器跳轉失敗，嘗試本地播放器
+            if (player.seekTo) {
+              try {
+                player.seekTo(newTime);
+              } catch (localError) {
+                console.error("🔧 本地播放器跳轉失敗:", localError);
+              }
+            }
+          }
+        } else if (player.seekTo) {
+          try {
+            player.seekTo(newTime);
+          } catch (error) {
+            console.error("🔧 本地播放器跳轉失敗:", error);
+          }
+        } else {
+          console.warn("🔧 沒有可用的跳轉方法");
+        }
+      }
+    } catch (error) {
+      console.error("🔧 [進度條] 計算位置失敗:", error);
+    }
+  };
+
+  // 處理進度條點擊（保持向後兼容）
   const handleButtonClick = (e) => {
     e.stopPropagation();
     if (e.cancelable) {
       e.preventDefault();
     }
+    handleProgressSeek(e);
+  };
+
+  // 處理進度條拖動開始
+  const handleProgressMouseDown = (e) => {
+    e.stopPropagation();
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+
     const point =
       (e.touches && e.touches[0]) ||
       (e.changedTouches && e.changedTouches[0]) ||
@@ -612,41 +689,92 @@ export default function MiniPlayer() {
       return;
     }
 
+    // ✅ 確保 target 是有效的 DOM 元素
     const target = e.currentTarget;
-    const rect = target.getBoundingClientRect();
-    const clickX = point.clientX - rect.left;
-    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
-    
-    if (player.duration > 0) {
-      const newTime = percentage * player.duration;
-      
-      
-      // 優先使用外部播放器控制
-      if (player.externalControls && typeof player.externalControls.seekTo === 'function') {
-        try {
-          player.externalControls.seekTo(newTime);
-        } catch (error) {
-          console.error("❌ [進度條點擊] 外部播放器跳轉失敗:", error);
-          // 如果外部播放器跳轉失敗，嘗試本地播放器
-          if (player.seekTo) {
-            try {
-              player.seekTo(newTime);
-            } catch (localError) {
-              console.error("🔧 本地播放器跳轉失敗:", localError);
-            }
-          }
-        }
-      } else if (player.seekTo) {
-        try {
-          player.seekTo(newTime);
-        } catch (error) {
-          console.error("🔧 本地播放器跳轉失敗:", error);
-        }
-      } else {
-        console.warn("🔧 沒有可用的跳轉方法");
-      }
+    if (!target || typeof target.getBoundingClientRect !== 'function') {
+      console.warn("🔧 [進度條拖動] 無法找到有效的目標元素");
+      return;
+    }
+
+    try {
+      const rect = target.getBoundingClientRect();
+      progressDragStartRef.current = {
+        x: point.clientX,
+        y: point.clientY,
+        startTime: Date.now()
+      };
+      progressDragOffsetRef.current = {
+        x: point.clientX - rect.left,
+        y: point.clientY - rect.top
+      };
+      setIsDraggingProgress(true);
+
+      // 立即處理點擊
+      handleProgressSeek(e, point.clientX);
+    } catch (error) {
+      console.error("🔧 [進度條拖動] 開始失敗:", error);
     }
   };
+
+  // 處理進度條拖動結束
+  const handleProgressMouseUp = (e) => {
+    if (!isDraggingProgress) return;
+    
+    const point =
+      (e.touches && e.touches[0]) ||
+      (e.changedTouches && e.changedTouches[0]) ||
+      e;
+    
+    if (point && typeof point.clientX === "number") {
+      handleProgressSeek(e, point.clientX);
+    }
+
+    setIsDraggingProgress(false);
+    progressDragStartRef.current = null;
+    progressDragOffsetRef.current = null;
+  };
+
+  // 處理進度條拖動移動
+  useEffect(() => {
+    if (!isDraggingProgress) return;
+
+    const handleMove = (e) => {
+      if (!progressDragStartRef.current) return;
+
+      const point =
+        (e.touches && e.touches[0]) ||
+        (e.changedTouches && e.changedTouches[0]) ||
+        e;
+      
+      if (!point || typeof point.clientX !== "number") return;
+
+      // 阻止默認行為
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+      e.stopPropagation();
+
+      handleProgressSeek(e, point.clientX);
+    };
+
+    const handleEnd = (e) => {
+      handleProgressMouseUp(e);
+    };
+
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd);
+    document.addEventListener('touchcancel', handleEnd);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener('touchcancel', handleEnd);
+    };
+  }, [isDraggingProgress, player]);
 
   // 下一首處理函數 - 直接使用 PlayerContext 的 next 方法
   const handleNext = () => {
@@ -1395,6 +1523,10 @@ export default function MiniPlayer() {
             cursor: 'default'
           }}
           onClick={(e) => {
+            // ✅ 如果點擊的是進度條，不要處理展開/收合
+            if (e.target.closest('[data-progress-bar]')) {
+              return;
+            }
             e.stopPropagation();
             if (justDraggedRef.current) return;
             setIsExpanded(prev => {
@@ -1592,7 +1724,8 @@ export default function MiniPlayer() {
           {/* 播放進度條：置於唱片下方居中顯示 */}
           {showProgressBar && (
             <div
-              className="absolute"
+              className="absolute cursor-pointer"
+              data-progress-bar="true"
               style={{
                 left: '50%',
                 transform: 'translateX(-50%)',
@@ -1602,12 +1735,21 @@ export default function MiniPlayer() {
                 background: 'rgba(0,0,0,0.10)',
                 borderRadius: '3px',
                 boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.12)',
-                zIndex: 1
+                zIndex: 20,
+                pointerEvents: 'auto'
               }}
               data-no-drag="true"
-              onMouseDown={handleButtonClick}
-              onTouchStart={handleButtonClick}
-              onTouchMove={handleButtonClick}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                handleProgressMouseDown(e);
+              }}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+                handleProgressMouseDown(e);
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
               aria-label="播放進度"
               title={`進度: ${Math.round(safePercentage)}%`}
             >
@@ -1617,7 +1759,16 @@ export default function MiniPlayer() {
                   height: '100%',
                   borderRadius: '3px',
                   background: `linear-gradient(to right, ${palette.accent1}, ${palette.accent2})`,
-                  transition: 'width 0.15s ease'
+                  transition: isDraggingProgress ? 'none' : 'width 0.15s ease',
+                  pointerEvents: 'none'
+                }}
+              />
+              {/* 拖動點 */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{
+                  left: `calc(${safePercentage}% - 4px)`,
+                  opacity: isDraggingProgress ? 1 : 0
                 }}
               />
             </div>

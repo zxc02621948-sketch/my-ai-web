@@ -776,8 +776,8 @@ export function PlayerProvider({
       }
     } catch {}
 
-    // ✅ 如果有播放清單且有多首歌曲，自動播放下一首
-    if (currentPlaylist.length > 1) {
+    // ✅ 如果有播放清單（即使只有一首歌），自動播放下一首（會循環播放）
+    if (currentPlaylist.length > 0) {
       console.log('🎵 [onEnded] 準備播放下一首');
       // 使用 setTimeout 確保在 ended 事件處理完成後再切換
       setTimeout(() => {
@@ -788,7 +788,6 @@ export function PlayerProvider({
           console.warn('⚠️ [onEnded] nextRef.current 為 null');
         }
       }, 100);
-    } else {
     }
   }, []); // ✅ 移除依賴項，使用 ref 獲取最新值
 

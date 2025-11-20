@@ -114,6 +114,23 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
       return;
     }
 
+    // ✅ 檢查是否為體驗券訂閱（pinPlayerTest），如果是則顯示付費提示
+    const hasTestSubscription = hasValidSubscription('pinPlayerTest');
+    const hasNormalSubscription = hasValidSubscription('pinPlayer');
+    
+    // ✅ 如果是體驗券訂閱且未釘選，先顯示提示
+    if (hasTestSubscription && !hasNormalSubscription && !isPinned) {
+      const confirmed = await notify.confirm(
+        '💡 體驗功能',
+        '此為付費功能，未來如需使用需要訂閱釘選播放器（月租）。\n\n目前為體驗期間，您可以免費使用此功能。',
+        { confirmText: '知道了', cancelText: '取消' }
+      );
+      
+      if (!confirmed) {
+        return; // 用戶取消，不執行釘選
+      }
+    }
+
     setLoading(true);
     try {
       
