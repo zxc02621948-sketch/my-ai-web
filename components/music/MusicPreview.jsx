@@ -7,32 +7,66 @@ import { audioManager } from "@/utils/audioManager";
 import { usePlayer } from "@/components/context/PlayerContext";
 
 // 🔍 監控 audio 元素數量的工具函數
-const logAudioElementCount = (context = "") => {
+let lastWarningTime = 0;
+const WARNING_COOLDOWN = 10000; // 10 秒內只警告一次
+
+const logAudioElementCount = (context = "", forceLog = false) => {
   if (typeof document === "undefined") return;
   
   const allAudios = document.querySelectorAll("audio");
-  const previewAudios = document.querySelectorAll("audio[data-music-preview]");
+  // ✅ 改進：更準確地識別不同類型的 audio 元素
+  const previewAudios = document.querySelectorAll("audio[data-music-preview], audio[data-preview-audio]");
   const modalAudios = document.querySelectorAll("audio[data-music-full-player]");
-  const playerAudios = document.querySelectorAll("audio:not([data-music-preview]):not([data-music-full-player])");
-  
-  console.log(`🔍 [Audio Monitor] ${context}`, {
-    total: allAudios.length,
-    preview: previewAudios.length,
-    modal: modalAudios.length,
-    player: playerAudios.length,
-    timestamp: new Date().toISOString(),
+  // ✅ 真正的 player audio 應該在 PlayerContext 中，有特定標識或沒有其他標識
+  // 檢查是否在 PlayerProvider 內部（通過父元素判斷）或沒有其他標識
+  const allPlayerAudios = Array.from(document.querySelectorAll("audio")).filter(audio => {
+    // 排除 preview 和 modal
+    if (audio.hasAttribute("data-music-preview") || 
+        audio.hasAttribute("data-preview-audio") || 
+        audio.hasAttribute("data-music-full-player")) {
+      return false;
+    }
+    // 檢查是否在 PlayerProvider 內部（通過檢查父元素是否有特定標識）
+    // 或者檢查是否在隱藏的 audio 元素（PlayerContext 的 audio 是隱藏的）
+    const isHidden = audio.style.display === "none" || 
+                     window.getComputedStyle(audio).display === "none";
+    // PlayerContext 的 audio 通常是隱藏的
+    return isHidden;
   });
   
-  // ⚠️ 如果 audio 元素過多，發出警告
-  if (allAudios.length > 20) {
-    console.warn(`⚠️ [Audio Monitor] 檢測到過多 audio 元素 (${allAudios.length} 個)！可能存在內存泄漏。`);
+  const now = Date.now();
+  const shouldWarn = allAudios.length > 20 && (now - lastWarningTime > WARNING_COOLDOWN);
+  
+  // 只在需要時輸出詳細日誌，或強制輸出
+  if (forceLog || shouldWarn || allAudios.length > 30) {
+    console.log(`🔍 [Audio Monitor] ${context}`, {
+      total: allAudios.length,
+      preview: previewAudios.length,
+      modal: modalAudios.length,
+      player: allPlayerAudios.length,
+      // 🔍 額外信息：顯示未分類的 audio 數量
+      unclassified: allAudios.length - previewAudios.length - modalAudios.length - allPlayerAudios.length,
+      timestamp: new Date().toISOString(),
+    });
+  }
+  
+  // ⚠️ 如果 audio 元素過多，發出警告（帶冷卻時間）
+  if (shouldWarn) {
+    lastWarningTime = now;
+    console.warn(`⚠️ [Audio Monitor] 檢測到過多 audio 元素 (${allAudios.length} 個)！可能存在內存泄漏。`, {
+      preview: previewAudios.length,
+      modal: modalAudios.length,
+      player: allPlayerAudios.length,
+      unclassified: allAudios.length - previewAudios.length - modalAudios.length - allPlayerAudios.length,
+    });
   }
   
   return {
     total: allAudios.length,
     preview: previewAudios.length,
     modal: modalAudios.length,
-    player: playerAudios.length,
+    player: allPlayerAudios.length,
+    unclassified: allAudios.length - previewAudios.length - modalAudios.length - allPlayerAudios.length,
   };
 };
 
@@ -56,6 +90,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   const timeUpdateHandlerRef = useRef(null);
   const isStartingRef = useRef(false);
   const isPlayingRef = useRef(false);
+  const previewSwitchTimerRef = useRef(null); // ✅ 用於清理 setTimeout
 
   const detachTimeUpdate = () => {
     const audio = audioRef.current;
@@ -68,8 +103,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   const stopPreview = ({ restore = true } = {}) => {
     const audio = audioRef.current;
 
-    // 🔍 停止預覽時記錄 audio 數量
-    logAudioElementCount(`停止預覽 [${music?._id?.substring(0, 8) || 'unknown'}]`);
+    // ❌ 移除停止預覽時的日誌（太多）
 
     detachTimeUpdate();
 
@@ -180,7 +214,14 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     }
 
     return new Promise((resolve, reject) => {
+      // ✅ 添加超時機制，防止 Promise 永遠掛起
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error("等待音頻就緒超時"));
+      }, 10000); // 10 秒超時
+
       const cleanup = () => {
+        clearTimeout(timeoutId); // ✅ 清理超時 timer
         audio.removeEventListener("canplaythrough", handleReady);
         audio.removeEventListener("loadedmetadata", handleReady);
         audio.removeEventListener("error", handleError);
@@ -195,6 +236,13 @@ const MusicPreview = ({ music, className = "", onClick }) => {
         cleanup();
         reject(event);
       };
+
+      // ✅ 檢查音頻元素是否仍然有效
+      if (!audio || !audioRef.current || audio !== audioRef.current) {
+        cleanup();
+        reject(new Error("音頻元素已被替換"));
+        return;
+      }
 
       audio.addEventListener("canplaythrough", handleReady, { once: true });
       audio.addEventListener("loadedmetadata", handleReady, { once: true });
@@ -226,8 +274,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       return;
     }
 
-    // 🔍 開始預覽時記錄 audio 數量
-    logAudioElementCount(`開始預覽 [${music?._id?.substring(0, 8) || 'unknown'}]`);
+    // ❌ 移除開始預覽時的日誌（太多）
 
     if (isPlayingRef.current || isPlaying) {
       stopPreview({ restore: false });
@@ -241,6 +288,15 @@ const MusicPreview = ({ music, className = "", onClick }) => {
         await waitForReadyState(audio);
       } catch (error) {
         console.warn("🎵 [Preview] waitForReadyState 發生錯誤", error);
+        // ✅ 確保清理狀態，避免 isStartingRef 永遠為 true
+        isStartingRef.current = false;
+        return;
+      }
+
+      // ✅ 再次檢查音頻元素是否仍然有效
+      if (!audioRef.current || audioRef.current !== audio) {
+        isStartingRef.current = false;
+        return;
       }
 
       const effectiveDuration =
@@ -304,25 +360,16 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     checkMobile();
     window.addEventListener("resize", checkMobile);
     
-    // 🔍 定期監控 audio 元素數量（每 5 秒檢查一次）
-    const monitorInterval = setInterval(() => {
-      logAudioElementCount(`定期檢查 [${music?._id?.substring(0, 8) || 'unknown'}]`);
-    }, 5000);
+    // ❌ 移除定期檢查，改為全局單例監控（避免每個組件都創建 interval）
+    // 定期監控改為在關鍵操作時觸發
     
     return () => {
       window.removeEventListener("resize", checkMobile);
-      clearInterval(monitorInterval);
     };
-  }, [music?._id]);
+  }, []);
 
   useEffect(() => {
-    // 🔍 組件掛載時記錄 audio 數量
-    logAudioElementCount(`MusicPreview 掛載 [${music?._id?.substring(0, 8) || 'unknown'}]`);
-    
     return () => {
-      // 🔍 組件卸載前記錄 audio 數量
-      logAudioElementCount(`MusicPreview 卸載前 [${music?._id?.substring(0, 8) || 'unknown'}]`);
-      
       stopPreview({ restore: false });
       
       // ✅ 組件卸載時清理 src，釋放內存
@@ -337,18 +384,22 @@ const MusicPreview = ({ music, className = "", onClick }) => {
         }
       }
       
-      // 🔍 組件卸載後記錄 audio 數量
-      setTimeout(() => {
-        logAudioElementCount(`MusicPreview 卸載後 [${music?._id?.substring(0, 8) || 'unknown'}]`);
-      }, 100);
+      // ❌ 移除卸載後的日誌（太多，只在真正異常時才需要檢查）
     };
   }, [music?._id]);
 
   // 監聽全局預覽切換事件，檢查自己的音頻狀態並更新
   useEffect(() => {
     const handlePreviewSwitch = () => {
-      // 使用 setTimeout 確保在停止其他預覽的操作完成後再檢查
-      setTimeout(() => {
+      // ✅ 清理之前的 timer
+      if (previewSwitchTimerRef.current) {
+        clearTimeout(previewSwitchTimerRef.current);
+        previewSwitchTimerRef.current = null;
+      }
+      
+      // ✅ 保存 timer ID 以便清理
+      previewSwitchTimerRef.current = setTimeout(() => {
+        previewSwitchTimerRef.current = null; // 執行後清空
         const audio = audioRef.current;
         // 檢查音頻是否已被停止（沒有 data-music-preview 屬性或已暫停）
         if (audio && (audio.paused || !audio.hasAttribute("data-music-preview"))) {
@@ -372,9 +423,14 @@ const MusicPreview = ({ music, className = "", onClick }) => {
 
     window.addEventListener("music-preview-switched", handlePreviewSwitch);
     return () => {
+      // ✅ 清理 timer
+      if (previewSwitchTimerRef.current) {
+        clearTimeout(previewSwitchTimerRef.current);
+        previewSwitchTimerRef.current = null;
+      }
       window.removeEventListener("music-preview-switched", handlePreviewSwitch);
     };
-  }, [isPlaying]);
+  }, []); // ✅ 移除 isPlaying 依賴，避免無限循環
 
   // ✅ 監聽播放器播放狀態變化，記錄播放/暫停
   useEffect(() => {
@@ -441,8 +497,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   
   // 當 music 變化時，重置顯示時長並停止當前播放
   useEffect(() => {
-    // 🔍 music 變化時記錄 audio 數量
-    logAudioElementCount(`music 變化 [${music?._id?.substring(0, 8) || 'unknown'}]`);
+    // ❌ 移除 music 變化時的日誌（太多，只在真正異常時才需要檢查）
     
     setDisplayDuration(music.duration || 0);
     
@@ -819,6 +874,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
         ref={audioRef} 
         src={music.musicUrl} 
         preload="none"
+        data-preview-audio="true"
       />
 
       {/* 播放按鈕覆蓋層（在中間區域，z-index 高於符號） */}
