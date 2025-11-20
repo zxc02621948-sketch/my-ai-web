@@ -497,35 +497,45 @@ export default function UserPlayerPage() {
                 <div className="flex items-start justify-center mb-4">
                   <div className="w-full flex flex-col items-center">
                     {playlist.length > 0 ? (
-                      <div className="space-y-1 flex flex-col items-center">
-                        <div className="text-xs text-gray-400">
-                          目前曲目：<span className="text-white font-medium">{playlist.length}</span> 首
+                      <div className="space-y-3 flex flex-col items-center w-full">
+                        <div className="space-y-1 flex flex-col items-center">
+                          <div className="text-xs text-gray-400">
+                            目前曲目：<span className="text-white font-medium">{playlist.length}</span> 首
+                          </div>
+                          <div className="text-xs text-gray-400 flex items-center gap-2">
+                            <span>目前播放：<span className="text-white font-medium">{playlist[activeIndex]?.title || "未知曲目"}</span></span>
+                            {player.originUrl && (
+                              <span className="px-2 py-0.5 bg-gray-700/50 rounded text-gray-300 text-[10px]">
+                                {(() => {
+                                  // 簡化來源顯示
+                                  const url = player.originUrl || "";
+                                  // 判斷是否為音樂區的公開音樂（R2 URL 或包含音樂 ID）
+                                  if (url.includes("imagedelivery.net") || url.includes("pub-") || url.includes("/api/music/")) {
+                                    return "音樂區";
+                                  }
+                                  // 判斷是否為本地上傳的 MP3（包含 /music/ 路徑或 .mp3 後綴）
+                                  if (url.includes("/music/") && !url.includes("imagedelivery.net")) {
+                                    return "MP3";
+                                  }
+                                  // 如果是 .mp3 後綴但不在 /music/ 路徑下，也可能是 MP3
+                                  if (url.endsWith(".mp3") || url.includes(".mp3?")) {
+                                    return "MP3";
+                                  }
+                                  // 其他情況顯示簡化的狀態
+                                  return url ? "已載入" : "未設定";
+                                })()}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-400 flex items-center gap-2">
-                          <span>目前播放：<span className="text-white font-medium">{playlist[activeIndex]?.title || "未知曲目"}</span></span>
-                          {player.originUrl && (
-                            <span className="px-2 py-0.5 bg-gray-700/50 rounded text-gray-300 text-[10px]">
-                              {(() => {
-                                // 簡化來源顯示
-                                const url = player.originUrl || "";
-                                // 判斷是否為音樂區的公開音樂（R2 URL 或包含音樂 ID）
-                                if (url.includes("imagedelivery.net") || url.includes("pub-") || url.includes("/api/music/")) {
-                                  return "音樂區";
-                                }
-                                // 判斷是否為本地上傳的 MP3（包含 /music/ 路徑或 .mp3 後綴）
-                                if (url.includes("/music/") && !url.includes("imagedelivery.net")) {
-                                  return "MP3";
-                                }
-                                // 如果是 .mp3 後綴但不在 /music/ 路徑下，也可能是 MP3
-                                if (url.endsWith(".mp3") || url.includes(".mp3?")) {
-                                  return "MP3";
-                                }
-                                // 其他情況顯示簡化的狀態
-                                return url ? "已載入" : "未設定";
-                              })()}
-                            </span>
-                          )}
-                        </div>
+                        <button
+                          onClick={() => {
+                            setModalOpen(true);
+                          }}
+                          className="w-full px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold text-base transition-all duration-300 shadow-xl border-2 border-blue-400"
+                        >
+                          🎵 編輯播放清單 🎵
+                        </button>
                       </div>
                     ) : (
                       <div className="space-y-3">

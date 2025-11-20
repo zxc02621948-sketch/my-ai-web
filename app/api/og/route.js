@@ -13,8 +13,9 @@ export async function GET() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background:
-            "radial-gradient(circle at 25% 25%, rgba(99, 102, 241, 0.5), transparent 45%), radial-gradient(circle at 75% 35%, rgba(14, 165, 233, 0.4), transparent 55%), #06060a",
+          backgroundColor: "#06060a",
+          backgroundImage:
+            "radial-gradient(circle at 25% 25%, rgba(99, 102, 241, 0.5), transparent 45%), radial-gradient(circle at 75% 35%, rgba(14, 165, 233, 0.4), transparent 55%)",
           color: "#ffffff",
           textAlign: "center",
         }}
