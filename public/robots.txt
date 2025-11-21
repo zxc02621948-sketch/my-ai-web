@@ -24,7 +24,6 @@ Disallow: /store
 Disallow: /user/*/player
 
 # 禁止索引測試和開發相關
-Disallow: /test-exposure
 Disallow: /dev/
 
 # Sitemap 位置
