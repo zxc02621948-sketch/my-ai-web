@@ -57,7 +57,7 @@ export default function UploadVideoModal({
       const pendingMessage = sessionStorage.getItem(SUCCESS_TOAST_STORAGE_KEY);
       if (pendingMessage) {
         sessionStorage.removeItem(SUCCESS_TOAST_STORAGE_KEY);
-        toast.success(pendingMessage);
+        toast.success(pendingMessage, { duration: 6000 });
       }
     } catch (error) {
       console.warn('讀取上傳成功提示失敗:', error);
@@ -410,7 +410,7 @@ export default function UploadVideoModal({
       }
 
       if (!storedMessage) {
-        toast.success(successMessage);
+        toast.success(successMessage, { duration: 6000 });
       }
 
       handleClose();

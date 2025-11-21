@@ -290,30 +290,201 @@ export async function GET(req) {
           ],
         },
         // 計算有效的「上架時間」（權力券會重置這個時間）
+        // 只有在權力券未過期時才使用權力券時間
         effectiveCreatedAt: {
           $cond: [
             {
               $and: [
-                { $eq: ["$powerUsed", true] },
-                { $ne: [{ $ifNull: ["$powerUsedAt", null] }, null] }
+                { $eq: [{ $ifNull: ["$powerUsed", false] }, true] },
+                { $ne: [{ $ifNull: ["$powerUsedAt", null] }, null] },
+                { $ne: [{ $ifNull: ["$powerExpiry", null] }, null] },
+                { $gt: [{ $ifNull: ["$powerExpiry", null] }, "$$NOW"] }  // 權力券未過期
               ]
             },
-            "$powerUsedAt",  // 使用過權力券：用權力券時間作為新的上架時間
-            "$createdAt"     // 沒用過：用真實上架時間
+            "$powerUsedAt",  // 使用過權力券且未過期：用權力券時間作為新的上架時間
+            "$createdAt"     // 沒用過或已過期：用真實上架時間
           ]
         },
         // 統一計算加成（只有一套邏輯）
-        hoursElapsed: { $divide: [{ $subtract: ["$$NOW", "$effectiveCreatedAt"] }, 1000 * 60 * 60] },
-        boostFactor: { $max: [0, { $subtract: [1, { $divide: ["$hoursElapsed", POP_NEW_WINDOW_HOURS] }] } ] },
-        finalBoost: { $round: [{ $multiply: [{ $ifNull: ["$initialBoost", 0] }, "$boostFactor"] }, 1] },
+        // 直接在 $subtract 中計算 effectiveCreatedAt，避免引用問題
+        // 只有在權力券未過期時才使用權力券時間
+        hoursElapsed: { 
+          $divide: [
+            { 
+              $subtract: [
+                "$$NOW", 
+                {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: [{ $ifNull: ["$powerUsed", false] }, true] },
+                        { $ne: [{ $ifNull: ["$powerUsedAt", null] }, null] },
+                        { $ne: [{ $ifNull: ["$powerExpiry", null] }, null] },
+                        { $gt: [{ $ifNull: ["$powerExpiry", null] }, "$$NOW"] }  // 權力券未過期
+                      ]
+                    },
+                    "$powerUsedAt",
+                    "$createdAt"
+                  ]
+                }
+              ] 
+            }, 
+            1000 * 60 * 60
+          ] 
+        },
+        boostFactor: { 
+          $max: [
+            0, 
+            { 
+              $subtract: [
+                1, 
+                { 
+                  $divide: [
+                    { 
+                      $divide: [
+                        { 
+                          $subtract: [
+                            "$$NOW", 
+                            {
+                              $cond: [
+                                {
+                                  $and: [
+                                    { $eq: [{ $ifNull: ["$powerUsed", false] }, true] },
+                                    { $ne: [{ $ifNull: ["$powerUsedAt", null] }, null] },
+                                    { $ne: [{ $ifNull: ["$powerExpiry", null] }, null] },
+                                    { $gt: [{ $ifNull: ["$powerExpiry", null] }, "$$NOW"] }  // 權力券未過期
+                                  ]
+                                },
+                                "$powerUsedAt",
+                                "$createdAt"
+                              ]
+                            }
+                          ] 
+                        }, 
+                        1000 * 60 * 60
+                      ] 
+                    }, 
+                    POP_NEW_WINDOW_HOURS
+                  ] 
+                }
+              ] 
+            }
+          ] 
+        },
+        finalBoost: { 
+          $round: [
+            { 
+              $multiply: [
+                { $ifNull: ["$initialBoost", 0] }, 
+                { 
+                  $max: [
+                    0, 
+                    { 
+                      $subtract: [
+                        1, 
+                        { 
+                          $divide: [
+                            { 
+                              $divide: [
+                                { 
+                                  $subtract: [
+                                    "$$NOW", 
+                                    {
+                                      $cond: [
+                                        {
+                                          $and: [
+                                            { $eq: [{ $ifNull: ["$powerUsed", false] }, true] },
+                                            { $ne: [{ $ifNull: ["$powerUsedAt", null] }, null] },
+                                            { $ne: [{ $ifNull: ["$powerExpiry", null] }, null] },
+                                            { $gt: [{ $ifNull: ["$powerExpiry", null] }, "$$NOW"] }  // 權力券未過期
+                                          ]
+                                        },
+                                        "$powerUsedAt",
+                                        "$createdAt"
+                                      ]
+                                    }
+                                  ] 
+                                }, 
+                                1000 * 60 * 60
+                              ] 
+                            }, 
+                            POP_NEW_WINDOW_HOURS
+                          ] 
+                        }
+                      ] 
+                    }
+                  ] 
+                }
+              ] 
+            }, 
+            1
+          ] 
+        },
         baseScore: {
           $add: [
             { $multiply: [{ $ifNull: ["$clicks", 0] }, POP_W_CLICK] },
-            { $multiply: ["$likesCountCalc", POP_W_LIKE] },
+            { $multiply: [{ $ifNull: ["$likesCountCalc", 0] }, POP_W_LIKE] },
             { $multiply: [{ $ifNull: ["$completenessScore", 0] }, POP_W_COMPLETE] },
           ],
         },
-        livePopScore: { $add: ["$baseScore", "$finalBoost"] },
+        livePopScore: { 
+          $add: [
+            {
+              $add: [
+                { $multiply: [{ $ifNull: ["$clicks", 0] }, POP_W_CLICK] },
+                { $multiply: [{ $ifNull: ["$likesCountCalc", 0] }, POP_W_LIKE] },
+                { $multiply: [{ $ifNull: ["$completenessScore", 0] }, POP_W_COMPLETE] },
+              ]
+            },
+            {
+              $round: [
+                { 
+                  $multiply: [
+                    { $ifNull: ["$initialBoost", 0] }, 
+                    { 
+                      $max: [
+                        0, 
+                        { 
+                          $subtract: [
+                            1, 
+                            { 
+                              $divide: [
+                                { 
+                                  $divide: [
+                                    { 
+                                      $subtract: [
+                                        "$$NOW", 
+                                        {
+                                          $cond: [
+                                            {
+                                              $and: [
+                                                { $eq: ["$powerUsed", true] },
+                                                { $ne: [{ $ifNull: ["$powerUsedAt", null] }, null] }
+                                              ]
+                                            },
+                                            "$powerUsedAt",
+                                            "$createdAt"
+                                          ]
+                                        }
+                                      ] 
+                                    }, 
+                                    1000 * 60 * 60
+                                  ] 
+                                }, 
+                                POP_NEW_WINDOW_HOURS
+                              ] 
+                            }
+                          ] 
+                        }
+                      ] 
+                    }
+                  ] 
+                }, 
+                1
+              ]
+            }
+          ] 
+        },
         popScoreDB: { $ifNull: ["$popScore", 0] },
       },
     };

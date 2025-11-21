@@ -243,6 +243,36 @@ const MusicPage = () => {
   // 播放器邏輯（參考首頁）
   usePinnedPlayerBootstrap({ player, currentUser, shareMode: "global" });
 
+  // 監聽查詢參數中的 id，如果存在則打開音樂彈窗
+  useEffect(() => {
+    const musicId = searchParams.get("id");
+    if (musicId && !showMusicModal) {
+      // 嘗試從當前音樂列表中查找
+      const foundMusic = music.find((m) => String(m._id) === String(musicId));
+      if (foundMusic) {
+        setSelectedMusic(foundMusic);
+        setShowMusicModal(true);
+        // 清除查詢參數，避免刷新後再次打開
+        router.replace("/music", { scroll: false });
+      } else {
+        // 如果列表中沒有，從 API 獲取
+        fetch(`/api/music/${musicId}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data && data._id) {
+              setSelectedMusic(data);
+              setShowMusicModal(true);
+              // 清除查詢參數
+              router.replace("/music", { scroll: false });
+            }
+          })
+          .catch((err) => {
+            console.error("獲取音樂失敗:", err);
+          });
+      }
+    }
+  }, [searchParams, music, showMusicModal, router]);
+
   return (
     <div className="min-h-screen bg-zinc-950 -mt-2 md:-mt-16">
       {/* 頁面標題 */}

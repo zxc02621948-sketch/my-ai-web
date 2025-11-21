@@ -23,7 +23,7 @@ export default function PowerCouponModal({ isOpen, onClose, userData }) {
         setCoupons(res.data.coupons || []);
       }
     } catch (error) {
-      console.error('載入權力券失敗:', error);
+      console.error('載入加成券失敗:', error);
     } finally {
       setLoading(false);
     }
@@ -40,13 +40,13 @@ export default function PowerCouponModal({ isOpen, onClose, userData }) {
       });
       
       if (res?.data?.success) {
-        notify.success("成功", "權力券使用成功！");
-        loadCoupons(); // 重新載入權力券
+        notify.success("成功", "加成券使用成功！");
+        loadCoupons(); // 重新載入加成券
       } else {
         notify.error("使用失敗", res?.data?.message || "請稍後再試");
       }
     } catch (error) {
-      console.error('使用權力券失敗:', error);
+      console.error('使用加成券失敗:', error);
       notify.error("使用失敗", "請稍後再試");
     } finally {
       setUsingCoupon(null);
@@ -59,7 +59,7 @@ export default function PowerCouponModal({ isOpen, onClose, userData }) {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-zinc-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-white">我的權力券</h2>
+          <h2 className="text-xl font-bold text-white">我的加成券</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white text-2xl"
@@ -71,7 +71,7 @@ export default function PowerCouponModal({ isOpen, onClose, userData }) {
         {loading ? (
           <p className="text-gray-400">載入中...</p>
         ) : coupons.length === 0 ? (
-          <p className="text-gray-400">尚無權力券</p>
+          <p className="text-gray-400">尚無加成券</p>
         ) : (
           <div className="space-y-4">
             {coupons.map((coupon) => (
@@ -98,7 +98,7 @@ export default function PowerCouponModal({ isOpen, onClose, userData }) {
                     </p>
                     <button
                       onClick={() => {
-                        const imageId = prompt('請輸入要使用權力券的圖片ID:');
+                        const imageId = prompt('請輸入要使用加成券的圖片ID:');
                         if (imageId) {
                           useCoupon(coupon._id, imageId);
                         }

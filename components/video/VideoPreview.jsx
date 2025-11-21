@@ -3,6 +3,7 @@
 import React, { useRef, useEffect, useState, useMemo, memo, useCallback } from 'react';
 import { Heart } from 'lucide-react';
 import NewBadge from '@/components/image/NewBadge';
+import FireEffect from '@/components/image/FireEffect';
 
 const VideoPreview = memo(({ 
   video, 
@@ -559,6 +560,14 @@ const VideoPreview = memo(({
         <div className="absolute left-2 top-2 z-20 pointer-events-none">
           <NewBadge animated />
         </div>
+      )}
+
+      {/* 加成券火焰效果（左下角） */}
+      {video?.powerUsed && video?.powerExpiry && new Date(video.powerExpiry) > new Date() && (
+        <FireEffect 
+          powerExpiry={video.powerExpiry}
+          powerType={video.powerType}
+        />
       )}
 
       {/* 預覽指示器 - 中間上方 */}

@@ -134,7 +134,11 @@ const userSchema = new mongoose.Schema(
       allowPersonalization: { type: Boolean, default: true },       // 允許個人化推薦
       allowProfileIndexing: { type: Boolean, default: true },       // 允許搜尋引擎索引個人頁面
     },
-    activePowerImages: [{ type: mongoose.Schema.Types.ObjectId, ref: "Image" }],
+    activePowerImages: [{ type: mongoose.Schema.Types.ObjectId, ref: "Image" }], // 保留向后兼容
+    activePowerItems: [{
+      contentId: { type: mongoose.Schema.Types.ObjectId, required: true },
+      contentType: { type: String, enum: ['image', 'video', 'music'], required: true }
+    }], // 通用内容权力券追踪
     lastPowerUse: { type: Date, default: null },
     
     // ✅ 訂閱狀態

@@ -13,7 +13,9 @@ const PowerCouponSchema = new mongoose.Schema(
     expiry: { type: Date, default: null }, // null for rare coupons (no expiry)
     used: { type: Boolean, default: false },
     usedAt: { type: Date, default: null },
-    usedOnImage: { type: mongoose.Schema.Types.ObjectId, ref: "Image", default: null },
+    usedOnImage: { type: mongoose.Schema.Types.ObjectId, ref: "Image", default: null }, // 保留向后兼容
+    usedOnContentId: { type: mongoose.Schema.Types.ObjectId, default: null }, // 通用内容ID
+    contentType: { type: String, enum: ['image', 'video', 'music'], default: null }, // 内容类型
     
     // 購買記錄
     purchasePrice: { type: Number, default: 0 },

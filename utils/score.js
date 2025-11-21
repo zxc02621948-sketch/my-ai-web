@@ -91,17 +91,51 @@ export function computeInitialBoostFromTop(topScore = 0) {
 }
 
 /**
- * 🆕 新圖加乘的「線性遞減」：
+ * 🆕 新作品加成的「線性遞減」：
  * - 只有新圖（有 initialBoost > 0）會吃到
  * - 係數 = max(0, 1 - 經過小時 / POP_NEW_WINDOW_HOURS)
  * - 超過時間窗即為 0
+ * - 如果使用了權力券，使用 powerUsedAt 作為起始時間
  */
 export function computeInitialBoostDecay(x = {}) {
   const base = toNum(x.initialBoost, 0);
   if (base <= 0) return 0; // 不是新圖（或沒種子）就沒有加乘
 
-  const createdMs = getCreatedMs(x);
-  const hours = Math.max(0, (Date.now() - createdMs) / 36e5);
+  // 如果使用了權力券，使用 powerUsedAt 作為起始時間
+  // 但需要檢查 powerExpiry 是否已過期
+  let startMs;
+  if (x.powerUsed && x.powerUsedAt) {
+    // 檢查 powerExpiry 是否已過期
+    let isExpired = false;
+    if (x.powerExpiry) {
+      const expiryTime = x.powerExpiry instanceof Date 
+        ? x.powerExpiry.getTime() 
+        : (typeof x.powerExpiry === "string" ? Date.parse(x.powerExpiry) : null);
+      if (expiryTime && Number.isFinite(expiryTime)) {
+        isExpired = Date.now() > expiryTime;
+      }
+    }
+    
+    // 如果未過期，使用 powerUsedAt；否則使用 createdAt
+    if (!isExpired) {
+      if (x.powerUsedAt instanceof Date) {
+        startMs = x.powerUsedAt.getTime();
+      } else if (typeof x.powerUsedAt === "string") {
+        const t = Date.parse(x.powerUsedAt);
+        startMs = Number.isFinite(t) ? t : getCreatedMs(x);
+      } else if (typeof x.powerUsedAt === "number" && Number.isFinite(x.powerUsedAt)) {
+        startMs = x.powerUsedAt;
+      } else {
+        startMs = getCreatedMs(x);
+      }
+    } else {
+      startMs = getCreatedMs(x);
+    }
+  } else {
+    startMs = getCreatedMs(x);
+  }
+
+  const hours = Math.max(0, (Date.now() - startMs) / 36e5);
 
   if (hours >= POP_NEW_WINDOW_HOURS) return 0;
 

@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Modal from "@/components/common/Modal";
 
 const TYPE_LABEL = {
-  upload: "上傳作品",
-  like_received: "獲得讚",
+  upload: "上傳圖片",
+  video_upload: "上傳影片",
+  music_upload: "上傳音樂",
+  like_received: "獲得愛心",
   like_given: "給予愛心",
   comment_received: "獲得留言",
   daily_login: "每日登入",
@@ -21,6 +23,8 @@ const TYPE_LABEL = {
 
 const TYPE_COLOR = {
   upload: "text-yellow-300",
+  video_upload: "text-orange-300",
+  music_upload: "text-purple-300",
   like_received: "text-pink-300",
   like_given: "text-red-300",
   comment_received: "text-green-300",
@@ -38,6 +42,7 @@ const TYPE_COLOR = {
 export default function PointsHistoryModal({ isOpen, onClose }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
 
   useEffect(() => {
     if (!isOpen) return;
@@ -57,43 +62,141 @@ export default function PointsHistoryModal({ isOpen, onClose }) {
     run();
   }, [isOpen]);
 
+  // 按日期和类型分组
+  const groupedRows = useMemo(() => {
+    const groups = new Map();
+    
+    rows.forEach((row) => {
+      // 使用 dateKey 和 type 作为分组键
+      const dateKey = row.dateKey || new Date(row.createdAt).toISOString().slice(0, 10);
+      const groupKey = `${dateKey}_${row.type}`;
+      
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          groupKey,
+          dateKey,
+          type: row.type,
+          rows: [],
+          totalPoints: 0,
+        });
+      }
+      
+      const group = groups.get(groupKey);
+      group.rows.push(row);
+      group.totalPoints += row.points;
+    });
+    
+    // 转换为数组并按日期倒序排序
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.dateKey !== b.dateKey) {
+        return b.dateKey.localeCompare(a.dateKey);
+      }
+      return b.rows[0].createdAt.localeCompare(a.rows[0].createdAt);
+    });
+  }, [rows]);
+
+  const toggleGroup = (groupKey) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  };
+
   if (!isOpen) return null;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="積分記錄">
-      {/* 積分規則說明 */}
-      <div className="mb-4 p-3 bg-blue-900/20 border border-blue-700/30 rounded-lg">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-blue-400 text-lg">💡</span>
-          <span className="text-blue-300 text-sm font-medium">積分規則</span>
-        </div>
-        <p className="text-gray-300 text-xs leading-relaxed">
-          給他人按讚可獲積分，自讚不計分，每日最多 5 分，同一圖片僅計一次
-        </p>
-      </div>
-      
       <div className="text-white pr-2">
         {loading ? (
           <p className="text-gray-400">載入中...</p>
-        ) : rows.length === 0 ? (
+        ) : groupedRows.length === 0 ? (
           <p className="text-gray-400">尚無積分記錄</p>
         ) : (
           <ul className="divide-y divide-zinc-700/50">
-            {rows.map((row) => {
-              const label = TYPE_LABEL[row.type] || row.type;
-              const color = TYPE_COLOR[row.type] || "text-gray-300";
-              const date = new Date(row.createdAt).toLocaleString();
-              // 消費類型（負數或零）顯示負號，收入類型（正數）顯示正號
-              const isExpense = row.points <= 0;
+            {groupedRows.map((group) => {
+              const label = TYPE_LABEL[group.type] || group.type;
+              const color = TYPE_COLOR[group.type] || "text-gray-300";
+              
+              // 格式化日期显示
+              const date = new Date(group.dateKey + "T00:00:00");
+              const dateStr = date.toLocaleDateString("zh-TW", { 
+                year: "numeric", 
+                month: "long", 
+                day: "numeric" 
+              });
+              
+              const isExpense = group.totalPoints <= 0;
               const sign = isExpense ? "-" : "+";
-              const displayPoints = isExpense ? Math.abs(row.points) : row.points;
+              const displayPoints = isExpense ? Math.abs(group.totalPoints) : group.totalPoints;
+              const isExpanded = expandedGroups.has(group.groupKey);
+              const canExpand = group.rows.length > 1;
+              
               return (
-                <li key={String(row._id)} className="py-2 flex items-center">
-                  <div className="flex flex-col flex-1 pr-6">
-                    <span className={`text-sm ${color}`}>{label}</span>
-                    <span className="text-xs text-gray-500">{date}</span>
+                <li key={group.groupKey}>
+                  {/* 合并项 */}
+                  <div 
+                    className={`py-2 flex items-center transition-colors ${canExpand ? "cursor-pointer hover:bg-zinc-800/70 rounded-lg px-2" : ""}`}
+                    onClick={() => canExpand && toggleGroup(group.groupKey)}
+                  >
+                    <div className="flex flex-col flex-1 pr-6">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-medium ${color}`}>{label}</span>
+                        {canExpand && (
+                          <>
+                            <span className="px-2 py-0.5 text-xs font-semibold bg-blue-900/40 text-blue-300 rounded-full border border-blue-600/50">
+                              {group.rows.length} 筆
+                            </span>
+                            <span className={`text-xs font-bold transition-colors ${
+                              isExpanded 
+                                ? "text-blue-300" 
+                                : "text-gray-400 hover:text-blue-300"
+                            }`}>
+                              {isExpanded ? "▼" : "►"}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-500">{dateStr}</span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="text-sm font-semibold text-yellow-400">
+                        {sign}{displayPoints}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-sm font-semibold text-yellow-400 flex-shrink-0">{sign}{displayPoints}</div>
+                  
+                  {/* 展开的详细记录 */}
+                  {isExpanded && canExpand && (
+                    <ul className="ml-4 border-l-2 border-zinc-700/50 pl-2 space-y-1">
+                      {group.rows.map((row) => {
+                        const rowDate = new Date(row.createdAt).toLocaleString("zh-TW", {
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        });
+                        const rowIsExpense = row.points <= 0;
+                        const rowSign = rowIsExpense ? "-" : "+";
+                        const rowDisplayPoints = rowIsExpense ? Math.abs(row.points) : row.points;
+                        return (
+                          <li key={String(row._id)} className="py-1 flex items-center">
+                            <div className="flex flex-col flex-1 pr-4">
+                              <span className={`text-xs ${color} opacity-75`}>{label}</span>
+                              <span className="text-xs text-gray-600">{rowDate}</span>
+                            </div>
+                            <div className="text-xs font-semibold text-yellow-400/75 flex-shrink-0">
+                              {rowSign}{rowDisplayPoints}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </li>
               );
             })}

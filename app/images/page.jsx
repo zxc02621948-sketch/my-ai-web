@@ -499,23 +499,51 @@ export default function ImagesPage() {
 
       {/* ✅ 畫廊/作品集標籤切換 */}
       <div className="max-w-6xl mx-auto mb-4 px-4">
-        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-0 justify-between w-full">
-          {/* 左側：模式切換標籤 - 靠左 */}
-          <div className="flex gap-3 shrink-0 self-start sm:self-center">
+        {/* 中間資訊區：放在最上方，寬度不足時自動換行 */}
+        <div className="flex items-center justify-center gap-4 sm:gap-6 text-xs text-gray-400 px-2 sm:px-8 py-2 mb-3">
+          <div className="flex items-center gap-3 sm:gap-4 flex-wrap justify-center text-center">
+            <a
+              href="/about"
+              className="hover:text-white transition text-sm font-medium text-blue-400 whitespace-nowrap"
+            >
+              我們的故事
+            </a>
+            <span className="text-gray-600 hidden sm:inline">•</span>
+            <span className="text-sm text-yellow-400 whitespace-nowrap">
+              版本 v0.8.0（2025-11-05）🎉
+            </span>
+            <a href="/changelog" className="text-sm underline hover:text-white whitespace-nowrap">
+              查看更新內容
+            </a>
+            <span className="text-gray-600 hidden sm:inline">•</span>
+            <a href="/privacy" className="hover:text-white transition whitespace-nowrap">
+              隱私政策
+            </a>
+            <span className="text-gray-600 hidden sm:inline">•</span>
+            <a href="/terms" className="hover:text-white transition whitespace-nowrap">
+              服務條款
+            </a>
+          </div>
+        </div>
+
+        {/* 第一行：左側按鈕 + 右側按鈕 */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:gap-3 justify-between w-full mb-3 sm:mb-0">
+          {/* 左側：模式切換標籤 */}
+          <div className="flex gap-3 shrink-0 w-full sm:w-auto justify-center sm:justify-start">
             <button
               onClick={() => setDisplayMode("gallery")}
-              className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+              className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-all duration-200 text-sm sm:text-base whitespace-nowrap ${
                 displayMode === "gallery"
                   ? "bg-white text-black shadow-md"
                   : "bg-zinc-800 text-gray-300 hover:bg-zinc-700"
               }`}
             >
               🎨 作品展示
-              <span className="text-xs ml-1.5 opacity-60">全部作品</span>
+              <span className="text-xs ml-1.5 opacity-60 hidden sm:inline">全部作品</span>
             </button>
             <button
               onClick={() => setDisplayMode("collection")}
-              className={`relative px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+              className={`relative px-3 sm:px-4 py-2 rounded-lg font-medium transition-all duration-200 text-sm sm:text-base whitespace-nowrap ${
                 displayMode === "collection"
                   ? "bg-white text-black shadow-md"
                   : "bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg"
@@ -523,7 +551,7 @@ export default function ImagesPage() {
             >
               <span className="flex items-center gap-1.5">
                 🔧 創作參考
-                <span className="text-xs opacity-75">可學習參數</span>
+                <span className="text-xs opacity-75 hidden md:inline">可學習參數</span>
               </span>
               {/* 閃爍提示徽章 */}
               {displayMode !== "collection" && (
@@ -535,47 +563,24 @@ export default function ImagesPage() {
             </button>
           </div>
 
-          {/* 中間：關於本站、版本資訊和法律連結（手機版隱藏）- 居中，有足夠空間 */}
-          <div className="hidden md:flex items-center justify-center gap-6 text-xs text-gray-400 flex-1 px-8 py-2 min-w-0">
-            <div className="flex items-center gap-4 flex-wrap justify-center">
-              <a
-                href="/about"
-                className="hover:text-white transition text-sm font-medium text-blue-400 whitespace-nowrap"
-              >
-                我們的故事
-              </a>
-              <span className="text-gray-600">•</span>
-              <span className="text-sm text-yellow-400 whitespace-nowrap">
-                版本 v0.8.0（2025-11-05）🎉
-              </span>
-              <a href="/changelog" className="text-sm underline hover:text-white whitespace-nowrap">
-                查看更新內容
-              </a>
-              <span className="text-gray-600">•</span>
-              <a href="/privacy" className="hover:text-white transition whitespace-nowrap">
-                隱私政策
-              </a>
-              <span className="text-gray-600">•</span>
-              <a href="/terms" className="hover:text-white transition whitespace-nowrap">
-                服務條款
-              </a>
+          {/* 右側：排序 + 前往創作 */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 w-full sm:w-auto justify-center sm:justify-end flex-wrap sm:flex-nowrap">
+            <div className="flex-shrink-0">
+              <SortSelect value={sort} onChange={setSort} />
             </div>
-          </div>
-
-          {/* 右側：排序 + 前往創作 - 靠右 */}
-          <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
-            <SortSelect value={sort} onChange={setSort} />
             <a
               href="/images/create"
-              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500/90 to-teal-500/90 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 hover:from-emerald-500 hover:to-teal-500 transition"
+              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500/90 to-teal-500/90 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 hover:from-emerald-500 hover:to-teal-500 transition whitespace-nowrap flex-shrink-0"
             >
               <span role="img" aria-label="前往創作圖片">
                 🧪
               </span>
-              前往創作圖片
+              <span className="hidden sm:inline">前往創作圖片</span>
+              <span className="sm:hidden">創作</span>
             </a>
           </div>
         </div>
+
 
         {/* ✅ 首次訪問引導橫幅（手機版隱藏） */}
         {showGuide && displayMode === "gallery" && !isMobile && (

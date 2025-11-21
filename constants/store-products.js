@@ -158,8 +158,8 @@ export const STORE_PRODUCTS = {
   special: [
     {
       id: "power-coupon-7day",
-      title: "新圖加乘權力券 (7天)",
-      description: "讓指定圖片重新獲得新圖加乘效果，券有效期7天，使用後效果持續10小時",
+      title: "新作品加成券 (7天)",
+      description: "讓指定作品重新獲得新作品加成效果，券有效期7天，使用後效果持續10小時。限購：3天內只能購買1次",
       icon: "🎫",
       price: 30,
       originalPrice: 50,
@@ -169,17 +169,18 @@ export const STORE_PRODUCTS = {
       type: "power-coupon",
       duration: 7,
       features: [
-        "重新獲得新圖加乘",
+        "重新獲得新作品加成",
         "券有效期7天",
         "效果持續10小時",
-        "針對特定圖片",
-        "限時優惠價格"
+        "針對特定作品",
+        "限時優惠價格",
+        "限購：3天內只能購買1次"
       ]
     },
     {
       id: "power-coupon-30day",
-      title: "新圖加乘權力券 (30天)",
-      description: "讓指定圖片重新獲得新圖加乘效果，券有效期30天，使用後效果持續10小時",
+      title: "新作品加成券 (30天)",
+      description: "讓指定作品重新獲得新作品加成效果，券有效期30天，使用後效果持續10小時。限購：7天內只能購買1次",
       icon: "🎫",
       price: 100,
       originalPrice: 150,
@@ -189,11 +190,12 @@ export const STORE_PRODUCTS = {
       type: "power-coupon",
       duration: 30,
       features: [
-        "重新獲得新圖加乘",
+        "重新獲得新作品加成",
         "券有效期30天",
         "效果持續10小時",
-        "針對特定圖片",
-        "長期投資優惠"
+        "針對特定作品",
+        "長期投資優惠",
+        "限購：7天內只能購買1次"
       ]
     }
   ],

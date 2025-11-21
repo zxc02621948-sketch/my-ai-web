@@ -1,11 +1,12 @@
-'use client';
+"use client";
 
-import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { X, Heart } from 'lucide-react';
-import DesktopVideoRightPane from './DesktopVideoRightPane';
-import { usePortalContainer } from '@/components/common/usePortal';
-import MobileVideoSheet from './MobileVideoSheet';
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { X, Heart } from "lucide-react";
+import DesktopVideoRightPane from "./DesktopVideoRightPane";
+import { usePortalContainer } from "@/components/common/usePortal";
+import MobileVideoSheet from "./MobileVideoSheet";
+import { useFollowState } from "@/hooks/useFollowState";
 
 const VideoModal = ({ 
   video, 
@@ -23,6 +24,7 @@ const VideoModal = ({
 }) => {
   const modalRef = useRef(null);
   const videoRef = useRef(null);
+  const [videoState, setVideoState] = useState(video);
   const [isLikedLocal, setIsLikedLocal] = useState(isLiked);
   const [likeCount, setLikeCount] = useState(video?.likes?.length || 0);
   const viewedRef = useRef(new Set());
@@ -37,13 +39,43 @@ const VideoModal = ({
     active: false,
   });
 
+  // 當 props 的 video 改變時，更新內部 state
+  useEffect(() => {
+    setVideoState(video);
+  }, [video]);
+
   useEffect(() => {
     setIsLikedLocal(isLiked);
   }, [isLiked]);
 
   useEffect(() => {
-    setLikeCount(video?.likes?.length || 0);
-  }, [video?.likes]);
+    setLikeCount(videoState?.likes?.length || 0);
+  }, [videoState?.likes]);
+
+  const ownerId = videoState?.author?._id || videoState?.author;
+
+  const externalIsFollowing =
+    typeof isFollowing === "boolean"
+      ? isFollowing
+      : videoState?.author?.isFollowing;
+
+  const { authorFollowing, handleFollowToggle } = useFollowState({
+    ownerId,
+    currentUser,
+    externalIsFollowing,
+    onFollowToggle,
+    onLocalUpdate: (next) =>
+      setVideoState((prev) =>
+        prev
+          ? {
+              ...prev,
+              author: prev.author
+                ? { ...prev.author, isFollowing: next }
+                : prev.author,
+            }
+          : prev
+      ),
+  });
 
   useEffect(() => {
     const updateIsMobile = () => {
@@ -51,13 +83,13 @@ const VideoModal = ({
     };
 
     updateIsMobile();
-    window.addEventListener('resize', updateIsMobile);
-    return () => window.removeEventListener('resize', updateIsMobile);
+    window.addEventListener("resize", updateIsMobile);
+    return () => window.removeEventListener("resize", updateIsMobile);
   }, []);
 
-  // ✅ 記錄點擊（每次打開影片時調用一次）
+  // ✅ 記錄點擊（每次打開影片時調用一次），並更新本地 state
   useEffect(() => {
-    const videoId = video?._id;
+    const videoId = videoState?._id;
     if (!videoId) return;
 
     // 避免同一個影片在同一次開啟中被重複計分
@@ -67,12 +99,22 @@ const VideoModal = ({
     fetch(`/api/videos/${videoId}/click`, { method: "POST" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data?.ok) {
-          console.log('✅ 點擊已記錄:', data);
-        }
+        if (!data?.ok) return;
+        // 把 server 更新後的 clicks / likesCount / popScore 回寫到當前 video
+        setVideoState((prev) =>
+          prev && prev._id === videoId
+            ? {
+                ...prev,
+                clicks: data.clicks ?? prev.clicks,
+                views: data.views ?? prev.views,
+                likesCount: data.likesCount ?? prev.likesCount,
+                popScore: data.popScore ?? prev.popScore,
+              }
+            : prev
+        );
       })
       .catch(() => {});
-  }, [video?._id]);
+  }, [videoState?._id]);
 
   useEffect(() => {
     // 禁止背景滾動
@@ -107,7 +149,7 @@ const VideoModal = ({
     setLikeCount(prev => isLikedLocal ? prev - 1 : prev + 1);
 
     try {
-      await onToggleLike(video._id);
+      await onToggleLike(videoState._id);
     } catch (error) {
       // 如果失敗，回滾狀態
       setIsLikedLocal(isLikedLocal);
@@ -225,11 +267,11 @@ const VideoModal = ({
       >
         {isMobile ? (
           <MobileVideoSheet
-            video={video}
+            video={videoState}
             currentUser={currentUser}
             displayMode={displayMode}
-            isFollowing={isFollowing}
-            onFollowToggle={onFollowToggle}
+            isFollowing={authorFollowing}
+            onFollowToggle={handleFollowToggle}
             onUserClick={onUserClick}
             onClose={onClose}
             onDelete={onDelete}
@@ -242,36 +284,36 @@ const VideoModal = ({
         ) : (
           <div className="flex flex-row h-full">
             <div className="flex-1 relative bg-black flex items-center justify-center">
-              {video.streamId ? (
+              {videoState?.streamId ? (
                 <iframe
-                  src={`https://iframe.cloudflarestream.com/${video.streamId}?autoplay=true&loop=true`}
+                  src={`https://iframe.cloudflarestream.com/${videoState.streamId}?autoplay=true&loop=true`}
                   className="w-full h-full max-h-[70vh] border-0"
                   allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
                   allowFullScreen
                   onError={(e) => {
                     console.error('Stream 影片載入失敗:', e);
-                    console.log('Stream ID:', video.streamId);
-                    console.log('播放 URL:', video.videoUrl);
+                    console.log('Stream ID:', videoState?.streamId);
+                    console.log('播放 URL:', videoState?.videoUrl);
                   }}
                 />
               ) : (
                 <video
                   ref={videoRef}
-                  src={video.videoUrl}
+                  src={videoState?.videoUrl}
                   controls
                   autoPlay
                   loop
                   className="w-full h-full max-h-[70vh] object-contain"
                   onError={(e) => {
                     console.error('影片載入失敗:', e);
-                    console.log('影片 URL:', video.videoUrl);
-                    console.log('影片類型:', video.videoUrl?.includes('r2.dev') ? 'R2 影片' : '其他');
+                    console.log('影片 URL:', videoState?.videoUrl);
+                    console.log('影片類型:', videoState?.videoUrl?.includes('r2.dev') ? 'R2 影片' : '其他');
                   }}
                   onLoadStart={() => {
-                    console.log('開始載入影片:', video.videoUrl);
+                    console.log('開始載入影片:', videoState?.videoUrl);
                   }}
                   onCanPlay={() => {
-                    console.log('影片可以播放:', video.videoUrl);
+                    console.log('影片可以播放:', videoState?.videoUrl);
                   }}
                 />
               )}
@@ -301,11 +343,11 @@ const VideoModal = ({
             </div>
 
             <DesktopVideoRightPane
-              video={video}
+              video={videoState}
               currentUser={currentUser}
               displayMode={displayMode}
-              isFollowing={isFollowing}
-              onFollowToggle={onFollowToggle}
+              isFollowing={authorFollowing}
+              onFollowToggle={handleFollowToggle}
               onUserClick={onUserClick}
               onClose={onClose}
               onDelete={onDelete}

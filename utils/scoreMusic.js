@@ -81,8 +81,41 @@ export function computeMusicInitialBoostDecay(music = {}) {
   const base = toNum(music.initialBoost, 0);
   if (base <= 0) return 0;
 
-  const createdMs = getCreatedMs(music);
-  const hours = Math.max(0, (Date.now() - createdMs) / 36e5);
+  // 如果使用了權力券，使用 powerUsedAt 作為起始時間
+  // 但需要檢查 powerExpiry 是否已過期
+  let startMs;
+  if (music.powerUsed && music.powerUsedAt) {
+    // 檢查 powerExpiry 是否已過期
+    let isExpired = false;
+    if (music.powerExpiry) {
+      const expiryTime = music.powerExpiry instanceof Date 
+        ? music.powerExpiry.getTime() 
+        : (typeof music.powerExpiry === "string" ? Date.parse(music.powerExpiry) : null);
+      if (expiryTime && Number.isFinite(expiryTime)) {
+        isExpired = Date.now() > expiryTime;
+      }
+    }
+    
+    // 如果未過期，使用 powerUsedAt；否則使用 createdAt
+    if (!isExpired) {
+      if (music.powerUsedAt instanceof Date) {
+        startMs = music.powerUsedAt.getTime();
+      } else if (typeof music.powerUsedAt === "string") {
+        const t = Date.parse(music.powerUsedAt);
+        startMs = Number.isFinite(t) ? t : getCreatedMs(music);
+      } else if (typeof music.powerUsedAt === "number" && Number.isFinite(music.powerUsedAt)) {
+        startMs = music.powerUsedAt;
+      } else {
+        startMs = getCreatedMs(music);
+      }
+    } else {
+      startMs = getCreatedMs(music);
+    }
+  } else {
+    startMs = getCreatedMs(music);
+  }
+
+  const hours = Math.max(0, (Date.now() - startMs) / 36e5);
 
   if (hours >= MUSIC_POP_NEW_WINDOW_HOURS) return 0;
 

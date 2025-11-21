@@ -130,13 +130,12 @@ export default function DesktopMusicRightPane({
                   <button
                     onClick={handleFollowToggleInternal}
                     disabled={followLoading}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                      following
-                        ? "bg-zinc-700 hover:bg-zinc-600 text-white"
-                        : "bg-blue-600 hover:bg-blue-700 text-white"
-                    } ${followLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                    className={`px-3 py-1.5 rounded-md text-sm text-white ${
+                      following ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+                    } disabled:opacity-50 ${followLoading ? "pointer-events-none" : ""}`}
+                    title={following ? "取消追蹤" : "追蹤作者"}
                   >
-                    {followLoading ? "..." : following ? "已追蹤" : "追蹤"}
+                    {followLoading ? "..." : following ? "取消追蹤" : "追蹤作者"}
                   </button>
                 )}
             </div>

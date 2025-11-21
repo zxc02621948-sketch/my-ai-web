@@ -193,7 +193,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
     fetchUserStats();
   }, [userData?._id]);
 
-  // ====== 獲取權力券數量（僅自己的個人頁） ======
+      // ====== 獲取加成券數量（僅自己的個人頁） ======
   useEffect(() => {
     const fetchCouponCount = async () => {
       if (!isOwnProfile) return;
@@ -207,7 +207,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
           setCouponCount(activeCoupons.length);
         }
       } catch (error) {
-        console.error('獲取權力券數量失敗:', error);
+        console.error('獲取加成券數量失敗:', error);
       }
     };
 
@@ -642,7 +642,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
             </div>
 
             {/* 快速操作和積分獲得方式 - 手機版簡化 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div>
               {/* 快速操作（僅自己可見）- 手機版隱藏次要功能 */}
               {isOwnProfile && (
                 <div>
@@ -671,8 +671,8 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                       }`}
                       title={couponCount === 0 ? '點擊查看說明並購買' : `你有 ${couponCount} 張可用券，點擊查看使用方法`}
                     >
-                      <span className="hidden sm:inline">🎫 新圖加乘券</span>
-                      <span className="sm:hidden">🎫 加乘券</span>
+                      <span className="hidden sm:inline">🎫 新作品加成券</span>
+                      <span className="sm:hidden">🎫 加成券</span>
                       {couponCount > 0 && (
                         <span className="ml-1 bg-yellow-500 text-black text-xs px-1.5 py-0.5 rounded-full font-bold">
                           {couponCount}
@@ -682,25 +682,44 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                         <span className="ml-1 text-xs opacity-75 hidden sm:inline">(無券)</span>
                       )}
                     </button>
-                    <button
-                      onClick={() => setClaimModalOpen(true)}
-                      className="relative bg-gradient-to-r from-yellow-600 to-green-600 hover:from-yellow-500 hover:to-green-500 text-white py-2 px-3 rounded-lg font-medium transition-all duration-200 text-xs sm:text-sm"
-                      title="提領討論區收益"
-                    >
-                      <span className="hidden sm:inline">💰 積分提領</span>
-                      <span className="sm:hidden">💰 提領</span>
-                      {(userData?.discussionPendingPoints || 0) >= 5 && (
-                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
-                          {userData.discussionPendingPoints > 99 ? '99+' : userData.discussionPendingPoints}
-                        </span>
-                      )}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setClaimModalOpen(true)}
+                        className="relative flex-1 bg-gradient-to-r from-yellow-600 to-green-600 hover:from-yellow-500 hover:to-green-500 text-white py-2 px-3 rounded-lg font-medium transition-all duration-200 text-xs sm:text-sm"
+                        title="提領討論區收益"
+                      >
+                        <span className="hidden sm:inline">💰 積分提領</span>
+                        <span className="sm:hidden">💰 提領</span>
+                        {(userData?.discussionPendingPoints || 0) >= 5 && (
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                            {userData.discussionPendingPoints > 99 ? '99+' : userData.discussionPendingPoints}
+                          </span>
+                        )}
+                      </button>
+                      {/* 積分獲得方式 - 改為按鈕 */}
+                      <button
+                        onClick={() => setPointsEarningModalOpen(true)}
+                        className="flex-1 py-2 px-3 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 hover:from-yellow-600/30 hover:to-orange-600/30 border border-yellow-500/50 rounded-lg text-gray-200 text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 hover:scale-105"
+                      >
+                        <span className="text-lg">💰</span>
+                        <span className="hidden sm:inline">獲得積分</span>
+                        <span className="sm:hidden">獲得</span>
+                        <svg 
+                          className="w-4 h-4"
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
-
-              {/* 積分獲得方式 - 改為按鈕 */}
-              <div>
+              
+              {/* 如果不是自己的页面，只显示获得积分按钮 */}
+              {!isOwnProfile && (
                 <button
                   onClick={() => setPointsEarningModalOpen(true)}
                   className="w-full py-2 px-3 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 hover:from-yellow-600/30 hover:to-orange-600/30 border border-yellow-500/50 rounded-lg text-gray-200 text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 hover:scale-105"
@@ -716,7 +735,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -724,7 +743,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       {/* 積分商店彈窗 */}
       <PointsStoreModal isOpen={isStoreOpen} onClose={() => setStoreOpen(false)} userData={userData} />
       
-      {/* 權力券說明彈窗 */}
+      {/* 加成券說明彈窗 */}
       <PowerCouponGuideModal 
         isOpen={isCouponGuideOpen} 
         onClose={() => setIsCouponGuideOpen(false)} 

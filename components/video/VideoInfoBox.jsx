@@ -2,6 +2,7 @@ import { useRef, useState, useMemo } from "react";
 import { X, Trash2, Download, Clipboard, AlertTriangle, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import PowerCouponButton from "@/components/power-coupon/PowerCouponButton";
 
 export default function VideoInfoBox({ 
   video, 
@@ -83,6 +84,18 @@ export default function VideoInfoBox({
         </div>
         
         <div className="flex items-center gap-2 ml-4">
+          {/* 加成券使用按鈕；僅作者可見 */}
+          {isOwner && (
+            <div onClick={(e) => e.stopPropagation()}>
+              <PowerCouponButton
+                contentType="video"
+                contentId={video._id}
+                contentTitle={video.title || "影片"}
+                onSuccess={() => window.location.reload()}
+              />
+            </div>
+          )}
+
           {/* 編輯按鈕 */}
           {canEditVideo && onEdit && (
             <button

@@ -62,8 +62,41 @@ export function computeVideoInitialBoostDecay(video = {}) {
   const base = toNum(video.initialBoost, 0);
   if (base <= 0) return 0;
 
-  const createdMs = getCreatedMs(video);
-  const hours = Math.max(0, (Date.now() - createdMs) / 36e5);
+  // 如果使用了權力券，使用 powerUsedAt 作為起始時間
+  // 但需要檢查 powerExpiry 是否已過期
+  let startMs;
+  if (video.powerUsed && video.powerUsedAt) {
+    // 檢查 powerExpiry 是否已過期
+    let isExpired = false;
+    if (video.powerExpiry) {
+      const expiryTime = video.powerExpiry instanceof Date 
+        ? video.powerExpiry.getTime() 
+        : (typeof video.powerExpiry === "string" ? Date.parse(video.powerExpiry) : null);
+      if (expiryTime && Number.isFinite(expiryTime)) {
+        isExpired = Date.now() > expiryTime;
+      }
+    }
+    
+    // 如果未過期，使用 powerUsedAt；否則使用 createdAt
+    if (!isExpired) {
+      if (video.powerUsedAt instanceof Date) {
+        startMs = video.powerUsedAt.getTime();
+      } else if (typeof video.powerUsedAt === "string") {
+        const t = Date.parse(video.powerUsedAt);
+        startMs = Number.isFinite(t) ? t : getCreatedMs(video);
+      } else if (typeof video.powerUsedAt === "number" && Number.isFinite(video.powerUsedAt)) {
+        startMs = video.powerUsedAt;
+      } else {
+        startMs = getCreatedMs(video);
+      }
+    } else {
+      startMs = getCreatedMs(video);
+    }
+  } else {
+    startMs = getCreatedMs(video);
+  }
+
+  const hours = Math.max(0, (Date.now() - startMs) / 36e5);
   const WINDOW_HOURS = 10; // 10小時窗口
 
   if (hours >= WINDOW_HOURS) return 0;

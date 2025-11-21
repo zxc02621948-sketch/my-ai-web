@@ -156,6 +156,12 @@ const VideoSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+
+  // ✅ 權力券系統
+  powerUsed: { type: Boolean, default: false },
+  powerUsedAt: { type: Date, default: null },
+  powerExpiry: { type: Date, default: null },
+  powerType: { type: String, enum: ['7day', '30day', 'rare'], default: null },
   
   uploadDate: {
     type: Date,

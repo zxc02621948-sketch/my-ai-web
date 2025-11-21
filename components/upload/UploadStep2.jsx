@@ -1085,7 +1085,7 @@ export default function UploadStep2({
       }
 
       if (!storedMessage) {
-        notify.success("上傳成功", successBody);
+        notify.success("上傳成功", successBody, { autoClose: true, autoCloseDelay: 6000 });
       }
 
       setStep(1);
@@ -1583,6 +1583,7 @@ export default function UploadStep2({
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {/* Steps */}
                 <div className="space-y-1">
+                  <label className="text-xs text-zinc-400">步數 (Steps)</label>
                   <input
                     className={`p-2 rounded w-full ${
                       validationErrors.steps 
@@ -1617,6 +1618,7 @@ export default function UploadStep2({
                 
                 {/* Sampler */}
                 <div className="space-y-1">
+                  <label className="text-xs text-zinc-400">採樣器 (Sampler)</label>
                   <input
                     className={`p-2 rounded w-full ${
                       validationErrors.sampler 
@@ -1649,6 +1651,7 @@ export default function UploadStep2({
                 
                 {/* CFG Scale */}
                 <div className="space-y-1">
+                  <label className="text-xs text-zinc-400">CFG 強度 (CFG Scale)</label>
                   <input
                     className={`p-2 rounded w-full ${
                       validationErrors.cfgScale 
@@ -1681,6 +1684,7 @@ export default function UploadStep2({
                 
                 {/* Seed */}
                 <div className="space-y-1">
+                  <label className="text-xs text-zinc-400">種子 (Seed)</label>
                   <input
                     className={`p-2 rounded w-full ${
                       validationErrors.seed 
@@ -1713,6 +1717,7 @@ export default function UploadStep2({
                 
                 {/* Clip Skip */}
                 <div className="space-y-1">
+                  <label className="text-xs text-zinc-400">Clip Skip</label>
                   <input
                     className={`p-2 rounded w-full ${
                       validationErrors.clipSkip 
@@ -1757,6 +1762,7 @@ export default function UploadStep2({
                 </div>
                 {/* Model Hash */}
                 <div className="space-y-1">
+                  <label className="text-xs text-zinc-400">模型雜湊 (Model Hash)</label>
                   <input
                     className={`p-2 rounded w-full ${
                       validationErrors.modelHash 

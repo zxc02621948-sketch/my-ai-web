@@ -13,14 +13,14 @@ const OPTIONS = [
 
 export default function SortSelect({ value = "popular", onChange }) {
   return (
-    <div className="inline-flex items-center gap-2">
-      <span className="text-sm text-zinc-400">排序：</span>
+    <div className="inline-flex items-center gap-2 flex-shrink-0">
+      <span className="text-sm text-zinc-400 whitespace-nowrap">排序：</span>
       <SelectField
         value={value}
         onChange={onChange}
         options={OPTIONS}
         placeholder="請選擇排序"
-        className="min-w-[220px]"
+        className="min-w-[180px] sm:min-w-[220px]"
         buttonClassName="bg-zinc-900 border border-white/10 text-sm"
       />
     </div>

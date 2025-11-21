@@ -274,71 +274,10 @@ export default function ImageModal({
     }
   };
 
-  // 權力券使用狀態
-  const [isPowerCouponModalOpen, setIsPowerCouponModalOpen] = useState(false);
-  const [availableCoupons, setAvailableCoupons] = useState([]);
-  const [selectedCouponId, setSelectedCouponId] = useState(null);
-  const [isUsingCoupon, setIsUsingCoupon] = useState(false);
-
-  // 權力券使用
-  const handlePowerCouponUse = async (imageId) => {
-    try {
-      // 獲取用戶的權力券列表
-      const res = await axios.get('/api/power-coupon/user-coupons', {
-        withCredentials: true
-      });
-      
-      if (!res?.data?.success) {
-        notify.error('錯誤', '獲取權力券失敗');
-        return;
-      }
-      
-      const coupons = res.data.coupons || [];
-      if (coupons.length === 0) {
-        notify.warning('提示', '你沒有可用的權力券！請先到積分商店購買。');
-        return;
-      }
-      
-      // 設置權力券數據並打開彈窗
-      setAvailableCoupons(coupons);
-      setSelectedCouponId(null);
-      setIsPowerCouponModalOpen(true);
-    } catch (error) {
-      console.error('獲取權力券失敗:', error);
-      notify.error('錯誤', '獲取權力券失敗，請稍後再試');
-    }
-  };
-
-  // 確認使用權力券
-  const confirmUseCoupon = async () => {
-    if (!selectedCouponId) {
-      notify.warning('提示', '請選擇要使用的權力券');
-      return;
-    }
-    
-    setIsUsingCoupon(true);
-    try {
-      const useRes = await axios.post('/api/power-coupon/use', {
-        couponId: selectedCouponId,
-        imageId: image?._id
-      }, {
-        withCredentials: true
-      });
-      
-      if (useRes?.data?.success) {
-        notify.success('成功', '權力券使用成功！圖片曝光度已提升。');
-        setIsPowerCouponModalOpen(false);
-        // 刷新圖片數據
-        window.location.reload();
-      } else {
-        notify.error('使用失敗', useRes?.data?.message || '請稍後再試');
-      }
-    } catch (error) {
-      console.error('使用權力券失敗:', error);
-      notify.error('使用失敗', '請稍後再試');
-    } finally {
-      setIsUsingCoupon(false);
-    }
+  // 加成券使用成功回調
+  const handlePowerCouponSuccess = () => {
+    // 刷新圖片數據
+    window.location.reload();
   };
 
   // Like
@@ -568,7 +507,7 @@ export default function ImageModal({
               onDelete={handleDelete}
               canEdit={canEdit}
               onEdit={openEdit}   // ← 傳給右欄，讓鉛筆按鈕可以打開編輯彈窗
-              onPowerCouponUse={handlePowerCouponUse}
+              onPowerCouponSuccess={handlePowerCouponSuccess}
             />
           </div>
 
@@ -580,102 +519,6 @@ export default function ImageModal({
             onImageUpdated={handleEditUpdated}
           />
 
-          {/* 權力券選擇彈窗 */}
-          {isPowerCouponModalOpen && (
-            <div className="fixed inset-0 z-[100000] flex items-center justify-center">
-              <div 
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-                onClick={() => setIsPowerCouponModalOpen(false)}
-              />
-              <div className="relative bg-zinc-800 rounded-lg p-6 max-w-md w-full mx-4">
-                <h3 className="text-xl font-bold text-white mb-4">選擇權力券</h3>
-                
-                <div className="space-y-3 mb-6 max-h-60 overflow-y-auto">
-                  {(() => {
-                    // 合併相同類型的券
-                    const groupedCoupons = {};
-                    availableCoupons.forEach(coupon => {
-                      const key = coupon.type;
-                      if (!groupedCoupons[key]) {
-                        groupedCoupons[key] = {
-                          type: coupon.type,
-                          coupons: [],
-                          count: 0
-                        };
-                      }
-                      groupedCoupons[key].coupons.push(coupon);
-                      groupedCoupons[key].count++;
-                    });
-
-                    return Object.values(groupedCoupons).map((group, index) => (
-                      <div
-                        key={group.type}
-                        className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                          selectedCouponId && group.coupons.some(c => c._id === selectedCouponId)
-                            ? "bg-purple-700 border-purple-500"
-                            : "bg-zinc-700 border-zinc-600 hover:bg-zinc-600"
-                        }`}
-                        onClick={() => {
-                          // 選擇該組的第一張券
-                          setSelectedCouponId(group.coupons[0]._id);
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            {/* 權力券圖示 */}
-                            <div className="text-2xl">🎫</div>
-                            <div>
-                              <p className="font-medium text-white">
-                                {group.type === '7day' ? '7天曝光加成券' : 
-                                 group.type === '30day' ? '30天曝光加成券' : 
-                                 group.type === 'rare' ? '稀有曝光加成券' : group.type}
-                                {group.count > 1 && (
-                                  <span className="ml-2 bg-yellow-600 text-yellow-100 text-xs px-2 py-1 rounded-full">
-                                    x{group.count}
-                                  </span>
-                                )}
-                              </p>
-                              <p className="text-xs text-gray-400">
-                                購買日期: {new Date(group.coupons[0].createdAt).toLocaleDateString()}
-                              </p>
-                              {group.coupons[0].expiry && (
-                                <p className="text-xs text-gray-400">
-                                  過期日期: {new Date(group.coupons[0].expiry).toLocaleDateString()}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          {selectedCouponId && group.coupons.some(c => c._id === selectedCouponId) && (
-                            <span className="text-green-400 text-sm">已選擇</span>
-                          )}
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setIsPowerCouponModalOpen(false)}
-                    className="flex-1 py-2 px-4 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={confirmUseCoupon}
-                    disabled={!selectedCouponId || isUsingCoupon}
-                    className={`flex-1 py-2 px-4 rounded-lg transition-colors ${
-                      !selectedCouponId || isUsingCoupon
-                        ? "bg-gray-500 text-gray-300 cursor-not-allowed"
-                        : "bg-purple-600 hover:bg-purple-700 text-white"
-                    }`}
-                  >
-                    {isUsingCoupon ? "使用中..." : "確認使用"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </Dialog.Panel>
       </div>
     </Dialog>

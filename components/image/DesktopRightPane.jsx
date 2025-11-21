@@ -22,7 +22,7 @@ export default function DesktopRightPane({
   onDelete,
   canEdit,
   onEdit,
-  onPowerCouponUse
+  onPowerCouponSuccess
 }) {
   const rightScrollRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -191,7 +191,7 @@ export default function DesktopRightPane({
               fileUrl={fileUrlOf(image)}
               canEdit={canEdit}
               onEdit={onEdit}
-              onPowerCouponUse={onPowerCouponUse}
+              onPowerCouponSuccess={onPowerCouponSuccess}
             />
             <CommentBox currentUser={currentUser} imageId={image._id} />
           </>

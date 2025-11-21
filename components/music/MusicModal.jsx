@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Heart } from "lucide-react";
 import DesktopMusicRightPane from "./DesktopMusicRightPane";
@@ -8,6 +8,7 @@ import MobileMusicSheet from "./MobileMusicSheet";
 import { usePlayer } from "@/components/context/PlayerContext";
 import { audioManager } from "@/utils/audioManager";
 import { usePortalContainer } from "@/components/common/usePortal";
+import { useFollowState } from "@/hooks/useFollowState";
 
 // 🔍 監控 audio 元素數量的工具函數
 let lastWarningTime = 0;
@@ -89,6 +90,7 @@ const MusicModal = ({
 }) => {
   const modalRef = useRef(null);
   const audioRef = useRef(null);
+  const [musicState, setMusicState] = useState(music);
   const [isLikedLocal, setIsLikedLocal] = useState(isLiked);
   const [likeCount, setLikeCount] = useState(music?.likes?.length || 0);
   const viewedRef = useRef(new Set());
@@ -140,7 +142,7 @@ const MusicModal = ({
   // 檢查播放進度的函數（可在多個地方調用）
   const checkProgress = React.useCallback(
     (useStoredTime = false) => {
-      if (!audioRef.current || !music?._id) return;
+      if (!audioRef.current || !musicState?._id) return;
 
       const audio = audioRef.current;
       // 如果 useStoredTime 為 true，使用存儲的 currentTime（用於關閉時檢查）
@@ -164,7 +166,7 @@ const MusicModal = ({
           audio.dataset.progressReported = "true";
           const startTime = parseFloat(audio.dataset.startTime || "0");
           // 調用進度追蹤 API
-          fetch(`/api/music/${music._id}/track-progress`, {
+          fetch(`/api/music/${musicState._id}/track-progress`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -181,7 +183,7 @@ const MusicModal = ({
         }
       }
     },
-    [music?._id],
+    [musicState?._id],
   );
 
   // 🔧 修復：檢測是否為行動裝置，在視窗大小改變時切換佈局
@@ -210,17 +212,47 @@ const MusicModal = ({
     return () => window.removeEventListener("resize", checkMobile);
   }, []); // 移除 isMobile 依賴，使用函數式更新
 
+  // 當 props 的 music 改變時，更新內部 state
+  useEffect(() => {
+    setMusicState(music);
+  }, [music]);
+
   useEffect(() => {
     setIsLikedLocal(isLiked);
   }, [isLiked]);
 
   useEffect(() => {
-    setLikeCount(music?.likes?.length || 0);
-  }, [music?.likes]);
+    setLikeCount(musicState?.likes?.length || 0);
+  }, [musicState?.likes]);
 
-  // ✅ 記錄點擊（每次打開音樂時調用一次）
+  const ownerId = musicState?.author?._id || musicState?.author;
+
+  const externalIsFollowing =
+    typeof isFollowing === "boolean"
+      ? isFollowing
+      : musicState?.author?.isFollowing;
+
+  const { authorFollowing, handleFollowToggle } = useFollowState({
+    ownerId,
+    currentUser,
+    externalIsFollowing,
+    onFollowToggle,
+    onLocalUpdate: (next) =>
+      setMusicState((prev) =>
+        prev
+          ? {
+              ...prev,
+              author: prev.author
+                ? { ...prev.author, isFollowing: next }
+                : prev.author,
+            }
+          : prev
+      ),
+  });
+
+  // ✅ 記錄點擊（每次打開音樂時調用一次），並更新本地 state
   useEffect(() => {
-    const musicId = music?._id;
+    const musicId = musicState?._id;
     if (!musicId) return;
 
     // 避免同一個音樂在同一次開啟中被重複計分
@@ -229,8 +261,23 @@ const MusicModal = ({
 
     fetch(`/api/music/${musicId}/click`, { method: "POST" })
       .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data?.ok) return;
+        // 把 server 更新後的 clicks / plays / likesCount / popScore 回寫到當前 music
+        setMusicState((prev) =>
+          prev && prev._id === musicId
+            ? {
+                ...prev,
+                clicks: data.clicks ?? prev.clicks,
+                plays: data.plays ?? prev.plays,
+                likesCount: data.likesCount ?? prev.likesCount,
+                popScore: data.popScore ?? prev.popScore,
+              }
+            : prev
+        );
+      })
       .catch(() => {});
-  }, [music?._id]);
+  }, [musicState?._id]);
 
   // ✅ 關鍵修復：當音樂 ID 改變時（打開新音樂或重新打開），重置進度報告標記和自動播放標記
   useEffect(() => {
@@ -241,18 +288,18 @@ const MusicModal = ({
       // ✅ 修復：重置自動播放標記，確保新音樂可以自動播放
       audioRef.current.dataset.autoPlayAttempted = "";
     }
-  }, [music?._id]);
+  }, [musicState?._id]);
 
   // ✅ 使用 AudioManager：當 Modal 打開時，請求播放權限（優先度 3）
   useEffect(() => {
-    if (!music?._id) return;
+    if (!musicState?._id) return;
     
     // ✅ 防重複執行：如果當前音樂 ID 已經處理過，跳過
-    if (currentMusicIdRef.current === music._id) {
+    if (currentMusicIdRef.current === musicState._id) {
       return;
     }
     
-    const musicId = music._id.substring(0, 8) || 'unknown';
+    const musicId = musicState._id.substring(0, 8) || 'unknown';
     
     // ✅ 從 PlayerContext 獲取播放器在被打斷前的狀態（由播放器自己記錄，不受預覽等影響）
     const wasPlaying = player?.wasPlayingBeforeInterruption || false;
@@ -260,7 +307,7 @@ const MusicModal = ({
     
     // 更新當前音樂 ID
     const previousMusicId = currentMusicIdRef.current;
-    currentMusicIdRef.current = music._id;
+    currentMusicIdRef.current = musicState._id;
     
     // 使用 setTimeout 確保 audioRef.current 已經設置
     const timer = setTimeout(() => {
@@ -279,7 +326,7 @@ const MusicModal = ({
     return () => {
       clearTimeout(timer);
     };
-  }, [music?._id, player?.wasPlayingBeforeInterruption]); // 只依賴 music._id，避免播放器狀態改變時重新執行
+  }, [musicState?._id, player?.wasPlayingBeforeInterruption]); // 只依賴 musicState._id，避免播放器狀態改變時重新執行
 
   useEffect(() => {
     // 禁止背景滾動
@@ -375,7 +422,7 @@ const MusicModal = ({
           if (playedPercent >= 10 && !audio.dataset.progressReported) {
             audio.dataset.progressReported = "true";
             // 調用進度追蹤 API
-            fetch(`/api/music/${music._id}/track-progress`, {
+            fetch(`/api/music/${musicState._id}/track-progress`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -495,8 +542,8 @@ const MusicModal = ({
     setTimeout(restorePlayback, 0);
 
     // 呼叫外部回調
-    if (onToggleLike && music._id) {
-      await onToggleLike(music._id);
+    if (onToggleLike && musicState._id) {
+      await onToggleLike(musicState._id);
     }
 
     // ✅ 異步操作後再次檢查（確保恢復播放）
@@ -532,13 +579,13 @@ const MusicModal = ({
             WebkitOverflowScrolling: 'touch'
           }}>
             <MobileMusicSheet
-            music={music}
+            music={musicState}
             audioRef={audioRef}
             isMobile={isMobile}
             currentUser={currentUser}
             displayMode={displayMode}
-            isFollowing={isFollowing}
-            onFollowToggle={onFollowToggle}
+            isFollowing={authorFollowing}
+            onFollowToggle={handleFollowToggle}
             onUserClick={onUserClick}
             onClose={handleClose}
             onDelete={onDelete}
@@ -852,23 +899,23 @@ const MusicModal = ({
               {/* 封面（內含播放器） */}
               <div 
                 className={`aspect-square rounded-lg overflow-hidden shadow-2xl max-w-md mx-auto relative ${
-                  music.coverImageUrl 
+                  musicState?.coverImageUrl 
                     ? "" 
                     : "bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600"
                 }`}
                 style={
-                  music.coverImageUrl
+                  musicState?.coverImageUrl
                     ? {
-                        backgroundImage: `url(${music.coverImageUrl})`,
+                        backgroundImage: `url(${musicState.coverImageUrl})`,
                         backgroundSize: "cover",
-                        backgroundPosition: music.coverPosition || "center",
+                        backgroundPosition: musicState.coverPosition || "center",
                         backgroundRepeat: "no-repeat",
                       }
                     : {}
                 }
               >
                 <div className="w-full h-full flex items-center justify-center">
-                  {music.coverImageUrl ? null : (
+                  {musicState?.coverImageUrl ? null : (
                     <div className="text-white text-8xl opacity-60">🎵</div>
                   )}
                 </div>
@@ -877,7 +924,7 @@ const MusicModal = ({
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent pb-2 pt-6">
                   <audio
                 ref={audioRef}
-                src={music.musicUrl}
+                src={musicState?.musicUrl}
                 controls
                 controlsList="nodownload nofullscreen noplaybackrate"
                 autoPlay
@@ -948,10 +995,16 @@ const MusicModal = ({
                   // 當用戶調整音量時同步到 localStorage
                   if (audioRef.current) {
                     try {
+                      const volume = audioRef.current.volume;
                       localStorage.setItem(
                         "playerVolume",
-                        audioRef.current.volume.toString(),
+                        volume.toString(),
                       );
+                      // ✅ 觸發自定義事件，通知其他組件（如預覽）音量已改變
+                      window.dispatchEvent(new CustomEvent("volumeChanged"));
+                      window.dispatchEvent(new CustomEvent("playerVolumeChanged", {
+                        detail: { volume }
+                      }));
                     } catch (e) {
                       console.warn("儲存音量失敗:", e);
                     }
@@ -1196,11 +1249,11 @@ const MusicModal = ({
 
           {/* 右側：音樂資訊 */}
           <DesktopMusicRightPane
-            music={music}
+            music={musicState}
             currentUser={currentUser}
             displayMode={displayMode}
-            isFollowing={isFollowing}
-            onFollowToggle={onFollowToggle}
+            isFollowing={authorFollowing}
+            onFollowToggle={handleFollowToggle}
             onUserClick={onUserClick}
             onClose={handleClose}
             onDelete={onDelete}

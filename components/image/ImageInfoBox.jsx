@@ -42,7 +42,9 @@ function sanitizeComfyWorkflow(text) {
   }
 }
 
-export default function ImageInfoBox({ image, currentUser, displayMode = "gallery", onClose, onEdit, onPowerCouponUse }) {
+import PowerCouponButton from "@/components/power-coupon/PowerCouponButton";
+
+export default function ImageInfoBox({ image, currentUser, displayMode = "gallery", onClose, onEdit, onPowerCouponSuccess }) {
   const positiveRef = useRef();
   const negativeRef = useRef();
   const paramsRef = useRef();
@@ -421,10 +423,16 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
     (typeof comfyObj?.promptRaw === "string" && comfyObj.promptRaw.trim()) ||
     "";
 
+  // 是否為作者：支持多種格式（image.user 可能是對象或字符串）
+  const imageOwnerId = 
+    (typeof image.user === 'object' && image.user !== null) 
+      ? (image.user._id || image.user.id || image.user.userId)
+      : (image.user || image.userId);
+  const currentUserId = currentUser?._id || currentUser?.id;
+  const isOwner = !!currentUser && imageOwnerId && currentUserId && String(currentUserId) === String(imageOwnerId);
+  
   // 是否作者或管理員
-  const isOwnerOrAdmin = !!currentUser && (
-    String(currentUser._id) === String(image.user?._id) || currentUser.isAdmin
-  );
+  const isOwnerOrAdmin = isOwner || currentUser?.isAdmin;
 
   // 從後端帶回的公開狀態（相容舊命名 allowComfyShare）
   const allowShare = (image?.comfy?.allowShare ?? image?.allowComfyShare ?? true);
@@ -459,8 +467,7 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
           </button>
 
           {/* 編輯放在下載左邊；僅作者或管理員可見 */}
-          {currentUser &&
-            ((String(currentUser._id) === String(image.user?._id)) || currentUser.isAdmin) && (
+          {isOwnerOrAdmin && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -470,27 +477,24 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
                 title="編輯圖片資料"
               >
                 <Pencil size={16} />
+                <span>編輯</span>
               </button>
             )}
 
-          {/* 權力券使用按鈕；僅作者可見 */}
-          {currentUser &&
-            String(currentUser._id) === String(image.user?._id) && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPowerCouponUse?.(image._id);
-                }}
-                className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded shadow transition"
-                title="使用權力券增加曝光度"
-              >
-                🎫 權力券
-              </button>
+          {/* 加成券使用按鈕；僅作者可見 */}
+          {isOwner && (
+              <div onClick={(e) => e.stopPropagation()}>
+                <PowerCouponButton
+                  contentType="image"
+                  contentId={image._id}
+                  contentTitle={image.title || "圖片"}
+                  onSuccess={onPowerCouponSuccess}
+                />
+              </div>
             )}
 
           {/* 刪除（作者/管理員） */}
-          {currentUser &&
-            ((String(currentUser._id) === String(image.user?._id)) || currentUser.isAdmin) && (
+          {isOwnerOrAdmin && (
               <button
                 onClick={handleDelete}
                 className="flex items-center gap-1 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded shadow transition"
@@ -501,7 +505,7 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
             )}
 
           {/* 檢舉（登入且不是作者才顯示） */}
-          {currentUser && String(currentUser._id) !== String(image.user?._id) && (
+          {currentUser && !isOwner && (
             <button
               onClick={() => setShowReport(true)}
               className="flex items-center gap-1 px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white text-sm rounded shadow transition"

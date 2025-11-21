@@ -5,6 +5,7 @@ import { GENRE_MAP } from "@/constants/musicCategories";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import { useRouter } from "next/navigation";
+import PowerCouponButton from "@/components/power-coupon/PowerCouponButton";
 
 export default function MusicInfoBox({
   music,
@@ -198,6 +199,18 @@ export default function MusicInfoBox({
         </div>
 
         <div className="flex items-center gap-2 ml-4">
+          {/* 加成券使用按鈕；僅作者可見 */}
+          {isOwner && (
+            <div onClick={(e) => e.stopPropagation()}>
+              <PowerCouponButton
+                contentType="music"
+                contentId={music._id}
+                contentTitle={music.title || "音樂"}
+                onSuccess={() => window.location.reload()}
+              />
+            </div>
+          )}
+
           {/* 編輯按鈕 */}
           {canEditMusic && onEdit && (
             <button

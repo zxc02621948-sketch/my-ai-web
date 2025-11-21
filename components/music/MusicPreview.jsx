@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useRef, useEffect, useState, useMemo } from "react";
+import React, { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { GENRE_MAP, GENRE_ICONS } from "@/constants/musicCategories";
 import NewBadge from "@/components/image/NewBadge";
+import FireEffect from "@/components/image/FireEffect";
 import { audioManager } from "@/utils/audioManager";
 import { usePlayer } from "@/components/context/PlayerContext";
 
@@ -215,10 +216,11 @@ const MusicPreview = ({ music, className = "", onClick }) => {
 
     return new Promise((resolve, reject) => {
       // ✅ 添加超時機制，防止 Promise 永遠掛起
+      // 預覽是臨時的，使用較短的超時時間（3秒）
       const timeoutId = setTimeout(() => {
         cleanup();
         reject(new Error("等待音頻就緒超時"));
-      }, 10000); // 10 秒超時
+      }, 3000); // 3 秒超時（預覽不需要等待太久）
 
       const cleanup = () => {
         clearTimeout(timeoutId); // ✅ 清理超時 timer
@@ -287,7 +289,12 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       try {
         await waitForReadyState(audio);
       } catch (error) {
-        console.warn("🎵 [Preview] waitForReadyState 發生錯誤", error);
+        // ✅ 超時或音頻元素被替換是正常的（快速切換時會發生）
+        // 只在非預期的錯誤時才顯示警告
+        if (error.message !== "等待音頻就緒超時" && 
+            error.message !== "音頻元素已被替換") {
+          console.warn("🎵 [Preview] waitForReadyState 發生錯誤", error);
+        }
         // ✅ 確保清理狀態，避免 isStartingRef 永遠為 true
         isStartingRef.current = false;
         return;
@@ -319,6 +326,19 @@ const MusicPreview = ({ music, className = "", onClick }) => {
         console.warn("🎵 [Preview] startPreview: 設置 currentTime 失敗", error);
       }
 
+      // ✅ 在開始播放前，確保從 localStorage 讀取最新的音量設置
+      try {
+        const saved = localStorage.getItem("playerVolume");
+        if (saved) {
+          const vol = parseFloat(saved);
+          if (!isNaN(vol) && vol >= 0 && vol <= 1) {
+            targetVolumeRef.current = vol; // 更新目標音量
+          }
+        }
+      } catch (e) {
+        console.warn("讀取音量設置失敗:", e);
+      }
+
       audio.volume = 0;
       audio.muted = false;
       audio.dataset.musicPreview = "true";
@@ -333,7 +353,14 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       try {
         await audio.play();
       } catch (error) {
-        if (error.name === "AbortError" || error.name === "NotAllowedError") {
+        // ✅ AbortError 是正常的競態條件（單一音源系統在切換音頻）
+        // 不需要警告，靜默處理即可
+        if (error.name === "AbortError") {
+          // 靜默處理，這是預期的行為
+          isStartingRef.current = false;
+          return;
+        }
+        if (error.name === "NotAllowedError") {
           console.warn("🎵 [Preview] startPreview: 播放被瀏覽器拒絕", error);
         } else {
           console.error("音頻播放錯誤:", error);
@@ -528,7 +555,8 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   const handleMouseEnter = () => {
     if (!isMobile) {
       const musicId = music?._id?.substring(0, 8) || 'unknown';
-      // hover 進入，準備播放預覽
+      // hover 進入，只更新 hover 狀態，不自動播放預覽
+      // 預覽只能通過右上角的預覽按鈕觸發
       setIsHovered(true);
       if (restoreTimerRef.current) {
         clearTimeout(restoreTimerRef.current);
@@ -603,6 +631,15 @@ const MusicPreview = ({ music, className = "", onClick }) => {
   const handleClick = () => {
     stopPreview({ restore: false });
     if (onClick) onClick();
+  };
+
+  // ✅ 中间的播放按钮点击时直接打开弹窗，不播放预览
+  const handleCenterPlayClick = (e) => {
+    e.stopPropagation();
+    if (onClick) {
+      stopPreview({ restore: false });
+      onClick();
+    }
   };
 
   // ✅ 計算曲風符號位置（散佈在卡片邊緣）
@@ -696,6 +733,14 @@ const MusicPreview = ({ music, className = "", onClick }) => {
         >
           <NewBadge animated />
         </div>
+      )}
+
+      {/* 加成券火焰效果（左下角） */}
+      {music?.powerUsed && music?.powerExpiry && new Date(music.powerExpiry) > new Date() && (
+        <FireEffect 
+          powerExpiry={music.powerExpiry}
+          powerType={music.powerType}
+        />
       )}
 
       {/* 背景圖片或音樂封面 */}
@@ -878,19 +923,22 @@ const MusicPreview = ({ music, className = "", onClick }) => {
       />
 
       {/* 播放按鈕覆蓋層（在中間區域，z-index 高於符號） */}
-      {/* 懸停預聽時隱藏按鈕 */}
+      {/* 懸停試聽時隱藏按鈕 */}
       {!isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center z-30">
           <button
-            onClick={handlePlayButtonClick}
-            className={`bg-black bg-opacity-60 hover:bg-opacity-80 rounded-full p-4 transition-all duration-300 ${
-              isHovered ? "bg-opacity-40 scale-110" : "bg-opacity-60 scale-100"
+            onClick={handleCenterPlayClick}
+            className={`transition-all duration-300 ${
+              isHovered ? "scale-110" : "scale-100"
             }`}
           >
             <svg
-              className="w-8 h-8 text-white"
+              className="w-12 h-12 text-white"
               fill="currentColor"
               viewBox="0 0 24 24"
+              style={{
+                filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))',
+              }}
             >
               <path d="M8 5v14l11-7z" />
             </svg>
@@ -898,7 +946,7 @@ const MusicPreview = ({ music, className = "", onClick }) => {
         </div>
       )}
 
-      {/* 預覽控制按鈕（右上角） */}
+      {/* 試聽控制按鈕（右上角） */}
       <button
         onClick={handlePlayButtonClick}
         className={`absolute top-3 right-3 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40 ${
@@ -911,14 +959,14 @@ const MusicPreview = ({ music, className = "", onClick }) => {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white/70 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
             </span>
-            預覽中
+            試聽中
           </>
         ) : (
           <>
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M8 5v14l11-7z" />
             </svg>
-            預覽
+            試聽
           </>
         )}
       </button>

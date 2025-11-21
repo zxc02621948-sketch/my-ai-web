@@ -2,7 +2,7 @@
 
 import { usePlayer } from "@/components/context/PlayerContext";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import MiniPlayerArt from "@/components/common/MiniPlayerArt";
 import CatPlayerArt from "@/components/player/MiniPlayerArt";
 import CatHeadphoneCanvas from "@/components/player/CatHeadphoneCanvas";
@@ -20,6 +20,7 @@ export default function MiniPlayer() {
   const player = usePlayer();
   const { currentUser, hasValidSubscription, setCurrentUser, subscriptions } = useCurrentUser(); // 使用 Context
   const pathname = usePathname(); // 獲取當前路徑
+  const router = useRouter();
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState(null); // ✅ 初始為 null，等待從 localStorage 載入
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -1494,8 +1495,33 @@ export default function MiniPlayer() {
             onClick={(e) => {
               e.stopPropagation();
               if (justDraggedRef.current) return; // 如果剛拖動過，不要打開連結
-              const href = player.originUrl || player.src;
-              if (href) window.open(href, "_blank");
+              
+              // 嘗試從播放器獲取當前音樂 ID
+              let musicId = null;
+              
+              // 方法1: 從 playlist 和 activeIndex 獲取
+              if (player?.playlist && Array.isArray(player.playlist) && typeof player.activeIndex === 'number') {
+                const currentTrack = player.playlist[player.activeIndex];
+                if (currentTrack?._id) {
+                  musicId = currentTrack._id;
+                }
+              }
+              
+              // 方法2: 從 URL 中提取音樂 ID
+              if (!musicId) {
+                const url = player.originUrl || player.src || "";
+                if (url && url.includes("/api/music/stream/")) {
+                  const match = url.match(/\/api\/music\/stream\/([^/?]+)/);
+                  if (match && match[1]) {
+                    musicId = match[1];
+                  }
+                }
+              }
+              
+              // 如果有音樂 ID，打開音樂彈窗
+              if (musicId) {
+                router.push(`/music?id=${musicId}`);
+              }
             }}
             onTouchStart={(e) => {
               e.stopPropagation();

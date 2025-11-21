@@ -71,7 +71,7 @@ export default function UploadMusicModal() {
       const pendingMessage = sessionStorage.getItem(SUCCESS_TOAST_STORAGE_KEY);
       if (pendingMessage) {
         sessionStorage.removeItem(SUCCESS_TOAST_STORAGE_KEY);
-        toast.success(pendingMessage);
+        toast.success(pendingMessage, { duration: 6000 });
       }
     } catch (error) {
       console.warn("讀取音樂上傳成功提示失敗:", error);
@@ -440,7 +440,7 @@ export default function UploadMusicModal() {
           console.warn("儲存音樂上傳成功提示失敗:", err);
         }
         if (!storedMessage) {
-          toast.success(successMessage);
+          toast.success(successMessage, { duration: 6000 });
         }
         setIsOpen(false);
         window.location.href = "/music";
