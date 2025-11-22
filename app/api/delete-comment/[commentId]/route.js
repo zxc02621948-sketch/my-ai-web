@@ -57,16 +57,22 @@ export async function DELETE(req, context) {
 
     // ✅ 更新圖片的留言數和熱門度分數
     if (imageId) {
-      const image = await Image.findById(imageId);
-      if (image) {
-        // 重新計算留言總數
-        const totalComments = await Comment.countDocuments({ imageId });
-        image.commentsCount = totalComments;
-        
-        // 重新計算熱門度分數
-        image.popScore = computePopScore(image);
-        
-        await image.save();
+      try {
+        const image = await Image.findById(imageId);
+        if (image) {
+          // 重新計算留言總數
+          const totalComments = await Comment.countDocuments({ imageId });
+          image.commentsCount = totalComments;
+          
+          // 重新計算熱門度分數（轉換為普通對象以確保兼容性）
+          const imageObj = image.toObject ? image.toObject() : image;
+          image.popScore = computePopScore(imageObj);
+          
+          await image.save();
+        }
+      } catch (updateErr) {
+        console.error("更新圖片分數失敗:", updateErr);
+        // 繼續執行，不中斷刪除流程
       }
     }
 

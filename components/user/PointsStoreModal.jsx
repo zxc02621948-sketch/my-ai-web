@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Modal from "@/components/common/Modal";
 import axios from "axios";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function PointsStoreModal({ isOpen, onClose, userData }) {
   const userId = String(userData?._id || "");
@@ -35,13 +36,6 @@ export default function PointsStoreModal({ isOpen, onClose, userData }) {
     preview: "/frames/魔法陣1.png",
     description: "神秘的魔法陣頭像框",
     cost: 0
-  },
-  {
-    id: "magic-circle-2",
-    name: "魔法陣2",
-    preview: "/frames/魔法陣2.png",
-    description: "進階版魔法陣頭像框",
-    cost: 0
   }
   ];
 
@@ -59,9 +53,22 @@ export default function PointsStoreModal({ isOpen, onClose, userData }) {
     if (!frame) {
       console.log("❌ 找不到頭像框:", frameId);
       setFrameMessage("找不到該頭像框");
-      setFrameLoading(prev => ({ ...prev, [frameId]: false }));
       return;
     }
+    
+    // 顯示確認對話框
+    const confirmMessage = `確定要購買「${frame.name}」頭像框嗎？\n\n` +
+      `💰 費用：${frame.cost === 0 ? "免費" : `${frame.cost} 積分`}\n` +
+      (currentPoints !== undefined ? `💎 目前積分：${currentPoints}\n${frame.cost > 0 ? `💰 購買後剩餘：${currentPoints - frame.cost}\n` : ''}` : '') +
+      `\n${frame.description}`;
+    
+    const confirmed = await notify.confirm("確認購買", confirmMessage);
+    if (!confirmed) {
+      return;
+    }
+    
+    setFrameLoading(prev => ({ ...prev, [frameId]: true }));
+    setFrameMessage("");
     
     console.log("🔧 準備購買:", { frameId, cost: frame.cost, frame });
     
@@ -69,7 +76,13 @@ export default function PointsStoreModal({ isOpen, onClose, userData }) {
       const res = await axios.post("/api/user/purchase-frame", { frameId, cost: frame.cost });
       console.log("🔧 API 響應:", res.data);
       if (res?.data?.success) {
-        setFrameMessage(`已獲得 ${FRAME_ITEMS.find(f => f.id === frameId)?.name} 頭像框！`);
+        // 將成功狀態保存到 sessionStorage，刷新後顯示提示
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("purchaseSuccess", JSON.stringify({
+            title: "購買成功！",
+            message: `已獲得 ${FRAME_ITEMS.find(f => f.id === frameId)?.name} 頭像框！`
+          }));
+        }
         // 刷新頁面以更新用戶數據
         setTimeout(() => {
           window.location.reload();

@@ -164,8 +164,7 @@ export default function UnifiedAvatarModal({
       "ai-generated": "AI 生成",
       "animals": "動物",
       "leaves": "葉子",
-      "magic-circle": "魔法陣",
-      "magic-circle-2": "魔法陣2"
+      "magic-circle": "魔法陣"
     };
     return frameMap[frameId] || frameId;
   };

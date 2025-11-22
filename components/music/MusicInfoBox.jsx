@@ -6,6 +6,7 @@ import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import { useRouter } from "next/navigation";
 import PowerCouponButton from "@/components/power-coupon/PowerCouponButton";
+import { getPlatformUrl } from "@/constants/platformUrls";
 
 export default function MusicInfoBox({
   music,
@@ -437,7 +438,29 @@ export default function MusicInfoBox({
             {music.platform && (
               <div className="p-2 bg-zinc-800 rounded">
                 <div className="text-gray-400 text-xs mb-1">生成平台</div>
-                <div className="text-white text-sm">{music.platform}</div>
+                <div className="text-white text-sm">
+                  {(() => {
+                    const platform = music.platform;
+                    
+                    // 檢查是否有官方網站連結
+                    const platformUrl = getPlatformUrl(platform);
+                    
+                    if (platformUrl) {
+                      const isInternalLink = platformUrl.startsWith("/");
+                      return (
+                        <a
+                          href={platformUrl}
+                          {...(isInternalLink ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+                          className="text-blue-400 hover:text-blue-300 underline"
+                        >
+                          {platform}
+                        </a>
+                      );
+                    }
+                    
+                    return <span>{platform}</span>;
+                  })()}
+                </div>
               </div>
             )}
 

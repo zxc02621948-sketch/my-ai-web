@@ -159,6 +159,9 @@ export default function UserPlayerPage() {
   
   // 從後端 API 載入用戶的播放清單
   useEffect(() => {
+    // ✅ 添加 AbortController 來取消請求，防止內存泄漏
+    const abortController = new AbortController();
+    
     const fetchPlaylist = async () => {
       try {
         // ✅ 檢查是否有釘選的播放器，但只有在不是自己的頁面時才跳過
@@ -190,7 +193,8 @@ export default function UserPlayerPage() {
         let userDataFetched = {};
         try {
           const response = await axios.get(`/api/user-info?id=${id}`, {
-            headers: { 'Cache-Control': 'no-cache' }
+            headers: { 'Cache-Control': 'no-cache' },
+            signal: abortController.signal // ✅ 添加 signal 以支持取消
           });
           userDataFetched = response.data;
           setUserData(userDataFetched); // 保存用戶數據用於釘選按鈕
@@ -210,6 +214,10 @@ export default function UserPlayerPage() {
           }
           applyShufflePreference(allowShuffleIsBoolean ? allowShuffleValue : null);
         } catch (error) {
+          // ✅ 檢查是否是被取消的請求
+          if (error.name === 'CanceledError' || error.message === 'canceled' || abortController.signal.aborted) {
+            return; // 請求被取消，直接返回，不處理錯誤
+          }
           console.error("獲取用戶資料失敗:", error.message);
           userDataFetched = {}; // 使用空物件作為備用
         }
@@ -274,14 +282,26 @@ export default function UserPlayerPage() {
                }
              }
       } catch (error) {
+        // ✅ 檢查是否是被取消的請求
+        if (error.name === 'CanceledError' || error.message === 'canceled' || error.code === 'ERR_CANCELED' || abortController.signal.aborted) {
+          return; // 請求被取消，直接返回，不處理錯誤
+        }
         console.error("載入播放清單失敗:", error);
         setError("載入播放清單失敗");
       } finally {
-        setLoading(false);
+        // ✅ 只有在請求未被取消時才設置 loading
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
     
     fetchPlaylist();
+    
+    // ✅ 清理函數：取消請求，防止內存泄漏
+    return () => {
+      abortController.abort();
+    };
   }, [id, currentUser?.pinnedPlayer, applyShufflePreference, setShuffleAllowed]);
 
     // 監聽播放狀態變化事件
@@ -305,11 +325,29 @@ export default function UserPlayerPage() {
       };
       
       // 🔥 監聽積分更新事件，刷新用戶數據（用於播放清單擴充等）
+      // ✅ 添加 AbortController 來取消請求，防止內存泄漏
+      const pointsUpdateAbortControllerRef = { current: null };
+      
       const handlePointsUpdated = async () => {
+        // ✅ 取消之前的請求（如果存在）
+        if (pointsUpdateAbortControllerRef.current) {
+          pointsUpdateAbortControllerRef.current.abort();
+        }
+        
+        // ✅ 創建新的 AbortController
+        const abortController = new AbortController();
+        pointsUpdateAbortControllerRef.current = abortController;
+        
       try {
         const response = await axios.get(`/api/user-info?id=${id}`, {
-          headers: { 'Cache-Control': 'no-cache' }
+          headers: { 'Cache-Control': 'no-cache' },
+          signal: abortController.signal // ✅ 添加 signal 以支持取消
         });
+        
+        // ✅ 檢查請求是否已被取消
+        if (abortController.signal.aborted) {
+          return;
+        }
         if (response.data) {
           setUserData(response.data);
           const allowShuffle =
@@ -330,7 +368,16 @@ export default function UserPlayerPage() {
           applyShufflePreference(allowShuffle);
         }
       } catch (error) {
+        // ✅ 檢查是否是被取消的請求
+        if (error.name === 'CanceledError' || error.message === 'canceled' || error.code === 'ERR_CANCELED') {
+          return; // 請求被取消，直接返回，不處理錯誤
+        }
         console.error("刷新用戶數據失敗:", error);
+      } finally {
+        // ✅ 清理引用
+        if (pointsUpdateAbortControllerRef.current === abortController) {
+          pointsUpdateAbortControllerRef.current = null;
+        }
       }
     };
     
@@ -339,6 +386,12 @@ export default function UserPlayerPage() {
     window.addEventListener('points-updated', handlePointsUpdated); // ✅ 新增監聽器
     
     return () => {
+      // ✅ 取消正在進行的請求
+      if (pointsUpdateAbortControllerRef.current) {
+        pointsUpdateAbortControllerRef.current.abort();
+        pointsUpdateAbortControllerRef.current = null;
+      }
+      
       window.removeEventListener('playerStateChanged', handlePlayerStateChange);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('points-updated', handlePointsUpdated); // ✅ 清理監聽器

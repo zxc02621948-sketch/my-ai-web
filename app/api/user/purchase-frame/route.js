@@ -13,8 +13,7 @@ const FRAME_COSTS = {
   "animals": 0,
   "flowers": 0,
   "leaves": 0,
-  "magic-circle": 0,
-  "magic-circle-2": 0
+  "magic-circle": 0
 };
 
 export async function POST(req) {

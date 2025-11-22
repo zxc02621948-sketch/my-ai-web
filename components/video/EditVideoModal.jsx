@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import VIDEO_CATEGORIES from '@/constants/videoCategories';
+import SelectField from '@/components/common/SelectField';
 
 export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
   const [mounted, setMounted] = useState(false);
@@ -14,7 +15,8 @@ export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
   const [rating, setRating] = useState('');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState(''); // 保持向後兼容
+  const [categories, setCategories] = useState([]);
   
   // AI 生成元數據
   const [platform, setPlatform] = useState('');
@@ -24,9 +26,7 @@ export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
   // 生成參數
   const [fps, setFps] = useState('');
   const [resolution, setResolution] = useState('');
-  const [steps, setSteps] = useState('');
-  const [cfgScale, setCfgScale] = useState('');
-  const [seed, setSeed] = useState('');
+  const [aspectRatio, setAspectRatio] = useState('');
   
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -40,15 +40,14 @@ export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
       setDescription(video.description || '');
       setTags(Array.isArray(video.tags) ? video.tags.join(', ') : '');
       setRating(video.rating || '');
-      setCategory(video.category || '');
+      setCategory(video.category || ''); // 保持向後兼容
+      setCategories(Array.isArray(video.categories) ? video.categories : (video.category ? [video.category] : []));
       setPlatform(video.platform || '');
       setPrompt(video.prompt || '');
       setNegativePrompt(video.negativePrompt || '');
       setFps(video.fps || '');
       setResolution(video.resolution || '');
-      setSteps(video.steps || '');
-      setCfgScale(video.cfgScale || '');
-      setSeed(video.seed || '');
+      setAspectRatio(video.aspectRatio || '');
     }
   }, [video, isOpen]);
 
@@ -73,15 +72,14 @@ export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
         description: description.trim(),
         tags: tags.split(/[,，\s]+/).map(t => t.trim()).filter(Boolean),
         rating,
-        category,
+        category: categories.length > 0 ? categories[0] : '', // 保持向後兼容
+        categories: categories.slice(0, 3), // 最多3個
         platform: platform.trim(),
         prompt: prompt.trim(),
         negativePrompt: negativePrompt.trim(),
         fps: fps.trim(),
         resolution: resolution.trim(),
-        steps: steps.trim(),
-        cfgScale: cfgScale.trim(),
-        seed: seed.trim(),
+        aspectRatio: aspectRatio.trim(),
       };
 
       const response = await fetch(`/api/videos/${video._id}/edit`, {
@@ -172,23 +170,62 @@ export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
                 </select>
               </div>
 
-              {/* 分類 */}
+              {/* 分類（可複選，最多3個） */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  分類
+                <label className={`block text-sm font-medium mb-2 ${categories.length === 0 ? 'text-gray-300' : 'text-gray-300'}`}>
+                  📁 影片分類（可複選，最多3個）
                 </label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <div
+                  className={`max-h-32 overflow-y-auto rounded p-2 bg-zinc-800 border ${
+                    categories.length === 0 ? 'border-zinc-700' : categories.length >= 3 ? 'border-yellow-500/50' : 'border-zinc-700'
+                  }`}
                 >
-                  <option value="">選擇分類</option>
-                  {VIDEO_CATEGORIES.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
+                  {VIDEO_CATEGORIES.map((categoryKey) => {
+                    const isSelected = categories.includes(categoryKey);
+                    const isDisabled = !isSelected && categories.length >= 3;
+                    
+                    return (
+                      <label
+                        key={categoryKey}
+                        className={`flex items-center gap-2 py-1 cursor-pointer hover:bg-zinc-700/50 rounded px-2 ${
+                          isDisabled ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          value={categoryKey}
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              if (categories.length < 3) {
+                                setCategories([...categories, categoryKey]);
+                                // 同時更新 category 保持向後兼容
+                                if (categories.length === 0) {
+                                  setCategory(categoryKey);
+                                }
+                              }
+                            } else {
+                              const newCategories = categories.filter((c) => c !== categoryKey);
+                              setCategories(newCategories);
+                              // 更新 category 為第一個分類或空字串
+                              setCategory(newCategories.length > 0 ? newCategories[0] : '');
+                            }
+                          }}
+                          className="rounded"
+                        />
+                        <span className="text-white text-sm">
+                          {categoryKey}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {categories.length > 0 && (
+                  <div className="mt-1 text-xs text-zinc-400">
+                    已選擇 {categories.length} / 3 個分類
+                  </div>
+                )}
               </div>
 
               {/* 標籤 */}
@@ -202,6 +239,47 @@ export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
                   onChange={(e) => setTags(e.target.value)}
                   className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="用逗號或空格分隔，例如：動畫, 特效, 3D"
+                />
+              </div>
+
+              {/* 提示詞與負面提示詞 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-gray-300">提示詞（Prompt）</label>
+                  <textarea
+                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-24"
+                    placeholder="描述你想要的畫面、風格、動作等"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-gray-300">負面提示詞（Negative Prompt）</label>
+                  <textarea
+                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-24"
+                    placeholder="不想要出現的元素（如：模糊、雜訊、扭曲等）"
+                    value={negativePrompt}
+                    onChange={(e) => setNegativePrompt(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* 生成平台 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  🛠️ 生成平台
+                </label>
+                <SelectField
+                  value={platform}
+                  onChange={setPlatform}
+                  placeholder="請選擇平台"
+                  options={[
+                    { value: 'SeaArt.ai', label: 'SeaArt.ai' },
+                    { value: 'deevid.ai', label: 'deevid.ai' },
+                    { value: 'Stable Video Diffusion', label: 'Stable Video Diffusion' },
+                    { value: '即夢AI', label: '即夢AI' },
+                    { value: '其他', label: '其他' },
+                  ]}
                 />
               </div>
             </div>
@@ -218,113 +296,40 @@ export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
 
               {showAdvanced && (
                 <div className="mt-4 space-y-4 p-4 bg-zinc-900 rounded-lg">
-                  {/* 生成平台 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      生成平台
-                    </label>
-                    <input
-                      type="text"
-                      value={platform}
-                      onChange={(e) => setPlatform(e.target.value)}
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="例如：Runway, Pika, Sora"
-                    />
-                  </div>
-
-                  {/* Prompt */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      正面提示詞
-                    </label>
-                    <textarea
-                      value={prompt}
-                      onChange={(e) => setPrompt(e.target.value)}
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
-                      placeholder="輸入生成影片的提示詞"
-                    />
-                  </div>
-
-                  {/* Negative Prompt */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      負面提示詞
-                    </label>
-                    <textarea
-                      value={negativePrompt}
-                      onChange={(e) => setNegativePrompt(e.target.value)}
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
-                      placeholder="輸入要避免的元素"
-                    />
-                  </div>
-
                   {/* 技術參數 */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        FPS
-                      </label>
-                      <input
-                        type="text"
-                        value={fps}
-                        onChange={(e) => setFps(e.target.value)}
-                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="例如：24, 30, 60"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        解析度
-                      </label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-400">解析度（可修改，例如 720p、1024p）</label>
                       <input
                         type="text"
                         value={resolution}
                         onChange={(e) => setResolution(e.target.value)}
                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="例如：1920x1080"
+                        placeholder="例如：720p、1024p"
                       />
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Steps
-                      </label>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-400">FPS（可選）</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="240"
+                        value={fps}
+                        onChange={(e) => setFps(e.target.value)}
+                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="例如：30"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-400">縱橫比（Aspect Ratio）</label>
                       <input
                         type="text"
-                        value={steps}
-                        onChange={(e) => setSteps(e.target.value)}
+                        value={aspectRatio}
+                        onChange={(e) => setAspectRatio(e.target.value)}
                         className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="例如：20, 50"
+                        placeholder="例如：16:9、9:16、1:1"
                       />
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        CFG Scale
-                      </label>
-                      <input
-                        type="text"
-                        value={cfgScale}
-                        onChange={(e) => setCfgScale(e.target.value)}
-                        className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="例如：7.5"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Seed */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Seed
-                    </label>
-                    <input
-                      type="text"
-                      value={seed}
-                      onChange={(e) => setSeed(e.target.value)}
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="例如：123456789"
-                    />
                   </div>
                 </div>
               )}

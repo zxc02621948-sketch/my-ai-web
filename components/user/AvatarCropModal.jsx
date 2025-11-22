@@ -92,12 +92,6 @@ export default function AvatarCropModal({ isOpen, onClose, imageSrc, onCropCompl
     description: "神秘的魔法陣頭像框"
   },
   {
-    id: "magic-circle-2",
-    name: "魔法陣2",
-    preview: "/frames/魔法陣2.png",
-    description: "進階版魔法陣頭像框"
-  },
-  {
     id: "military",
     name: "戰損軍事",
     preview: "/frames/avatar-frame-military-01.png",

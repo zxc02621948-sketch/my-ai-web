@@ -2,30 +2,42 @@
 
 import { useEffect, useState } from "react";
 import axios from "axios";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function AnalyticsPage() {
+  const router = useRouter();
   const [logs, setLogs] = useState([]);
   const [summary, setSummary] = useState([]);
 
   useEffect(() => {
-    axios.get("/api/admin/analytics-summary").then((res) => {
-      setSummary(res.data.summary);
-    });
-    axios.get("/api/admin/analytics").then((res) => {
-      setLogs(res.data.logs);
-    });
+    axios.get("/api/admin/analytics-summary")
+      .then((res) => {
+        setSummary(res.data.summary || []);
+      })
+      .catch((err) => {
+        console.error("獲取流量統計失敗:", err);
+        setSummary([]);
+      });
+    axios.get("/api/admin/analytics")
+      .then((res) => {
+        // apiSuccess 返回格式是 { ok: true, logs }
+        setLogs(res.data.logs || []);
+      })
+      .catch((err) => {
+        console.error("獲取訪問記錄失敗:", err);
+        setLogs([]);
+      });
   }, []);
 
   return (
     <div className="relative min-h-screen bg-black text-white p-20">
-      {/* 左上角回首頁按鈕 */}
-      <Link
-        href="/"
-        className="absolute top-0 left-0 m-2 px-3 py-1 bg-white text-black rounded hover:bg-gray-100 font-semibold z-50"
+      {/* 左上角回上一頁按鈕 */}
+      <button
+        onClick={() => router.back()}
+        className="absolute top-0 left-0 m-2 px-3 py-1 bg-white text-black rounded hover:bg-gray-100 font-semibold z-50 cursor-pointer"
       >
-        ← 回首頁
-      </Link>
+        ← 回上一頁
+      </button>
 
       <h1 className="text-xl font-bold mb-4">📊 後台總覽（最近 7 天）</h1>
       <table className="w-full mb-8 text-sm border border-zinc-700">

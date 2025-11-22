@@ -240,6 +240,10 @@ export function PlayerProvider({
         if (audioRef.current) {
           try {
             audioRef.current.pause();
+            // ✅ 播放列表為空時，清理音頻來源和緩衝區
+            audioRef.current.removeAttribute("src");
+            audioRef.current.load();
+            audioRef.current.currentTime = 0;
           } catch {}
         }
         return;
@@ -2376,6 +2380,28 @@ export function PlayerProvider({
     next,
     previous,
   ]);
+
+  // ✅ 組件卸載時清理音頻元素和緩衝區
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        try {
+          // ✅ 強制清理音頻元素
+          audioRef.current.pause();
+          // ✅ 移除音頻來源，釋放內存
+          audioRef.current.removeAttribute("src");
+          // ✅ 清空音頻緩衝區
+          audioRef.current.load();
+          // ✅ 重置時間位置
+          audioRef.current.currentTime = 0;
+        } catch (error) {
+          console.warn("⚠️ [PlayerContext] 清理音頻元素失敗:", error);
+        }
+      }
+      // ✅ 釋放 AudioManager 引用
+      audioManager.release();
+    };
+  }, []);
 
   return (
     <PlayerContext.Provider value={contextValue}>

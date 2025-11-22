@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function AdAnalyticsPage() {
+  const router = useRouter();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,9 +16,14 @@ export default function AdAnalyticsPage() {
       try {
         const response = await axios.get("/api/admin/ad-analytics");
         // API 返回 { success: true, data: { ... } }，所以需要使用 response.data.data
-        setData(response.data.data);
+        if (response.data.success && response.data.data) {
+          setData(response.data.data);
+        } else {
+          setError("無法獲取數據");
+        }
       } catch (err) {
-        setError(err.response?.data?.message || "載入失敗");
+        console.error("獲取廣告收益統計失敗:", err);
+        setError(err.response?.data?.error || err.response?.data?.message || "載入失敗");
       } finally {
         setLoading(false);
       }
@@ -74,12 +81,12 @@ export default function AdAnalyticsPage() {
     <div className="relative min-h-screen bg-black text-white p-6">
       {/* 導航 */}
       <div className="flex gap-4 mb-6">
-        <Link
-          href="/"
-          className="px-3 py-1 bg-white text-black rounded hover:bg-gray-100 font-semibold"
+        <button
+          onClick={() => router.back()}
+          className="px-3 py-1 bg-white text-black rounded hover:bg-gray-100 font-semibold cursor-pointer"
         >
-          ← 回首頁
-        </Link>
+          ← 回上一頁
+        </button>
         <Link
           href="/admin/analytics"
           className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold"

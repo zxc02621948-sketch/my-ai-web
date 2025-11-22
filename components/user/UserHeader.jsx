@@ -847,7 +847,13 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
                     });
                     const result = await response.json();
                     if (result.success) {
-                      notify.success("提領成功！", `獲得 ${result.claimed} 積分`);
+                      // 將成功狀態保存到 sessionStorage，刷新後顯示提示
+                      if (typeof window !== "undefined") {
+                        sessionStorage.setItem("actionSuccess", JSON.stringify({
+                          title: "提領成功！",
+                          message: `獲得 ${result.claimed} 積分`
+                        }));
+                      }
                       setClaimModalOpen(false);
                       window.location.reload();
                     } else {

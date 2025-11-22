@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Modal from "@/components/common/Modal";
 import toast from "react-hot-toast";
 import CATEGORIES from "@/constants/categories";
+import SelectField from "@/components/common/SelectField";
 
 /** 更寬鬆的真值判斷（支援 true/1/"1"/"true"/"yes"/"on"/"public"） */
 function truthy(v) {
@@ -42,8 +43,12 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
   const [form, setForm] = useState({
     title: "",
     description: "",
-    category: "",
+    category: "", // 保持向後兼容
+    categories: [],
     rating: "all",
+    platform: "",
+    positivePrompt: "",
+    negativePrompt: "",
     modelName: "",
     modelUrl: "",
     loraName: "",
@@ -79,12 +84,23 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
 
         // ✅ 依現況推論公開旗標（取代原本用 form.allowComfyShare 回填自己的做法）:contentReference[oaicite:3]{index=3}
         const allowShareNow = inferAllowComfyShare(img);
+        
+        // ✅ 將 rating 從 'sfw' 轉換為 'all' 以匹配表單選項
+        const ratingForForm = img.rating === "sfw" ? "all" : (img.rating || "all");
 
         setForm({
           title: img.title || "",
           description: img.description || "",
-          category: img.category || "",
-          rating: img.rating || "all",
+          category: img.category || "", // 保持向後兼容
+          categories: Array.isArray(img.categories) && img.categories.length > 0
+            ? img.categories
+            : img.category
+              ? [img.category]
+              : [],
+          rating: ratingForForm,
+          platform: img.platform || "",
+          positivePrompt: img.positivePrompt || "",
+          negativePrompt: img.negativePrompt || "",
           modelName: img.modelName || "",
           modelUrl: img.modelUrl || img.modelLink || "",
           loraName: img.loraName || "",
@@ -132,26 +148,32 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
         .map((t) => t.trim())
         .filter(Boolean);
 
-      // ✅ 送出時確保是布林
+      // ✅ 送出時確保是布林，並將 rating 從 'all' 轉換為 'sfw'
+      const normalizedRating = form.rating === "all" ? "sfw" : (form.rating || "sfw");
+      
       const body = {
-        title: form.title.trim(),
-        description: form.description,
-        category: form.category,
-        rating: form.rating,
-        modelName: form.modelName,
-        modelUrl: form.modelUrl, // 若後端用 modelLink 會在 API 端對應
-        loraName: form.loraName,
-        loraUrl: form.loraUrl,   // 同上
+        title: (form.title || "").trim(),
+        description: form.description || "",
+        category: form.categories.length > 0 ? form.categories[0] : "", // 保持向後兼容
+        categories: form.categories.slice(0, 3), // 最多3個
+        rating: normalizedRating,
+        platform: (form.platform || "").trim(),
+        positivePrompt: (form.positivePrompt || "").trim(),
+        negativePrompt: (form.negativePrompt || "").trim(),
+        modelName: (form.modelName || "").trim(),
+        modelUrl: (form.modelUrl || "").trim(), // 若後端用 modelLink 會在 API 端對應
+        loraName: (form.loraName || "").trim(),
+        loraUrl: (form.loraUrl || "").trim(),   // 同上
         tags: normalizedTags,
         // 進階（型別轉換）
         steps: form.steps === "" ? null : Number(form.steps),
-        sampler: form.sampler,
+        sampler: (form.sampler || "").trim(),
         cfgScale: form.cfgScale === "" ? null : Number(form.cfgScale),
         seed: String(form.seed || ""),
         clipSkip: form.clipSkip === "" ? null : Number(form.clipSkip),
         width: form.width === "" ? null : Number(form.width),
         height: form.height === "" ? null : Number(form.height),
-        modelHash: form.modelHash,
+        modelHash: (form.modelHash || "").trim(),
         allowComfyShare: !!form.allowComfyShare,
       };
 
@@ -184,6 +206,7 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="編輯圖片資料">
       <div className="flex flex-col gap-3">
+        {/* 標題 */}
         <label className="text-sm text-zinc-300">
           標題
           <input
@@ -195,8 +218,21 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
           />
         </label>
 
+        {/* 標籤 */}
         <label className="text-sm text-zinc-300">
-          描述
+          標籤（以空白或逗號分隔）
+          <input
+            className="mt-1 w-full p-2 rounded bg-zinc-800 text-white"
+            placeholder="戰士 惡魔 機甲（或：戰士, 惡魔, 機甲）"
+            value={form.tags}
+            onChange={(e) => handleChange("tags", e.target.value)}
+            disabled={loading || saving}
+          />
+        </label>
+
+        {/* 描述 */}
+        <label className="text-sm text-zinc-300">
+          描述（選填）
           <textarea
             className="mt-1 w-full p-2 rounded bg-zinc-800 text-white min-h-[80px]"
             placeholder="描述"
@@ -206,22 +242,8 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
           />
         </label>
 
+        {/* 分級 */}
         <div className="grid grid-cols-2 gap-3">
-          <label className="text-sm text-zinc-300">
-            分類
-            <select
-              className="mt-1 w-full p-2 rounded bg-zinc-800 text-white"
-              value={form.category || ""}
-              onChange={(e) => handleChange("category", e.target.value)}
-              disabled={loading || saving}
-            >
-              <option value="" disabled>請選擇分類</option>
-              {finalCategoryOptions.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </label>
-
           <label className="text-sm text-zinc-300">
             分級
             <select
@@ -234,6 +256,114 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
               <option value="15">15+</option>
               <option value="18">18+</option>
             </select>
+          </label>
+        </div>
+
+        {/* 分類與生成平台 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 分類（可複選，最多3個） */}
+          <div>
+            <label className={`text-sm font-semibold text-zinc-300 mb-2 block ${form.categories.length === 0 ? "" : ""}`}>
+              📁 圖片分類（可複選，最多3個）
+            </label>
+            <div
+              className={`max-h-32 overflow-y-auto rounded p-2 bg-zinc-800 border ${
+                form.categories.length === 0 ? "border-zinc-700" : form.categories.length >= 3 ? "border-yellow-500/50" : "border-zinc-700"
+              }`}
+            >
+              {categoryOptions.map((categoryKey) => {
+                const isSelected = form.categories.includes(categoryKey);
+                const isDisabled = !isSelected && form.categories.length >= 3;
+                
+                return (
+                  <label
+                    key={categoryKey}
+                    className={`flex items-center gap-2 py-1 cursor-pointer hover:bg-zinc-700/50 rounded px-2 ${
+                      isDisabled ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      value={categoryKey}
+                      checked={isSelected}
+                      disabled={isDisabled || loading || saving}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          if (form.categories.length < 3) {
+                            const newCategories = [...form.categories, categoryKey];
+                            setForm((p) => ({
+                              ...p,
+                              categories: newCategories,
+                              category: newCategories.length > 0 ? newCategories[0] : "", // 保持向後兼容
+                            }));
+                          }
+                        } else {
+                          const newCategories = form.categories.filter((c) => c !== categoryKey);
+                          setForm((p) => ({
+                            ...p,
+                            categories: newCategories,
+                            category: newCategories.length > 0 ? newCategories[0] : "", // 保持向後兼容
+                          }));
+                        }
+                      }}
+                      className="rounded"
+                    />
+                    <span className="text-white text-sm">
+                      {categoryKey}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {form.categories.length > 0 && (
+              <div className="mt-1 text-xs text-zinc-400">
+                已選擇 {form.categories.length} / 3 個分類
+              </div>
+            )}
+          </div>
+
+          {/* 生成平台 */}
+          <div>
+            <label className="text-sm text-zinc-300 mb-2 block">
+              🛠️ 使用平台
+            </label>
+            <SelectField
+              value={form.platform}
+              onChange={(value) => handleChange("platform", value)}
+              placeholder="選擇平台"
+              options={[
+                { value: 'Stable Diffusion WebUI', label: 'Stable Diffusion WebUI' },
+                { value: 'ComfyUI', label: 'ComfyUI' },
+                { value: 'SeaArt.ai', label: 'SeaArt.ai' },
+                { value: '其他', label: '其他' },
+              ]}
+              disabled={loading || saving}
+              buttonClassName="bg-zinc-800 text-white"
+            />
+          </div>
+        </div>
+
+        {/* 提示詞與負面提示詞 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label className="text-sm text-zinc-300">
+            正面提示詞（Prompt）
+            <textarea
+              className="mt-1 w-full p-2 rounded bg-zinc-800 text-white min-h-[80px]"
+              placeholder="描述你想要的畫面、風格等"
+              value={form.positivePrompt}
+              onChange={(e) => handleChange("positivePrompt", e.target.value)}
+              disabled={loading || saving}
+            />
+          </label>
+          <label className="text-sm text-zinc-300">
+            負面提示詞（Negative Prompt）
+            <textarea
+              className="mt-1 w-full p-2 rounded bg-zinc-800 text-white min-h-[80px]"
+              placeholder="不想要出現的元素（如：模糊、雜訊、扭曲等）"
+              value={form.negativePrompt}
+              onChange={(e) => handleChange("negativePrompt", e.target.value)}
+              disabled={loading || saving}
+            />
           </label>
         </div>
 
@@ -277,17 +407,6 @@ export default function EditImageModal({ imageId, isOpen, onClose, onImageUpdate
             placeholder="https://civitai.com/... 或 https://seaart.ai/..."
             value={form.loraUrl}
             onChange={(e) => handleChange("loraUrl", e.target.value)}
-            disabled={loading || saving}
-          />
-        </label>
-
-        <label className="text-sm text-zinc-300">
-          標籤（以空白或逗號分隔）
-          <input
-            className="mt-1 w-full p-2 rounded bg-zinc-800 text-white"
-            placeholder="戰士 惡魔 機甲（或：戰士, 惡魔, 機甲）"
-            value={form.tags}
-            onChange={(e) => handleChange("tags", e.target.value)}
             disabled={loading || saving}
           />
         </label>

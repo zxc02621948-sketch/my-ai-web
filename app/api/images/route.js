@@ -140,55 +140,91 @@ export async function GET(req) {
     const selected = new Set(ratingsParam);
 
     const match = {};
-    if (categoriesParam.length) match.category = { $in: categoriesParam };
-
+    
     // ✅ 支持 hasMetadata 篩選（用於「作品展示」vs「創作參考」）
     const hasMetadataParam = url.searchParams.get("hasMetadata");
+    let metadataCondition = null;
     if (hasMetadataParam === "true") {
       // 使用更智能的質量篩選：只顯示優質圖和標準圖
-      match.$or = [
-        // 優質圖條件：有模型/LoRA/Prompt 且自動抓取比例高
-        {
-          $and: [
-            { $or: [
-              { modelName: { $exists: true, $ne: "", $ne: "(未提供)" } },
-              { loraName: { $exists: true, $ne: "", $ne: "(未提供)" } },
-              { positivePrompt: { $exists: true, $ne: "", $ne: "(無)" } }
-            ]},
-            { $or: [
-              { steps: { $exists: true, $ne: null } },
-              { sampler: { $exists: true, $ne: "" } },
-              { cfgScale: { $exists: true, $ne: null } },
-              { seed: { $exists: true, $ne: "" } },
-              { width: { $exists: true, $ne: null } },
-              { height: { $exists: true, $ne: null } }
-            ]}
-          ]
-        }
-      ];
+      metadataCondition = {
+        $or: [
+          // 優質圖條件：有模型/LoRA/Prompt 且自動抓取比例高
+          {
+            $and: [
+              { $or: [
+                { modelName: { $exists: true, $ne: "", $ne: "(未提供)" } },
+                { loraName: { $exists: true, $ne: "", $ne: "(未提供)" } },
+                { positivePrompt: { $exists: true, $ne: "", $ne: "(無)" } }
+              ]},
+              { $or: [
+                { steps: { $exists: true, $ne: null } },
+                { sampler: { $exists: true, $ne: "" } },
+                { cfgScale: { $exists: true, $ne: null } },
+                { seed: { $exists: true, $ne: "" } },
+                { width: { $exists: true, $ne: null } },
+                { height: { $exists: true, $ne: null } }
+              ]}
+            ]
+          }
+        ]
+      };
+    }
+    
+    // ✅ 篩選分類：支援多分類篩選，同時檢查 categories 數組和 category 單個欄位（向後兼容）
+    let categoryCondition = null;
+    if (categoriesParam.length) {
+      categoryCondition = {
+        $or: [
+          { categories: { $in: categoriesParam } },  // 檢查 categories 數組
+          { category: { $in: categoriesParam } }      // 檢查 category 單個欄位（向後兼容）
+        ]
+      };
+    }
+    
+    // 合併條件：如果兩個條件都存在，使用 $and；否則直接使用條件
+    if (categoryCondition && metadataCondition) {
+      match.$and = [categoryCondition, metadataCondition];
+    } else if (categoryCondition) {
+      Object.assign(match, categoryCondition);
+    } else if (metadataCondition) {
+      Object.assign(match, metadataCondition);
     }
 
     const hasSfw = selected.has("sfw");
     const has15 = selected.has("15");
     const has18 = selected.has("18");
-    const applyDefaultGeneralPlus15 = () => { match.rating = { $ne: "18" }; };
+    
+    // ✅ 構建 rating 篩選條件（避免覆蓋分類篩選的 $or）
+    let ratingCondition = null;
+    const applyDefaultGeneralPlus15 = () => { ratingCondition = { rating: { $ne: "18" } }; };
 
     if (!hasSfw && !has15 && !has18) {
       applyDefaultGeneralPlus15();
     } else if (hasSfw && !has15 && !has18) {
-      match.rating = { $nin: ["15", "18"] };
+      ratingCondition = { rating: { $nin: ["15", "18"] } };
     } else if (!hasSfw && has15 && !has18) {
-      match.rating = "15";
+      ratingCondition = { rating: "15" };
     } else if (!hasSfw && !has15 && has18) {
-      match.rating = "18";
+      ratingCondition = { rating: "18" };
     } else if (hasSfw && has15 && !has18) {
       applyDefaultGeneralPlus15();
     } else if (hasSfw && !has15 && has18) {
-      match.$or = [{ rating: { $nin: ["15", "18"] } }, { rating: "18" }];
+      ratingCondition = { $or: [{ rating: { $nin: ["15", "18"] } }, { rating: "18" }] };
     } else if (!hasSfw && has15 && has18) {
-      match.rating = { $in: ["15", "18"] };
+      ratingCondition = { rating: { $in: ["15", "18"] } };
     } else {
-      match.$or = [{ rating: { $nin: ["15", "18"] } }, { rating: { $in: ["15", "18"] } }];
+      ratingCondition = { $or: [{ rating: { $nin: ["15", "18"] } }, { rating: { $in: ["15", "18"] } }] };
+    }
+    
+    // ✅ 合併所有條件：categoryCondition, metadataCondition, ratingCondition
+    const allConditions = [categoryCondition, metadataCondition, ratingCondition].filter(Boolean);
+    if (allConditions.length === 0) {
+      // 沒有篩選條件，保持 match 為空對象
+    } else if (allConditions.length === 1) {
+      Object.assign(match, allConditions[0]);
+    } else {
+      // 多個條件，使用 $and 合併
+      match.$and = allConditions;
     }
 
     const useLive = url.searchParams.get("live") === "1";
@@ -196,7 +232,7 @@ export async function GET(req) {
     const usersColl = mongoose.model("User").collection.name;
 
     const projectBase = {
-      _id: 1, title: 1, description: 1, positivePrompt: 1, negativePrompt: 1, tags: 1, category: 1, rating: 1,
+      _id: 1, title: 1, description: 1, positivePrompt: 1, negativePrompt: 1, tags: 1, category: 1, categories: 1, rating: 1,
       createdAt: 1, likes: 1, likesCount: 1, popScore: 1, imageUrl: 1, imageId: 1, variant: 1, userId: 1, user: 1,
       platform: 1, modelName: 1, modelLink: 1, modelHash: 1, loraName: 1, loraLink: 1, author: 1,
       sampler: 1, steps: 1, cfgScale: 1, seed: 1, clipSkip: 1, width: 1, height: 1,

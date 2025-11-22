@@ -5,18 +5,19 @@ import User from "@/models/User";
 import Image from "@/models/Image";
 import Comment from "@/models/Comment";
 import LikeLog from "@/models/LikeLog";
-import { verifyToken } from "@/lib/serverAuth";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
+import { NextResponse } from "next/server";
 
 export async function GET(req) {
-  await dbConnect();
+  try {
+    await dbConnect();
 
-  const cookie = req.headers.get("cookie");
-  const token = cookie?.match(/token=([^;]+)/)?.[1];
-  const tokenData = token ? verifyToken(token) : null;
-
-  if (!tokenData?.isAdmin) {
-    return new Response("Forbidden", { status: 403 });
-  }
+    // 從數據庫獲取用戶信息（而不是從 JWT token）
+    const currentUser = await getCurrentUserFromRequest(req);
+    
+    if (!currentUser || !currentUser.isAdmin) {
+      return NextResponse.json({ error: "需要管理員權限" }, { status: 403 });
+    }
 
   const summary = [];
 
@@ -92,5 +93,12 @@ export async function GET(req) {
     });
   }
 
-  return new Response(JSON.stringify({ summary }), { status: 200 });
+  return NextResponse.json({ summary }, { status: 200 });
+  } catch (error) {
+    console.error('[ANALYTICS-SUMMARY] Error:', error);
+    return NextResponse.json(
+      { error: "獲取流量統計失敗" },
+      { status: 500 }
+    );
+  }
 }

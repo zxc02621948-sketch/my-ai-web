@@ -37,14 +37,6 @@ const BASIC_FRAMES = [
     description: "神秘的魔法陣頭像框",
     tier: "basic",
     cost: 0
-  },
-  {
-    id: "magic-circle-2",
-    name: "魔法陣2",
-    preview: "/frames/魔法陣2.png",
-    description: "進階版魔法陣頭像框",
-    tier: "basic",
-    cost: 0
   }
 ];
 

@@ -30,19 +30,38 @@ export async function GET(request) {
     // 基礎匹配條件
     const match = { isPublic: true };
 
-    // 搜尋條件
+    // 構建搜尋條件
+    let searchCondition = null;
     if (search.trim()) {
-      match.$or = [
-        { title: { $regex: search.trim(), $options: 'i' } },
-        { description: { $regex: search.trim(), $options: 'i' } },
-        { tags: { $regex: search.trim(), $options: 'i' } }
-      ];
+      searchCondition = {
+        $or: [
+          { title: { $regex: search.trim(), $options: 'i' } },
+          { description: { $regex: search.trim(), $options: 'i' } },
+          { tags: { $regex: search.trim(), $options: 'i' } }
+        ]
+      };
     }
 
-    // ✅ 新增：分類篩選
+    // ✅ 新增：分類篩選（支援多分類篩選，同時檢查 categories 數組和 category 單個欄位）
+    let categoryCondition = null;
     if (categories) {
-      const categoryList = categories.split(',').map(cat => decodeURIComponent(cat));
-      match.category = { $in: categoryList };
+      const categoryList = categories.split(',').map(cat => decodeURIComponent(cat.trim())).filter(Boolean);
+      if (categoryList.length > 0) {
+        categoryCondition = {
+          $or: [
+            { categories: { $in: categoryList } },  // 檢查 categories 數組
+            { category: { $in: categoryList } }      // 檢查 category 單個欄位（向後兼容）
+          ]
+        };
+      }
+    }
+
+    // 合併搜尋和分類條件
+    const conditions = [searchCondition, categoryCondition].filter(Boolean);
+    if (conditions.length === 1) {
+      Object.assign(match, conditions[0]);
+    } else if (conditions.length > 1) {
+      match.$and = conditions;
     }
 
     // ✅ 新增：分級篩選
@@ -64,6 +83,7 @@ export async function GET(request) {
       description: 1,
       tags: 1,
       category: 1,
+      categories: 1,
       rating: 1,
       createdAt: 1,
       uploadDate: 1,

@@ -136,23 +136,6 @@ export const STORE_PRODUCTS = {
         "神秘風格",
         "永久使用權"
       ]
-    },
-    {
-      id: "magic-circle-2-frame",
-      title: "魔法陣2頭像框（測試版）",
-      description: "測試版魔法陣設計，未來將升級為高級版本！早鳥價限時優惠，升級後不再以此價格販售。",
-      icon: "/frames/魔法陣2.png",
-      price: 300,
-      originalPrice: 600,
-      isLimited: false,
-      expiry: null,
-      category: "personalization",
-      features: [
-        "測試版設計",
-        "未來將升級為高級版",
-        "早鳥投資機會",
-        "永久使用權"
-      ]
     }
   ],
   special: [

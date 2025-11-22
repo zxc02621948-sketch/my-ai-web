@@ -38,7 +38,11 @@ const allowedFields = [
   "title",
   "description",
   "category",
+  "categories",   // ✅ 新增：支持多分類
   "rating",
+  "platform",     // ✅ 新增：生成平台
+  "positivePrompt",  // ✅ 新增：正面提示詞
+  "negativePrompt",  // ✅ 新增：負面提示詞
   "modelName",
   "modelUrl",     // 你前端送這個；若舊資料用 modelLink，後面會一併處理
   "loraName",
@@ -137,12 +141,45 @@ export async function PATCH(req, ctx) {
       delete updates.allowComfyShare;
     }
 
+    // ✅ 處理 rating：將 'all' 轉換為 'sfw'，確保符合 enum
+    if ("rating" in updates) {
+      const ratingValue = updates.rating;
+      if (ratingValue === "all" || !["sfw", "15", "18"].includes(ratingValue)) {
+        image.rating = "sfw"; // 默認值
+      } else {
+        image.rating = ratingValue;
+      }
+      delete updates.rating;
+    }
+
+    // ✅ 處理分類：優先使用 categories，否則使用 category
+    if ("categories" in updates || "category" in updates) {
+      if (Array.isArray(updates.categories) && updates.categories.length > 0) {
+        image.categories = updates.categories.slice(0, 3); // 最多3個
+        image.category = updates.categories[0]; // 保持向後兼容
+      } else if (updates.category) {
+        image.category = updates.category;
+        image.categories = [updates.category];
+      } else {
+        image.category = "";
+        image.categories = [];
+      }
+      delete updates.categories;
+      delete updates.category;
+    }
+
+    // ✅ 處理 powerType：確保符合 enum，如果不符合則設為 null
+    if (image.powerType && !['7day', '30day', 'rare'].includes(image.powerType)) {
+      image.powerType = null;
+    }
+
     // 其餘欄位（基礎、進階）直接寫回
     const directKeys = [
       "title",
       "description",
-      "category",
-      "rating",
+      "platform",      // ✅ 新增
+      "positivePrompt", // ✅ 新增
+      "negativePrompt", // ✅ 新增
       "modelName",
       "loraName",
       "tags",
@@ -157,7 +194,17 @@ export async function PATCH(req, ctx) {
     ];
     for (const k of directKeys) {
       if (k in updates) {
-        image[k] = updates[k];
+        // 對於字符串字段，如果是 null 或 undefined，設為空字符串；否則使用原值
+        // 對於數值字段（steps, cfgScale等），null 已經在前面處理了
+        if (updates[k] === null || updates[k] === undefined) {
+          if (["steps", "cfgScale", "clipSkip", "width", "height"].includes(k)) {
+            image[k] = null;
+          } else {
+            image[k] = "";
+          }
+        } else {
+          image[k] = updates[k];
+        }
       }
     }
 

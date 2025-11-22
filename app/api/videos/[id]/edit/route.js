@@ -47,14 +47,13 @@ export async function PUT(req, { params }) {
       tags,
       rating,
       category,
+      categories,
       platform,
       prompt,
       negativePrompt,
       fps,
       resolution,
-      steps,
-      cfgScale,
-      seed,
+      aspectRatio,
     } = body;
 
     // 驗證必填欄位
@@ -77,15 +76,20 @@ export async function PUT(req, { params }) {
     video.description = description?.trim() || "";
     video.tags = Array.isArray(tags) ? tags : [];
     video.rating = rating;
-    video.category = category || "";
+    // 更新分類：優先使用 categories，否則使用 category
+    if (Array.isArray(categories) && categories.length > 0) {
+      video.categories = categories.slice(0, 3); // 最多3個
+      video.category = categories[0]; // 保持向後兼容
+    } else {
+      video.category = category || "";
+      video.categories = category ? [category] : [];
+    }
     video.platform = platform?.trim() || "";
     video.prompt = prompt?.trim() || "";
     video.negativePrompt = negativePrompt?.trim() || "";
-    video.fps = fps?.trim() || "";
+    video.fps = fps ? (typeof fps === 'number' ? fps : parseFloat(fps) || null) : null;
     video.resolution = resolution?.trim() || "";
-    video.steps = steps?.trim() || "";
-    video.cfgScale = cfgScale?.trim() || "";
-    video.seed = seed?.trim() || "";
+    video.aspectRatio = aspectRatio?.trim() || "";
 
     // ✅ 重新計算完整度（但不重算 popScore）
     video.completenessScore = computeVideoCompleteness(video);

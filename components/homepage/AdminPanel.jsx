@@ -59,7 +59,13 @@ export default function AdminPanel() {
       const data = await res.json();
       
       if (data.success) {
-        notify.success("成功", `成功獲得 ${pointsAmount} 積分！\n原積分: ${data.data.oldBalance}\n新積分: ${data.data.newBalance}`);
+        // 將成功狀態保存到 sessionStorage，刷新後顯示提示
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("actionSuccess", JSON.stringify({
+            title: "成功",
+            message: `成功獲得 ${pointsAmount} 積分！\n原積分: ${data.data.oldBalance}\n新積分: ${data.data.newBalance}`
+          }));
+        }
         // 刷新頁面以更新顯示
         window.location.reload();
       } else {

@@ -265,7 +265,13 @@ export default function ImageModal({
         body: JSON.stringify({ imageId: id }),
       });
       if (!res.ok) throw new Error("刪除失敗");
-      notify.success("成功", "圖片刪除成功！");
+      // 將成功狀態保存到 sessionStorage，刷新後顯示提示
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("imageDeletedSuccess", JSON.stringify({
+          title: "成功",
+          message: "圖片刪除成功！"
+        }));
+      }
       window.location.reload();
       onClose?.();
     } catch (err) {

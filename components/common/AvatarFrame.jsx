@@ -33,7 +33,6 @@ export default function AvatarFrame({
     "animals": "/frames/animals-5985896_1280.png",
     "leaves": "/frames/leaves-6649803_1280.png",
     "magic-circle": "/frames/魔法陣1.png",
-    "magic-circle-2": "/frames/魔法陣2.png",
     "military": "/frames/avatar-frame-military-01.png",
     "nature": "/frames/avatar-frame-nature-01.png"
   };
@@ -114,28 +113,24 @@ export default function AvatarFrame({
                opacity: frameTransparency,
                top: frameOffset - (avatarSize * (
                  frameId === 'magic-circle' ? 0.28 : 
-                 frameId === 'magic-circle-2' ? 0.25 : 
                  frameId === 'military' ? 0.20 :
                  frameId === 'nature' ? 0.18 :
                  0.08
                )),
                left: frameOffset - (avatarSize * (
                  frameId === 'magic-circle' ? 0.30 : 
-                 frameId === 'magic-circle-2' ? 0.25 : 
                  frameId === 'military' ? 0.20 :
                  frameId === 'nature' ? 0.18 :
                  0.08
                )),
                width: avatarSize + (avatarSize * (
                  frameId === 'magic-circle' ? 0.60 : 
-                 frameId === 'magic-circle-2' ? 0.50 : 
                  frameId === 'military' ? 0.40 :
                  frameId === 'nature' ? 0.36 :
                  0.16
                )), 
                height: avatarSize + (avatarSize * (
                  frameId === 'magic-circle' ? 0.60 : 
-                 frameId === 'magic-circle-2' ? 0.50 : 
                  frameId === 'military' ? 0.40 :
                  frameId === 'nature' ? 0.36 :
                  0.16

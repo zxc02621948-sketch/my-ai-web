@@ -104,6 +104,69 @@ export default function GlobalNotificationManager() {
     }
   }, []);
 
+  // 檢查 sessionStorage 中是否有需要顯示的提示（刷新後顯示）
+  useEffect(() => {
+    if (typeof window === "undefined" || !globalNotificationManager) return;
+
+    try {
+      // 檢查刪除圖片成功的提示
+      const deletedNotification = sessionStorage.getItem("imageDeletedSuccess");
+      if (deletedNotification) {
+        const { title, message } = JSON.parse(deletedNotification);
+        sessionStorage.removeItem("imageDeletedSuccess");
+        globalNotificationManager.success(title, message);
+        return; // 只顯示一個提示，優先顯示刪除提示
+      }
+
+      // 檢查上傳圖片成功的提示
+      const uploadNotification = sessionStorage.getItem("imageUploadSuccessMessage");
+      if (uploadNotification) {
+        try {
+          const payload = JSON.parse(uploadNotification);
+          const title = payload.title || "上傳成功";
+          const message = payload.body || payload.message || "";
+          sessionStorage.removeItem("imageUploadSuccessMessage");
+          globalNotificationManager.success(title, message, { 
+            autoClose: true, 
+            autoCloseDelay: 6000 
+          });
+        } catch (e) {
+          // 如果不是 JSON 格式，當作純文字處理
+          sessionStorage.removeItem("imageUploadSuccessMessage");
+          globalNotificationManager.success("上傳成功", uploadNotification, { 
+            autoClose: true, 
+            autoCloseDelay: 6000 
+          });
+        }
+        return;
+      }
+
+      // 檢查購買成功的提示
+      const purchaseNotification = sessionStorage.getItem("purchaseSuccess");
+      if (purchaseNotification) {
+        const { title, message } = JSON.parse(purchaseNotification);
+        sessionStorage.removeItem("purchaseSuccess");
+        globalNotificationManager.success(title, message);
+        return;
+      }
+
+      // 檢查操作成功的提示（通用）
+      const actionNotification = sessionStorage.getItem("actionSuccess");
+      if (actionNotification) {
+        const { title, message } = JSON.parse(actionNotification);
+        sessionStorage.removeItem("actionSuccess");
+        globalNotificationManager.success(title, message);
+      }
+    } catch (err) {
+      console.error("讀取保存的提示失敗:", err);
+      // 清除可能損壞的數據
+      sessionStorage.removeItem("imageDeletedSuccess");
+      sessionStorage.removeItem("imageUploadSuccessMessage");
+      sessionStorage.removeItem("purchaseSuccess");
+      sessionStorage.removeItem("actionSuccess");
+    }
+  }, []);
+
   return (
     <>
       <NotificationModal

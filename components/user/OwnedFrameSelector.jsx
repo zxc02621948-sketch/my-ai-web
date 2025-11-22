@@ -76,11 +76,6 @@ export default function OwnedFrameSelector({
     name: "魔法陣",
     preview: "/frames/魔法陣1.png",
     description: "神秘的魔法陣頭像框"
-  },
-  "magic-circle-2": {
-    name: "魔法陣2",
-    preview: "/frames/魔法陣2.png",
-    description: "進階版魔法陣頭像框"
   }
   };
 

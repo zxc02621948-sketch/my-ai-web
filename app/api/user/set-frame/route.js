@@ -5,7 +5,7 @@ import User from "@/models/User";
 import PointsTransaction from "@/models/PointsTransaction";
 
 const VALID_FRAMES = [
-  "default", "ai-generated", "animals", "leaves", "magic-circle", "magic-circle-2", "military", "nature"
+  "default", "ai-generated", "animals", "leaves", "magic-circle", "military", "nature"
 ];
 
 export async function POST(req) {

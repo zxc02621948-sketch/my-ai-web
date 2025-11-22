@@ -3,6 +3,7 @@ import { X, Trash2, Download, Clipboard, AlertTriangle, MessageSquare } from "lu
 import { useRouter } from "next/navigation";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import PowerCouponButton from "@/components/power-coupon/PowerCouponButton";
+import { getPlatformUrl } from "@/constants/platformUrls";
 
 export default function VideoInfoBox({ 
   video, 
@@ -159,11 +160,22 @@ export default function VideoInfoBox({
       )}
 
       {/* 分類 */}
-      {video.category && (
-        <div>
-          <div className="text-sm text-gray-300 mb-2">分類: {video.category}</div>
-        </div>
-      )}
+      {(() => {
+        // 優先使用 categories 數組，如果沒有則使用 category 單個值
+        const categoriesToShow = Array.isArray(video.categories) && video.categories.length > 0
+          ? video.categories
+          : video.category
+            ? [video.category]
+            : [];
+
+        if (categoriesToShow.length === 0) return null;
+
+        return (
+          <div>
+            <div className="text-sm text-gray-300 mb-2">分類：{categoriesToShow.join("、")}</div>
+          </div>
+        );
+      })()}
 
       {/* 標籤 */}
       {video.tags && video.tags.length > 0 && (
@@ -200,7 +212,29 @@ export default function VideoInfoBox({
             {video.platform && (
               <div className="p-2 bg-zinc-800 rounded">
                 <div className="text-gray-400 text-xs mb-1">生成平台</div>
-                <div className="text-white text-sm">{video.platform}</div>
+                <div className="text-white text-sm">
+                  {(() => {
+                    const platform = video.platform;
+                    
+                    // 檢查是否有官方網站連結
+                    const platformUrl = getPlatformUrl(platform);
+                    
+                    if (platformUrl) {
+                      const isInternalLink = platformUrl.startsWith("/");
+                      return (
+                        <a
+                          href={platformUrl}
+                          {...(isInternalLink ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+                          className="text-blue-400 hover:text-blue-300 underline"
+                        >
+                          {platform}
+                        </a>
+                      );
+                    }
+                    
+                    return <span>{platform}</span>;
+                  })()}
+                </div>
               </div>
             )}
             

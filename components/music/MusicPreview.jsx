@@ -399,13 +399,18 @@ const MusicPreview = ({ music, className = "", onClick }) => {
     return () => {
       stopPreview({ restore: false });
       
-      // ✅ 組件卸載時清理 src，釋放內存
-      // 只在組件卸載時清理，不影響正常的預覽停止
+      // ✅ 組件卸載時清理音頻狀態，但不移除 src（由 React 管理）
+      // ⚠️ 注意：不清理 src，因為 src 由 React 的 src={music.musicUrl} 管理
+      // 清理 src 會導致 React 無法自動恢復，下次試聽會失敗
       if (audioRef.current) {
         try {
           audioRef.current.pause();
-          audioRef.current.removeAttribute("src"); // 完全移除音頻來源
-          audioRef.current.load(); // 立刻釋放解碼緩存
+          // ✅ 重置時間位置
+          audioRef.current.currentTime = 0;
+          // ✅ 移除標記
+          audioRef.current.removeAttribute("data-music-preview");
+          // ⚠️ 注意：不調用 load() 和 removeAttribute("src")
+          // 因為 React 會自動管理 src 屬性，強制清理會導致下次試聽失敗
         } catch (error) {
           console.warn("🎵 [Preview] 組件卸載時清理音頻失敗", error);
         }
@@ -607,7 +612,11 @@ const MusicPreview = ({ music, className = "", onClick }) => {
             try {
               audioElement.pause();
               audioElement.currentTime = 0;
+              // ✅ 移除標記
               audioElement.removeAttribute("data-music-preview");
+              // ⚠️ 注意：不清理 src 和 load()，因為 src 由 React 管理
+              // 移除 src 會導致 React 無法恢復，下次試聽會失敗
+              // 只暫停播放和重置狀態即可
               if (audioManager && typeof audioManager.release === "function") {
                 audioManager.release(audioElement);
               }

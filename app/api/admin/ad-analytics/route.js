@@ -1,25 +1,25 @@
 // app/api/admin/ad-analytics/route.js
 import { dbConnect } from "@/lib/db";
 import AdVisitorLog from "@/models/AdVisitorLog";
-import { verifyToken } from "@/lib/serverAuth";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
+import { NextResponse } from "next/server";
 
 export async function GET(req) {
-  await dbConnect();
-
-  const cookie = req.headers.get("cookie");
-  const token = cookie?.match(/token=([^;]+)/)?.[1];
-  const tokenData = token ? verifyToken(token) : null;
-
-  if (!tokenData?.isAdmin) {
-    return new Response("Forbidden", { status: 403 });
-  }
-
-  const url = new URL(req.url);
-  const days = parseInt(url.searchParams.get('days')) || 7;
-  const page = parseInt(url.searchParams.get('page')) || 1;
-  const limit = parseInt(url.searchParams.get('limit')) || 20;
-
   try {
+    await dbConnect();
+
+    // 從數據庫獲取用戶信息（而不是從 JWT token）
+    const currentUser = await getCurrentUserFromRequest(req);
+    
+    if (!currentUser || !currentUser.isAdmin) {
+      return NextResponse.json({ error: "需要管理員權限" }, { status: 403 });
+    }
+
+    const url = new URL(req.url);
+    const days = parseInt(url.searchParams.get('days')) || 7;
+    const page = parseInt(url.searchParams.get('page')) || 1;
+    const limit = parseInt(url.searchParams.get('limit')) || 20;
+
     // 計算日期範圍
     const endDate = new Date();
     const startDate = new Date();
@@ -193,7 +193,7 @@ export async function GET(req) {
       createdAt: { $gte: startDate, $lte: endDate }
     });
 
-    return new Response(JSON.stringify({
+    return NextResponse.json({
       success: true,
       data: {
         summary: {
@@ -225,23 +225,13 @@ export async function GET(req) {
           }
         }
       }
-    }), { 
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    }, { status: 200 });
 
   } catch (error) {
     console.error('[AD-ANALYTICS] Error:', error);
-    return new Response(JSON.stringify({
+    return NextResponse.json({
       success: false,
-      error: 'Failed to fetch ad analytics'
-    }), { 
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+      error: '獲取廣告收益統計失敗'
+    }, { status: 500 });
   }
 }

@@ -14,6 +14,8 @@ export const GET = requireAdmin(
       .limit(200)
       .populate("userId", "name email");
     
+    // apiSuccess 返回格式是 { ok: true, ...data }
+    // 為了保持與前端的一致性，返回 { ok: true, logs }
     return apiSuccess({ logs });
   })
 );

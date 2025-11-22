@@ -43,6 +43,7 @@ function sanitizeComfyWorkflow(text) {
 }
 
 import PowerCouponButton from "@/components/power-coupon/PowerCouponButton";
+import { getPlatformUrl } from "@/constants/platformUrls";
 
 export default function ImageInfoBox({ image, currentUser, displayMode = "gallery", onClose, onEdit, onPowerCouponSuccess }) {
   const positiveRef = useRef();
@@ -231,7 +232,13 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data?.ok) {
-        notify.success("成功", "圖片刪除成功！");
+        // 將成功狀態保存到 sessionStorage，刷新後顯示提示
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("imageDeletedSuccess", JSON.stringify({
+            title: "成功",
+            message: "圖片刪除成功！"
+          }));
+        }
         onClose?.();
         window.scrollTo(0, 0);
         setTimeout(() => window.location.reload(), 50);
@@ -620,7 +627,30 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
           <div className="text-sm text-zinc-300 mb-3">
             來源作者： <span className="text-white">{image?.author?.trim() || "—"}</span>
           </div>
-          <div className="text-sm text-gray-300 mb-3">平台：{image.platform?.trim() ? image.platform : "未指定"}</div>
+          <div className="text-sm text-gray-300 mb-3">
+            平台：{(() => {
+              const platform = image.platform?.trim();
+              if (!platform) return "未指定";
+              
+              // 檢查是否有官方網站連結
+              const platformUrl = getPlatformUrl(platform);
+              
+              if (platformUrl) {
+                const isInternalLink = platformUrl.startsWith("/");
+                return (
+                  <a
+                    href={platformUrl}
+                    {...(isInternalLink ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+                    className="text-blue-400 hover:text-blue-300 underline"
+                  >
+                    {platform}
+                  </a>
+                );
+              }
+              
+              return <span className="text-white">{platform}</span>;
+            })()}
+          </div>
 
           {/* ComfyUI：原始 JSON 下載（顯示在資訊欄） */}
           {canSeeComfyJson && (
@@ -907,7 +937,23 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
       )}
 
       {/* 分類 - 兩種模式都顯示 */}
-      <div className="text-sm text-gray-300 mb-3">分類：{image.category || "未分類"}</div>
+      {/* 分類 */}
+      {(() => {
+        // 優先使用 categories 數組，如果沒有則使用 category 單個值
+        const categoriesToShow = Array.isArray(image.categories) && image.categories.length > 0
+          ? image.categories
+          : image.category
+            ? [image.category]
+            : [];
+
+        if (categoriesToShow.length === 0) return null;
+
+        return (
+          <div className="text-sm text-gray-300 mb-3">
+            分類：{categoriesToShow.join("、")}
+          </div>
+        );
+      })()}
 
       {/* 標籤 - 兩種模式都顯示 */}
       <div className="text-sm text-gray-300 mb-3">

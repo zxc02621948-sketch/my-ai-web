@@ -873,8 +873,15 @@ export default function UserProfilePage() {
       const matchLevel =
         selectedRatings.length === 0 ? rating !== "18" : selectedRatings.includes(rating);
 
+      // ✅ 支援多分類篩選：檢查 categories 陣列中是否有任何一個在 categoryFilters 中
+      const itemCategories = Array.isArray(item.categories) && item.categories.length > 0
+        ? item.categories
+        : item.category
+          ? [item.category]
+          : [];
       const matchCategory =
-        categoryFilters.length === 0 || categoryFilters.includes(item.category);
+        categoryFilters.length === 0 || 
+        itemCategories.some(cat => categoryFilters.includes(cat));
 
       const matchSearch =
         keyword === "" ||

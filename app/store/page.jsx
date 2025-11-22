@@ -124,6 +124,50 @@ export default function StorePage() {
   }, [currentUser]);
 
   const handlePurchase = async (productId, options) => {
+    // 先顯示確認對話框（訂閱有自己的確認邏輯，在後面處理）
+    if (productId !== "pin-player-subscription") {
+      // 獲取所有商品類別
+      const allProducts = [
+        ...STORE_PRODUCTS.features, 
+        ...STORE_PRODUCTS.personalization,
+        ...(STORE_PRODUCTS.special || []),
+        ...(STORE_PRODUCTS.limited || [])
+      ];
+      const product = allProducts.find(p => p.id === productId);
+      
+      if (product) {
+        let confirmMessage = `確定要購買「${product.title}」嗎？\n\n`;
+        
+        if (product.price === 0 || product.price === "免費") {
+          confirmMessage += `💰 費用：免費\n`;
+        } else if (product.price === "動態") {
+          confirmMessage += `💰 費用：根據擴充次數計算\n`;
+        } else {
+          confirmMessage += `💰 費用：${product.price} 積分\n`;
+        }
+        
+        if (productId === "power-coupon-7day") {
+          confirmMessage += `\n限購：3天內只能購買1次`;
+        } else if (productId === "power-coupon-30day") {
+          confirmMessage += `\n限購：7天內只能購買1次`;
+        }
+        
+        if (userInfo?.pointsBalance !== undefined) {
+          confirmMessage += `\n\n💎 目前積分：${userInfo.pointsBalance}`;
+          if (typeof product.price === "number" && product.price > 0) {
+            const remaining = userInfo.pointsBalance - product.price;
+            confirmMessage += `\n💰 購買後剩餘：${remaining}`;
+          }
+        }
+        
+        const confirmed = await notify.confirm("確認購買", confirmMessage);
+        if (!confirmed) {
+          setPurchaseStatus(prev => ({ ...prev, [productId]: false }));
+          return;
+        }
+      }
+    }
+    
     setLoading(true);
     setPurchaseStatus(prev => ({ ...prev, [productId]: true }));
     
@@ -219,8 +263,25 @@ export default function StorePage() {
           const pinPlayerSub = subscriptions?.pinPlayer;
           const isRenewal = pinPlayerSub?.isActive && pinPlayerSub?.expiresAt && new Date(pinPlayerSub.expiresAt) > new Date();
           
+          // 如果是首次開通，顯示確認對話框
+          if (!isRenewal) {
+            const confirmed = await notify.confirm(
+              "確認開通釘選播放器訂閱",
+              `💰 費用：200 積分\n\n` +
+              `📅 訂閱時長：30 天\n` +
+              `✨ 功能：全站跨頁面播放，背景可連播\n\n` +
+              (userInfo?.pointsBalance !== undefined ? `💎 目前積分：${userInfo.pointsBalance}\n💰 購買後剩餘：${userInfo.pointsBalance - 200}\n\n` : '') +
+              `是否確認購買？`
+            );
+            
+            if (!confirmed) {
+              setLoading(false);
+              setPurchaseStatus(prev => ({ ...prev, [productId]: false }));
+              return;
+            }
+          }
           // 如果是續費，顯示確認對話框
-          if (isRenewal) {
+          else if (isRenewal) {
             const expiresAt = pinPlayerSub.expiresAt 
               ? new Date(pinPlayerSub.expiresAt).toLocaleDateString('zh-TW')
               : '';
@@ -271,10 +332,15 @@ export default function StorePage() {
             const daysRemaining = res.data.daysRemaining || 0;
             const expiresAt = expiresDate.toLocaleDateString('zh-TW');
             
-            if (isPermanent) {
-              notify.success("訂閱成功！", `🎉 有效期：永久訂閱\n📅 到期時間：${expiresAt}\n\n💡 恭喜獲得永久釘選播放器！`);
-            } else {
-              notify.success("訂閱成功！", `📅 到期時間：${expiresAt}\n⏳ 剩餘天數：${daysRemaining} 天\n\n💡 續費時剩餘時間會累積，不會浪費。`);
+            // 將成功狀態保存到 sessionStorage，刷新後顯示提示
+            if (typeof window !== "undefined") {
+              const message = isPermanent 
+                ? `🎉 有效期：永久訂閱\n📅 到期時間：${expiresAt}\n\n💡 恭喜獲得永久釘選播放器！`
+                : `📅 到期時間：${expiresAt}\n⏳ 剩餘天數：${daysRemaining} 天\n\n💡 續費時剩餘時間會累積，不會浪費。`;
+              sessionStorage.setItem("purchaseSuccess", JSON.stringify({
+                title: "訂閱成功！",
+                message: message
+              }));
             }
             // 重新獲取訂閱狀態（確保前端狀態同步）
             await updateSubscriptions();
@@ -375,6 +441,15 @@ export default function StorePage() {
           if (setCurrentUser && currentUserInfo.data) {
             setCurrentUser(currentUserInfo.data);
           }
+          // 將成功狀態保存到 sessionStorage，刷新後顯示提示
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("purchaseSuccess", JSON.stringify({
+              title: "購買成功！",
+              message: expiresDate > new Date('2099-01-01') 
+                ? "🎉 永久訂閱成功！" 
+                : `📅 到期時間：${expiresAt}\n⏳ 剩餘天數：${daysRemaining} 天`
+            }));
+          }
           // 刷新頁面以顯示播放器
           setTimeout(() => {
             window.location.reload();
@@ -388,7 +463,13 @@ export default function StorePage() {
           cost: 300 
         });
         if (res?.data?.success) {
-          notify.success("購買成功！", "已獲得 AI 生成頭像框！");
+          // 將成功狀態保存到 sessionStorage，刷新後顯示提示
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("purchaseSuccess", JSON.stringify({
+              title: "購買成功！",
+              message: "已獲得 AI 生成頭像框！"
+            }));
+          }
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新已擁有的頭像框列表
           setUserOwnedFrames(prev => [...prev, "ai-generated"]);
@@ -405,7 +486,13 @@ export default function StorePage() {
           cost: 200 
         });
         if (res?.data?.success) {
-          notify.success("購買成功！", "已獲得動物頭像框！");
+          // 將成功狀態保存到 sessionStorage，刷新後顯示提示
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("purchaseSuccess", JSON.stringify({
+              title: "購買成功！",
+              message: "已獲得動物頭像框！"
+            }));
+          }
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新已擁有的頭像框列表
           setUserOwnedFrames(prev => [...prev, "animals"]);
@@ -426,20 +513,6 @@ export default function StorePage() {
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新已擁有的頭像框列表
           setUserOwnedFrames(prev => [...prev, "magic-circle"]);
-          // 不需要刷新頁面，狀態已經更新
-        } else {
-          notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
-        }
-      } else if (productId === "magic-circle-2-frame") {
-        const res = await axios.post("/api/user/purchase-frame", { 
-          frameId: "magic-circle-2", 
-          cost: 300 
-        });
-        if (res?.data?.success) {
-          notify.success("購買成功！", "已獲得魔法陣2頭像框！");
-          setPurchasedItems(prev => new Set([...prev, productId]));
-          // 更新已擁有的頭像框列表
-          setUserOwnedFrames(prev => [...prev, "magic-circle-2"]);
           // 不需要刷新頁面，狀態已經更新
         } else {
           notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
@@ -621,9 +694,6 @@ export default function StorePage() {
               // console.log("🔧 動物頭像框狀態:", { productId: product.id, isPurchased, frameOwned });
             } else if (product.id === "magic-circle-frame") {
               const frameOwned = userOwnedFrames.includes("magic-circle");
-              isPurchased = isPurchased || frameOwned;
-            } else if (product.id === "magic-circle-2-frame") {
-              const frameOwned = userOwnedFrames.includes("magic-circle-2");
               isPurchased = isPurchased || frameOwned;
             }
             

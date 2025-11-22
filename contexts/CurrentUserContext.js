@@ -55,21 +55,45 @@ export const CurrentUserProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    // ✅ 添加 AbortController 來取消請求，防止內存泄漏
+    const abortController = new AbortController();
+    
     const fetchUser = async () => {
       try {
-        const res = await axios.get("/api/current-user");
+        const res = await axios.get("/api/current-user", {
+          signal: abortController.signal // ✅ 添加 signal 以支持取消
+        });
+        
+        // ✅ 檢查請求是否已被取消
+        if (abortController.signal.aborted) {
+          return;
+        }
+        
         setCurrentUser(res.data);
         
         // 如果用戶已登入，同時獲取訂閱狀態
         if (res.data) {
+          // ✅ 檢查請求是否已被取消
+          if (abortController.signal.aborted) {
+            return;
+          }
           await fetchSubscriptions();
         }
-      } catch {
+      } catch (error) {
+        // ✅ 檢查是否是被取消的請求
+        if (error.name === 'CanceledError' || error.message === 'canceled' || error.code === 'ERR_CANCELED' || abortController.signal.aborted) {
+          return; // 請求被取消，直接返回，不處理錯誤
+        }
         setCurrentUser(null);
         setSubscriptions({});
       }
     };
     fetchUser();
+    
+    // ✅ 清理函數：取消請求，防止內存泄漏
+    return () => {
+      abortController.abort();
+    };
   }, []);
 
   // 訂閱狀態更新函數

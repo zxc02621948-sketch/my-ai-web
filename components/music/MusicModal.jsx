@@ -455,8 +455,12 @@ const MusicModal = ({
       // ✅ 新增: audio 元素清理（關鍵修復）
       try {
         audioRef.current.pause();
-        audioRef.current.removeAttribute("src"); // 💛 關鍵：完全移除音頻來源，立刻釋放 memory
-        audioRef.current.load(); // 💛 立刻釋放解碼緩存
+        // ✅ 重置時間位置
+        audioRef.current.currentTime = 0;
+        // ✅ 完全移除音頻來源，立刻釋放 memory
+        audioRef.current.removeAttribute("src");
+        // ✅ 立刻釋放解碼緩存和音頻緩衝區
+        audioRef.current.load();
       } catch (err) {
         console.warn("🎵 [Modal] Failed to cleanup audio:", err);
       }
