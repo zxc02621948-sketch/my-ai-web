@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { X, Trash2, Clipboard, Plus } from "lucide-react";
+import { X, Trash2, Clipboard, Pencil, Plus } from "lucide-react";
 import axios from "axios";
 import { GENRE_MAP } from "@/constants/musicCategories";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
@@ -215,11 +215,15 @@ export default function MusicInfoBox({
           {/* 編輯按鈕 */}
           {canEditMusic && onEdit && (
             <button
-              onClick={onEdit}
-              className="p-2 hover:bg-blue-600/20 rounded-lg transition-colors"
-              title="編輯音樂"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit?.();
+              }}
+              className="flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded shadow transition"
+              title="編輯音樂資料"
             >
-              <Clipboard size={16} className="text-blue-400" />
+              <Pencil size={16} />
+              <span>編輯</span>
             </button>
           )}
 

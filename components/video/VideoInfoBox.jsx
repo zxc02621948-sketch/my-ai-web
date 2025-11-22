@@ -1,5 +1,5 @@
 import { useRef, useState, useMemo } from "react";
-import { X, Trash2, Download, Clipboard, AlertTriangle, MessageSquare } from "lucide-react";
+import { X, Trash2, Download, Clipboard, Pencil, AlertTriangle, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import PowerCouponButton from "@/components/power-coupon/PowerCouponButton";
@@ -100,11 +100,15 @@ export default function VideoInfoBox({
           {/* 編輯按鈕 */}
           {canEditVideo && onEdit && (
             <button
-              onClick={onEdit}
-              className="p-2 hover:bg-blue-600/20 rounded-lg transition-colors"
-              title="編輯影片"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit?.();
+              }}
+              className="flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded shadow transition"
+              title="編輯影片資料"
             >
-              <Clipboard size={16} className="text-blue-400" />
+              <Pencil size={16} />
+              <span>編輯</span>
             </button>
           )}
           

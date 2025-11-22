@@ -15,6 +15,7 @@ import {
 import usePinnedPlayerBootstrap from "@/hooks/usePinnedPlayerBootstrap";
 import usePaginatedResource from "@/hooks/usePaginatedResource";
 import { audioManager } from "@/utils/audioManager";
+import { warmupAudioBatch } from "@/utils/audioWarmup";
 import {
   MUSIC_TYPE_MAP,
   MUSIC_LANGUAGES,
@@ -191,6 +192,21 @@ const MusicPage = () => {
   });
 
   const loadMoreRef = useRef(null);
+
+  // ✅ 預熱音樂列表中的前 5 首音頻（減少首次播放延遲）
+  useEffect(() => {
+    if (music.length > 0 && !loading) {
+      const urlsToWarmup = music
+        .slice(0, 5)
+        .map(item => item.musicUrl)
+        .filter(Boolean);
+      if (urlsToWarmup.length > 0) {
+        warmupAudioBatch(urlsToWarmup).catch(() => {
+          // 靜默處理預熱失敗，不影響正常播放
+        });
+      }
+    }
+  }, [music, loading]);
 
   // 當篩選條件變化時，清理所有正在播放的預覽
   useEffect(() => {

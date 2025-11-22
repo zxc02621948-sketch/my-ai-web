@@ -13,6 +13,7 @@ import PlayerSkinSettings from "@/components/player/PlayerSkinSettings";
 import CatHeadphoneCanvas from "@/components/player/CatHeadphoneCanvas";
 import CassettePlayerCanvas from "@/components/player/CassettePlayerCanvas";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { warmupAudioBatch } from "@/utils/audioWarmup";
 
 export default function UserPlayerPage() {
   const { id } = useParams();
@@ -255,6 +256,19 @@ export default function UserPlayerPage() {
                
                // 1. 設置播放清單到 PlayerContext（UI狀態）
                setPlaylist(finalPlaylist);
+               
+               // ✅ 預熱播放列表中的前 3 首音頻（減少首次播放延遲）
+               if (finalPlaylist.length > 0) {
+                 const urlsToWarmup = finalPlaylist
+                   .slice(0, 3)
+                   .map(item => item.url)
+                   .filter(Boolean);
+                 if (urlsToWarmup.length > 0) {
+                   warmupAudioBatch(urlsToWarmup).catch(() => {
+                     // 靜默處理預熱失敗，不影響正常播放
+                   });
+                 }
+               }
                
                // 2. 從 localStorage 載入播放進度（用戶偏好）
                const activeIndex = savedActiveIndex ? parseInt(savedActiveIndex) : 0;
