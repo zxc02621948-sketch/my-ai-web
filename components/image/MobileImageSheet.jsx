@@ -121,6 +121,7 @@ export default function MobileImageSheet({
 
     if (bypassSwipeRef.current || pinchingRef.current || zoomedRef.current) return;
 
+    // ✅ 性能優化：緩存寬度值，避免頻繁讀取布局屬性導致強制重排
     const width = panelRef.current?.clientWidth || window.innerWidth;
 
     const t = e.touches[0];
@@ -158,113 +159,116 @@ export default function MobileImageSheet({
     }
     if (!isDragging || animatingRef.current) return;
 
-    const width = panelRef.current?.clientWidth || window.innerWidth;
-    const height = panelRef.current?.clientHeight || window.innerHeight;
+    // ✅ 性能優化：使用 requestAnimationFrame 批量讀取布局屬性，減少強制重排
+    requestAnimationFrame(() => {
+      const width = panelRef.current?.clientWidth || window.innerWidth;
+      const height = panelRef.current?.clientHeight || window.innerHeight;
 
-    if (bypassSwipeRef.current) {
-      bypassSwipeRef.current = false;
-      pinchingRef.current = false;
-      setIsDragging(false);
-      setDragX(0); setDragY(0); setOverlayDim(0.6);
-      startRef.current.locked = null;
-      return;
-    }
-
-    const elapsedMs = performance.now() - startRef.current.t;
-    const absDx = Math.abs(dragX);
-    const absDy = Math.abs(dragY);
-
-    const dt = elapsedMs / 1000;
-    const vx = dragX / Math.max(dt, 0.001);
-    const vy = dragY / Math.max(dt, 0.001);
-
-    // 原本的「需要換頁」條件，現在改作「需要關閉」
-    const needCloseX =
-      Math.abs(dragX) >= Math.max(DIST_X_MIN, width * H_RATIO_X) || Math.abs(vx) > VEL_X_THRESH;
-    const needInfoUp =
-      -dragY >= Math.max(DIST_Y_MIN, height * V_RATIO_UP) || -vy > VEL_Y_UP;
-
-    const locked = startRef.current.locked;
-
-    // 判定是否在關閉區域（右上角）
-    const panelRect = panelRef.current?.getBoundingClientRect();
-    const startX = startRef.current.x;
-    const startY = startRef.current.y;
-    const localX = panelRect ? startX - panelRect.left : startX;
-    const localY = panelRect ? startY - panelRect.top : startY;
-    const inCloseRect = (localX >= width - EXCLUDE_CLOSE_PX) && (localY <= EXCLUDE_CLOSE_PX);
-
-    // ✅ 輕點：保留你原本的「點左右 1/3 翻頁」
-    if (!zoomedRef.current && !inCloseRect && absDx <= TAP_DIST_MAX && absDy <= TAP_DIST_MAX && elapsedMs <= TAP_TIME_MAX) {
-      const leftZone = width / 3;
-      const rightZone = (2 * width) / 3;
-
-      if (localX <= leftZone && prevImage) {
-        onNavigate?.("prev");
-        setDragX(0); setDragY(0); setIsDragging(false);
-        startRef.current.locked = null; setOverlayDim(0.6);
+      if (bypassSwipeRef.current) {
+        bypassSwipeRef.current = false;
+        pinchingRef.current = false;
+        setIsDragging(false);
+        setDragX(0); setDragY(0); setOverlayDim(0.6);
+        startRef.current.locked = null;
         return;
       }
-      if (localX >= rightZone && nextImage) {
-        onNavigate?.("next");
-        setDragX(0); setDragY(0); setIsDragging(false);
-        startRef.current.locked = null; setOverlayDim(0.6);
+
+      const elapsedMs = performance.now() - startRef.current.t;
+      const absDx = Math.abs(dragX);
+      const absDy = Math.abs(dragY);
+
+      const dt = elapsedMs / 1000;
+      const vx = dragX / Math.max(dt, 0.001);
+      const vy = dragY / Math.max(dt, 0.001);
+
+      // 原本的「需要換頁」條件，現在改作「需要關閉」
+      const needCloseX =
+        Math.abs(dragX) >= Math.max(DIST_X_MIN, width * H_RATIO_X) || Math.abs(vx) > VEL_X_THRESH;
+      const needInfoUp =
+        -dragY >= Math.max(DIST_Y_MIN, height * V_RATIO_UP) || -vy > VEL_Y_UP;
+
+      const locked = startRef.current.locked;
+
+      // 判定是否在關閉區域（右上角）
+      const panelRect = panelRef.current?.getBoundingClientRect();
+      const startX = startRef.current.x;
+      const startY = startRef.current.y;
+      const localX = panelRect ? startX - panelRect.left : startX;
+      const localY = panelRect ? startY - panelRect.top : startY;
+      const inCloseRect = (localX >= width - EXCLUDE_CLOSE_PX) && (localY <= EXCLUDE_CLOSE_PX);
+
+      // ✅ 輕點：保留你原本的「點左右 1/3 翻頁」
+      if (!zoomedRef.current && !inCloseRect && absDx <= TAP_DIST_MAX && absDy <= TAP_DIST_MAX && elapsedMs <= TAP_TIME_MAX) {
+        const leftZone = width / 3;
+        const rightZone = (2 * width) / 3;
+
+        if (localX <= leftZone && prevImage) {
+          onNavigate?.("prev");
+          setDragX(0); setDragY(0); setIsDragging(false);
+          startRef.current.locked = null; setOverlayDim(0.6);
+          return;
+        }
+        if (localX >= rightZone && nextImage) {
+          onNavigate?.("next");
+          setDragX(0); setDragY(0); setIsDragging(false);
+          startRef.current.locked = null; setOverlayDim(0.6);
+          return;
+        }
+        // 中間 1/3：不動作
+      }
+
+      if (locked === "x") {
+        // ←→ 水平滑動：不再換頁，改為關閉
+        if (needCloseX) {
+          animateTo({
+            targetX: dragX > 0 ? width : -width,
+            targetY: 0,
+            duration: 260,
+            onDone: () => {
+              onClose?.();
+              requestAnimationFrame(() => {
+                setDragX(0); setDragY(0); setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
+              });
+            }
+          });
+          return;
+        }
+        // 未達關閉門檻 → 回彈
+        animateTo({ targetX: 0, targetY: 0, duration: 190, onDone: () => {
+          setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
+        }});
         return;
       }
-      // 中間 1/3：不動作
-    }
 
-    if (locked === "x") {
-      // ←→ 水平滑動：不再換頁，改為關閉
-      if (needCloseX) {
-        animateTo({
-          targetX: dragX > 0 ? width : -width,
-          targetY: 0,
-          duration: 260,
-          onDone: () => {
-            onClose?.();
-            requestAnimationFrame(() => {
-              setDragX(0); setDragY(0); setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
-            });
+      if (locked === "y") {
+        if (needInfoUp) {
+          const panel = panelRef.current;
+          if (panel) {
+            const h = panel.clientHeight || window.innerHeight;
+            panel.scrollTo({ top: h, behavior: "smooth" });
           }
-        });
-        return;
-      }
-      // 未達關閉門檻 → 回彈
-      animateTo({ targetX: 0, targetY: 0, duration: 190, onDone: () => {
-        setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
-      }});
-      return;
-    }
-
-    if (locked === "y") {
-      if (needInfoUp) {
-        const panel = panelRef.current;
-        if (panel) {
-          const h = panel.clientHeight || window.innerHeight;
-          panel.scrollTo({ top: h, behavior: "smooth" });
+          animateTo({ targetX: 0, targetY: 0, duration: 160, onDone: () => {
+            setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
+          }});
+          return;
+        }
+        const needCloseDown = dragY >= Math.max(160, height * 0.16) || vy > 1400;
+        if (needCloseDown) {
+          animateTo({ targetX: 0, targetY: Math.max(180, dragY + 60), duration: 180, onDone: () => {
+            setDragX(0); setDragY(0); setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null; onClose?.();
+          }});
+          return;
         }
         animateTo({ targetX: 0, targetY: 0, duration: 160, onDone: () => {
           setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
         }});
         return;
       }
-      const needCloseDown = dragY >= Math.max(160, height * 0.16) || vy > 1400;
-      if (needCloseDown) {
-        animateTo({ targetX: 0, targetY: Math.max(180, dragY + 60), duration: 180, onDone: () => {
-          setDragX(0); setDragY(0); setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null; onClose?.();
-        }});
-        return;
-      }
+
       animateTo({ targetX: 0, targetY: 0, duration: 160, onDone: () => {
         setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
       }});
-      return;
-    }
-
-    animateTo({ targetX: 0, targetY: 0, duration: 160, onDone: () => {
-      setOverlayDim(0.6); setIsDragging(false); startRef.current.locked = null;
-    }});
+    });
   }
 
   // --app-vh 修正

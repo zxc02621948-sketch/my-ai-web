@@ -101,7 +101,7 @@ export default function ImageGrid({
       <div className="image-grid">
         {columnArrays.map((columnImages, columnIndex) => (
           <div key={columnIndex} className="grid-column">
-            {columnImages.map((image) => (
+            {columnImages.map((image, imageIndex) => (
               <div key={image._id} className="grid-item">
                 <ImageCard
                   img={image}
@@ -112,6 +112,7 @@ export default function ImageGrid({
                   onLocalLikeChange={onLocalLikeChange}
                   onLikeUpdate={onLikeUpdate}
                   viewMode={viewMode}
+                  isFirstInColumn={imageIndex === 0}
                 />
               </div>
             ))}

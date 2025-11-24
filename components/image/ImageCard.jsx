@@ -28,6 +28,7 @@ export default function ImageCard({
   onLocalLikeChange,
   onLikeUpdate,
   onImageLoad,         // 圖片載入完成回調
+  isFirstInColumn,     // ✅ 性能優化：是否為列中的第一張圖片（首屏可見）
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const canLike = !!currentUser;
@@ -37,6 +38,18 @@ export default function ImageCard({
   );
   const [isProcessing, setIsProcessing] = useState(false);
   const [renderKey, setRenderKey] = useState(0);
+  
+  // ✅ 性能優化：檢測移動設備（用於優化圖片尺寸）
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(typeof window !== 'undefined' && window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // ✅ 以父層資料為基準初始化/回補
   useEffect(() => {
@@ -132,24 +145,26 @@ export default function ImageCard({
     }
   };
 
-  // ✅ 性能優化：生成響應式圖片 URL
-  // 根據性能報告，圖片顯示尺寸約為 242x161，但原始尺寸是 1152x768
+  // ✅ 性能優化：生成響應式圖片 URL（根據設備類型優化）
+  // 根據性能報告：
+  // - 桌面端：顯示尺寸約為 242x161，原始尺寸是 1152x768
+  // - 移動端：顯示尺寸更小，需要更小的圖片尺寸
   // Cloudflare Images 支持通過 variant 或 URL 參數來調整尺寸
-  // 注意：Cloudflare Images 的 URL 格式為：https://imagedelivery.net/{account_hash}/{image_id}/{variant}
-  // 我們可以使用不同的 variant 或添加查詢參數（如果支持）
   const getOptimizedImageUrl = () => {
+    // 根據設備類型選擇圖片尺寸
+    // 移動端使用更小的尺寸以節省帶寬
+    const targetWidth = isMobile ? 300 : 500;  // 移動端 300px，桌面端 500px
+    const targetHeight = isMobile ? 200 : 333; // 移動端 200px，桌面端 333px
+    
     if (img?.imageUrl) {
       // 如果已有完整 URL，檢查是否為 Cloudflare Images
       if (img.imageUrl.includes('imagedelivery.net')) {
-        // Cloudflare Images 可能不支持查詢參數，但我們可以嘗試
-        // 如果失敗，瀏覽器會回退到原始 URL
         try {
           const url = new URL(img.imageUrl);
           // 嘗試添加尺寸參數（2x 顯示尺寸以支持高 DPI 屏幕）
-          // 注意：這可能不被 Cloudflare Images 支持，但不會破壞功能
           if (!url.searchParams.has('width')) {
-            url.searchParams.set('width', '500');
-            url.searchParams.set('height', '333');
+            url.searchParams.set('width', String(targetWidth));
+            url.searchParams.set('height', String(targetHeight));
             url.searchParams.set('fit', 'cover');
             url.searchParams.set('quality', '85');
           }
@@ -166,8 +181,8 @@ export default function ImageCard({
       try {
         const url = new URL(baseUrl);
         // 嘗試添加尺寸參數
-        url.searchParams.set('width', '500');
-        url.searchParams.set('height', '333');
+        url.searchParams.set('width', String(targetWidth));
+        url.searchParams.set('height', String(targetHeight));
         url.searchParams.set('fit', 'cover');
         url.searchParams.set('quality', '85');
         return url.toString();
@@ -181,12 +196,12 @@ export default function ImageCard({
   const imageUrl = getOptimizedImageUrl();
 
   // ✅ 性能優化：計算圖片顯示尺寸（用於 width/height 屬性以減少 CLS）
-  // 根據實際顯示尺寸計算（約 242x161，但考慮響應式設計）
+  // 根據實際顯示尺寸計算（考慮響應式設計和設備類型）
   // 如果數據庫中有原始尺寸，使用原始尺寸計算比例
-  const displayWidth = 242; // 卡片顯示寬度（px）
+  const displayWidth = isMobile ? 180 : 242; // 移動端 180px，桌面端 242px
   const displayHeight = img?.width && img?.height 
     ? Math.round((displayWidth / img.width) * img.height)
-    : 161; // 默認高度（16:9 比例）
+    : (isMobile ? 120 : 161); // 移動端默認 120px，桌面端 161px（16:9 比例）
 
   // ⬇️ NEW 判斷（< 10 小時）
   const createdMs = img?.createdAt ? new Date(img.createdAt).getTime() : getCreatedMsFromObjectId(img?._id);
@@ -270,7 +285,8 @@ export default function ImageCard({
             alt={img?.title || "圖片"}
             width={displayWidth}
             height={displayHeight}
-            loading="lazy"
+            loading={isFirstInColumn ? "eager" : "lazy"}
+            fetchPriority={isFirstInColumn ? "high" : "auto"}
             decoding="async"
             className={`w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg ${
               imageLoaded ? "opacity-100" : "opacity-0"

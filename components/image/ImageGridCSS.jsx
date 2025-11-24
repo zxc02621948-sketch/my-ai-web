@@ -35,44 +35,58 @@ export default function ImageGridCSS({
   const [forceUpdate, setForceUpdate] = useState(0); // 強制重新渲染的計數器
   const columnCountRef = useRef(5); // 用於在 resize 處理函數中獲取最新的列數
 
+  // ✅ 性能優化：使用 requestAnimationFrame 和 debounce 來減少強制重排
+  const resizeTimeoutRef = useRef(null);
+  
   const handleResize = useCallback(() => {
-    const newColumnCount = getColumnCount();
-    const currentColumnCount = columnCountRef.current;
-    
-    console.log(`[ImageGridCSS] Resize - New: ${newColumnCount}, Current: ${currentColumnCount}, State: ${columnCount}`);
-    
-    if (newColumnCount !== currentColumnCount) {
-      console.log(`[ImageGridCSS] Column count changed from ${currentColumnCount} to ${newColumnCount}`);
-      setColumnCount(newColumnCount);
-      columnCountRef.current = newColumnCount;
-      setForceUpdate(prev => prev + 1); // 強制重新渲染
-      
-      // 更新 CSS 自定義屬性
-      if (gridRef.current) {
-        gridRef.current.style.setProperty('--grid-columns', newColumnCount);
-        console.log(`[ImageGridCSS] CSS property updated to: ${newColumnCount}`);
-      }
-    } else {
-      console.log(`[ImageGridCSS] No change needed - staying at ${currentColumnCount} columns`);
+    // 清除之前的 timeout
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current);
     }
+    
+    // 使用 debounce 和 requestAnimationFrame 來批量處理 resize 事件
+    resizeTimeoutRef.current = setTimeout(() => {
+      requestAnimationFrame(() => {
+        const newColumnCount = getColumnCount();
+        const currentColumnCount = columnCountRef.current;
+        
+        if (newColumnCount !== currentColumnCount) {
+          columnCountRef.current = newColumnCount;
+          setColumnCount(newColumnCount);
+          setForceUpdate(prev => prev + 1);
+          
+          // 在 requestAnimationFrame 中更新 CSS 自定義屬性，避免強制重排
+          if (gridRef.current) {
+            gridRef.current.style.setProperty('--grid-columns', newColumnCount);
+          }
+        }
+      });
+    }, 150); // 150ms debounce
   }, []);
 
   useEffect(() => {
     // 客戶端掛載後設置正確的列數
-    const initialColumnCount = getColumnCount();
-    console.log(`[ImageGridCSS] Initial setup - Column count: ${initialColumnCount}`);
-    setColumnCount(initialColumnCount);
-    columnCountRef.current = initialColumnCount;
-    setForceUpdate(prev => prev + 1);
-    
-    // 設置 CSS 自定義屬性
-    if (gridRef.current) {
-      gridRef.current.style.setProperty('--grid-columns', initialColumnCount);
-      console.log(`[ImageGridCSS] CSS property set to: ${initialColumnCount}`);
-    }
+    // 使用 requestAnimationFrame 確保在下一幀更新，避免強制重排
+    requestAnimationFrame(() => {
+      const initialColumnCount = getColumnCount();
+      setColumnCount(initialColumnCount);
+      columnCountRef.current = initialColumnCount;
+      setForceUpdate(prev => prev + 1);
+      
+      // 設置 CSS 自定義屬性
+      if (gridRef.current) {
+        gridRef.current.style.setProperty('--grid-columns', initialColumnCount);
+      }
+    });
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      // 清理 timeout
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
   }, [handleResize]);
 
   // 處理圖片載入
@@ -82,17 +96,15 @@ export default function ImageGridCSS({
 
   // 將圖片分配到各列 - 使用 useMemo 確保在依賴項改變時重新計算
   const columns = useMemo(() => {
-    console.log(`[ImageGridCSS] Redistributing ${list.length} images into ${columnCount} columns (forceUpdate: ${forceUpdate})`);
     const columnsArray = Array.from({ length: columnCount }, () => []);
     const columnHeights = Array(columnCount).fill(0);
 
     // 確保 list 是有效陣列
     if (!Array.isArray(list) || list.length === 0) {
-      console.log(`[ImageGridCSS] No images to distribute`);
       return columnsArray;
     }
 
-    list.forEach((image, index) => {
+    list.forEach((image) => {
       // 確保 image 物件存在且有必要的屬性
       if (!image || !image.width || !image.height) {
         return;
@@ -120,7 +132,7 @@ export default function ImageGridCSS({
       >
         {columns.map((column, columnIndex) => (
           <div key={columnIndex} className={styles.column}>
-            {column.map((image) => (
+            {column.map((image, imageIndex) => (
               <div
                 key={image._id}
                 className={`${styles.item} ${loadedImages.has(image._id) ? styles.loaded : ''}`}
@@ -134,6 +146,7 @@ export default function ImageGridCSS({
                   onLocalLikeChange={onLocalLikeChange}
                   viewMode={viewMode}
                   onImageLoad={() => handleImageLoad(image._id)}
+                  isFirstInColumn={imageIndex === 0}
                 />
               </div>
             ))}
