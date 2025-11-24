@@ -10,13 +10,17 @@ import {
   ArrowRight,
   Sparkles,
 } from "lucide-react";
-import ShowcaseImageModal from "@/components/homepage/ShowcaseImageModal";
-import ShowcaseVideoModal from "@/components/homepage/ShowcaseVideoModal";
-import ImageModal from "@/components/image/ImageModal";
-import VideoModal from "@/components/video/VideoModal";
-import BackToTopButton from "@/components/common/BackToTopButton";
-import StarrySky from "@/components/homepage/StarrySky";
+// ✅ 性能優化：使用動態導入延遲加載非關鍵組件，減少初始包大小
+import dynamic from "next/dynamic";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+
+// 動態導入 Modal 組件（只在需要時加載）
+const ShowcaseImageModal = dynamic(() => import("@/components/homepage/ShowcaseImageModal"), { ssr: false });
+const ShowcaseVideoModal = dynamic(() => import("@/components/homepage/ShowcaseVideoModal"), { ssr: false });
+const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr: false });
+const VideoModal = dynamic(() => import("@/components/video/VideoModal"), { ssr: false });
+const BackToTopButton = dynamic(() => import("@/components/common/BackToTopButton"), { ssr: false });
+const StarrySky = dynamic(() => import("@/components/homepage/StarrySky"), { ssr: false });
 
 const SHOWCASE_LIMIT = 12;
 const CF_IMAGE_BASE = "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A";
@@ -66,13 +70,54 @@ const SECTION_CONFIG = [
   },
 ];
 
+// ✅ 性能優化：檢測移動設備（用於優化圖片尺寸）
+function isMobileDevice() {
+  if (typeof window === 'undefined') return false;
+  return window.innerWidth < 768;
+}
+
 function resolveImageUrl(image) {
   if (!image) return "";
-  if (image.imageUrl) return image.imageUrl;
+  
+  // ✅ 性能優化：為移動端優化圖片尺寸
+  const isMobile = isMobileDevice();
+  const targetWidth = isMobile ? 400 : 600;  // 移動端 400px，桌面端 600px
+  const targetHeight = isMobile ? 300 : 450; // 移動端 300px，桌面端 450px
+  
+  if (image.imageUrl) {
+    // 如果是 Cloudflare Images URL，添加尺寸參數
+    if (image.imageUrl.includes('imagedelivery.net')) {
+      try {
+        const url = new URL(image.imageUrl);
+        if (!url.searchParams.has('width')) {
+          url.searchParams.set('width', String(targetWidth));
+          url.searchParams.set('height', String(targetHeight));
+          url.searchParams.set('fit', 'cover');
+          url.searchParams.set('quality', '85');
+        }
+        return url.toString();
+      } catch {
+        return image.imageUrl;
+      }
+    }
+    return image.imageUrl;
+  }
+  
   if (image.imageId) {
     const variant = image.variant || "public";
-    return `${CF_IMAGE_BASE}/${image.imageId}/${variant}`;
+    const baseUrl = `${CF_IMAGE_BASE}/${image.imageId}/${variant}`;
+    try {
+      const url = new URL(baseUrl);
+      url.searchParams.set('width', String(targetWidth));
+      url.searchParams.set('height', String(targetHeight));
+      url.searchParams.set('fit', 'cover');
+      url.searchParams.set('quality', '85');
+      return url.toString();
+    } catch {
+      return baseUrl;
+    }
   }
+  
   if (Array.isArray(image.files) && image.files[0]?.url) {
     return image.files[0].url;
   }
@@ -491,50 +536,56 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
   const marqueeItems = items.length >= 6 ? [...items, ...items] : [...items];
   const trackClass = direction === "right" ? "marquee-track-right" : "marquee-track";
 
+  // ✅ 性能優化：使用 requestAnimationFrame 避免強制重排
   // 点击按钮滚动：通过 CSS 变量调整 transform，叠加在无缝循环动画上
   const scroll = (dir) => {
     if (!trackRef.current) return;
     
-    const track = trackRef.current;
-    const trackWidth = track.scrollWidth / 2;
-    
-    // 计算滚动距离（每个卡片宽度 + gap）
-    const cardWidth = 256; // w-64 = 16rem = 256px
-    const gap = 16; // gap-4 = 1rem = 16px
-    const scrollAmount = cardWidth + gap;
-    
-    // 确定滚动方向
-    // 左按钮 = 向左移动（scrollOffset 减少），右按钮 = 向右移动（scrollOffset 增加）
-    const scrollDelta = dir === "left" ? -scrollAmount : scrollAmount;
-    
-    // 更新滚动偏移量
-    scrollOffsetRef.current += scrollDelta;
-    
-    // 将偏移量归一化到 [-trackWidth, 0) 范围内，确保无缝循环
-    let normalizedOffset = scrollOffsetRef.current;
-    if (normalizedOffset < -trackWidth) {
-      // 超出下界：调整到等效位置
-      normalizedOffset = normalizedOffset % trackWidth;
-      if (normalizedOffset > 0) {
-        normalizedOffset -= trackWidth;
+    // 使用 requestAnimationFrame 批量讀取布局屬性，減少強制重排
+    requestAnimationFrame(() => {
+      const track = trackRef.current;
+      if (!track) return;
+      
+      const trackWidth = track.scrollWidth / 2;
+      
+      // 计算滚动距离（每个卡片宽度 + gap）
+      const cardWidth = 256; // w-64 = 16rem = 256px
+      const gap = 16; // gap-4 = 1rem = 16px
+      const scrollAmount = cardWidth + gap;
+      
+      // 确定滚动方向
+      // 左按钮 = 向左移动（scrollOffset 减少），右按钮 = 向右移动（scrollOffset 增加）
+      const scrollDelta = dir === "left" ? -scrollAmount : scrollAmount;
+      
+      // 更新滚动偏移量
+      scrollOffsetRef.current += scrollDelta;
+      
+      // 将偏移量归一化到 [-trackWidth, 0) 范围内，确保无缝循环
+      let normalizedOffset = scrollOffsetRef.current;
+      if (normalizedOffset < -trackWidth) {
+        // 超出下界：调整到等效位置
+        normalizedOffset = normalizedOffset % trackWidth;
+        if (normalizedOffset > 0) {
+          normalizedOffset -= trackWidth;
+        }
+      } else if (normalizedOffset > 0) {
+        // 超出上界：调整到等效位置
+        normalizedOffset = normalizedOffset % trackWidth;
+        if (normalizedOffset > 0) {
+          normalizedOffset -= trackWidth;
+        }
       }
-    } else if (normalizedOffset > 0) {
-      // 超出上界：调整到等效位置
-      normalizedOffset = normalizedOffset % trackWidth;
-      if (normalizedOffset > 0) {
-        normalizedOffset -= trackWidth;
+      
+      // 更新 CSS 变量，transform 会叠加在动画上
+      track.style.setProperty("--scroll-offset", `${normalizedOffset}px`);
+      scrollOffsetRef.current = normalizedOffset;
+      
+      // 清除之前的延迟恢复（不再自动恢复，让动画和偏移量保持叠加状态）
+      if (animationRef.current) {
+        clearTimeout(animationRef.current);
+        animationRef.current = null;
       }
-    }
-    
-    // 更新 CSS 变量，transform 会叠加在动画上
-    track.style.setProperty("--scroll-offset", `${normalizedOffset}px`);
-    scrollOffsetRef.current = normalizedOffset;
-    
-    // 清除之前的延迟恢复（不再自动恢复，让动画和偏移量保持叠加状态）
-    if (animationRef.current) {
-      clearTimeout(animationRef.current);
-      animationRef.current = null;
-    }
+    });
   };
 
   const handleMouseEnter = () => {

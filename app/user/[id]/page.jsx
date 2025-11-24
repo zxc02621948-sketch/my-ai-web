@@ -3,23 +3,27 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import axios from "axios";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import ImageModal from "@/components/image/ImageModal";
-import VideoModal from "@/components/video/VideoModal";
-import EditVideoModal from "@/components/video/EditVideoModal";
-import MusicModal from "@/components/music/MusicModal";
-import EditMusicModal from "@/components/music/EditMusicModal";
+// ✅ 性能優化：使用動態導入延遲加載非關鍵組件，減少初始包大小
+import dynamic from "next/dynamic";
 import UserHeader from "@/components/user/UserHeader";
 import UserImageGrid from "@/components/user/UserImageGrid";
-import UserEditModal from "@/components/user/UserEditModal";
 import { useFilterContext } from "@/components/context/FilterContext";
 import useLikeHandler from "@/hooks/useLikeHandler";
-import PointsHistoryModal from "@/components/user/PointsHistoryModal";
-import PointsStoreModal from "@/components/user/PointsStoreModal";
-import PowerCouponModal from "@/components/user/PowerCouponModal";
 import { usePlayer } from "@/components/context/PlayerContext";
-import UnpinReminderModal from "@/components/player/UnpinReminderModal";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+
+// 動態導入 Modal 組件（只在需要時加載）
+const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr: false });
+const VideoModal = dynamic(() => import("@/components/video/VideoModal"), { ssr: false });
+const EditVideoModal = dynamic(() => import("@/components/video/EditVideoModal"), { ssr: false });
+const MusicModal = dynamic(() => import("@/components/music/MusicModal"), { ssr: false });
+const EditMusicModal = dynamic(() => import("@/components/music/EditMusicModal"), { ssr: false });
+const UserEditModal = dynamic(() => import("@/components/user/UserEditModal"), { ssr: false });
+const PointsHistoryModal = dynamic(() => import("@/components/user/PointsHistoryModal"), { ssr: false });
+const PointsStoreModal = dynamic(() => import("@/components/user/PointsStoreModal"), { ssr: false });
+const PowerCouponModal = dynamic(() => import("@/components/user/PowerCouponModal"), { ssr: false });
+const UnpinReminderModal = dynamic(() => import("@/components/player/UnpinReminderModal"), { ssr: false });
 // 重複 import 修正：axios 已在檔案頂部引入
 
 const labelToRating = {
@@ -1010,10 +1014,15 @@ export default function UserProfilePage() {
       ? filteredImages[selectedIndex + 1]
       : undefined;
 
+  // ✅ 性能優化：即使 userData 未加載，也先渲染 UserHeader 的骨架屏以提升 LCP
+  // 但為了避免錯誤，我們仍然需要檢查 userData
   if (!userData) {
     return (
       <div className="text-white p-4">
-        載入中...（若卡住請稍候或稍後重試）
+        <div className="animate-pulse">
+          <div className="h-32 bg-zinc-800 rounded-lg mb-4"></div>
+          <div className="h-64 bg-zinc-800 rounded-lg"></div>
+        </div>
       </div>
     );
   }

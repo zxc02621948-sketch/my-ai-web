@@ -322,19 +322,40 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
   };
 
   // ====== 渲染 ======
-  // 檢查 userData.image 是否已經是完整的 URL
+  // ✅ 性能優化：檢查 userData.image 是否已經是完整的 URL
+  // 為移動端優化：添加尺寸參數以減少傳輸大小
   const imageUrl = (() => {
+    let baseUrl = '';
     if (typeof userData?.image === "string" && userData.image.trim() !== "") {
       // 如果已經是完整 URL，直接使用
       if (userData.image.startsWith('http')) {
-        return userData.image;
+        baseUrl = userData.image;
+      } else {
+        // 如果是 ID，構建完整 URL
+        baseUrl = `${cloudflarePrefix}${userData.image}/avatar`;
       }
-      // 如果是 ID，構建完整 URL
-      return `${cloudflarePrefix}${userData.image}/avatar`;
+    } else {
+      // 使用默認頭像
+      const defaultId = DEFAULT_AVATAR_IDS[userData?.gender] || DEFAULT_AVATAR_IDS.hidden;
+      baseUrl = `${cloudflarePrefix}${defaultId}/avatar`;
     }
-    // 使用默認頭像
-    const defaultId = DEFAULT_AVATAR_IDS[userData?.gender] || DEFAULT_AVATAR_IDS.hidden;
-    return `${cloudflarePrefix}${defaultId}/avatar`;
+    
+    // ✅ 移動端優化：為 Cloudflare Images 添加尺寸參數（150x150 用於頭像）
+    if (baseUrl.includes('imagedelivery.net')) {
+      try {
+        const url = new URL(baseUrl);
+        if (!url.searchParams.has('width')) {
+          url.searchParams.set('width', '150');
+          url.searchParams.set('height', '150');
+          url.searchParams.set('fit', 'cover');
+          url.searchParams.set('quality', '85');
+        }
+        return url.toString();
+      } catch {
+        return baseUrl;
+      }
+    }
+    return baseUrl;
   })();
 
   return (
