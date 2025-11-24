@@ -141,6 +141,20 @@ export default function AvatarFrame({
             src={framePath}
             alt="Avatar frame"
             className="w-full h-full object-contain"
+            width={avatarSize + (avatarSize * (
+              frameId === 'magic-circle' ? 0.60 : 
+              frameId === 'military' ? 0.40 :
+              frameId === 'nature' ? 0.36 :
+              0.16
+            ))}
+            height={avatarSize + (avatarSize * (
+              frameId === 'magic-circle' ? 0.60 : 
+              frameId === 'military' ? 0.40 :
+              frameId === 'nature' ? 0.36 :
+              0.16
+            ))}
+            loading="lazy"
+            decoding="async"
             draggable={false}
             onLoad={() => {}}
             onError={() => {}}
@@ -189,6 +203,11 @@ export default function AvatarFrame({
             src={src || fallback}
             alt={alt}
             className="w-full h-full rounded-full object-cover shadow-[0_4px_18px_rgba(0,0,0,0.35)]"
+            width={avatarSize}
+            height={avatarSize}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
             draggable={false}
             onError={(e) => {
               e.currentTarget.onerror = null;

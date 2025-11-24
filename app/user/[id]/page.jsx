@@ -35,9 +35,11 @@ export default function UserProfilePage() {
   const player = usePlayer();
   const { currentUser, setCurrentUser } = useCurrentUser(); // 使用 Context
   
-  // ✅ 立即滾動到頂部（在組件渲染前執行）
+  // ✅ 性能優化：使用 requestAnimationFrame 避免強制重排
   useEffect(() => {
-    window.scrollTo(0, 0);
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+    });
   }, [id]);
 
   const {
