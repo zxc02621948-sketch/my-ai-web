@@ -55,6 +55,116 @@ const nextConfig = {
         ],
       },
       {
+        // ✅ 性能優化：靜態資源快取標頭
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        // ✅ 性能優化：圖片文件快取標頭
+        source: "/:path*.jpg",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        source: "/:path*.jpeg",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        source: "/:path*.png",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        source: "/:path*.gif",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        source: "/:path*.webp",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        source: "/:path*.svg",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        source: "/:path*.ico",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        source: "/:path*.woff",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        source: "/:path*.woff2",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        source: "/:path*.ttf",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
+        source: "/:path*.eot",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          },
+        ],
+      },
+      {
         // API 路由的 CORS 設置
         source: "/api/:path*",
         headers: [

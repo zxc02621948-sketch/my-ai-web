@@ -85,6 +85,9 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="zh-TW">
       <head>
+        {/* ✅ 性能優化：預先連結外部資源 */}
+        <link rel="preconnect" href="https://imagedelivery.net" />
+        <link rel="preconnect" href="https://media.aicreateaworld.com" />
       </head>
 
       <body className={`antialiased min-h-screen bg-zinc-950 text-white`}>

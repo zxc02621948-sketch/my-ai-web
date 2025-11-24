@@ -305,7 +305,7 @@ function ShowcaseSkeletonRow({ accent }) {
   );
 }
 
-function ImageShowcaseCard({ item, onSelect }) {
+function ImageShowcaseCard({ item, onSelect, isFirst = false }) {
   return (
     <button
       type="button"
@@ -319,7 +319,9 @@ function ImageShowcaseCard({ item, onSelect }) {
             alt={item.title}
             fill
             sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 25vw"
-            loading="lazy"
+            loading={isFirst ? "eager" : "lazy"}
+            priority={isFirst}
+            fetchPriority={isFirst ? "high" : "auto"}
             unoptimized
             className="object-cover transition duration-700 group-hover/card:scale-105"
           />
@@ -351,7 +353,7 @@ function ImageShowcaseCard({ item, onSelect }) {
   );
 }
 
-function MusicShowcaseCard({ item, onSelect, isActive }) {
+function MusicShowcaseCard({ item, onSelect, isActive, isFirst = false }) {
   const title = item.displayTitle || item.title || "未命名歌曲";
   const author = item.displayAuthor || item.author || item.authorName || "匿名創作者";
   return (
@@ -371,7 +373,9 @@ function MusicShowcaseCard({ item, onSelect, isActive }) {
             alt={title}
             fill
             sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 25vw"
-            loading="lazy"
+            loading={isFirst ? "eager" : "lazy"}
+            priority={isFirst}
+            fetchPriority={isFirst ? "high" : "auto"}
             unoptimized
             className="object-cover transition duration-700 group-hover/card:scale-105"
           />
@@ -401,7 +405,7 @@ function MusicShowcaseCard({ item, onSelect, isActive }) {
   );
 }
 
-function VideoShowcaseCard({ item, onSelect }) {
+function VideoShowcaseCard({ item, onSelect, isFirst = false }) {
   const title = item.displayTitle || item.title || "未命名影片";
   const author =
     item.displayAuthor ||
@@ -428,7 +432,9 @@ function VideoShowcaseCard({ item, onSelect }) {
             alt={title}
             fill
             sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 25vw"
-            loading="lazy"
+            loading={isFirst ? "eager" : "lazy"}
+            priority={isFirst}
+            fetchPriority={isFirst ? "high" : "auto"}
             unoptimized
             className="object-cover transition duration-700 group-hover/card:scale-105"
           />
@@ -1096,6 +1102,7 @@ const musicPreviewStateRef = useRef({
           key={item.id ?? idx}
           item={item}
           onSelect={() => handleOpenImage(item)}
+          isFirst={idx === 0}
         />
       ),
       music: (item, idx) => (
@@ -1107,6 +1114,7 @@ const musicPreviewStateRef = useRef({
             activeMusicPreviewId &&
             String(activeMusicPreviewId) === String(item._id || item.id)
           }
+          isFirst={idx === 0}
         />
       ),
       videos: (item, idx) => (
@@ -1114,6 +1122,7 @@ const musicPreviewStateRef = useRef({
           key={item.id ?? item._id ?? idx}
           item={item}
           onSelect={() => handleOpenVideo(item)}
+          isFirst={idx === 0}
         />
       ),
     }),

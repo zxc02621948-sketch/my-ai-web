@@ -28,7 +28,6 @@ export default function ImageGridCSS({
     else if (width <= 1023) columns = 3;
     else columns = 5;
     
-    console.log(`[ImageGridCSS] Window width: ${width}px, Columns: ${columns}`);
     return columns;
   };
 

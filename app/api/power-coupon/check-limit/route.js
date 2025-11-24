@@ -37,22 +37,31 @@ export async function POST(req) {
         
         const limitDate = new Date(now.getTime() - limitPeriod * 24 * 60 * 60 * 1000);
         
-        const recentPurchases = await PowerCoupon.countDocuments({
+        // ✅ 查找最近一次購買記錄（用於計算剩餘天數）
+        const lastPurchase = await PowerCoupon.findOne({
           userId: currentUser._id,
           type: t,
           purchaseMethod: 'shop',
           createdAt: { $gte: limitDate }
-        });
+        }).sort({ createdAt: -1 }).lean();
         
+        const recentPurchases = lastPurchase ? 1 : 0;
         const canPurchase = recentPurchases === 0 || currentUser.isAdmin;
-        const remainingDays = canPurchase ? 0 : Math.ceil((limitDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+        
+        // ✅ 正確計算剩餘天數：從購買時間到現在過了多少天，還需要等待多少天
+        let remainingDays = 0;
+        if (!canPurchase && lastPurchase) {
+          const purchaseTime = new Date(lastPurchase.createdAt).getTime();
+          const daysSincePurchase = Math.floor((now.getTime() - purchaseTime) / (24 * 60 * 60 * 1000));
+          remainingDays = Math.max(0, limitPeriod - daysSincePurchase);
+        }
         
         results[t] = {
           success: true,
           canPurchase,
           recentPurchases,
           limitPeriod,
-          remainingDays: Math.max(0, remainingDays),
+          remainingDays,
           isAdmin: currentUser.isAdmin
         };
       }
@@ -73,22 +82,31 @@ export async function POST(req) {
     const limitPeriod = limitPeriods[type];
     const limitDate = new Date(now.getTime() - limitPeriod * 24 * 60 * 60 * 1000);
     
-    const recentPurchases = await PowerCoupon.countDocuments({
+    // ✅ 查找最近一次購買記錄（用於計算剩餘天數）
+    const lastPurchase = await PowerCoupon.findOne({
       userId: currentUser._id,
       type: type,
       purchaseMethod: 'shop',
       createdAt: { $gte: limitDate }
-    });
+    }).sort({ createdAt: -1 }).lean();
     
+    const recentPurchases = lastPurchase ? 1 : 0;
     const canPurchase = recentPurchases === 0 || currentUser.isAdmin;
-    const remainingDays = canPurchase ? 0 : Math.ceil((limitDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    
+    // ✅ 正確計算剩餘天數：從購買時間到現在過了多少天，還需要等待多少天
+    let remainingDays = 0;
+    if (!canPurchase && lastPurchase) {
+      const purchaseTime = new Date(lastPurchase.createdAt).getTime();
+      const daysSincePurchase = Math.floor((now.getTime() - purchaseTime) / (24 * 60 * 60 * 1000));
+      remainingDays = Math.max(0, limitPeriod - daysSincePurchase);
+    }
     
     return NextResponse.json({
       success: true,
       canPurchase,
       recentPurchases,
       limitPeriod,
-      remainingDays: Math.max(0, remainingDays),
+      remainingDays,
       isAdmin: currentUser.isAdmin
     });
   } catch (error) {

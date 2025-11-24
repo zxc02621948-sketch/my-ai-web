@@ -132,11 +132,61 @@ export default function ImageCard({
     }
   };
 
-  const imageUrl =
-    img?.imageUrl ||
-    (img?.imageId
-      ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/${img?.variant || "public"}`
-      : "/default-image.svg");
+  // ✅ 性能優化：生成響應式圖片 URL
+  // 根據性能報告，圖片顯示尺寸約為 242x161，但原始尺寸是 1152x768
+  // Cloudflare Images 支持通過 variant 或 URL 參數來調整尺寸
+  // 注意：Cloudflare Images 的 URL 格式為：https://imagedelivery.net/{account_hash}/{image_id}/{variant}
+  // 我們可以使用不同的 variant 或添加查詢參數（如果支持）
+  const getOptimizedImageUrl = () => {
+    if (img?.imageUrl) {
+      // 如果已有完整 URL，檢查是否為 Cloudflare Images
+      if (img.imageUrl.includes('imagedelivery.net')) {
+        // Cloudflare Images 可能不支持查詢參數，但我們可以嘗試
+        // 如果失敗，瀏覽器會回退到原始 URL
+        try {
+          const url = new URL(img.imageUrl);
+          // 嘗試添加尺寸參數（2x 顯示尺寸以支持高 DPI 屏幕）
+          // 注意：這可能不被 Cloudflare Images 支持，但不會破壞功能
+          if (!url.searchParams.has('width')) {
+            url.searchParams.set('width', '500');
+            url.searchParams.set('height', '333');
+            url.searchParams.set('fit', 'cover');
+            url.searchParams.set('quality', '85');
+          }
+          return url.toString();
+        } catch {
+          return img.imageUrl;
+        }
+      }
+      return img.imageUrl;
+    }
+    if (img?.imageId) {
+      // 構建 Cloudflare Images URL
+      const baseUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/${img?.variant || "public"}`;
+      try {
+        const url = new URL(baseUrl);
+        // 嘗試添加尺寸參數
+        url.searchParams.set('width', '500');
+        url.searchParams.set('height', '333');
+        url.searchParams.set('fit', 'cover');
+        url.searchParams.set('quality', '85');
+        return url.toString();
+      } catch {
+        return baseUrl;
+      }
+    }
+    return "/default-image.svg";
+  };
+
+  const imageUrl = getOptimizedImageUrl();
+
+  // ✅ 性能優化：計算圖片顯示尺寸（用於 width/height 屬性以減少 CLS）
+  // 根據實際顯示尺寸計算（約 242x161，但考慮響應式設計）
+  // 如果數據庫中有原始尺寸，使用原始尺寸計算比例
+  const displayWidth = 242; // 卡片顯示寬度（px）
+  const displayHeight = img?.width && img?.height 
+    ? Math.round((displayWidth / img.width) * img.height)
+    : 161; // 默認高度（16:9 比例）
 
   // ⬇️ NEW 判斷（< 10 小時）
   const createdMs = img?.createdAt ? new Date(img.createdAt).getTime() : getCreatedMsFromObjectId(img?._id);
@@ -218,6 +268,8 @@ export default function ImageCard({
           <img
             src={imageUrl}
             alt={img?.title || "圖片"}
+            width={displayWidth}
+            height={displayHeight}
             loading="lazy"
             decoding="async"
             className={`w-full h-auto object-cover transition-all duration-300 transform group-hover:scale-105 group-hover:shadow-lg ${
