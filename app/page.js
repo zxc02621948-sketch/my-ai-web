@@ -79,10 +79,11 @@ function isMobileDevice() {
 function resolveImageUrl(image) {
   if (!image) return "";
   
-  // ✅ 性能優化：為移動端優化圖片尺寸
+  // ✅ 性能優化：為移動端優化圖片尺寸（更激進的優化）
   const isMobile = isMobileDevice();
-  const targetWidth = isMobile ? 400 : 600;  // 移動端 400px，桌面端 600px
-  const targetHeight = isMobile ? 300 : 450; // 移動端 300px，桌面端 450px
+  // 移動端使用更小的尺寸以節省帶寬（卡片顯示約 256px 寬，使用 2x 以支持高 DPI）
+  const targetWidth = isMobile ? 300 : 512;  // 移動端 300px（1.2x），桌面端 512px（2x）
+  const targetHeight = isMobile ? 225 : 384; // 移動端 225px，桌面端 384px
   
   if (image.imageUrl) {
     // 如果是 Cloudflare Images URL，添加尺寸參數
@@ -209,10 +210,30 @@ async function fetchMusic(signal) {
       item.author?.displayName ||
       item.author?.username ||
       "匿名創作者";
-    const cover =
+    let cover =
       item.coverImageUrl ||
       (Array.isArray(item.coverCandidates) ? item.coverCandidates[0] : "") ||
       "";
+    
+    // ✅ 性能優化：為音樂封面圖片添加尺寸參數
+    if (cover && cover.includes('imagedelivery.net')) {
+      try {
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        const targetWidth = isMobile ? 300 : 512;
+        const targetHeight = isMobile ? 225 : 384;
+        const url = new URL(cover);
+        if (!url.searchParams.has('width')) {
+          url.searchParams.set('width', String(targetWidth));
+          url.searchParams.set('height', String(targetHeight));
+          url.searchParams.set('fit', 'cover');
+          url.searchParams.set('quality', '85');
+        }
+        cover = url.toString();
+      } catch {
+        // 保持原 URL
+      }
+    }
+    
     const likesCount =
       typeof item.likesCount === "number"
         ? item.likesCount
@@ -262,6 +283,27 @@ async function fetchVideos(signal) {
       item.author?.displayName ||
       item.author?.username ||
       "匿名創作者";
+    let thumbnail = item.thumbnailUrl || item.previewUrl || "";
+    
+    // ✅ 性能優化：為影片縮圖添加尺寸參數
+    if (thumbnail && thumbnail.includes('imagedelivery.net')) {
+      try {
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        const targetWidth = isMobile ? 300 : 512;
+        const targetHeight = isMobile ? 225 : 384;
+        const url = new URL(thumbnail);
+        if (!url.searchParams.has('width')) {
+          url.searchParams.set('width', String(targetWidth));
+          url.searchParams.set('height', String(targetHeight));
+          url.searchParams.set('fit', 'cover');
+          url.searchParams.set('quality', '85');
+        }
+        thumbnail = url.toString();
+      } catch {
+        // 保持原 URL
+      }
+    }
+    
     const likesCount =
       typeof item.likesCount === "number"
         ? item.likesCount
@@ -273,7 +315,7 @@ async function fetchVideos(signal) {
       id,
       displayTitle: item.title || "未命名影片",
       displayAuthor: authorName,
-      thumbnail: item.thumbnailUrl || item.previewUrl || "",
+      thumbnail,
       duration: item.duration || 0,
       likesCount,
       createdAt: item.uploadDate || item.createdAt || null,
@@ -363,10 +405,11 @@ function ImageShowcaseCard({ item, onSelect, isFirst = false }) {
             src={item.imageUrl}
             alt={item.title}
             fill
-            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 25vw"
+            sizes="(max-width: 640px) 300px, (max-width: 1024px) 400px, 256px"
             loading={isFirst ? "eager" : "lazy"}
             priority={isFirst}
             fetchPriority={isFirst ? "high" : "auto"}
+            decoding="async"
             unoptimized
             className="object-cover transition duration-700 group-hover/card:scale-105"
           />
@@ -417,10 +460,11 @@ function MusicShowcaseCard({ item, onSelect, isActive, isFirst = false }) {
             src={item.cover}
             alt={title}
             fill
-            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 25vw"
+            sizes="(max-width: 640px) 300px, (max-width: 1024px) 400px, 256px"
             loading={isFirst ? "eager" : "lazy"}
             priority={isFirst}
             fetchPriority={isFirst ? "high" : "auto"}
+            decoding="async"
             unoptimized
             className="object-cover transition duration-700 group-hover/card:scale-105"
           />
@@ -476,10 +520,11 @@ function VideoShowcaseCard({ item, onSelect, isFirst = false }) {
             src={thumb}
             alt={title}
             fill
-            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 25vw"
+            sizes="(max-width: 640px) 300px, (max-width: 1024px) 400px, 256px"
             loading={isFirst ? "eager" : "lazy"}
             priority={isFirst}
             fetchPriority={isFirst ? "high" : "auto"}
+            decoding="async"
             unoptimized
             className="object-cover transition duration-700 group-hover/card:scale-105"
           />
@@ -793,6 +838,16 @@ function HeroSection() {
 }
 
 export default function LandingPage() {
+  // ✅ 性能優化：延遲加載背景動畫，優先渲染內容
+  const [showStarrySky, setShowStarrySky] = useState(false);
+  
+  useEffect(() => {
+    // 延遲加載背景動畫，讓首屏內容先渲染
+    const timer = setTimeout(() => {
+      setShowStarrySky(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
   const { currentUser } = useCurrentUser();
   const [sectionData, setSectionData] = useState(() =>
     SECTION_CONFIG.reduce((acc, section) => {
@@ -834,19 +889,58 @@ const musicPreviewStateRef = useRef({
       });
 
       try {
-        const [images, music, videos] = await Promise.all([
-          fetchImages(controllers.images.signal),
-          fetchMusic(controllers.music.signal),
-          fetchVideos(controllers.videos.signal),
-        ]);
-
+        // ✅ 性能優化：優先加載首屏內容（圖片），其他內容延遲加載
+        // 先加載圖片（首屏第一個展示區）
+        const images = await fetchImages(controllers.images.signal);
+        
         if (!isMounted) return;
-
-        setSectionData({
+        
+        // 立即更新圖片數據，讓首屏先渲染
+        setSectionData((prev) => ({
+          ...prev,
           images: { items: images, loading: false, error: null },
-          music: { items: music, loading: false, error: null },
-          videos: { items: videos, loading: false, error: null },
-        });
+        }));
+        
+        // 使用 requestIdleCallback 或 setTimeout 延遲加載音樂和影片
+        const loadRemainingData = async () => {
+          try {
+            const [music, videos] = await Promise.all([
+              fetchMusic(controllers.music.signal),
+              fetchVideos(controllers.videos.signal),
+            ]);
+            
+            if (!isMounted) return;
+            
+            setSectionData((prev) => ({
+              ...prev,
+              music: { items: music, loading: false, error: null },
+              videos: { items: videos, loading: false, error: null },
+            }));
+          } catch (error) {
+            if (!isMounted) return;
+            console.warn("延遲載入內容失敗", error);
+            setSectionData((prev) => ({
+              ...prev,
+              music: {
+                items: prev.music.items,
+                loading: false,
+                error: controllers.music.signal.aborted ? null : error,
+              },
+              videos: {
+                items: prev.videos.items,
+                loading: false,
+                error: controllers.videos.signal.aborted ? null : error,
+              },
+            }));
+          }
+        };
+        
+        // 使用 requestIdleCallback 延遲加載，如果瀏覽器不支持則使用 setTimeout
+        if (typeof window !== 'undefined' && window.requestIdleCallback) {
+          window.requestIdleCallback(loadRemainingData, { timeout: 2000 });
+        } else {
+          setTimeout(loadRemainingData, 500);
+        }
       } catch (error) {
         if (!isMounted) return;
         console.warn("首頁精選載入失敗", error);
@@ -1182,7 +1276,7 @@ const musicPreviewStateRef = useRef({
 
   return (
     <div className="min-h-screen bg-transparent text-zinc-100 relative">
-      <StarrySky />
+      {showStarrySky && <StarrySky />}
       <HeroSection />
       <main className="mx-auto flex max-w-[1536px] flex-col gap-16 px-6 py-16 sm:px-10 sm:py-20 bg-transparent">
         {SECTION_CONFIG.map((section) => {

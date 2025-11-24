@@ -14,13 +14,26 @@ function StarrySky() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // 设置画布大小
+    // ✅ 性能優化：使用 requestAnimationFrame 和 debounce 優化 resize
+    const resizeTimeoutRef = { current: null };
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      requestAnimationFrame(() => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        // 如果星星已創建，需要重新計算位置
+        if (starsRef.current.length > 0) {
+          starsRef.current.forEach(star => star.reset());
+        }
+      });
     };
+    
+    const handleResize = () => {
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+      resizeTimeoutRef.current = setTimeout(resizeCanvas, 150); // 150ms debounce
+    };
+    
     resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
+    window.addEventListener("resize", handleResize);
 
     // 星星类
     class Star {
@@ -169,10 +182,14 @@ function StarrySky() {
       }
     }
 
-    // 创建星星（大幅增加数量，让星空更密集）
-    // 根据屏幕大小计算，但上限提高到 400-500 个
+    // ✅ 性能優化：根據設備性能調整星星數量
+    // 移動端減少星星數量以提升性能
+    const isMobile = window.innerWidth < 768;
     const baseStarCount = Math.floor((canvas.width * canvas.height) / 6000);
-    const starCount = Math.min(450, Math.max(200, baseStarCount)); // 最少200，最多450
+    // 移動端：最少100，最多250；桌面端：最少200，最多450
+    const starCount = isMobile 
+      ? Math.min(250, Math.max(100, Math.floor(baseStarCount * 0.6)))
+      : Math.min(450, Math.max(200, baseStarCount));
     starsRef.current = Array.from({ length: starCount }, () => new Star());
     
     // 按大小排序，先绘制小星星，后绘制大星星（确保大星星在上层）
@@ -197,7 +214,8 @@ function StarrySky() {
 
     // 清理函数
     return () => {
-      window.removeEventListener("resize", resizeCanvas);
+      window.removeEventListener("resize", handleResize);
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
