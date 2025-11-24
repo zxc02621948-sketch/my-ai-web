@@ -289,6 +289,37 @@ export default function UserProfilePage() {
     return () => window.removeEventListener("mini-player-purchased", onPurchased);
   }, [id, userData?._id, currentUser?._id, currentUser?.username]);
 
+  // ✅ 監聽用戶數據更新事件（如購買高階播放器造型），立即更新個人頁數據
+  useEffect(() => {
+    const onUserDataUpdated = async (e) => {
+      const { premiumPlayerSkin, activePlayerSkin } = e.detail || {};
+      
+      // 只更新當前用戶自己的頁面
+      const viewingByUsername = !!currentUser && String(id) === String(currentUser?.username);
+      const viewingById =
+        !!currentUser &&
+        (String(id) === String(currentUser?._id) || String(id) === String(currentUser?.id));
+      
+      if (!viewingByUsername && !viewingById) return; // 不是自己的頁面，不更新
+      
+      // 如果購買了高階播放器造型，重新獲取用戶數據
+      if (premiumPlayerSkin) {
+        try {
+          const uid = encodeURIComponent(id);
+          const userJson = await fetch(`/api/user-info?id=${uid}`, { cache: "no-store" }).then(r => r.json()).catch(() => null);
+          if (userJson) {
+            const picked = pickUser(userJson);
+            setUserData(picked);
+          }
+        } catch (error) {
+          console.error("更新用戶數據失敗:", error);
+        }
+      }
+    };
+    window.addEventListener("user-data-updated", onUserDataUpdated);
+    return () => window.removeEventListener("user-data-updated", onUserDataUpdated);
+  }, [id, currentUser?._id, currentUser?.username]);
+
   // —— 共用工具：彈性取值（各 API 可能有不同鍵名） ——
   const pickUser = (v) => (v?.user ?? v?.data?.user ?? v ?? null);
   const pickList = (v) => {
@@ -596,80 +627,107 @@ export default function UserProfilePage() {
         try { player?.setMiniPlayerEnabled?.(false); } catch {}
       }
 
-      // 並行抓取上傳與收藏清單（不阻塞 user-info 顯示）
-      getJSON(`/api/user-images?id=${uid}`)
-        .then((val) => {
-          const list = pickList(val);
-          if (list.length || uploadedImages.length === 0) setUploadedImages(list);
-        })
-        .catch((err) => {
-          if (err.name !== 'AbortError') {
-            console.warn("[user-images] failed:", err);
-          }
-        });
+      // ✅ 優化：按需加載 - 先加載當前 tab 的數據，其他數據延遲加載
+      // 並行抓取上傳清單（uploads tab 的數據）
+      const loadUploadsData = () => {
+        getJSON(`/api/user-images?id=${uid}`)
+          .then((val) => {
+            const list = pickList(val);
+            if (list.length || uploadedImages.length === 0) setUploadedImages(list);
+          })
+          .catch((err) => {
+            if (err.name !== 'AbortError') {
+              console.warn("[user-images] failed:", err);
+            }
+          });
 
-      // 抓取用戶上傳的影片
-      getJSON(`/api/user-videos?id=${uid}`)
-        .then((val) => {
-          const list = pickList(val);
-          if (list.length || uploadedVideos.length === 0) setUploadedVideos(list);
-        })
-        .catch((err) => {
-          if (err.name !== 'AbortError') {
-            console.warn("[user-videos] failed:", err);
-          }
-        });
+        // 抓取用戶上傳的影片
+        getJSON(`/api/user-videos?id=${uid}`)
+          .then((val) => {
+            const list = pickList(val);
+            if (list.length || uploadedVideos.length === 0) setUploadedVideos(list);
+          })
+          .catch((err) => {
+            if (err.name !== 'AbortError') {
+              console.warn("[user-videos] failed:", err);
+            }
+          });
 
-      // 抓取用戶上傳的音樂
-      getJSON(`/api/user-music?id=${uid}`)
-        .then((val) => {
-          const list = pickList(val);
-          if (list.length || uploadedMusic.length === 0) setUploadedMusic(list);
-        })
-        .catch((err) => {
-          if (err.name !== 'AbortError') {
-            console.warn("[user-music] failed:", err);
-          }
-        });
+        // 抓取用戶上傳的音樂
+        getJSON(`/api/user-music?id=${uid}`)
+          .then((val) => {
+            const list = pickList(val);
+            if (list.length || uploadedMusic.length === 0) setUploadedMusic(list);
+          })
+          .catch((err) => {
+            if (err.name !== 'AbortError') {
+              console.warn("[user-music] failed:", err);
+            }
+          });
+      };
 
-      getJSON(`/api/user-liked-images?id=${uid}`)
-        .then((val) => {
-          const list = pickList(val);
-          if (list.length || likedImages.length === 0) setLikedImages(list);
-        })
-        .catch((err) => {
-          if (err.name !== 'AbortError') {
-            console.warn("[user-liked-images] failed:", err);
-          }
-        });
+      // 加載收藏清單（likes tab 的數據）
+      const loadLikesData = () => {
+        getJSON(`/api/user-liked-images?id=${uid}`)
+          .then((val) => {
+            const list = pickList(val);
+            if (list.length || likedImages.length === 0) setLikedImages(list);
+          })
+          .catch((err) => {
+            if (err.name !== 'AbortError') {
+              console.warn("[user-liked-images] failed:", err);
+            }
+          });
 
-      // 抓取用戶收藏的影片
-      getJSON(`/api/user-liked-videos?id=${uid}`)
-        .then((val) => {
-          const list = pickList(val);
-          if (list.length || likedVideos.length === 0) setLikedVideos(list);
-        })
-        .catch((err) => {
-          if (err.name !== 'AbortError') {
-            console.warn("[user-liked-videos] failed:", err);
-          }
-        });
+        // 抓取用戶收藏的影片
+        getJSON(`/api/user-liked-videos?id=${uid}`)
+          .then((val) => {
+            const list = pickList(val);
+            if (list.length || likedVideos.length === 0) setLikedVideos(list);
+          })
+          .catch((err) => {
+            if (err.name !== 'AbortError') {
+              console.warn("[user-liked-videos] failed:", err);
+            }
+          });
 
-      // 抓取用戶收藏的音樂
-      getJSON(`/api/user-liked-music?id=${uid}`)
-        .then((val) => {
-          const list = pickList(val);
-          if (list.length || likedMusic.length === 0) setLikedMusic(list);
-        })
-        .catch((err) => {
-          if (err.name !== 'AbortError') {
-            console.warn("[user-liked-music] failed:", err);
-          }
-        });
+        // 抓取用戶收藏的音樂
+        getJSON(`/api/user-liked-music?id=${uid}`)
+          .then((val) => {
+            const list = pickList(val);
+            if (list.length || likedMusic.length === 0) setLikedMusic(list);
+          })
+          .catch((err) => {
+            if (err.name !== 'AbortError') {
+              console.warn("[user-liked-music] failed:", err);
+            }
+          });
+      };
+
+      // 根據當前 tab 決定加載順序
+      if (activeTab === 'uploads') {
+        // 立即加載 uploads 數據
+        loadUploadsData();
+        // 延遲加載 likes 數據（使用 requestIdleCallback 或 setTimeout）
+        if (typeof window !== 'undefined' && window.requestIdleCallback) {
+          window.requestIdleCallback(() => loadLikesData(), { timeout: 2000 });
+        } else {
+          setTimeout(() => loadLikesData(), 1000);
+        }
+      } else {
+        // 立即加載 likes 數據
+        loadLikesData();
+        // 延遲加載 uploads 數據
+        if (typeof window !== 'undefined' && window.requestIdleCallback) {
+          window.requestIdleCallback(() => loadUploadsData(), { timeout: 2000 });
+        } else {
+          setTimeout(() => loadUploadsData(), 1000);
+        }
+      }
     })();
 
     return () => {
-      ac.abort();
+      ac.abort("Component unmounted or dependencies changed");
       // 離開個人頁時僅恢復分享模式為 global，不關閉迷你播放器（避免返回後需要重新啟用）
       try {
         player?.setShareMode?.("global");
@@ -730,12 +788,25 @@ export default function UserProfilePage() {
           full.sdModel ??
           null;
       }
-      // 2) 作者資料不足時再補抓
-      const authorId =
-        typeof full.user === "string" ? full.user : full.user?._id || full.user?.id;
-      if (authorId && (!full.user || !full.user.username)) {
-        const u = await axios.get(`/api/user-info?id=${authorId}`);
-        if (u?.data) full = { ...full, user: u.data };
+      // 2) ✅ 優化：檢查圖片詳情API返回的user信息是否完整
+      // 圖片詳情API已經populate了user信息，通常不需要再調用user-info API
+      const apiImageUser = apiImage?.user;
+      const hasCompleteUserInfo = apiImageUser && 
+        typeof apiImageUser === 'object' && 
+        apiImageUser._id && 
+        apiImageUser.username;
+      
+      if (hasCompleteUserInfo) {
+        // user信息已經完整，不需要再調用user-info API
+        full.user = apiImageUser;
+      } else {
+        // 只有當user信息不完整時才調用user-info API
+        const authorId =
+          typeof full.user === "string" ? full.user : full.user?._id || full.user?.id;
+        if (authorId && (!full.user || !full.user.username)) {
+          const u = await axios.get(`/api/user-info?id=${authorId}`);
+          if (u?.data) full = { ...full, user: u.data };
+        }
       }
     } catch {
       // 靜默失敗

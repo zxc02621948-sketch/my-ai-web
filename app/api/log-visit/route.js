@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import VisitorLog from "@/models/VisitorLog";
-import { getCurrentUser } from "@/lib/serverAuth";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(req) {
@@ -22,8 +22,17 @@ export async function POST(req) {
     const userAgent = req.headers.get("user-agent") || "unknown";
 
     // 獲取當前用戶（如果已登錄）
-    const currentUser = await getCurrentUser(req);
+    const currentUser = await getCurrentUserFromRequest(req);
     const userId = currentUser?._id || null;
+
+    // ✅ 檢查隱私設定：如果用戶關閉了數據分析，則不記錄訪問
+    if (currentUser && currentUser.privacyPreferences?.allowDataAnalytics === false) {
+      return NextResponse.json({ 
+        success: true, 
+        message: "訪問記錄已跳過（用戶已關閉數據分析）",
+        skipped: true
+      });
+    }
 
     // 檢查是否在最近 30 秒內有相同的訪問記錄（避免重複記錄）
     const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);

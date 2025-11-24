@@ -9,11 +9,11 @@ const FRAME_COSTS = {
   "cat-ears": 0,
   "flame-ring": 0,
   "flower-wreath": 0,
-  "ai-generated": 0,
-  "animals": 0,
+  "ai-generated": 300, // 匹配商店價格
+  "animals": 200, // 匹配商店價格
   "flowers": 0,
   "leaves": 0,
-  "magic-circle": 0
+  "magic-circle": 300 // 匹配商店價格
 };
 
 export async function POST(req) {

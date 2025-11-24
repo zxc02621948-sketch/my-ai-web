@@ -47,6 +47,7 @@ export default function ImageModal({
   const [loading, setLoading] = useState(!imageData);
   const [error, setError] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   // 由已載入的 image 為主，否則回退到 props
   const currentId = image?._id ?? imageId ?? imageData?._id ?? null;
@@ -154,7 +155,8 @@ export default function ImageModal({
     }
   }, [image?._id, imageId, imageData]);
 
-  // 若 user 是字串 → 補抓作者物件
+  // ✅ 優化：若 user 是字串 → 補抓作者物件
+  // 優先檢查圖片詳情API（因為它已經populate了user信息），避免重複調用user API
   useEffect(() => {
     if (!image) return;
     const u = image.user ?? image.userId;
@@ -164,14 +166,10 @@ export default function ImageModal({
     (async () => {
       try {
         let userObj = null;
-        try {
-          const r = await fetch(`/api/user/${u}`, { cache: "no-store" });
-          if (r.ok) {
-            const data = await r.json();
-            userObj = data?.user || data?.data || null;
-          }
-        } catch {}
-        if (!userObj && image?._id) {
+        
+        // ✅ 優化：優先調用圖片詳情API（因為它已經populate了user信息）
+        // 這樣可以避免多餘的user API調用
+        if (image?._id) {
           try {
             const r2 = await fetch(`/api/images/${image._id}`, { cache: "no-store" });
             if (r2.ok) {
@@ -180,6 +178,18 @@ export default function ImageModal({
             }
           } catch {}
         }
+        
+        // ✅ 如果圖片詳情API失敗，才調用user API（fallback）
+        if (!userObj) {
+          try {
+            const r = await fetch(`/api/user/${u}`, { cache: "no-store" });
+            if (r.ok) {
+              const data = await r.json();
+              userObj = data?.user || data?.data || null;
+            }
+          } catch {}
+        }
+        
         if (alive && userObj && typeof userObj === "object") {
           setImage((prev) => (prev ? { ...prev, user: userObj } : prev));
         }
@@ -239,6 +249,7 @@ export default function ImageModal({
       // 失敗還原
       setIsFollowing(!next);
       console.error("❌ 追蹤切換失敗", e);
+      notify.error("操作失敗", "追蹤狀態更新失敗，請稍後再試");
     } finally {
       setTimeout(() => {
         followLockRef.current = false;
@@ -315,6 +326,7 @@ export default function ImageModal({
       }
     } catch (err) {
       console.error("❌ 點讚失敗", err);
+      notify.error("操作失敗", "點讚失敗，請稍後再試");
     }
   };
 
@@ -324,6 +336,16 @@ export default function ImageModal({
     }
     onClose?.();
   }
+
+  // ✅ 檢測是否是移動設備
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Body 鎖定 + 關閉還原 scroll（修復無限滾動時的跳躍問題）
   useEffect(() => {
@@ -357,13 +379,6 @@ export default function ImageModal({
         // 確保滾動位置不會超出新的頁面範圍
         const maxScrollY = Math.max(0, currentDocumentHeight - window.innerHeight);
         const safeScrollY = Math.min(initialScrollY, maxScrollY);
-        
-        console.log('🔧 [ImageModal] 檢測到頁面高度變化，安全恢復滾動位置:', {
-          initialScrollY,
-          safeScrollY,
-          initialHeight: initialDocumentHeight,
-          currentHeight: currentDocumentHeight
-        });
         
         // 使用 requestAnimationFrame 確保 DOM 更新完成後再滾動
         requestAnimationFrame(() => {
@@ -430,24 +445,26 @@ export default function ImageModal({
             paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
           }}
         >
-          <MobileImageSheet
-            image={image}
-            prevImage={prevImage}
-            nextImage={nextImage}
-            loading={loading}
-            error={error}
-            currentUser={currentUser}
-            displayMode={displayMode} // ✅ 傳遞顯示模式
-            isFollowing={isFollowing}
-            onFollowToggle={handleFollowToggle}
-            onUserClick={handleUserClick}
-            onToggleLike={toggleLikeOnServer}
-            onLikeUpdate={onLikeUpdate}
-            onClose={handleBackdropClick}
-            onNavigate={onNavigate}
-          />
-
-          <div className="hidden md:flex md:flex-row w-full">
+          {/* ✅ 優化：使用條件渲染，避免同時渲染兩個組件導致重複API調用 */}
+          {isMobile ? (
+            <MobileImageSheet
+              image={image}
+              prevImage={prevImage}
+              nextImage={nextImage}
+              loading={loading}
+              error={error}
+              currentUser={currentUser}
+              displayMode={displayMode} // ✅ 傳遞顯示模式
+              isFollowing={isFollowing}
+              onFollowToggle={handleFollowToggle}
+              onUserClick={handleUserClick}
+              onToggleLike={toggleLikeOnServer}
+              onLikeUpdate={onLikeUpdate}
+              onClose={handleBackdropClick}
+              onNavigate={onNavigate}
+            />
+          ) : (
+            <div className="flex flex-row w-full">
             <div className="flex-1 bg黑 relative p-4 flex items-center justify-center">
               {loading ? (
                 <div className="text-gray-400">載入中...</div>
@@ -516,6 +533,7 @@ export default function ImageModal({
               onPowerCouponSuccess={handlePowerCouponSuccess}
             />
           </div>
+          )}
 
           {/* 編輯彈窗：使用你的現成元件 */}
           <EditImageModal

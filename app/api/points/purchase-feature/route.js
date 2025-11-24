@@ -55,7 +55,7 @@ export async function POST(req) {
         // 檢查是否已購買過（終身限購1次）
         if (currentUser.playerCouponUsed) {
           return NextResponse.json({ 
-            error: "你已經使用過完整功能體驗券了" 
+            error: "你已經使用過體驗券了" 
           }, { status: 400 });
         }
         
@@ -113,12 +113,66 @@ export async function POST(req) {
         successMessage = "播放器完整功能體驗券已激活！已解鎖播放器與釘選功能（3天）";
         break;
         
+      case "pin-player-coupon":
+        // 檢查是否已購買過（終身限購1次，與完整體驗券共用）
+        if (currentUser.playerCouponUsed) {
+          return NextResponse.json({ 
+            error: "你已經使用過體驗券了" 
+          }, { status: 400 });
+        }
+        
+        // ✅ 獲取用戶文檔以更新訂閱
+        const pinUser = await User.findById(currentUser._id);
+        if (!pinUser) {
+          return NextResponse.json({ error: "用戶不存在" }, { status: 404 });
+        }
+        
+        // ✅ 只創建釘選訂閱（不設置播放器相關欄位）
+        // ✅ 創建 pinPlayerTest 訂閱（3天體驗期）
+        const pinStartDate = new Date();
+        const pinSubscriptionExpiresAt = new Date(pinStartDate);
+        pinSubscriptionExpiresAt.setDate(pinSubscriptionExpiresAt.getDate() + 3);
+        
+        // 檢查是否已有 pinPlayerTest 訂閱
+        const pinExistingTestSub = pinUser.subscriptions?.find(s => s.type === 'pinPlayerTest' && s.isActive);
+        if (!pinExistingTestSub) {
+          // 如果沒有訂閱數組，初始化它
+          if (!pinUser.subscriptions) {
+            pinUser.subscriptions = [];
+          }
+          pinUser.subscriptions.push({
+            type: 'pinPlayerTest',
+            startDate: pinStartDate,
+            expiresAt: pinSubscriptionExpiresAt,
+            isActive: true,
+            monthlyCost: 0, // 免費體驗
+            lastRenewedAt: pinStartDate
+          });
+        } else {
+          // 如果已有測試訂閱，更新到期時間
+          pinExistingTestSub.expiresAt = pinSubscriptionExpiresAt;
+          pinExistingTestSub.isActive = true;
+        }
+        
+        // ✅ 標記為已使用（與完整體驗券共用限購標記）
+        pinUser.playerCouponUsed = true;
+        // 注意：不設置 miniPlayerExpiry，因為用戶已經有播放器功能（通過等級解鎖）
+        
+        pinUser.pointsBalance -= cost; // 扣除積分
+        await pinUser.save();
+        
+        // ✅ 使用保存後的用戶文檔
+        updatedUser = pinUser;
+        
+        successMessage = "釘選播放器體驗券已激活！已解鎖釘選功能（3天）";
+        break;
+        
       default:
         return NextResponse.json({ error: "無效的商品" }, { status: 400 });
     }
 
-    // ✅ 如果已經在 switch 中處理了用戶更新（如 player-1day-coupon），則不需要再次更新
-    if (productId !== "player-1day-coupon") {
+    // ✅ 如果已經在 switch 中處理了用戶更新（如 player-1day-coupon, pin-player-coupon），則不需要再次更新
+    if (productId !== "player-1day-coupon" && productId !== "pin-player-coupon") {
       // 其他商品正常處理
       updatedUser = await User.findByIdAndUpdate(
         currentUser._id,

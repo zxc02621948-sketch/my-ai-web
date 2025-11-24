@@ -134,20 +134,22 @@ export default function ProductCard({
         <div className={`mb-4 p-3 border rounded-lg ${
           isSubscribed 
             ? "bg-green-900/20 border-green-600/30" 
+            : subscriptionInfo.isCancelled
+            ? "bg-yellow-900/20 border-yellow-600/30"
             : "bg-gray-900/20 border-gray-600/30"
         }`}>
           <div className={`text-sm font-medium mb-1 ${
-            isSubscribed ? "text-green-300" : "text-gray-300"
+            isSubscribed ? "text-green-300" : subscriptionInfo.isCancelled ? "text-yellow-300" : "text-gray-300"
           }`}>
-            {isSubscribed ? "✅ 訂閱中" : "📋 訂閱狀態"}
+            {isSubscribed ? "✅ 訂閱中" : subscriptionInfo.isCancelled ? "⚠️ 已取消訂閱" : "📋 訂閱狀態"}
           </div>
           <div className="text-xs text-gray-400 space-y-1">
-            {isSubscribed ? (
+            {isSubscribed || subscriptionInfo.isCancelled ? (
               <>
                 <div>📅 到期：{new Date(subscriptionInfo.expiresAt).toLocaleDateString('zh-TW')}</div>
                 <div>⏳ 剩餘：{subscriptionInfo.daysRemaining} 天</div>
-                {subscriptionInfo.cancelledAt && (
-                  <div className="text-red-400 mt-2">⚠️ 已取消，到期後失效</div>
+                {subscriptionInfo.isCancelled && (
+                  <div className="text-yellow-400 mt-2">⚠️ 已取消自動續訂，到期後失效</div>
                 )}
               </>
             ) : (
@@ -206,14 +208,14 @@ export default function ProductCard({
           : "立即購買"}
       </button>
       
-      {/* 取消訂閱按鈕（僅月租商品且已訂閱時顯示） */}
-      {type === "subscription" && isSubscribed && (
+      {/* 取消訂閱按鈕（僅月租商品且已訂閱且未取消時顯示） */}
+      {type === "subscription" && isSubscribed && !subscriptionInfo?.isCancelled && (
         <button
           onClick={() => onPurchase({ cancel: true })}
           disabled={loading}
-          className="w-full mt-2 py-2 px-4 rounded-lg font-medium transition-all bg-red-600/20 border border-red-600/50 text-red-400 hover:bg-red-600/30"
+          className="w-full mt-2 py-2 px-4 rounded-lg font-medium transition-all bg-red-600/20 border border-red-600/50 text-red-400 hover:bg-red-600/30 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          取消訂閱
+          {loading ? "處理中..." : "取消訂閱"}
         </button>
       )}
     </div>

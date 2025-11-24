@@ -273,7 +273,9 @@ export default function ImagesPage() {
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => {
+        controller.abort("Request timeout after 15 seconds");
+      }, 15000);
 
       try {
         const response = await fetch(`/api/images?${params.toString()}`, {
@@ -300,6 +302,10 @@ export default function ImagesPage() {
         };
       } catch (error) {
         clearTimeout(timeoutId);
+        // 如果是 AbortError，靜默處理（可能是依賴變更導致的正常中止）
+        if (error?.name === "AbortError" || error?.message?.includes("aborted")) {
+          throw error; // 重新拋出，讓 usePaginatedResource 處理
+        }
         console.error("載入圖片失敗:", error);
         throw error;
       }

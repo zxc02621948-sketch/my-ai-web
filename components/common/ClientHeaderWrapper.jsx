@@ -83,6 +83,13 @@ export default function ClientHeaderWrapper({ currentUser, setCurrentUser }) {
   // ✅ 登入後載入一次：靜默呼叫每日登入 API（支援 Cookie 與 Authorization）
   useEffect(() => {
     if (!effectiveUser?._id) return;
+    
+    // ✅ 優化：使用 ref 防止重複調用（只在首次登入時執行）
+    const dailyLoginChecked = sessionStorage.getItem('dailyLoginChecked');
+    if (dailyLoginChecked === effectiveUser._id) {
+      return; // 今天已經檢查過了
+    }
+    
     let done = false;
     (async () => {
       try {
@@ -96,6 +103,9 @@ export default function ClientHeaderWrapper({ currentUser, setCurrentUser }) {
         if (!res.ok && res.status === 401) {
           return; // 靜默返回，不處理
         }
+        
+        // ✅ 標記今天已經檢查過（使用用戶ID避免不同用戶之間干擾）
+        sessionStorage.setItem('dailyLoginChecked', effectiveUser._id);
         
         // 之後無論每日登入是否加分，都抓取最新使用者資訊並廣播（避免個人頁面顯示舊值 0）
         try {

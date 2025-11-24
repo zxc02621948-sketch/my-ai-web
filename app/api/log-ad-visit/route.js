@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbConnect } from '../../../lib/db';
 import AdVisitorLog from '../../../models/AdVisitorLog';
-import { getCurrentUser } from '../../../lib/auth/getCurrentUser';
+import { getCurrentUserFromRequest } from '../../../lib/serverAuth';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request) {
@@ -22,8 +22,17 @@ export async function POST(request) {
     const referrer = request.headers.get('referer') || null;
 
     // 獲取當前用戶（如果已登入）
-    const currentUser = await getCurrentUser(request);
-    const userId = currentUser?.id || null;
+    const currentUser = await getCurrentUserFromRequest(request);
+    const userId = currentUser?._id || null;
+
+    // ✅ 檢查隱私設定：如果用戶關閉了數據分析，則不記錄廣告訪問
+    if (currentUser && currentUser.privacyPreferences?.allowDataAnalytics === false) {
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Ad visit skipped (user disabled data analytics)',
+        skipped: true
+      });
+    }
 
     // 廣告統計專用：更寬鬆的防重複機制（3秒內同IP同頁面才算重複）
     const threeSecondsAgo = new Date(Date.now() - 3 * 1000);

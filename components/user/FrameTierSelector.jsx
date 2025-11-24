@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import FrameEditor from "./FrameEditor";
 
-// 低階頭像框（PNG - 不可編輯）
+// 低階頭像框（PNG - 不可編輯，不包含免費頭像框如 leaves）
 const BASIC_FRAMES = [
   {
     id: "ai-generated",
@@ -20,14 +20,6 @@ const BASIC_FRAMES = [
     preview: "/frames/animals-5985896_1280.png", 
     description: "動物主題頭像框",
     tier: "basic",
-    cost: 0
-  },
-  {
-    id: "leaves",
-    name: "葉子",
-    preview: "/frames/leaves-6649803_1280.png",
-    description: "自然葉子頭像框",
-    tier: "basic", 
     cost: 0
   },
   {

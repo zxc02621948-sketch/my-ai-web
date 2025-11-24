@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import Cropper from "react-easy-crop";
 import { Slider } from "@mui/material";
 import { getCroppedImg } from "@/lib/cropImage";
+import { computeCroppedAreaPixels } from "@/lib/cropUtils";
 import FreeFrameSelector from "./FreeFrameSelector";
 import OwnedFrameSelector from "./OwnedFrameSelector";
 import FrameColorEditor from "./FrameColorEditor";
@@ -39,6 +40,11 @@ export default function UnifiedAvatarModal({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [confirmCallback, setConfirmCallback] = useState(null);
   const [mounted, setMounted] = useState(false);
+  const latestCroppedAreaPixelsRef = useRef(null); // 用於存儲最新的裁剪區域
+  const cropperContainerRef = useRef(null); // 用於獲取 Cropper 容器的尺寸
+  const lastZoomRef = useRef(1); // 用於追蹤上次的縮放值
+  const lastCropRef = useRef({ x: 0, y: 0 }); // 用於追蹤上次的裁剪位置
+  const lastUpdateTimeRef = useRef(0); // 用於追蹤上次更新的時間
 
   useEffect(() => {
     setMounted(true);
@@ -61,23 +67,103 @@ export default function UnifiedAvatarModal({
     setFrameSettings(initialFrameSettings);
   }, [initialFrameSettings]);
 
-  const onCropChange = (c) => setCrop(c);
-  const onZoomChange = (z) => setZoom(z);
+  const onCropChange = (c) => {
+    setCrop(c);
+    lastCropRef.current = c; // 記錄最新的裁剪位置
+  };
+  const onZoomChange = (z) => {
+    setZoom(z);
+    lastZoomRef.current = z; // 記錄最新的縮放值
+  };
   const onCropAreaComplete = useCallback(async (_, croppedAreaPixels) => {
+    // ✅ 確保更新裁剪區域像素（包含縮放後的座標）
     setCroppedAreaPixels(croppedAreaPixels);
+    latestCroppedAreaPixelsRef.current = croppedAreaPixels; // 同時更新 ref，確保最新值
+    lastUpdateTimeRef.current = Date.now(); // 記錄更新時間
     
-    // 生成預覽圖片
+    // 生成預覽圖片（使用最新的裁剪區域）
+    // 注意：為了預覽，我們需要將 File 轉換為 base64
     if (selectedImage && croppedAreaPixels) {
       try {
-        console.log("🔧 開始生成預覽圖片");
-        const croppedImage = await getCroppedImg(selectedImage, croppedAreaPixels);
-        setPreviewImage(croppedImage);
-        console.log("🔧 預覽圖片生成成功");
+        const croppedFile = await getCroppedImg(selectedImage, croppedAreaPixels, "image/jpeg");
+        // 將 File 轉換為 base64 用於預覽
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPreviewImage(reader.result);
+        };
+        reader.readAsDataURL(croppedFile);
       } catch (error) {
         console.error("生成預覽圖片失敗:", error);
+        notify.error("預覽失敗", "生成預覽圖片失敗，請重試");
       }
     }
   }, [selectedImage]);
+  
+  // ✅ 當 crop 或 zoom 變化時，也更新預覽（使用最新的計算值）
+  useEffect(() => {
+    if (selectedImage && crop && zoom !== undefined) {
+      // 使用 debounce 避免頻繁計算
+      const timer = setTimeout(async () => {
+        try {
+          // 加載圖片以獲取尺寸
+          const img = new Image();
+          img.src = selectedImage;
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+          });
+          
+          // 獲取容器尺寸
+          const containerElement = cropperContainerRef.current;
+          const containerWidth = containerElement?.clientWidth || 400;
+          const containerHeight = containerElement?.clientHeight || 256;
+          
+          // 計算圖片在容器中的顯示尺寸
+          const naturalWidth = img.naturalWidth || img.width;
+          const naturalHeight = img.naturalHeight || img.height;
+          const containerAspect = containerWidth / containerHeight;
+          const imageAspect = naturalWidth / naturalHeight;
+          
+          let displayWidth, displayHeight;
+          if (imageAspect > containerAspect) {
+            displayWidth = containerWidth;
+            displayHeight = containerWidth / imageAspect;
+          } else {
+            displayHeight = containerHeight;
+            displayWidth = containerHeight * imageAspect;
+          }
+          
+          // 計算裁剪區域
+          const computedCroppedArea = computeCroppedAreaPixels(
+            { x: crop.x, y: crop.y },
+            { 
+              width: displayWidth,
+              height: displayHeight,
+              naturalWidth: naturalWidth,
+              naturalHeight: naturalHeight
+            },
+            { width: containerWidth, height: containerHeight },
+            1,
+            zoom,
+            0
+          );
+          
+          // 生成預覽
+          const croppedFile = await getCroppedImg(selectedImage, computedCroppedArea, "image/jpeg");
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setPreviewImage(reader.result);
+          };
+          reader.readAsDataURL(croppedFile);
+        } catch (error) {
+          console.error("更新預覽失敗:", error);
+          // 預覽失敗不影響主要功能，靜默處理即可
+        }
+      }, 300); // 300ms debounce
+      
+      return () => clearTimeout(timer);
+    }
+  }, [selectedImage, crop.x, crop.y, zoom]);
 
   const handleImageSelect = (event) => {
     const file = event.target.files[0];
@@ -86,6 +172,14 @@ export default function UnifiedAvatarModal({
       reader.onload = (e) => {
         setSelectedImage(e.target.result);
         setPreviewImage(null); // 重置預覽圖片
+        // ✅ 重置裁剪相關狀態，等待 Cropper 組件自動觸發 onCropAreaComplete
+        setCrop({ x: 0, y: 0 });
+        setZoom(1);
+        setCroppedAreaPixels(null);
+        latestCroppedAreaPixelsRef.current = null; // 同時重置 ref
+        lastZoomRef.current = 1; // 重置追蹤值
+        lastCropRef.current = { x: 0, y: 0 }; // 重置追蹤值
+        lastUpdateTimeRef.current = 0; // 重置更新時間
       };
       reader.readAsDataURL(file);
     }
@@ -93,32 +187,102 @@ export default function UnifiedAvatarModal({
 
   const handleImageUpload = async () => {
     try {
-      let imageFile = null;
-      
-      // 優先使用預覽圖片（已裁剪的）
-      if (previewImage) {
-        imageFile = previewImage;
-      } else if (selectedImage && croppedAreaPixels) {
-        // 如果沒有預覽圖片，重新裁剪
-        const croppedImage = await getCroppedImg(selectedImage, croppedAreaPixels);
-        imageFile = croppedImage;
-      } else if (selectedImage) {
-        // 如果沒有裁剪，使用原始圖片
-        imageFile = selectedImage;
+      if (!selectedImage) {
+        notify.error("錯誤", "請先選擇圖片");
+        return;
       }
       
-      if (imageFile) {
-        // 將 base64 轉換為 File 對象
-        const file = await base64ToFile(imageFile, 'avatar.jpg');
+      // ✅ 手動計算裁剪區域（確保包含最新的縮放和位置）
+      // 這樣不依賴 onCropAreaComplete 的觸發時機，確保使用最新的 crop 和 zoom 值
+      let finalCroppedAreaPixels = null;
+      
+      try {
+        // 加載圖片以獲取尺寸
+        const img = new Image();
+        img.src = selectedImage;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
         
-        // 先上傳頭像
-        await onImageUpload(file);
+        // 獲取容器尺寸（h-64 = 256px，寬度是 w-full，但我們使用最小邊作為裁剪框尺寸）
+        const containerElement = cropperContainerRef.current;
+        const containerWidth = containerElement?.clientWidth || 400; // 默認寬度
+        const containerHeight = containerElement?.clientHeight || 256; // h-64 = 256px
         
-        // 設置頭像框
-        await onFrameSelect(previewFrame);
+        // ✅ 計算圖片在容器中的顯示尺寸（適應容器後的尺寸）
+        // 這是 react-easy-crop 內部使用的顯示尺寸
+        const naturalWidth = img.naturalWidth || img.width;
+        const naturalHeight = img.naturalHeight || img.height;
         
-        onClose();
+        // 計算圖片適應容器後的顯示尺寸（保持寬高比）
+        const containerAspect = containerWidth / containerHeight;
+        const imageAspect = naturalWidth / naturalHeight;
+        
+        let displayWidth, displayHeight;
+        if (imageAspect > containerAspect) {
+          // 圖片更寬，以寬度為準
+          displayWidth = containerWidth;
+          displayHeight = containerWidth / imageAspect;
+        } else {
+          // 圖片更高，以高度為準
+          displayHeight = containerHeight;
+          displayWidth = containerHeight * imageAspect;
+        }
+        
+        // ✅ 使用手動計算的函數，根據當前的 crop 和 zoom 計算裁剪區域
+        // 注意：mediaSize.width/height 是顯示尺寸，naturalWidth/naturalHeight 是原始尺寸
+        finalCroppedAreaPixels = computeCroppedAreaPixels(
+          { x: crop.x, y: crop.y }, // 當前裁剪位置
+          { 
+            width: displayWidth,  // 顯示尺寸（適應容器後）
+            height: displayHeight, // 顯示尺寸（適應容器後）
+            naturalWidth: naturalWidth,  // 原始尺寸
+            naturalHeight: naturalHeight // 原始尺寸
+          },
+          { width: containerWidth, height: containerHeight }, // 容器尺寸
+          1, // aspect ratio (1:1)
+          zoom, // 當前縮放（這是最關鍵的！）
+          0 // rotation (無旋轉)
+        );
+      } catch (error) {
+        console.error("計算裁剪區域失敗:", error);
+        // 如果計算失敗，使用緩存的區域（這是內部錯誤，不需要用戶提示）
+        finalCroppedAreaPixels = latestCroppedAreaPixelsRef.current || croppedAreaPixels;
+        
+        // 如果還是沒有，創建一個默認的裁剪區域
+        if (!finalCroppedAreaPixels) {
+          const img = new Image();
+          img.src = selectedImage;
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+          });
+          
+          const size = Math.min(img.width, img.height);
+          const x = (img.width - size) / 2;
+          const y = (img.height - size) / 2;
+          
+          finalCroppedAreaPixels = {
+            x: x,
+            y: y,
+            width: size,
+            height: size
+          };
+        }
       }
+      
+      // ✅ 使用計算出的最新裁剪區域進行裁剪（確保包含最新的縮放和位置）
+      // 注意：getCroppedImg 返回的是 File 對象，不需要再轉換
+      const croppedFile = await getCroppedImg(selectedImage, finalCroppedAreaPixels, "image/jpeg");
+      
+      // 先上傳頭像
+      await onImageUpload(croppedFile);
+      
+      // 設置頭像框
+      await onFrameSelect(previewFrame);
+      
+      onClose();
     } catch (error) {
       console.error("處理圖片時發生錯誤:", error);
       notify.error("處理失敗", "處理圖片時發生錯誤，請重試");
@@ -160,11 +324,14 @@ export default function UnifiedAvatarModal({
       "geometric1": "幾何圖案1",
       "geometric2": "幾何圖案2",
       
-      // 一般頭像框
+      // 一般頭像框（不包含免費頭像框如 leaves）
       "ai-generated": "AI 生成",
       "animals": "動物",
+      "magic-circle": "魔法陣",
+      // 免費頭像框（僅在免費頭像框選擇器中顯示）
       "leaves": "葉子",
-      "magic-circle": "魔法陣"
+      "military": "戰損軍事",
+      "nature": "花園自然"
     };
     return frameMap[frameId] || frameId;
   };
@@ -301,16 +468,16 @@ export default function UnifiedAvatarModal({
 
           {activeTab === "upload" && (
             <div className="space-y-4">
-              {/* 預覽區域 - 使用統一的預覽區域 */}
+              {/* 預覽區域 - 顯示當前頭像 */}
               <div className="text-center">
-                <h3 className="text-white mb-4">預覽效果</h3>
+                <h3 className="text-white mb-4">當前頭像</h3>
                 <div className="flex justify-center">
                   <AvatarFrame
-                    src={previewImage || userAvatar || "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/avatar"}
+                    src={userAvatar || "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/b479a9e9-6c1a-4c6a-94ff-283541062d00/avatar"}
                     size={128}
                     frameId={previewFrame}
                     showFrame={true}
-                    alt="預覽頭像"
+                    alt="當前頭像"
                     frameColor={frameSettings[previewFrame]?.color || "#ffffff"}
                     frameOpacity={frameSettings[previewFrame]?.opacity || 1}
                     layerOrder={frameSettings[previewFrame]?.layerOrder || "frame-on-top"}
@@ -318,58 +485,99 @@ export default function UnifiedAvatarModal({
                   />
                 </div>
                 <p className="text-gray-400 text-sm mt-2">
-                  {previewImage ? "預覽裁剪後的頭像效果" : "預覽當前頭像效果"}
+                  當前頭像效果
                 </p>
               </div>
 
-              {/* 圖片選擇 */}
-              <div>
-                <h3 className="text-white font-medium mb-3">選擇圖片</h3>
-                <div className="border-2 border-dashed border-zinc-600 rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageSelect}
-                    className="hidden"
-                    id="image-upload"
-                  />
-                  <label
-                    htmlFor="image-upload"
-                    className="cursor-pointer block"
-                  >
-                    <div className="text-gray-400 mb-2">
-                      <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                    </div>
-                    <p className="text-white">點擊選擇圖片</p>
-                    <p className="text-gray-400 text-sm">支持 JPG, PNG, GIF 格式</p>
-                  </label>
+              {/* 圖片選擇 - 只在未選擇圖片時顯示 */}
+              {!selectedImage && (
+                <div>
+                  <h3 className="text-white font-medium mb-3">選擇圖片</h3>
+                  <div className="border-2 border-dashed border-zinc-600 rounded-lg p-6 text-center">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageSelect}
+                      className="hidden"
+                      id="image-upload"
+                    />
+                    <label
+                      htmlFor="image-upload"
+                      className="cursor-pointer block"
+                    >
+                      <div className="text-gray-400 mb-2">
+                        <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </div>
+                      <p className="text-white">點擊選擇圖片</p>
+                      <p className="text-gray-400 text-sm">支持 JPG, PNG, GIF 格式</p>
+                    </label>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* 圖片裁剪 */}
+              {/* 圖片裁剪 - 選擇圖片後取代選擇區域 */}
               {selectedImage && (
                 <div className="space-y-4">
-                  <h3 className="text-white font-medium">裁剪圖片</h3>
-                  <div className="relative w-full h-64 bg-zinc-700 rounded-lg overflow-hidden">
-                    <Cropper
-                      image={selectedImage}
-                      crop={crop}
-                      zoom={zoom}
-                      aspect={1}
-                      onCropChange={onCropChange}
-                      onCropAreaComplete={onCropAreaComplete}
-                      onZoomChange={onZoomChange}
-                      showGrid={false}
-                      style={{
-                        containerStyle: {
-                          width: "100%",
-                          height: "100%",
-                          position: "relative"
-                        }
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-white font-medium">裁剪圖片</h3>
+                    <button
+                      onClick={() => {
+                        setSelectedImage(null);
+                        setCrop({ x: 0, y: 0 });
+                        setZoom(1);
+                        setCroppedAreaPixels(null);
+                        setPreviewImage(null);
                       }}
-                    />
+                      className="text-gray-400 hover:text-white text-sm transition-colors"
+                    >
+                      重新選擇
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div 
+                      ref={cropperContainerRef}
+                      className="relative w-full h-64 bg-zinc-700 rounded-lg overflow-hidden"
+                    >
+                      <Cropper
+                        image={selectedImage}
+                        crop={crop}
+                        zoom={zoom}
+                        aspect={1}
+                        onCropChange={onCropChange}
+                        onCropAreaComplete={onCropAreaComplete}
+                        onZoomChange={onZoomChange}
+                        showGrid={false}
+                        style={{
+                          containerStyle: {
+                            width: "100%",
+                            height: "100%",
+                            position: "relative"
+                          }
+                        }}
+                      />
+                    </div>
+                    
+                    {/* ✅ 預覽區域：顯示裁剪後的圖片 + 頭像框 */}
+                    {previewImage && (
+                      <div className="space-y-2">
+                        <h4 className="text-white text-sm font-medium">預覽效果</h4>
+                        <div className="flex items-center justify-center p-4 bg-zinc-800 rounded-lg">
+                          <AvatarFrame
+                            src={previewImage}
+                            frameId={previewFrame}
+                            size={120}
+                            showFrame={true}
+                            alt="預覽頭像"
+                            frameColor={frameSettings[previewFrame]?.color || "#ffffff"}
+                            frameOpacity={frameSettings[previewFrame]?.opacity || 1}
+                            layerOrder={frameSettings[previewFrame]?.layerOrder || "frame-on-top"}
+                            frameTransparency={frameSettings[previewFrame]?.frameOpacity || 1}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   {/* 縮放控制 */}
@@ -528,9 +736,9 @@ export default function UnifiedAvatarModal({
         />
       )}
 
-      {/* 自定義確認彈窗 */}
-      {showConfirmDialog && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100001]">
+      {/* 自定義確認彈窗 - 使用單獨的 portal 確保在最頂層 */}
+      {showConfirmDialog && mounted && createPortal(
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100002]" style={{ zIndex: 100002 }}>
           <div className="bg-zinc-800 rounded-xl p-6 max-w-md mx-4 border-2 border-yellow-500/50 shadow-2xl">
             <h3 className="text-xl font-bold text-white mb-4 text-center">💰 確認保存調色設定</h3>
             
@@ -571,7 +779,8 @@ export default function UnifiedAvatarModal({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>,
     document.body

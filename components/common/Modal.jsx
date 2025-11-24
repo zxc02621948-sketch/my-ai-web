@@ -18,6 +18,20 @@ export default function Modal({ isOpen, onClose, title, children, bottomOffset =
     };
   }, [isOpen]);
 
+  // ✅ 添加 Escape 鍵支持
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const handleEscape = (e) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isOpen, onClose]);
+
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);

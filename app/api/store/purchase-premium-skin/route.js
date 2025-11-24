@@ -77,6 +77,7 @@ export async function POST(req) {
       message: '🎉 購買成功！您現在可以使用高階播放器造型了！',
       newBalance: user.pointsBalance,
       premiumPlayerSkin: true,
+      activePlayerSkin: user.activePlayerSkin, // ✅ 返回當前啟用的造型
       playerSkinSettings: user.playerSkinSettings
     });
   } catch (error) {

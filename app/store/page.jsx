@@ -90,6 +90,7 @@ export default function StorePage() {
           const purchasedSet = new Set();
           if (userResponse.data.playerCouponUsed) {
             purchasedSet.add("player-1day-coupon");
+            purchasedSet.add("pin-player-coupon"); // 兩種體驗券共用限購
           }
           if (userResponse.data.premiumPlayerSkin) {
             purchasedSet.add("premium-player-skin");
@@ -263,6 +264,9 @@ export default function StorePage() {
           const pinPlayerSub = subscriptions?.pinPlayer;
           const isRenewal = pinPlayerSub?.isActive && pinPlayerSub?.expiresAt && new Date(pinPlayerSub.expiresAt) > new Date();
           
+          // ✅ 詢問是否啟用自動續訂（首次開通或續費時）
+          let autoRenew = true; // 默認開啟自動續訂
+          
           // 如果是首次開通，顯示確認對話框
           if (!isRenewal) {
             const confirmed = await notify.confirm(
@@ -271,6 +275,7 @@ export default function StorePage() {
               `📅 訂閱時長：30 天\n` +
               `✨ 功能：全站跨頁面播放，背景可連播\n\n` +
               (userInfo?.pointsBalance !== undefined ? `💎 目前積分：${userInfo.pointsBalance}\n💰 購買後剩餘：${userInfo.pointsBalance - 200}\n\n` : '') +
+              `🔄 自動續訂：到期後自動續費（可在訂閱管理中取消）\n\n` +
               `是否確認購買？`
             );
             
@@ -279,6 +284,19 @@ export default function StorePage() {
               setPurchaseStatus(prev => ({ ...prev, [productId]: false }));
               return;
             }
+            
+            // ✅ 詢問是否啟用自動續訂
+            autoRenew = await notify.confirm(
+              "啟用自動續訂？",
+              `💡 啟用後，訂閱到期時會自動從您的積分中扣除 200 積分續費 30 天。\n\n` +
+              `✅ 好處：不會忘記續費，訂閱不中斷\n` +
+              `❌ 可隨時在「訂閱管理」中取消自動續訂\n\n` +
+              `是否啟用自動續訂？`,
+              {
+                confirmText: "啟用",
+                cancelText: "不啟用"
+              }
+            );
           }
           // 如果是續費，顯示確認對話框
           else if (isRenewal) {
@@ -292,12 +310,16 @@ export default function StorePage() {
             const daysRemaining = Math.ceil((expiresAtDate - now) / (1000 * 60 * 60 * 24));
             const newDaysRemaining = daysRemaining + 30;
             
+            // ✅ 檢查當前是否已啟用自動續訂
+            const currentAutoRenew = pinPlayerSub.autoRenew !== false; // 默認為 true
+            
             const confirmed = await notify.confirm(
               "確認續費釘選播放器訂閱",
               `💰 費用：200 積分\n\n` +
               `📅 目前到期：${expiresAt}\n` +
               `⏳ 剩餘天數：${daysRemaining} 天\n\n` +
               `✨ 續費後剩餘時間會累積，將變成 ${newDaysRemaining} 天\n\n` +
+              `🔄 自動續訂：${currentAutoRenew ? '已啟用' : '未啟用'}\n\n` +
               `是否確認續費？`
             );
             
@@ -306,12 +328,31 @@ export default function StorePage() {
               setPurchaseStatus(prev => ({ ...prev, [productId]: false }));
               return;
             }
+            
+            // ✅ 如果當前未啟用自動續訂，詢問是否啟用
+            if (!currentAutoRenew) {
+              autoRenew = await notify.confirm(
+                "啟用自動續訂？",
+                `💡 啟用後，訂閱到期時會自動從您的積分中扣除 200 積分續費 30 天。\n\n` +
+                `✅ 好處：不會忘記續費，訂閱不中斷\n` +
+                `❌ 可隨時在「訂閱管理」中取消自動續訂\n\n` +
+                `是否啟用自動續訂？`,
+                {
+                  confirmText: "啟用",
+                  cancelText: "不啟用"
+                }
+              );
+            } else {
+              // 如果已啟用，保持啟用狀態
+              autoRenew = true;
+            }
           }
           
           let res;
           try {
             res = await axios.post("/api/subscriptions/subscribe", {
-              subscriptionType
+              subscriptionType,
+              autoRenew // ✅ 傳遞自動續訂選項
             });
           } catch (error) {
             // ✅ 處理 API 錯誤（例如積分不足）
@@ -397,10 +438,26 @@ export default function StorePage() {
           });
           setUserInfo(info.data);
           
+          // ✅ 更新 currentUser（確保播放器頁面和 MiniPlayer 能獲取最新的狀態）
+          const currentUserInfo = await axios.get("/api/current-user", {
+            headers: { 'Cache-Control': 'no-cache' }
+          });
+          if (currentUserInfo.data && setCurrentUser) {
+            setCurrentUser(currentUserInfo.data);
+          }
+          
+          // ✅ 觸發事件通知其他組件更新（如 MiniPlayer）
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("user-data-updated", {
+              detail: { premiumPlayerSkin: true, activePlayerSkin: res.data.activePlayerSkin || 'cat-headphone' }
+            }));
+          }
+          
           // 重新計算已購買商品
           const purchasedSet = new Set();
           if (info.data.playerCouponUsed) {
             purchasedSet.add("player-1day-coupon");
+            purchasedSet.add("pin-player-coupon"); // 兩種體驗券共用限購
           }
           if (info.data.premiumPlayerSkin) {
             purchasedSet.add("premium-player-skin");
@@ -409,7 +466,7 @@ export default function StorePage() {
         } else {
           notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
         }
-      } else if (productId === "player-1day-coupon") {
+      } else if (productId === "player-1day-coupon" || productId === "pin-player-coupon") {
         // 未登入直接中止（按鈕層已提示並開啟登入窗）
         if (!currentUser) {
           setLoading(false);
@@ -418,13 +475,16 @@ export default function StorePage() {
         }
         const res = await axios.post(
           "/api/points/purchase-feature",
-          { productId: "player-1day-coupon", cost: 0 },
+          { productId: productId, cost: 0 },
           { withCredentials: true }
         );
         
         if (res?.data?.success) {
-          notify.success("體驗券已激活！", res?.data?.message || "播放器完整功能體驗券已激活！");
-          setPurchasedItems(prev => new Set([...prev, productId]));
+          const couponName = productId === "player-1day-coupon" 
+            ? "播放器完整功能體驗券 (3天)" 
+            : "釘選播放器體驗券 (3天)";
+          // ✅ 不立即顯示通知，因為頁面會重新載入，將在重新載入後從 sessionStorage 顯示
+          setPurchasedItems(prev => new Set([...prev, productId, productId === "player-1day-coupon" ? "pin-player-coupon" : "player-1day-coupon"])); // 兩種體驗券共用限購
           // ✅ 更新訂閱狀態（重要：體驗券會創建 pinPlayerTest 訂閱）
           if (updateSubscriptions) {
             await updateSubscriptions();
@@ -441,13 +501,14 @@ export default function StorePage() {
           if (setCurrentUser && currentUserInfo.data) {
             setCurrentUser(currentUserInfo.data);
           }
-          // 將成功狀態保存到 sessionStorage，刷新後顯示提示
+          // ✅ 將成功狀態保存到 sessionStorage，刷新後顯示提示（避免重複通知）
           if (typeof window !== "undefined") {
+            const expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + 3); // 3天有效期
+            const expiresAt = expiryDate.toLocaleDateString('zh-TW');
             sessionStorage.setItem("purchaseSuccess", JSON.stringify({
               title: "購買成功！",
-              message: expiresDate > new Date('2099-01-01') 
-                ? "🎉 永久訂閱成功！" 
-                : `📅 到期時間：${expiresAt}\n⏳ 剩餘天數：${daysRemaining} 天`
+              message: `${couponName} 已激活！\n📅 到期時間：${expiresAt}\n⏳ 體驗期限：3 天`
             }));
           }
           // 刷新頁面以顯示播放器
@@ -463,20 +524,16 @@ export default function StorePage() {
           cost: 300 
         });
         if (res?.data?.success) {
-          // 將成功狀態保存到 sessionStorage，刷新後顯示提示
-          if (typeof window !== "undefined") {
-            sessionStorage.setItem("purchaseSuccess", JSON.stringify({
-              title: "購買成功！",
-              message: "已獲得 AI 生成頭像框！"
-            }));
-          }
+          notify.success("購買成功！", "已獲得 AI 生成頭像框！");
+          // 更新用戶信息
+          const info = await axios.get("/api/user-info", {
+            headers: { 'Cache-Control': 'no-cache' }
+          });
+          setUserInfo(info.data);
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新已擁有的頭像框列表
           setUserOwnedFrames(prev => [...prev, "ai-generated"]);
-          // 刷新頁面以更新用戶數據
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
+          // 不需要刷新頁面，狀態已經更新
         } else {
           notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
         }
@@ -486,20 +543,16 @@ export default function StorePage() {
           cost: 200 
         });
         if (res?.data?.success) {
-          // 將成功狀態保存到 sessionStorage，刷新後顯示提示
-          if (typeof window !== "undefined") {
-            sessionStorage.setItem("purchaseSuccess", JSON.stringify({
-              title: "購買成功！",
-              message: "已獲得動物頭像框！"
-            }));
-          }
+          notify.success("購買成功！", "已獲得動物頭像框！");
+          // 更新用戶信息
+          const info = await axios.get("/api/user-info", {
+            headers: { 'Cache-Control': 'no-cache' }
+          });
+          setUserInfo(info.data);
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新已擁有的頭像框列表
           setUserOwnedFrames(prev => [...prev, "animals"]);
-          // 刷新頁面以更新用戶數據
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
+          // 不需要刷新頁面，狀態已經更新
         } else {
           notify.error("購買失敗", res?.data?.error || "購買失敗，請稍後再試。");
         }
@@ -510,6 +563,11 @@ export default function StorePage() {
         });
         if (res?.data?.success) {
           notify.success("購買成功！", "已獲得魔法陣頭像框！");
+          // 更新用戶信息
+          const info = await axios.get("/api/user-info", {
+            headers: { 'Cache-Control': 'no-cache' }
+          });
+          setUserInfo(info.data);
           setPurchasedItems(prev => new Set([...prev, productId]));
           // 更新已擁有的頭像框列表
           setUserOwnedFrames(prev => [...prev, "magic-circle"]);
@@ -652,9 +710,26 @@ export default function StorePage() {
             const hasPlayerByLevel = userLevel.index >= 2; // LV3 的索引是 2 (0-based)
             const hasPlayerByCoupon = userInfo?.playerCouponUsed;
             
-            // 如果用戶已經有播放器功能（等級解鎖或體驗券），且當前商品是播放器體驗券，則跳過不顯示
-            if ((hasPlayerByLevel || hasPlayerByCoupon) && product.id === "player-1day-coupon") {
-              return null;
+            // ✅ 根據用戶等級顯示不同的體驗券
+            // 如果用戶已使用過完整體驗券，兩個體驗券都不顯示
+            if (hasPlayerByCoupon) {
+              if (product.id === "player-1day-coupon" || product.id === "pin-player-coupon") {
+                return null;
+              }
+            }
+            // 如果用戶已達到 LV3（有播放器功能），顯示釘選體驗券，隱藏完整體驗券
+            else if (hasPlayerByLevel) {
+              if (product.id === "player-1day-coupon") {
+                return null; // 隱藏完整體驗券
+              }
+              // pin-player-coupon 會正常顯示
+            }
+            // 如果用戶未達到 LV3，顯示完整體驗券，隱藏釘選體驗券
+            else {
+              if (product.id === "pin-player-coupon") {
+                return null; // 隱藏釘選體驗券
+              }
+              // player-1day-coupon 會正常顯示
             }
             
             // 檢查商品是否已購買
@@ -755,7 +830,9 @@ export default function StorePage() {
                 const expiresAt = expiresAtValue ? new Date(expiresAtValue) : null;
                 
                 if (expiresAt) {
-                  isSubscribed = sub.isActive && expiresAt > now;
+                  // ✅ 已取消的訂閱（cancelledAt 存在）不算作已訂閱，但仍在有效期內
+                  const isCancelled = !!sub.cancelledAt;
+                  isSubscribed = sub.isActive && expiresAt > now && !isCancelled;
                   const isPermanent = expiresAt > new Date('2099-01-01');
                   
                   // 計算剩餘天數
@@ -765,7 +842,8 @@ export default function StorePage() {
                     expiresAt: expiresAtValue,
                     daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
                     cancelledAt: sub.cancelledAt,
-                    isPermanent: isPermanent
+                    isPermanent: isPermanent,
+                    isCancelled: isCancelled // ✅ 標記是否已取消
                   };
                 }
               } else {

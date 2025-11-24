@@ -55,6 +55,11 @@ export async function grantLevelRewards(user, oldLevel, newLevel) {
     
     // 發放頭像框
     if (reward.frames && Array.isArray(reward.frames)) {
+      // ✅ 確保 ownedFrames 是一個數組
+      if (!Array.isArray(user.ownedFrames)) {
+        user.ownedFrames = user.ownedFrames ? [user.ownedFrames] : ['default'];
+      }
+      
       for (const frameId of reward.frames) {
         if (!user.ownedFrames.includes(frameId)) {
           user.ownedFrames.push(frameId);

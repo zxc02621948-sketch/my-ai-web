@@ -1,16 +1,20 @@
 // app/changelog/page.jsx
-import Link from "next/link";
+"use client";
+
+import { useRouter } from "next/navigation";
 
 export default function ChangelogPage() {
+  const router = useRouter();
+  
   return (
     <div className="relative min-h-screen bg-black text-white">
-      {/* 回首頁按鈕固定左上角 */}
-      <Link
-        href="/"
+      {/* 回上一頁按鈕固定左上角 */}
+      <button
+        onClick={() => router.back()}
         className="absolute top-0 left-0 m-2 px-3 py-1 bg-white text-black rounded hover:bg-gray-100 font-semibold z-50"
       >
-        ← 回首頁
-      </Link>
+        ← 回上一頁
+      </button>
 
       {/* 內容區 */}
       <div className="max-w-2xl mx-auto py-10 px-4">
@@ -24,7 +28,6 @@ export default function ChangelogPage() {
           <h3 className="text-lg font-semibold text-purple-400 mb-2">🎬 影片系統</h3>
           <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
             <li>完整的影片上傳功能（支援多種格式，自動提取元數據）</li>
-            <li>整合 YouTube 播放器，支援釘選功能</li>
             <li>影片搜索功能（標題、標籤、描述搜索）</li>
             <li>影片排序系統（熱門、最新、最舊、隨機、最多讚）</li>
             <li>無限滾動載入更多影片內容</li>
@@ -48,7 +51,7 @@ export default function ChangelogPage() {
         <div className="mb-4">
           <h3 className="text-lg font-semibold text-cyan-400 mb-2">🎵 播放器系統</h3>
           <ul className="list-disc list-inside space-y-1 text-gray-300 ml-4">
-            <li>新增個人頁播放器功能（支援 YouTube 音樂）</li>
+            <li>新增個人頁播放器功能</li>
             <li>迷你播放器「釘選」功能（LV3 解鎖）</li>
             <li>可拖動迷你播放器，支援手機端安全邊界</li>
             <li>播放器訂閱系統（積分制月訂閱）</li>

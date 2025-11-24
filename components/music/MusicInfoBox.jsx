@@ -80,10 +80,29 @@ export default function MusicInfoBox({
   // 檢查是否可以刪除（擁有者或管理員）
   const canDeleteMusic = (isOwner || isAdmin) && onDelete;
 
-  // 獲取播放清單信息
+  // ✅ 優化：獲取播放清單信息
+  // 優先檢查currentUser是否已經包含播放列表信息，避免重複調用API
   useEffect(() => {
     if (!currentUser) return;
     
+    // ✅ 優化：如果currentUser已經包含播放列表信息，直接使用
+    if (currentUser?.playlist && Array.isArray(currentUser.playlist)) {
+      const userPlaylist = currentUser.playlist || [];
+      const maxSize = currentUser.playlistMaxSize || 5;
+      
+      setPlaylist(userPlaylist);
+      setPlaylistMaxSize(maxSize);
+      
+      // 檢查音樂是否已在播放清單中
+      const musicUrl = music?.musicUrl;
+      if (musicUrl) {
+        const exists = userPlaylist.some(item => item.url === musicUrl);
+        setIsInPlaylist(exists);
+      }
+      return; // 不需要調用API
+    }
+    
+    // ✅ 只有當currentUser沒有播放列表信息時才調用API
     const fetchPlaylistInfo = async () => {
       try {
         const response = await axios.get("/api/user-info", {

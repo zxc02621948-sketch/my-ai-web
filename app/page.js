@@ -524,8 +524,6 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
     track.style.setProperty("--scroll-offset", `${normalizedOffset}px`);
     scrollOffsetRef.current = normalizedOffset;
     
-    console.log(`Scrolling ${dir}, offset: ${scrollOffsetRef.current}px, delta: ${scrollDelta}px`);
-    
     // 清除之前的延迟恢复（不再自动恢复，让动画和偏移量保持叠加状态）
     if (animationRef.current) {
       clearTimeout(animationRef.current);
@@ -562,7 +560,6 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          console.log("Left button clicked");
           scroll("left");
         }}
         onMouseDown={(e) => {
@@ -581,7 +578,6 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          console.log("Right button clicked");
           scroll("right");
         }}
         onMouseDown={(e) => {
@@ -827,9 +823,9 @@ const musicPreviewStateRef = useRef({
 
     return () => {
       isMounted = false;
-      controllers.images.abort();
-      controllers.music.abort();
-      controllers.videos.abort();
+      controllers.images.abort("Component unmounted");
+      controllers.music.abort("Component unmounted");
+      controllers.videos.abort("Component unmounted");
     };
   }, []);
 

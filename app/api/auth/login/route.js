@@ -6,7 +6,6 @@ import { apiError, apiSuccess, withErrorHandling } from "@/lib/errorHandler";
 
 export const POST = withErrorHandling(async (req) => {
   const { email, password } = await req.json();
-  console.log("📥 收到帳密：", { email, password });
 
   if (!email || !password) {
     return apiError("請輸入帳號與密碼", 400);
@@ -14,7 +13,6 @@ export const POST = withErrorHandling(async (req) => {
 
   await dbConnect();
   const user = await User.findOne({ email }).lean();
-  console.log("🪪 使用者完整資料：", user);
 
   if (!user) {
     return apiError("帳號不存在", 401);
@@ -37,8 +35,6 @@ export const POST = withErrorHandling(async (req) => {
     username: user.username,
     isAdmin: user.isAdmin || false,
   };
-
-  console.log("🎯 token payload：", payload);
 
   const token = generateToken(payload);
 

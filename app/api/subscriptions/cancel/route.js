@@ -33,9 +33,10 @@ export async function POST(request) {
 
     // 取消訂閱（標記為已取消，但繼續有效到到期時間）
     subscription.cancelledAt = new Date();
+    subscription.autoRenew = false; // ✅ 關閉自動續訂，到期後不會自動續費
     
     // 注意：不設置 isActive = false，讓訂閱繼續有效到 expiresAt
-    // 這樣用戶可以用完已付費的時間
+    // 這樣用戶可以用完已付費的時間，但到期後不會自動續費
 
     await user.save();
 

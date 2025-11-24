@@ -22,8 +22,9 @@ export async function GET(req) {
   try {
     await dbConnect();
 
-    // 假設 Image.likes 是 userId 陣列
+    // ✅ 優化：populate user 信息，避免前端重複調用 API
     const items = await Image.find({ likes: id })
+      .populate('user', '_id username avatar currentFrame frameSettings')
       .sort({ createdAt: -1 })
       .lean()
       .exec();

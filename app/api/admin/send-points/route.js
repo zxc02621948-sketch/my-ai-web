@@ -43,6 +43,16 @@ export async function POST(req) {
     if (typeof targetUser.pointsBalance !== 'number') {
       targetUser.pointsBalance = 0;
     }
+    
+    // ✅ 確保 ownedFrames 是一個數組（如果不存在或不是數組）
+    if (!Array.isArray(targetUser.ownedFrames)) {
+      targetUser.ownedFrames = targetUser.ownedFrames ? [targetUser.ownedFrames] : ['default'];
+    }
+    
+    // ✅ 確保 subscriptions 是一個數組（如果不存在）
+    if (!Array.isArray(targetUser.subscriptions)) {
+      targetUser.subscriptions = [];
+    }
 
     // 更新積分（同時更新餘額和等級經驗）
     const oldBalance = targetUser.pointsBalance;

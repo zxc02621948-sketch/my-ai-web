@@ -40,20 +40,41 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
   // 通知彈窗狀態
   const [notification, setNotification] = useState({ isOpen: false, type: 'info', title: '', message: '' });
 
+  // ✅ 優化：添加AbortController避免重複調用和內存泄漏
   useEffect(() => {
     if (!imageId) return;
+    
+    const abortController = new AbortController();
+    
     const fetchComments = async () => {
       setLoading(true);
       try {
-        const res = await axios.get(`/api/comments/${imageId}`);
-        setComments(res.data);
+        const res = await axios.get(`/api/comments/${imageId}`, {
+          signal: abortController.signal
+        });
+        // ✅ 檢查請求是否已被取消
+        if (!abortController.signal.aborted) {
+          setComments(res.data);
+        }
       } catch (err) {
+        // ✅ 忽略被取消的請求
+        if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED' || abortController.signal.aborted) {
+          return;
+        }
         console.error("留言讀取錯誤：", err);
       } finally {
-        setLoading(false);
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
+    
     fetchComments();
+    
+    // ✅ 清理函數：取消請求
+    return () => {
+      abortController.abort();
+    };
   }, [imageId]);
 
   const handleCommentSubmit = async (parentCommentId = null) => {

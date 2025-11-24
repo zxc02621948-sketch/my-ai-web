@@ -28,8 +28,15 @@ export async function GET() {
       .limit(1000)
       .lean();
 
-    // 獲取活躍用戶的個人頁面
-    const activeUsers = await User.find({ isVerified: true, isSuspended: false })
+    // 獲取活躍用戶的個人頁面（只包含允許索引的用戶）
+    const activeUsers = await User.find({ 
+      isVerified: true, 
+      isSuspended: false,
+      $or: [
+        { "privacyPreferences.allowProfileIndexing": { $ne: false } }, // 默認允許或明確允許
+        { privacyPreferences: { $exists: false } } // 舊用戶沒有隱私設定，默認允許
+      ]
+    })
       .select("_id updatedAt")
       .sort({ createdAt: -1 })
       .limit(500)

@@ -49,6 +49,23 @@ export async function POST(request) {
     // 查找現有訂閱（不管是否過期）
     let existingSub = user.subscriptions?.find(s => s.type === subscriptionType);
     
+    // ✅ 特殊處理：pinPlayer 訂閱需要檢查是否有 pinPlayerTest 試用訂閱
+    let testSub = null;
+    let remainingTestDays = 0;
+    if (subscriptionType === 'pinPlayer') {
+      // 查找 pinPlayerTest 試用訂閱
+      testSub = user.subscriptions?.find(s => s.type === 'pinPlayerTest' && s.isActive);
+      
+      // 計算試用剩餘天數（如果有的話）
+      if (testSub && testSub.expiresAt) {
+        const testExpiresAt = new Date(testSub.expiresAt);
+        if (testExpiresAt > now) {
+          // 試用尚未過期，計算剩餘天數
+          remainingTestDays = Math.ceil((testExpiresAt - now) / (1000 * 60 * 60 * 24));
+        }
+      }
+    }
+    
     // 扣除積分
     user.pointsBalance -= config.monthlyCost;
     
@@ -70,16 +87,32 @@ export async function POST(request) {
       // 如果未過期，從 expiresAt 開始累加
       // 如果已過期，從 now 開始累加
       const baseTime = currentExpiresAt > now ? currentExpiresAt : now;
-      const newExpiresAt = new Date(baseTime.getTime() + addedDuration);
+      
+      // ✅ 如果是 pinPlayer 訂閱且有試用剩餘天數，累加到正式訂閱
+      const testRemainingMs = (subscriptionType === 'pinPlayer' && remainingTestDays > 0) 
+        ? remainingTestDays * 24 * 60 * 60 * 1000 
+        : 0;
+      
+      const newExpiresAt = new Date(baseTime.getTime() + addedDuration + testRemainingMs);
       
       existingSub.expiresAt = newExpiresAt;
       existingSub.isActive = true;
       existingSub.lastRenewedAt = now;
       existingSub.cancelledAt = null; // 清除取消標記
+      // ✅ 如果用戶明確設置了 autoRenew，更新它（否則保持原值）
+      if (autoRenew !== undefined) {
+        existingSub.autoRenew = autoRenew;
+      }
+      existingSub.nextBillingDate = newExpiresAt; // ✅ 更新下次扣款日期
     } 
     // 首次購買
     else {
-      const expiresAt = new Date(now.getTime() + addedDuration);
+      // ✅ 如果是 pinPlayer 訂閱且有試用剩餘天數，累加到正式訂閱
+      const testRemainingMs = (subscriptionType === 'pinPlayer' && remainingTestDays > 0) 
+        ? remainingTestDays * 24 * 60 * 60 * 1000 
+        : 0;
+      
+      const expiresAt = new Date(now.getTime() + addedDuration + testRemainingMs);
       
       const newSubscription = {
         type: subscriptionType,
@@ -87,7 +120,9 @@ export async function POST(request) {
         expiresAt: expiresAt,
         isActive: true,
         monthlyCost: config.monthlyCost,
-        lastRenewedAt: now
+        lastRenewedAt: now,
+        autoRenew: autoRenew !== false, // ✅ 默認開啟自動續訂，除非明確設置為 false
+        nextBillingDate: expiresAt // ✅ 下次扣款日期設為到期日
       };
 
       if (!user.subscriptions) {
@@ -95,6 +130,12 @@ export async function POST(request) {
       }
       user.subscriptions.push(newSubscription);
       existingSub = newSubscription; // 用於後續返回
+    }
+    
+    // ✅ 將試用訂閱標記為不活躍（已轉換為正式訂閱）
+    if (subscriptionType === 'pinPlayer' && testSub) {
+      testSub.isActive = false;
+      testSub.cancelledAt = now; // 標記為已取消/轉換
     }
 
     // ✅ 如果用戶已經有釘選播放器，同步更新 pinnedPlayer.expiresAt

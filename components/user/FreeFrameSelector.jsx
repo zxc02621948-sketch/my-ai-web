@@ -31,14 +31,20 @@ const FREE_FRAMES = [
     name: "戰損軍事",
     preview: "/frames/avatar-frame-military-01.png",
     description: "硬核軍事風格頭像框",
-    unlockType: "default" // 無條件
+    unlockType: "level", // 等級解鎖
+    levelRequired: 3, // LV4（索引從 0 開始，所以 LV4 = 索引 3）
+    unlockDescription: "達到 LV4 塑界者",
+    minPoints: 1000 // LV4 的積分門檻
   },
   {
     id: "nature",
     name: "花園自然",
     preview: "/frames/avatar-frame-nature-01.png",
     description: "清新自然風格頭像框",
-    unlockType: "default" // 無條件
+    unlockType: "level", // 等級解鎖
+    levelRequired: 4, // LV5（索引從 0 開始，所以 LV5 = 索引 4）
+    unlockDescription: "達到 LV5 筑夢者",
+    minPoints: 2000 // LV5 的積分門檻
   }
   // 未來可添加更多免費頭像框
   // 例如：成就解鎖（上傳 100 張圖、獲得 1000 讚等）

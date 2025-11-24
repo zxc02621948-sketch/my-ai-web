@@ -44,8 +44,15 @@ const userSchema = new mongoose.Schema(
 
     verificationToken: { type: String },
     resetPasswordToken: { type: String },
-    resetPasswordExpires: { type: Date }
-    ,
+    resetPasswordExpires: { type: Date },
+    
+    // ✅ 帳號註銷系統
+    deletionRequestedAt: { type: Date, default: null }, // 請求刪除的時間
+    deletionScheduledAt: { type: Date, default: null }, // 實際刪除的時間（7天後）
+    deletionCode: { type: String, default: null }, // 6位數驗證碼
+    deletionCodeExpiresAt: { type: Date, default: null }, // 驗證碼過期時間
+    lastDeletionCodeSentAt: { type: Date, default: null }, // 最後發送驗證碼的時間
+    
     // 封鎖與永久鎖（Strike 3 within window）
     isSuspended: { type: Boolean, default: false },
     isPermanentSuspension: { type: Boolean, default: false },
@@ -206,7 +213,9 @@ const userSchema = new mongoose.Schema(
       isActive: { type: Boolean, default: true },
       monthlyCost: { type: Number },
       lastRenewedAt: { type: Date }, // 最後續費時間
-      cancelledAt: { type: Date, default: null }
+      cancelledAt: { type: Date, default: null },
+      autoRenew: { type: Boolean, default: true }, // ✅ 自動續訂（默認開啟）
+      nextBillingDate: { type: Date } // ✅ 下次扣款日期（用於自動續訂）
     }]
   },
   {

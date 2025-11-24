@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function PrivacySettingsPage() {
-  const { currentUser } = useCurrentUser();
+  const { currentUser, setCurrentUser } = useCurrentUser();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -27,6 +27,7 @@ export default function PrivacySettingsPage() {
     
     if (currentUser) {
       const prefs = currentUser.privacyPreferences || {};
+      // ✅ 正確處理隱私設定：如果明確設置為 false，則為 false；否則為 true（默認值）
       setPreferences({
         allowMarketingEmails: prefs.allowMarketingEmails !== false,
         allowDataAnalytics: prefs.allowDataAnalytics !== false,
@@ -49,6 +50,14 @@ export default function PrivacySettingsPage() {
       });
 
       if (res.ok) {
+        const data = await res.json();
+        // ✅ 更新 currentUser 狀態，包含新的隱私設定
+        if (data.success && data.preferences && currentUser) {
+          setCurrentUser({
+            ...currentUser,
+            privacyPreferences: data.preferences
+          });
+        }
         notify.success("成功", "隱私設定已保存");
       } else {
         notify.error("保存失敗", "請稍後再試");
@@ -137,6 +146,9 @@ export default function PrivacySettingsPage() {
                 <p className="text-xs text-zinc-500 mt-1">
                   （關閉後將顯示一般性內容，不會根據您的偏好調整）
                 </p>
+                <div className="mt-2 px-3 py-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-200">
+                  💡 此功能將在未來版本中推出，目前設定會先保存以備將來使用
+                </div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input

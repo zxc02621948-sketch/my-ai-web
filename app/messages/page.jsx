@@ -212,7 +212,7 @@ export default function MessagesPage() {
     if (!cid) { setThread([]); setThreadArchived(false); setErrorMsg(""); return; }
 
     // 中止舊請求避免競態
-    if (abortRef.current) abortRef.current.abort();
+    if (abortRef.current) abortRef.current.abort("New thread load request started");
     const controller = new AbortController();
     abortRef.current = controller;
 

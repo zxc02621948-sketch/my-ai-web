@@ -78,7 +78,7 @@ export const LEVELS = [
     key: "lv10", 
     rank: "LV10", 
     title: "無界者", 
-    min: 10000, 
+    min: 12000, 
     color: "bg-red-600",
     rewards: ["每日上傳 14 張圖片/影片", "永久釘選播放器", "迷你播放器功能", "頭像框調色盤功能", "基本功能使用權"]
   },

@@ -103,6 +103,13 @@ export async function GET() {
         typeof user.playlistAllowShuffle === "boolean"
           ? user.playlistAllowShuffle
           : null,
+      // ✅ 添加隱私設定字段
+      privacyPreferences: user.privacyPreferences || {
+        allowMarketingEmails: true,
+        allowDataAnalytics: true,
+        allowPersonalization: true,
+        allowProfileIndexing: true,
+      },
     },
     // 兼容舊代碼（直接在根層級）
     _id: user._id,
@@ -139,5 +146,12 @@ export async function GET() {
       typeof user.playlistAllowShuffle === "boolean"
         ? user.playlistAllowShuffle
         : null,
+    // ✅ 添加隱私設定字段
+    privacyPreferences: user.privacyPreferences || {
+      allowMarketingEmails: true,
+      allowDataAnalytics: true,
+      allowPersonalization: true,
+      allowProfileIndexing: true,
+    },
   });
 }

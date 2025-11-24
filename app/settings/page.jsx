@@ -72,6 +72,17 @@ export default function SettingsPage() {
             </div>
             <p className="text-sm text-zinc-400">管理資料使用偏好和隱私權利</p>
           </a>
+          
+          <a 
+            href="/settings/account/deletion"
+            className="bg-zinc-800/60 hover:bg-zinc-800 border border-red-700/50 rounded-lg p-4 transition-all group"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-2xl">🗑️</span>
+              <h3 className="font-semibold text-lg group-hover:text-red-400 transition">帳號註銷</h3>
+            </div>
+            <p className="text-sm text-zinc-400">永久刪除帳號和所有數據</p>
+          </a>
         </div>
         
         {/* 訂閱管理 */}
@@ -95,7 +106,7 @@ export default function SettingsPage() {
                 <div className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-500/40 rounded-lg p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <h3 className="font-medium text-lg">🎧 播放器 1 日體驗券</h3>
+                      <h3 className="font-medium text-lg">🎧 播放器完整功能體驗券 (3天)</h3>
                       <p className="text-sm text-gray-400 mt-1">
                         🎁 免費體驗（限時權益）
                       </p>

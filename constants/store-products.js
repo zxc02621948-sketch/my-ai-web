@@ -2,7 +2,7 @@ export const STORE_PRODUCTS = {
   features: [
     {
       id: "player-1day-coupon",
-      title: "播放器完整功能體驗券",
+      title: "播放器完整功能體驗券 (3天)",
       description: "完整體驗播放器與釘選功能！包含個人頁面專屬播放器與全站釘選播放功能，讓音樂陪伴創作的每一刻！",
       icon: "/store/mini-player.png",
       price: 0,
@@ -21,6 +21,27 @@ export const STORE_PRODUCTS = {
         "背景播放不受限制（體驗）",
         "體驗期限 3 天",
         "終身限購 1 次"
+      ]
+    },
+    {
+      id: "pin-player-coupon",
+      title: "釘選播放器體驗券 (3天)",
+      description: "體驗全站釘選播放功能！釘選後可在任何頁面與背景持續連播（不受 30 秒限制），讓音樂陪你瀏覽整個網站。",
+      icon: "📌",
+      price: 0,
+      originalPrice: 0,
+      isLimited: true,
+      expiry: 3, // 3天有效期
+      category: "features",
+      type: "pin-player-coupon",
+      duration: 3,
+      maxPurchase: 1, // 終身限購1次（與完整體驗券共用限購）
+      features: [
+        "全站跨頁面播放，背景可連播",
+        "釘選後：背景播放不受 30 秒限制",
+        "支援自動下一首",
+        "體驗期限 3 天",
+        "終身限購 1 次（與完整體驗券共用）"
       ]
     },
     {

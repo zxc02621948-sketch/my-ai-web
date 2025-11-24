@@ -32,10 +32,16 @@ async function processSubscriptions() {
     const today = new Date();
     console.log(`\n📅 開始處理訂閱（${today.toLocaleString('zh-TW')}）\n`);
 
-    // 找到所有需要續費的用戶
+    // ✅ 找到所有需要續費的用戶（使用 expiresAt 或 nextBillingDate）
     const usersWithDueSubscriptions = await User.find({
-      'subscriptions.nextBillingDate': { $lte: today },
-      'subscriptions.isActive': true
+      'subscriptions.isActive': true,
+      $or: [
+        { 'subscriptions.nextBillingDate': { $lte: today } },
+        { 
+          'subscriptions.nextBillingDate': { $exists: false },
+          'subscriptions.expiresAt': { $lte: today }
+        }
+      ]
     });
 
     console.log(`🔍 找到 ${usersWithDueSubscriptions.length} 個用戶需要處理訂閱\n`);
@@ -51,7 +57,13 @@ async function processSubscriptions() {
       let userModified = false;
 
       for (const subscription of user.subscriptions) {
-        if (!subscription.isActive || subscription.nextBillingDate > today) {
+        if (!subscription.isActive) {
+          continue;
+        }
+        
+        // ✅ 檢查是否需要續費（使用 nextBillingDate 或 expiresAt）
+        const billingDate = subscription.nextBillingDate || subscription.expiresAt;
+        if (!billingDate || new Date(billingDate) > today) {
           continue;
         }
 
@@ -63,11 +75,12 @@ async function processSubscriptions() {
 
         console.log(`\n   📦 處理訂閱: ${config.name}`);
         console.log(`   - 月費: ${subscription.monthlyCost} 積分`);
-        console.log(`   - 自動續費: ${subscription.autoRenew ? '是' : '否'}`);
-        console.log(`   - 到期日: ${subscription.nextBillingDate.toLocaleString('zh-TW')}`);
+        console.log(`   - 自動續費: ${subscription.autoRenew !== false ? '是' : '否'}`); // ✅ 默認為 true
+        console.log(`   - 到期日: ${new Date(billingDate).toLocaleString('zh-TW')}`);
 
-        // 如果沒有啟用自動續費，直接取消
-        if (!subscription.autoRenew) {
+        // ✅ 如果沒有啟用自動續費（明確設置為 false），直接取消
+        // 注意：autoRenew 默認為 true，所以只有明確設置為 false 時才取消
+        if (subscription.autoRenew === false) {
           subscription.isActive = false;
           subscription.cancelledAt = today;
           
@@ -124,14 +137,19 @@ async function processSubscriptions() {
         // 扣除積分並續費
         user.pointsBalance -= subscription.monthlyCost;
         
-        // 更新下次扣款日期
-        const newBillingDate = new Date(subscription.nextBillingDate);
-        if (config.durationDays) {
-          newBillingDate.setDate(newBillingDate.getDate() + config.durationDays);
-        } else if (config.durationMinutes) {
-          newBillingDate.setMinutes(newBillingDate.getMinutes() + config.durationMinutes);
-        }
-        subscription.nextBillingDate = newBillingDate;
+        // ✅ 更新到期時間和下次扣款日期（累積制）
+        // 使用 expiresAt 作為基準（如果沒有則使用 nextBillingDate）
+        const baseTime = subscription.expiresAt 
+          ? new Date(subscription.expiresAt) 
+          : new Date(subscription.nextBillingDate);
+        
+        const addedDuration = config.durationDays 
+          ? config.durationDays * 24 * 60 * 60 * 1000 
+          : (config.durationMinutes ? config.durationMinutes * 60 * 1000 : 0);
+        
+        const newExpiresAt = new Date(baseTime.getTime() + addedDuration);
+        subscription.expiresAt = newExpiresAt; // ✅ 更新到期時間
+        subscription.nextBillingDate = newExpiresAt; // ✅ 更新下次扣款日期
         
         userModified = true;
         renewedCount++;

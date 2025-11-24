@@ -25,9 +25,9 @@ export async function GET(req) {
   try {
     await dbConnect();
 
-    // 依你的資料結構調整條件：
-    // 假設 Image.user 是作者的 ObjectId
+    // ✅ 優化：populate user 信息，避免前端重複調用 API
     const items = await Image.find({ user: id })
+      .populate('user', '_id username avatar currentFrame frameSettings')
       .sort({ createdAt: -1 })
       .lean()
       .exec();

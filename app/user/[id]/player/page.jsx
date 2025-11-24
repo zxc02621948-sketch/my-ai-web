@@ -314,7 +314,7 @@ export default function UserPlayerPage() {
     
     // ✅ 清理函數：取消請求，防止內存泄漏
     return () => {
-      abortController.abort();
+      abortController.abort("Component unmounted or dependencies changed");
     };
   }, [id, currentUser?.pinnedPlayer, applyShufflePreference, setShuffleAllowed]);
 
@@ -345,7 +345,7 @@ export default function UserPlayerPage() {
       const handlePointsUpdated = async () => {
         // ✅ 取消之前的請求（如果存在）
         if (pointsUpdateAbortControllerRef.current) {
-          pointsUpdateAbortControllerRef.current.abort();
+          pointsUpdateAbortControllerRef.current.abort("New points update request started");
         }
         
         // ✅ 創建新的 AbortController
@@ -402,7 +402,7 @@ export default function UserPlayerPage() {
     return () => {
       // ✅ 取消正在進行的請求
       if (pointsUpdateAbortControllerRef.current) {
-        pointsUpdateAbortControllerRef.current.abort();
+        pointsUpdateAbortControllerRef.current.abort("Component unmounted");
         pointsUpdateAbortControllerRef.current = null;
       }
       
@@ -411,6 +411,27 @@ export default function UserPlayerPage() {
       window.removeEventListener('points-updated', handlePointsUpdated); // ✅ 清理監聽器
     };
   }, [playlist, id, applyShufflePreference, playerOwner, setShuffleAllowed]);
+
+  // ✅ 監聽用戶數據更新事件（如購買高階播放器造型），立即更新 currentUser
+  useEffect(() => {
+    const onUserDataUpdated = async () => {
+      // 只更新當前用戶自己的播放器頁面
+      if (!isOwner || !setCurrentUser) return;
+      
+      try {
+        const currentUserInfo = await axios.get("/api/current-user", {
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        if (currentUserInfo.data) {
+          setCurrentUser(currentUserInfo.data);
+        }
+      } catch (error) {
+        console.error("更新用戶數據失敗:", error);
+      }
+    };
+    window.addEventListener("user-data-updated", onUserDataUpdated);
+    return () => window.removeEventListener("user-data-updated", onUserDataUpdated);
+  }, [isOwner, setCurrentUser]);
 
   // 組件卸載時的清理
   useEffect(() => {

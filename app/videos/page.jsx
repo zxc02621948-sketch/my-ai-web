@@ -117,6 +117,10 @@ const VideosPage = () => {
         };
       } catch (error) {
         console.error('載入影片失敗:', error);
+        // ✅ 只在首次加載失敗時顯示錯誤提示，避免無限滾動時頻繁提示
+        if (targetPage === 1) {
+          notify.error('載入失敗', '無法載入影片列表，請稍後再試');
+        }
         return {
           items: [],
           hasMore: false,

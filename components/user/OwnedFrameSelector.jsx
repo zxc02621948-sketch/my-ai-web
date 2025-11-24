@@ -28,14 +28,18 @@ export default function OwnedFrameSelector({
       const response = await axios.get("/api/user/owned-frames");
       if (response.data.success) {
         const ownedFrames = response.data.data || [];
+        // 過濾掉免費頭像框（如 leaves），它們應該只在免費頭像框選擇器中顯示
+        const freeFrames = ["leaves", "military", "nature"]; // 免費頭像框列表
+        const filteredFrames = ownedFrames.filter(frameId => !freeFrames.includes(frameId));
         // 確保 default 頭像框總是包含在內
-        if (!ownedFrames.includes("default")) {
-          ownedFrames.unshift("default");
+        if (!filteredFrames.includes("default")) {
+          filteredFrames.unshift("default");
         }
-        setOwnedFrames(ownedFrames);
+        setOwnedFrames(filteredFrames);
       }
     } catch (error) {
       console.error("獲取擁有的頭像框失敗:", error);
+      // 靜默失敗，因為這不是關鍵操作，用戶可以稍後重試
     } finally {
       setLoading(false);
     }
@@ -50,7 +54,7 @@ export default function OwnedFrameSelector({
     onClose();
   };
 
-  // 頭像框信息映射
+  // 頭像框信息映射（不包含免費頭像框，如 leaves）
   const frameInfoMap = {
     "default": {
       name: "預設",
@@ -66,11 +70,6 @@ export default function OwnedFrameSelector({
       name: "動物",
       preview: "/frames/animals-5985896_1280.png",
       description: "可愛動物頭像框"
-    },
-    "leaves": {
-      name: "葉子",
-      preview: "/frames/leaves-6649803_1280.png",
-      description: "自然葉子頭像框"
     },
   "magic-circle": {
     name: "魔法陣",
