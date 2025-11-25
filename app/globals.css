@@ -323,17 +323,19 @@ input, textarea, select, button {
   animation-play-state: paused;
 }
 
-@media (max-width: 767px) {
-  .marquee-track,
-  .marquee-track-right {
-    animation-duration: calc(var(--marquee-duration, 40s) * 1.35);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .marquee-track,
   .marquee-track-right {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }

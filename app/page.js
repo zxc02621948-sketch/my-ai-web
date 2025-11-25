@@ -605,10 +605,28 @@ function ShowcaseMarquee({
     return <EmptyNotice href={href} />;
   }
 
-  const marqueeItems =
-    items.length >= 6 && !isMobile ? [...items, ...items] : [...items];
+  const shouldLoop = !isMobile && items.length >= 6;
+  const marqueeItems = shouldLoop ? [...items, ...items] : [...items];
   const trackClass = direction === "right" ? "marquee-track-right" : "marquee-track";
   const showControls = !isMobile && marqueeItems.length > 4;
+
+  if (isMobile) {
+    return (
+      <div className={`relative overflow-hidden rounded-b-3xl border-t-0 border ${accent.border} bg-black/20`}>
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[#050505] via-[#050505]/80 to-transparent z-10" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[#050505] via-[#050505]/80 to-transparent z-10" />
+        <div className="overflow-x-auto no-scrollbar px-3 py-4 snap-x snap-mandatory">
+          <div className="flex gap-3">
+            {items.map((item, idx) => (
+              <div key={`${item.id ?? idx}-mobile`} className="w-56 flex-shrink-0 snap-start">
+                {renderItem(item, idx)}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ✅ 性能優化：使用 requestAnimationFrame 避免強制重排
   // 点击按钮滚动：通过 CSS 变量调整 transform，叠加在无缝循环动画上
@@ -620,7 +638,7 @@ function ShowcaseMarquee({
       const track = trackRef.current;
       if (!track) return;
       
-      const trackWidth = track.scrollWidth / 2;
+      const trackWidth = shouldLoop ? track.scrollWidth / 2 : track.scrollWidth;
       
       // 计算滚动距离（每个卡片宽度 + gap）
       const cardWidth = 256; // w-64 = 16rem = 256px
