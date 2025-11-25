@@ -586,6 +586,9 @@ function ShowcaseMarquee({
   const animationDelayRef = useRef(0); // 动画延迟（秒）
   const scrollOffsetRef = useRef(0); // 手动滚动偏移量（像素）
   const animationRef = useRef(null);
+  const touchStartXRef = useRef(0);
+  const lastTouchXRef = useRef(0);
+  const isDraggingRef = useRef(false);
 
   // 组件卸载时清理
   useEffect(() => {
@@ -605,79 +608,55 @@ function ShowcaseMarquee({
     return <EmptyNotice href={href} />;
   }
 
-  const shouldLoop = !isMobile && items.length >= 6;
+  const shouldLoop = items.length >= 6;
   const marqueeItems = shouldLoop ? [...items, ...items] : [...items];
   const trackClass = direction === "right" ? "marquee-track-right" : "marquee-track";
   const showControls = !isMobile && marqueeItems.length > 4;
 
-  if (isMobile) {
-    return (
-      <div className={`relative overflow-hidden rounded-b-3xl border-t-0 border ${accent.border} bg-black/20`}>
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[#050505] via-[#050505]/80 to-transparent z-10" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[#050505] via-[#050505]/80 to-transparent z-10" />
-        <div className="overflow-x-auto no-scrollbar px-3 py-4 snap-x snap-mandatory">
-          <div className="flex gap-3">
-            {items.map((item, idx) => (
-              <div key={`${item.id ?? idx}-mobile`} className="w-56 flex-shrink-0 snap-start">
-                {renderItem(item, idx)}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const applyScrollDelta = (delta) => {
+    if (!delta || !trackRef.current) return;
+    requestAnimationFrame(() => {
+      const track = trackRef.current;
+      if (!track) return;
+
+      const trackWidth = shouldLoop ? track.scrollWidth / 2 : track.scrollWidth;
+
+      scrollOffsetRef.current += delta;
+
+      let normalizedOffset = scrollOffsetRef.current;
+      if (normalizedOffset < -trackWidth) {
+        normalizedOffset = normalizedOffset % trackWidth;
+        if (normalizedOffset > 0) {
+          normalizedOffset -= trackWidth;
+        }
+      } else if (normalizedOffset > 0) {
+        normalizedOffset = normalizedOffset % trackWidth;
+        if (normalizedOffset > 0) {
+          normalizedOffset -= trackWidth;
+        }
+      }
+
+      track.style.setProperty("--scroll-offset", `${normalizedOffset}px`);
+      scrollOffsetRef.current = normalizedOffset;
+
+      if (animationRef.current) {
+        clearTimeout(animationRef.current);
+        animationRef.current = null;
+      }
+    });
+  };
 
   // ✅ 性能優化：使用 requestAnimationFrame 避免強制重排
   // 点击按钮滚动：通过 CSS 变量调整 transform，叠加在无缝循环动画上
   const scroll = (dir) => {
     if (!trackRef.current) return;
     
-    // 使用 requestAnimationFrame 批量讀取布局屬性，減少強制重排
-    requestAnimationFrame(() => {
-      const track = trackRef.current;
-      if (!track) return;
-      
-      const trackWidth = shouldLoop ? track.scrollWidth / 2 : track.scrollWidth;
-      
-      // 计算滚动距离（每个卡片宽度 + gap）
-      const cardWidth = 256; // w-64 = 16rem = 256px
-      const gap = 16; // gap-4 = 1rem = 16px
-      const scrollAmount = cardWidth + gap;
-      
-      // 确定滚动方向
-      // 左按钮 = 向左移动（scrollOffset 减少），右按钮 = 向右移动（scrollOffset 增加）
-      const scrollDelta = dir === "left" ? -scrollAmount : scrollAmount;
-      
-      // 更新滚动偏移量
-      scrollOffsetRef.current += scrollDelta;
-      
-      // 将偏移量归一化到 [-trackWidth, 0) 范围内，确保无缝循环
-      let normalizedOffset = scrollOffsetRef.current;
-      if (normalizedOffset < -trackWidth) {
-        // 超出下界：调整到等效位置
-        normalizedOffset = normalizedOffset % trackWidth;
-        if (normalizedOffset > 0) {
-          normalizedOffset -= trackWidth;
-        }
-      } else if (normalizedOffset > 0) {
-        // 超出上界：调整到等效位置
-        normalizedOffset = normalizedOffset % trackWidth;
-        if (normalizedOffset > 0) {
-          normalizedOffset -= trackWidth;
-        }
-      }
-      
-      // 更新 CSS 变量，transform 会叠加在动画上
-      track.style.setProperty("--scroll-offset", `${normalizedOffset}px`);
-      scrollOffsetRef.current = normalizedOffset;
-      
-      // 清除之前的延迟恢复（不再自动恢复，让动画和偏移量保持叠加状态）
-      if (animationRef.current) {
-        clearTimeout(animationRef.current);
-        animationRef.current = null;
-      }
-    });
+    const cardWidth = 256; // w-64 = 16rem = 256px
+    const gap = 16; // gap-4 = 1rem = 16px
+    const scrollAmount = cardWidth + gap;
+    const scrollDelta = dir === "left" ? -scrollAmount : scrollAmount;
+
+    applyScrollDelta(scrollDelta);
   };
 
   const handleMouseEnter = () => {
@@ -700,6 +679,32 @@ function ShowcaseMarquee({
     if (scrollOffsetRef.current !== 0) {
       track.style.setProperty("--scroll-offset", `${scrollOffsetRef.current}px`);
     }
+  };
+
+  const handleTouchStart = (event) => {
+    if (!isMobile) return;
+    if (event.touches.length !== 1) return;
+
+    const touch = event.touches[0];
+    touchStartXRef.current = touch.clientX;
+    lastTouchXRef.current = touch.clientX;
+    isDraggingRef.current = true;
+  };
+
+  const handleTouchMove = (event) => {
+    if (!isMobile || !isDraggingRef.current) return;
+    if (event.touches.length !== 1) return;
+
+    const touch = event.touches[0];
+    const delta = touch.clientX - lastTouchXRef.current;
+    lastTouchXRef.current = touch.clientX;
+
+    applyScrollDelta(delta);
+  };
+
+  const handleTouchEnd = () => {
+    if (!isMobile) return;
+    isDraggingRef.current = false;
   };
 
   return (
@@ -757,10 +762,15 @@ function ShowcaseMarquee({
         className={`${trackClass} flex gap-4 ${isMobile ? "px-4 py-4" : "px-6 py-4 md:pr-10 md:py-6"}`}
         style={{ 
           "--marquee-duration": `${duration}s`,
-          "--scroll-offset": "0px"
+          "--scroll-offset": "0px",
+          touchAction: isMobile ? "pan-y" : undefined,
         }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       >
         {marqueeItems.map((item, index) => (
           <div
