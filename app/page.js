@@ -76,6 +76,24 @@ function isMobileDevice() {
   return window.innerWidth < 768;
 }
 
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < breakpoint;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      setIsMobile(window.innerWidth < breakpoint);
+    };
+    window.addEventListener("resize", handler, { passive: true });
+    return () => window.removeEventListener("resize", handler);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
 function resolveImageUrl(image) {
   if (!image) return "";
   
@@ -554,7 +572,16 @@ function VideoShowcaseCard({ item, onSelect, isFirst = false }) {
   );
 }
 
-function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, direction = "left" }) {
+function ShowcaseMarquee({
+  items,
+  renderItem,
+  accent,
+  duration,
+  loading,
+  href,
+  direction = "left",
+  isMobile = false,
+}) {
   const trackRef = useRef(null);
   const animationDelayRef = useRef(0); // 动画延迟（秒）
   const scrollOffsetRef = useRef(0); // 手动滚动偏移量（像素）
@@ -578,8 +605,10 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
     return <EmptyNotice href={href} />;
   }
 
-  const marqueeItems = items.length >= 6 ? [...items, ...items] : [...items];
+  const marqueeItems =
+    items.length >= 6 && !isMobile ? [...items, ...items] : [...items];
   const trackClass = direction === "right" ? "marquee-track-right" : "marquee-track";
+  const showControls = !isMobile && marqueeItems.length > 4;
 
   // ✅ 性能優化：使用 requestAnimationFrame 避免強制重排
   // 点击按钮滚动：通过 CSS 变量调整 transform，叠加在无缝循环动画上
@@ -634,6 +663,7 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
   };
 
   const handleMouseEnter = () => {
+    if (isMobile) return;
     if (trackRef.current) {
       const track = trackRef.current;
       // 暂停动画，允许手动控制
@@ -642,6 +672,7 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
   };
 
   const handleMouseLeave = () => {
+    if (isMobile) return;
     if (!trackRef.current) return;
     
     const track = trackRef.current;
@@ -657,45 +688,55 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
     <div
       className={`group relative overflow-hidden rounded-b-3xl border-t-0 border ${accent.border} bg-transparent`}
     >
+      {isMobile && (
+        <>
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[#050505] via-[#050505]/80 to-transparent z-10" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[#050505] via-[#050505]/80 to-transparent z-10" />
+        </>
+      )}
       {/* 左按钮 */}
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          scroll("left");
-        }}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        className="absolute left-3 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 backdrop-blur-sm border border-white/30 shadow-xl hover:scale-110 active:scale-95 cursor-pointer"
-        aria-label="向左滚动"
-        type="button"
-      >
-        <ArrowRight className="w-6 h-6 rotate-180" />
-      </button>
+      {showControls && (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            scroll("left");
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className="absolute left-3 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 backdrop-blur-sm border border-white/30 shadow-xl hover:scale-110 active:scale-95 cursor-pointer"
+          aria-label="向左滚动"
+          type="button"
+        >
+          <ArrowRight className="w-6 h-6 rotate-180" />
+        </button>
+      )}
 
       {/* 右按钮 */}
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          scroll("right");
-        }}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        className="absolute right-3 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 backdrop-blur-sm border border-white/30 shadow-xl hover:scale-110 active:scale-95 cursor-pointer"
-        aria-label="向右滚动"
-        type="button"
-      >
-        <ArrowRight className="w-6 h-6" />
-      </button>
+      {showControls && (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            scroll("right");
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 backdrop-blur-sm border border-white/30 shadow-xl hover:scale-110 active:scale-95 cursor-pointer"
+          aria-label="向右滚动"
+          type="button"
+        >
+          <ArrowRight className="w-6 h-6" />
+        </button>
+      )}
 
       <div
         ref={trackRef}
-        className={`${trackClass} flex gap-4 px-6 py-4 md:pr-10 md:py-6`}
+        className={`${trackClass} flex gap-4 ${isMobile ? "px-4 py-4" : "px-6 py-4 md:pr-10 md:py-6"}`}
         style={{ 
           "--marquee-duration": `${duration}s`,
           "--scroll-offset": "0px"
@@ -706,7 +747,7 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
         {marqueeItems.map((item, index) => (
           <div
             key={`${item.id ?? index}-${index}`}
-            className="w-64 flex-shrink-0"
+            className={`${isMobile ? "w-56" : "w-64"} flex-shrink-0`}
           >
             {renderItem(item, index)}
           </div>
@@ -716,7 +757,7 @@ function ShowcaseMarquee({ items, renderItem, accent, duration, loading, href, d
   );
 }
 
-function HeroSection() {
+function HeroSection({ isMobile }) {
   const { currentUser } = useCurrentUser();
   
   const handleLoginClick = () => {
@@ -729,10 +770,10 @@ function HeroSection() {
   
   return (
     <header className="border-b border-white/10 bg-gradient-to-br from-emerald-500/10 via-purple-600/5 to-sky-500/10">
-      <div className="mx-auto flex max-w-[1536px] flex-col gap-3 px-6 py-6 sm:px-10 sm:py-8">
+      <div className="mx-auto flex max-w-[1536px] flex-col gap-3 px-4 py-5 sm:px-10 sm:py-8">
         {/* Logo、標題與「我們的故事」捷徑（同一行） */}
-        <div className="flex items-center justify-between gap-2 md:gap-3 shrink-0 mb-3">
-          <div className="flex items-center gap-2 md:gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0 mb-3">
+          <div className="flex items-center gap-2 md:gap-3 justify-between sm:justify-start">
             <Link
               href="/"
               className="flex items-center gap-2 md:gap-3"
@@ -761,7 +802,7 @@ function HeroSection() {
           
           {/* ✅ 登錄/註冊按鈕（未登錄時顯示） */}
           {!currentUser && (
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex flex-wrap gap-2 sm:flex-nowrap sm:gap-3">
               <button
                 onClick={handleLoginClick}
                 className="rounded-lg border border-blue-500/50 bg-blue-600/20 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold text-blue-200 hover:bg-blue-600/30 hover:border-blue-500 transition-all"
@@ -778,32 +819,32 @@ function HeroSection() {
           )}
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-bold text-white sm:text-2xl lg:text-3xl">
+            <h1 className="text-lg font-bold text-white sm:text-2xl lg:text-3xl">
               創作、靈感與音樂的交會處
             </h1>
-            <p className="mt-1.5 max-w-2xl text-xs text-zinc-200 sm:text-sm">
+            <p className="mt-1.5 max-w-2xl text-xs text-zinc-200 sm:text-sm leading-relaxed">
               我們將圖片、音樂與影片三大內容專區匯聚於此，一頁掌握最新精選作品，
               滑過即可瀏覽，點擊即可探索每個專區的完整體驗。
             </p>
           </div>
-          <div className="flex flex-shrink-0 gap-3 sm:gap-4">
+          <div className="flex flex-wrap sm:flex-nowrap flex-shrink-0 gap-2 sm:gap-4">
             <Link
               href="/images"
-              className="rounded-xl border-2 border-[#4a0ba8]/80 bg-gradient-to-r from-[#4a0ba8]/90 to-[#1a55d9]/90 px-6 py-3 text-base sm:text-lg font-bold text-white shadow-lg shadow-[#4a0ba8]/50 transition-all hover:border-[#4a0ba8] hover:from-[#4a0ba8] hover:to-[#1a55d9] hover:shadow-xl hover:shadow-[#4a0ba8]/70 hover:scale-105 active:scale-100"
+              className="rounded-xl border-2 border-[#4a0ba8]/80 bg-gradient-to-r from-[#4a0ba8]/90 to-[#1a55d9]/90 px-4 py-2 text-sm sm:text-lg font-bold text-white shadow-lg shadow-[#4a0ba8]/50 transition-all hover:border-[#4a0ba8] hover:from-[#4a0ba8] hover:to-[#1a55d9] hover:shadow-xl hover:shadow-[#4a0ba8]/70 hover:scale-105 active:scale-100 flex-1 sm:flex-none text-center"
             >
               圖片專區
             </Link>
             <Link
               href="/music"
-              className="rounded-xl border-2 border-purple-400/80 bg-gradient-to-r from-indigo-600/90 via-purple-600/90 to-pink-600/90 px-6 py-3 text-base sm:text-lg font-bold text-white shadow-lg shadow-purple-600/50 transition-all hover:border-purple-400 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 hover:shadow-xl hover:shadow-purple-600/70 hover:scale-105 active:scale-100"
+              className="rounded-xl border-2 border-purple-400/80 bg-gradient-to-r from-indigo-600/90 via-purple-600/90 to-pink-600/90 px-4 py-2 text-sm sm:text-lg font-bold text-white shadow-lg shadow-purple-600/50 transition-all hover:border-purple-400 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 hover:shadow-xl hover:shadow-purple-600/70 hover:scale-105 active:scale-100 flex-1 sm:flex-none text-center"
             >
               音樂專區
             </Link>
             <Link
               href="/videos"
-              className="rounded-xl border-2 border-orange-400/80 bg-gradient-to-r from-orange-600/90 via-pink-600/90 to-red-600/90 px-6 py-3 text-base sm:text-lg font-bold text-white shadow-lg shadow-orange-600/50 transition-all hover:border-orange-400 hover:from-orange-600 hover:via-pink-600 hover:to-red-600 hover:shadow-xl hover:shadow-orange-600/70 hover:scale-105 active:scale-100"
+              className="rounded-xl border-2 border-orange-400/80 bg-gradient-to-r from-orange-600/90 via-pink-600/90 to-red-600/90 px-4 py-2 text-sm sm:text-lg font-bold text-white shadow-lg shadow-orange-600/50 transition-all hover:border-orange-400 hover:from-orange-600 hover:via-pink-600 hover:to-red-600 hover:shadow-xl hover:shadow-orange-600/70 hover:scale-105 active:scale-100 flex-1 sm:flex-none text-center"
             >
               影片專區
             </Link>
@@ -849,6 +890,7 @@ export default function LandingPage() {
     return () => clearTimeout(timer);
   }, []);
   const { currentUser } = useCurrentUser();
+  const isMobile = useIsMobile();
   const [sectionData, setSectionData] = useState(() =>
     SECTION_CONFIG.reduce((acc, section) => {
       acc[section.id] = {
@@ -1277,8 +1319,8 @@ const musicPreviewStateRef = useRef({
   return (
     <div className="min-h-screen bg-transparent text-zinc-100 relative">
       {showStarrySky && <StarrySky />}
-      <HeroSection />
-      <main className="mx-auto flex max-w-[1536px] flex-col gap-16 px-6 py-16 sm:px-10 sm:py-20 bg-transparent">
+      <HeroSection isMobile={isMobile} />
+      <main className="mx-auto flex max-w-[1536px] flex-col gap-12 sm:gap-16 px-4 py-12 sm:px-10 sm:py-20 bg-transparent">
         {SECTION_CONFIG.map((section) => {
           const data = sectionData[section.id] || {
             items: [],
@@ -1311,6 +1353,7 @@ const musicPreviewStateRef = useRef({
                       loading={data.loading}
                       href={section.href}
                       direction={section.direction}
+                      isMobile={isMobile}
                     />
                   </div>
                 )}

@@ -462,53 +462,67 @@ export default function UploadStep2({
     if (typeof parsed.prompt === "string") setPositivePrompt(parsed.prompt);
     if (typeof parsed.negative === "string") setNegativePrompt(parsed.negative);
     
+    // ✅ 兼容 ComfyUI canonical 格式（cfg -> cfgScale, modelName -> model）
+    const cfgValue = parsed.cfgScale ?? parsed.cfg;
+    const modelValue = parsed.model ?? parsed.modelName;
+    
     // 自动读取的字段标记来源为 'auto'
-    if (parsed.steps) {
-      setSteps(parsed.steps);
+    if (parsed.steps !== undefined && parsed.steps !== null) {
+      setSteps(String(parsed.steps));
       setStepsSource('auto');
     }
     if (parsed.sampler) {
       setSampler(parsed.sampler);
       setSamplerSource('auto');
     }
-    if (parsed.cfgScale) {
-      setCfgScale(parsed.cfgScale);
+    if (cfgValue !== undefined && cfgValue !== null) {
+      setCfgScale(String(cfgValue));
       setCfgScaleSource('auto');
     }
-    if (parsed.seed) {
-      setSeed(parsed.seed);
+    if (parsed.seed !== undefined && parsed.seed !== null) {
+      setSeed(String(parsed.seed));
       setSeedSource('auto');
     }
     if (parsed.clipSkip) {
       setClipSkip(parsed.clipSkip);
       setClipSkipSource('auto');
     }
-    if (parsed.modelHash) {
-      setModelHash(parsed.modelHash);
+    // ✅ 模型哈希（ComfyUI workflow 通常不包含，但如果有就提取）
+    const modelHashValue = parsed.modelHash ?? parsed.model_hash;
+    if (modelHashValue) {
+      setModelHash(String(modelHashValue));
       setModelHashSource('auto');
     }
     
     if (parsed.width) {
-      setWidth(parsed.width);
+      setWidth(String(parsed.width));
       setWidthSource('auto');
     }
     if (parsed.height) {
-      setHeight(parsed.height);
+      setHeight(String(parsed.height));
       setHeightSource('auto');
     }
-    setModelName(parsed.model || "");
+    if (modelValue) {
+      setModelName(String(modelValue));
+    }
     
     // 只有当有 LoRA hashes（链接）时，才自动填入 LoRA 名称
     if (Array.isArray(parsed.loraHashes) && parsed.loraHashes.length) {
       setLoraHashes(parsed.loraHashes);
       // 如果有 hashes，说明有链接，可以安全填入名称
       if (Array.isArray(parsed.loras) && parsed.loras.length) {
-        setLoraName(parsed.loras.join(", "));
+        // ✅ 兼容 ComfyUI loras 格式：可能是对象数组 {name, weight} 或字符串数组
+        const loraNames = parsed.loras.map(l => typeof l === 'string' ? l : l.name).filter(Boolean);
+        if (loraNames.length) {
+          setLoraName(loraNames.join(", "));
+        }
       }
     } else if (Array.isArray(parsed.loras) && parsed.loras.length) {
       // 如果只有名称没有链接，不自动填入，让用户手动选择
-      console.log("检测到 LoRA 名称但没有链接，不自动填入:", parsed.loras);
-      setDetectedLorasWithoutLinks(parsed.loras);
+      // ✅ 兼容 ComfyUI loras 格式
+      const loraNames = parsed.loras.map(l => typeof l === 'string' ? l : l.name).filter(Boolean);
+      console.log("检测到 LoRA 名称但没有链接，不自动填入:", loraNames);
+      setDetectedLorasWithoutLinks(loraNames);
     }
   }
 

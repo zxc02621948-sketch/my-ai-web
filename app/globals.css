@@ -326,8 +326,7 @@ input, textarea, select, button {
 @media (max-width: 767px) {
   .marquee-track,
   .marquee-track-right {
-    animation: none !important;
-    transform: none !important;
+    animation-duration: calc(var(--marquee-duration, 40s) * 1.35);
   }
 }
 
