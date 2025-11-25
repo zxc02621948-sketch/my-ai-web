@@ -6,6 +6,7 @@ import CommentItem from "./CommentItem";
 import { DEFAULT_AVATAR_IDS } from "@/lib/constants";
 import ReportModal from "@/components/common/ReportModal";
 import NotificationModal from "@/components/common/NotificationModal";
+import { trackEvent } from "@/utils/analyticsQueue";
 
 function findCommentById(comments, id) {
   for (const comment of comments) {
@@ -93,6 +94,14 @@ export default function CommentBox({ imageId, onAddComment, currentUser, onlyLis
         parentCommentId: typeof parentCommentId === "string" ? parentCommentId : null,
       });
 
+      // ✅ 圖片分析：追蹤評論事件
+      if (imageId) {
+        trackEvent('image', {
+          imageId,
+          eventType: 'comment',
+        });
+      }
+      
       // 使用 API 返回的完整數據，包含 userFrame
       const newCommentObj = {
         _id: res.data._id,

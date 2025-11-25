@@ -7,7 +7,8 @@ import FireEffect from "@/components/image/FireEffect";
 import VideoPreview from "@/components/video/VideoPreview";
 import MusicPreview from "@/components/music/MusicPreview";
 import { updateLikeCacheAndBroadcast } from "@/lib/likeSync";
-import { notify } from "@/components/common/GlobalNotificationManager"; 
+import { notify } from "@/components/common/GlobalNotificationManager";
+import { trackEvent } from "@/utils/analyticsQueue"; 
 
 // ⬇️ 從 ObjectId 推回建立時間（備援）
 function getCreatedMsFromObjectId(id) {
@@ -108,6 +109,14 @@ export default function ImageCard({
 
       // 呼叫原本 API
       await onToggleLike(img?._id, newLiked);
+      
+      // ✅ 圖片分析：追蹤點讚事件
+      if (img?._id) {
+        trackEvent('image', {
+          imageId: img._id,
+          eventType: 'like',
+        });
+      }
 
       // 讓 Heart 重跑動畫（照你原有寫法）
       setRenderKey((prev) => prev + 1);
@@ -214,6 +223,7 @@ export default function ImageCard({
       role="button"
       title={img?.title || "圖片"}
       aria-label={img?.title || "圖片"}
+      data-image-id={img?._id || img?.id}
     >
       {/* NEW 徽章（左上角）- 音樂類型不顯示，因為 MusicPreview 會自己顯示 */}
       {isNew && img?.type !== 'music' && (

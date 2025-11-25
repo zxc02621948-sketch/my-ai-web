@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import { X, Trash2, Clipboard, Pencil, Plus } from "lucide-react";
 import axios from "axios";
-import { GENRE_MAP } from "@/constants/musicCategories";
+import { GENRE_MAP, LANGUAGE_MAP } from "@/constants/musicCategories";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import { useRouter } from "next/navigation";
@@ -308,13 +308,7 @@ export default function MusicInfoBox({
         <div>
           <div className="text-sm text-gray-300 mb-2">
             語言:{" "}
-            {music.language === "chinese"
-              ? "中文"
-              : music.language === "english"
-                ? "英文"
-                : music.language === "japanese"
-                  ? "日文"
-                  : music.language}
+            {LANGUAGE_MAP[music.language] || music.language}
           </div>
         </div>
       )}

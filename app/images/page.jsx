@@ -4,7 +4,6 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import ImageGrid from "@/components/image/ImageGrid";
 import ImageModal from "@/components/image/ImageModal";
-import AdminPanel from "@/components/homepage/AdminPanel";
 import BackToTopButton from "@/components/common/BackToTopButton";
 import SortSelect from "@/components/common/SortSelect";
 import { useFilterContext, labelToRating } from "@/components/context/FilterContext";
@@ -497,12 +496,6 @@ export default function ImagesPage() {
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white px-4 pb-4 pt-0 -mt-2 md:-mt-16">
-      {currentUser?.isAdmin && (
-        <div className="mb-4">
-          <AdminPanel />
-        </div>
-      )}
-
       {/* ✅ 畫廊/作品集標籤切換 */}
       <div className="max-w-6xl mx-auto mb-4 px-4">
         {/* 中間資訊區：放在最上方，寬度不足時自動換行 */}

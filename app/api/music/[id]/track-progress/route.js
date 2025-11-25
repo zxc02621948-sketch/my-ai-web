@@ -28,7 +28,7 @@ export async function POST(request, { params }) {
     await dbConnect();
     const { id } = await params;
     const body = await request.json();
-    const { progress, duration, startTime, playedDuration } = body;
+    const { progress, duration, startTime, playedDuration, source } = body;
     // progress: 當前播放位置（秒）
     // duration: 總時長（秒）
     // startTime: 開始播放時的位置（秒）
@@ -73,7 +73,8 @@ export async function POST(request, { params }) {
     }
 
     // 只有實際播放時長達到總時長的 10% 以上且尚未計數時才增加播放次數
-    if (playedPercent >= 10) {
+    // ✅ 只統計音樂區播放（source: 'modal' 或 null），排除播放器播放（source: 'player'）
+    if (playedPercent >= 10 && source !== 'player') {
       // ✅ 優化：使用原子操作增加播放次數（避免並發問題）
       const updateResult = await Music.updateOne(
         { _id: id },

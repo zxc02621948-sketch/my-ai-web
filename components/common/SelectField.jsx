@@ -1,7 +1,7 @@
 "use client";
 
 import { Listbox, Transition } from "@headlessui/react";
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState, useLayoutEffect } from "react";
 
 const MAX_VISIBLE_OPTIONS = 8;
 const OPTION_HEIGHT = 36;
@@ -25,6 +25,12 @@ export default function SelectField({
   const [computedPlacement, setComputedPlacement] = useState(
     placement === "top" ? "top" : "bottom",
   );
+  const [mounted, setMounted] = useState(false);
+
+  // ✅ 使用 useLayoutEffect 確保在客戶端首次渲染時也顯示占位符
+  useLayoutEffect(() => {
+    setMounted(true);
+  }, []);
 
   const selectedOption =
     options.find((opt) => opt.value === value) ?? null;
@@ -68,6 +74,40 @@ export default function SelectField({
     computedPlacement === "top"
       ? "bottom-full mb-2 origin-bottom"
       : "top-full mt-2 origin-top";
+
+  // ✅ 在服務器端和首次客戶端渲染時返回占位符，避免 Hydration 錯誤
+  if (!mounted) {
+    return (
+      <div className={`relative ${className}`} suppressHydrationWarning>
+        <button
+          type="button"
+          disabled={disabled}
+          suppressHydrationWarning
+          className={`flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black ${
+            disabled
+              ? "cursor-not-allowed opacity-60"
+              : "cursor-pointer hover:bg-white/5"
+          } ${invalid ? "border-red-500/80" : "border-white/10"} ${buttonClassName}`}
+        >
+          <span className={`truncate ${selectedOption ? "text-white" : "text-zinc-400"}`}>
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
+          <svg
+            aria-hidden="true"
+            className="h-4 w-4 text-zinc-400"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 011.06.02L10 10.204l3.71-2.973a.75.75 0 111.04 1.081l-4.25 3.404a.75.75 0 01-.96 0l-4.25-3.404a.75.75 0 01-1.05-1.104z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className={`relative ${className}`}>

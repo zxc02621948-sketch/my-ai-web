@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import ImageCard from "./ImageCard";
+import { trackEvent } from "@/utils/analyticsQueue";
 
 export default function ImageGrid({
   images = [],
@@ -19,6 +20,12 @@ export default function ImageGrid({
   }, [images, filteredImages]);
   const [columns, setColumns] = useState(5);
   const [columnArrays, setColumnArrays] = useState([]);
+  
+  // ✅ 圖片分析：滾動深度追蹤
+  const viewedImagesRef = useRef(new Set());
+  const scrollDepthMapRef = useRef(new Map()); // imageId -> maxScrollDepth
+  const scrollTimerRef = useRef(null);
+  const trackEventRef = useRef(trackEvent); // ✅ 使用 ref 保存 trackEvent 引用
 
   // 監聽窗口大小變化，計算欄數
   useEffect(() => {
@@ -58,6 +65,89 @@ export default function ImageGrid({
 
     setColumnArrays(newColumnArrays);
   }, [list, columns]);
+  
+  // ✅ 圖片分析：滾動深度追蹤
+  useEffect(() => {
+    if (!list || list.length === 0) return;
+    
+    const observerOptions = {
+      root: null,
+      rootMargin: '0px',
+      threshold: [0, 0.25, 0.5, 0.75, 1],
+    };
+    
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const imageId = entry.target.dataset.imageId;
+        if (!imageId) return;
+        
+        if (entry.isIntersecting) {
+          // 計算滾動深度
+          const rect = entry.boundingClientRect;
+          const viewportHeight = window.innerHeight;
+          const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+          const elementTop = rect.top + scrollTop;
+          const windowBottom = scrollTop + viewportHeight;
+          
+          // 計算圖片在視口中的可見比例
+          const visibleTop = Math.max(0, windowBottom - elementTop);
+          const visibleBottom = Math.max(0, windowBottom - (elementTop + rect.height));
+          const visibleHeight = Math.min(rect.height, visibleTop - visibleBottom);
+          const scrollDepth = rect.height > 0 ? (visibleHeight / rect.height) * 100 : 0;
+          
+          // 更新最大滾動深度
+          const currentMax = scrollDepthMapRef.current.get(imageId) || 0;
+          const newMax = Math.max(currentMax, scrollDepth);
+          scrollDepthMapRef.current.set(imageId, newMax);
+          
+          // 記錄 view 事件（第一次進入視口時）
+          if (!viewedImagesRef.current.has(imageId)) {
+            viewedImagesRef.current.add(imageId);
+            if (typeof trackEventRef.current === 'function') {
+              trackEventRef.current('image', {
+                imageId,
+                eventType: 'view',
+                scrollDepth: 0,
+              });
+            }
+          }
+        }
+      });
+    }, observerOptions);
+    
+    // 觀察所有圖片卡片
+    const imageCards = document.querySelectorAll('[data-image-id]');
+    imageCards.forEach(card => observer.observe(card));
+    
+    // 定期上報滾動深度（1秒一次）
+    const handleScroll = () => {
+      if (scrollTimerRef.current) {
+        clearTimeout(scrollTimerRef.current);
+      }
+      
+      scrollTimerRef.current = setTimeout(() => {
+        if (typeof trackEventRef.current === 'function') {
+          scrollDepthMapRef.current.forEach((depth, imageId) => {
+            trackEventRef.current('image', {
+              imageId,
+              eventType: 'scroll_depth',
+              scrollDepth: Math.round(depth),
+            });
+          });
+        }
+      }, 1000); // 1秒 debounce
+    };
+    
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimerRef.current) {
+        clearTimeout(scrollTimerRef.current);
+      }
+    };
+  }, [list]);
 
   // 如果沒有圖片，顯示空狀態
   if (!list || list.length === 0) {

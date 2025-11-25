@@ -83,7 +83,7 @@ export default async function RootLayout({ children }) {
   const currentUser = await getCurrentUser();
 
   return (
-    <html lang="zh-TW">
+    <html lang="zh-TW" suppressHydrationWarning>
       <head>
         {/* ✅ 性能優化：預先連結外部資源 */}
         <link rel="preconnect" href="https://imagedelivery.net" />

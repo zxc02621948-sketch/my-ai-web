@@ -419,6 +419,7 @@ export function PlayerProvider({
                   duration: duration,
                   startTime: startTime,
                   playedDuration: playedDuration,
+                  source: 'player', // ✅ 標記為播放器播放，不計入音樂區播放次數
                 }),
               }).catch(() => {
                 // ✅ 忽略網絡錯誤

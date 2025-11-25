@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import axios from "axios";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import AdminPanel from "@/components/homepage/AdminPanel";
 
 export default function SettingsPage() {
   const { currentUser, subscriptions, updateSubscriptions } = useCurrentUser();
@@ -84,6 +85,147 @@ export default function SettingsPage() {
             <p className="text-sm text-zinc-400">永久刪除帳號和所有數據</p>
           </a>
         </div>
+        
+        {/* 管理員工具 */}
+        {currentUser?.isAdmin && (
+          <div className="mb-8 space-y-6">
+            {/* 管理頁面連結 */}
+            <div className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-700/50 rounded-lg p-6">
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <span className="text-2xl">🛠️</span>
+                <span>管理員工具</span>
+                <span className="text-xs px-2 py-1 bg-purple-600/30 border border-purple-500/50 rounded text-purple-300">
+                  僅管理員可見
+                </span>
+              </h2>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* 統計分析 */}
+              <a 
+                href="/admin/analytics"
+                className="bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700 rounded-lg p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">📊</span>
+                  <h3 className="font-semibold text-lg group-hover:text-blue-400 transition">流量統計</h3>
+                </div>
+                <p className="text-sm text-zinc-400">查看網站流量和訪問記錄</p>
+              </a>
+              
+              <a 
+                href="/admin/ad-analytics"
+                className="bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700 rounded-lg p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">💰</span>
+                  <h3 className="font-semibold text-lg group-hover:text-green-400 transition">廣告統計</h3>
+                </div>
+                <p className="text-sm text-zinc-400">查看廣告收益和點擊數據</p>
+              </a>
+              
+              {/* 內容分析 */}
+              <a 
+                href="/admin/content-analytics/music"
+                className="bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700 rounded-lg p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🎧</span>
+                  <h3 className="font-semibold text-lg group-hover:text-purple-400 transition">音樂分析</h3>
+                </div>
+                <p className="text-sm text-zinc-400">音樂播放器監控和分析</p>
+              </a>
+              
+              <a 
+                href="/admin/content-analytics/images"
+                className="bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700 rounded-lg p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🖼️</span>
+                  <h3 className="font-semibold text-lg group-hover:text-pink-400 transition">圖片分析</h3>
+                </div>
+                <p className="text-sm text-zinc-400">圖片瀏覽深度和互動分析</p>
+              </a>
+              
+              <a 
+                href="/admin/content-analytics/videos"
+                className="bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700 rounded-lg p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🎬</span>
+                  <h3 className="font-semibold text-lg group-hover:text-orange-400 transition">影片分析</h3>
+                </div>
+                <p className="text-sm text-zinc-400">影片播放和卡頓分析</p>
+              </a>
+              
+              {/* 內容管理 */}
+              <a 
+                href="/admin/reports"
+                className="bg-zinc-800/60 hover:bg-zinc-800 border border-red-700/50 rounded-lg p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🚨</span>
+                  <h3 className="font-semibold text-lg group-hover:text-red-400 transition">檢舉管理</h3>
+                </div>
+                <p className="text-sm text-zinc-400">處理用戶檢舉內容</p>
+              </a>
+              
+              <a 
+                href="/admin/feedbacks"
+                className="bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700 rounded-lg p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">💬</span>
+                  <h3 className="font-semibold text-lg group-hover:text-yellow-400 transition">意見反饋</h3>
+                </div>
+                <p className="text-sm text-zinc-400">查看用戶意見和建議</p>
+              </a>
+              
+              {/* 用戶管理 */}
+              <a 
+                href="/admin/warnings"
+                className="bg-zinc-800/60 hover:bg-zinc-800 border border-yellow-700/50 rounded-lg p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">⚠️</span>
+                  <h3 className="font-semibold text-lg group-hover:text-yellow-400 transition">警告管理</h3>
+                </div>
+                <p className="text-sm text-zinc-400">管理用戶警告記錄</p>
+              </a>
+              
+              <a 
+                href="/admin/suspensions"
+                className="bg-zinc-800/60 hover:bg-zinc-800 border border-red-700/50 rounded-lg p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🔒</span>
+                  <h3 className="font-semibold text-lg group-hover:text-red-400 transition">封鎖管理</h3>
+                </div>
+                <p className="text-sm text-zinc-400">管理用戶封鎖狀態</p>
+              </a>
+              
+              <a 
+                href="/admin/account-deletion"
+                className="bg-zinc-800/60 hover:bg-zinc-800 border border-red-700/50 rounded-lg p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🗑️</span>
+                  <h3 className="font-semibold text-lg group-hover:text-red-400 transition">帳號註銷管理</h3>
+                </div>
+                <p className="text-sm text-zinc-400">管理待刪除帳號</p>
+              </a>
+              </div>
+            </div>
+            
+            {/* 功能工具 */}
+            <div className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-700/50 rounded-lg p-6">
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <span className="text-2xl">⚙️</span>
+                <span>功能工具</span>
+              </h2>
+              <AdminPanel />
+            </div>
+          </div>
+        )}
         
         {/* 訂閱管理 */}
         <div className="mb-8 bg-zinc-800/40 border border-zinc-700/60 rounded-lg p-6">

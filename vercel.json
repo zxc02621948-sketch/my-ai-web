@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/check-expiring-subscriptions",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/aggregate-analytics",
+      "schedule": "*/10 * * * *"
     }
   ],
   "functions": {

@@ -9,6 +9,7 @@ import { usePlayer } from "@/components/context/PlayerContext";
 import { audioManager } from "@/utils/audioManager";
 import { usePortalContainer } from "@/components/common/usePortal";
 import { useFollowState } from "@/hooks/useFollowState";
+import { trackEvent } from "@/utils/analyticsQueue";
 
 // 🔍 監控 audio 元素數量的工具函數
 let lastWarningTime = 0;
@@ -105,6 +106,26 @@ const MusicModal = ({
   const wasPlayerPlayingRef = useRef(false); // 記錄打開音樂時播放器是否在播放
   const currentMusicIdRef = useRef(null); // 追蹤當前音樂 ID，用於判斷是否應該釋放
   const portalContainer = usePortalContainer();
+  
+  // ✅ 音樂分析追蹤：緩衝相關狀態
+  const bufferStartTimeRef = useRef(null);
+  const totalBufferDurationRef = useRef(0);
+  const bufferCountRef = useRef(0);
+  const playStartTimeRef = useRef(null);
+  const hasTrackedPlayStartRef = useRef(false);
+  
+  // ✅ 音樂切換時重置追蹤狀態
+  useEffect(() => {
+    if (music?._id && currentMusicIdRef.current !== music._id) {
+      // 音樂已切換，重置所有追蹤狀態
+      hasTrackedPlayStartRef.current = false;
+      playStartTimeRef.current = null;
+      totalBufferDurationRef.current = 0;
+      bufferCountRef.current = 0;
+      bufferStartTimeRef.current = null;
+      currentMusicIdRef.current = music._id;
+    }
+  }, [music?._id]);
 
   // ✅ 優化：封裝 dataset 操作，減少重複代碼
   const savePlayProgress = React.useCallback((totalPlayed, lastTime) => {
@@ -176,6 +197,7 @@ const MusicModal = ({
               duration: duration,
               startTime: startTime,
               playedDuration: playedDuration,
+              source: 'modal', // ✅ 標記為音樂區播放
             }),
           }).catch((err) => {
             console.error("❌ 計數失敗:", err);
@@ -432,6 +454,7 @@ const MusicModal = ({
                 duration: duration,
                 startTime: startTime,
                 playedDuration: playedDuration,
+                source: 'modal', // ✅ 標記為音樂區播放
               }),
             }).catch((err) => {
               console.error("❌ 關閉時計數失敗:", err);
@@ -936,8 +959,48 @@ const MusicModal = ({
                 className="w-full px-2"
                 onError={(e) => {
                   console.error("音樂載入失敗:", e);
+                  
+                  // ✅ 音樂分析：追蹤錯誤
+                  if (musicState?._id) {
+                    const audio = audioRef.current;
+                    trackEvent('music', {
+                      musicId: musicState._id,
+                      eventType: 'error',
+                      errorType: audio?.error?.code ? `error_${audio.error.code}` : 'unknown',
+                      bufferDuration: totalBufferDurationRef.current,
+                      bufferCount: bufferCountRef.current,
+                      source: 'modal', // ✅ 標記為音樂區播放
+                    });
+                  }
+                }}
+                onWaiting={() => {
+                  // ✅ 音樂分析：開始緩衝
+                  if (musicState?._id && !bufferStartTimeRef.current) {
+                    bufferStartTimeRef.current = Date.now();
+                    bufferCountRef.current++;
+                  }
                 }}
                 onCanPlay={() => {
+                  // ✅ 音樂分析：緩衝結束
+                  if (bufferStartTimeRef.current) {
+                    const bufferDuration = (Date.now() - bufferStartTimeRef.current) / 1000;
+                    totalBufferDurationRef.current += bufferDuration;
+                    
+                    if (musicState?._id) {
+                      trackEvent('music', {
+                        musicId: musicState._id,
+                        eventType: 'buffering',
+                        bufferDuration,
+                        bufferCount: bufferCountRef.current,
+                        totalBufferDuration: totalBufferDurationRef.current,
+                        source: 'modal', // ✅ 標記為音樂區播放
+                      });
+                    }
+                    
+                    bufferStartTimeRef.current = null;
+                  }
+                }}
+                onCanPlayThrough={() => {
                   if (!audioRef.current) return;
                   
                   // ✅ 設置標記
@@ -1035,6 +1098,20 @@ const MusicModal = ({
                       savePlayProgress(0, startTime);
                       // ✅ 重置進度報告標記，允許重新計數
                       audio.dataset.progressReported = "";
+                      
+                      // ✅ 音樂分析：追蹤播放開始（只在第一次播放時記錄）
+                      if (musicState?._id && !hasTrackedPlayStartRef.current) {
+                        playStartTimeRef.current = Date.now();
+                        hasTrackedPlayStartRef.current = true;
+                        totalBufferDurationRef.current = 0;
+                        bufferCountRef.current = 0;
+                        
+                        trackEvent('music', {
+                          musicId: musicState._id,
+                          eventType: 'play_start',
+                          source: 'modal', // ✅ 標記為音樂區播放
+                        });
+                      }
                     } else {
                       // 不是第一次播放，從 dataset 恢復累計值
                       // 這包括：跳播後重新播放、暫停後繼續播放等情況
@@ -1100,6 +1177,24 @@ const MusicModal = ({
                       totalPlayedDurationRef.current,
                       currentTime,
                     );
+                    
+                    // ✅ 音樂分析：追蹤暫停
+                    if (musicState?._id && playStartTimeRef.current) {
+                      const playTime = (Date.now() - playStartTimeRef.current) / 1000;
+                      const progress = audio.duration > 0 
+                        ? (totalPlayedDurationRef.current / audio.duration) * 100 
+                        : 0;
+                      
+                      trackEvent('music', {
+                        musicId: musicState._id,
+                        eventType: 'play_pause',
+                        totalPlayTime: totalPlayedDurationRef.current,
+                        playProgress: progress,
+                        bufferDuration: totalBufferDurationRef.current,
+                        bufferCount: bufferCountRef.current,
+                        source: 'modal', // ✅ 標記為音樂區播放
+                      });
+                    }
                   } else {
                     // 如果沒有在播放，也更新狀態
                     if (audioRef.current) {
@@ -1182,6 +1277,26 @@ const MusicModal = ({
                       totalPlayedDurationRef.current,
                       currentTime,
                     );
+                  }
+
+                  // ✅ 音樂分析：追蹤播放完成
+                  if (musicState?._id) {
+                    const audio = audioRef.current;
+                    trackEvent('music', {
+                      musicId: musicState._id,
+                      eventType: 'play_complete',
+                      playProgress: 100,
+                      totalPlayTime: totalPlayedDurationRef.current,
+                      bufferDuration: totalBufferDurationRef.current,
+                      bufferCount: bufferCountRef.current,
+                      source: 'modal', // ✅ 標記為音樂區播放
+                    });
+                    
+                    // 重置追蹤狀態
+                    hasTrackedPlayStartRef.current = false;
+                    playStartTimeRef.current = null;
+                    totalBufferDurationRef.current = 0;
+                    bufferCountRef.current = 0;
                   }
 
                   // 清除定時器

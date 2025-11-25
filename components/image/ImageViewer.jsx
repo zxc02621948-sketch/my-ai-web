@@ -4,7 +4,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, X } from "lucide-react";
-import AdminModerationBar from "@/components/image/AdminModerationBar";
 import { updateLikeCacheAndBroadcast } from "@/lib/likeSync";
 
 /**
@@ -287,22 +286,6 @@ export default function ImageViewer({
         )}
       </AnimatePresence>
 
-      {/* 管理員工具列（包一層 data-stop-nav，並阻止事件冒泡） */}
-      {currentUser?.isAdmin && image && (
-        <div
-          className="absolute left-3 bottom-3 z-30 max-w-[92%]"
-          data-stop-nav
-          onClick={(e)=>e.stopPropagation()}
-          onPointerDown={(e)=>e.stopPropagation()}
-          onMouseDown={(e)=>e.stopPropagation()}
-          onTouchStart={(e)=>e.stopPropagation()}
-        >
-          <AdminModerationBar
-            image={image}
-            onDone={() => { try { location.reload(); } catch (e) {} }}
-          />
-        </div>
-      )}
     </div>
   );
 }

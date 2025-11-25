@@ -10,6 +10,7 @@ import axios from "axios";
 import { getLikesFromCache } from "@/lib/likeSync";
 import EditImageModal from "@/components/image/EditImageModal"; // ← 你的編輯彈窗
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { trackEvent } from "@/utils/analyticsQueue";
 
 const getOwnerId = (img) => {
   if (!img) return null;
@@ -41,6 +42,7 @@ export default function ImageModal({
   const router = useRouter();
   const followLockRef = useRef(false);
   const viewedRef = useRef(new Set());
+  const modalOpenTimeRef = useRef(null);
 
   // ---- 先定義 state，再根據 state 推導 currentId（修復點） ----
   const [image, setImage] = useState(imageData || null);
@@ -116,6 +118,15 @@ export default function ImageModal({
     // 避免同一張在同一次開啟中被重複計分
     if (viewedRef.current.has(currentId)) return;
     viewedRef.current.add(currentId);
+
+    // ✅ 圖片分析：追蹤打開 Modal 事件
+    trackEvent('image', {
+      imageId: currentId,
+      eventType: 'open_modal',
+    });
+    
+    // ✅ 記錄打開時間，用於計算停留時間
+    modalOpenTimeRef.current = Date.now();
 
     fetch(`/api/images/${currentId}/click`, { method: "POST" })
       .then((r) => (r.ok ? r.json() : null))
@@ -331,6 +342,18 @@ export default function ImageModal({
   };
 
   function handleBackdropClick() {
+    // ✅ 圖片分析：追蹤離開事件
+    if (currentId && modalOpenTimeRef.current) {
+      const timeSpent = (Date.now() - modalOpenTimeRef.current) / 1000;
+      trackEvent('image', {
+        imageId: currentId,
+        eventType: 'exit',
+        timeSpent: Math.round(timeSpent),
+        exitPoint: window.location.pathname,
+      });
+      modalOpenTimeRef.current = null;
+    }
+    
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }

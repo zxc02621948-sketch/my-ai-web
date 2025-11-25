@@ -223,10 +223,8 @@ export default function AdminPanel() {
   };
 
   return (
-    <div className="mt-4 bg-zinc-800 p-4 rounded text-sm border border-zinc-700 space-y-3">
-      <p className="text-gray-300 font-semibold">🧪 測試工具（限管理員）</p>
-
-      {/* 建立測試帳號 & 快速連結 */}
+    <div className="space-y-3">
+      {/* 建立測試帳號 */}
       <div className="flex items-center gap-3">
         <button
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
@@ -235,26 +233,6 @@ export default function AdminPanel() {
         >
           ➕ 建立測試帳號
         </button>
-
-        <div className="text-yellow-400 underline hover:text-yellow-300">
-          <Link href="/admin/analytics">📊 查看流量紀錄</Link>
-        </div>
-        <div className="text-yellow-400 underline hover:text-yellow-300">
-          <Link href="/admin/ad-analytics">💰 廣告收益統計</Link>
-        </div>
-        <div className="text-yellow-400 underline hover:text-yellow-300">
-          <Link href="/admin/feedbacks">📩 使用者回報</Link>
-        </div>
-        <div className="text-yellow-400 underline hover:text-yellow-300">
-          <Link href="/admin/reports">🚨 檢舉列表</Link>
-        </div>
-        <div className="text-yellow-400 underline hover:text-yellow-300">
-          <Link href="/admin/suspensions">🔒 鎖號列表</Link>
-        </div>
-        {/* 新增：警告管理 */}
-        <div className="text-yellow-400 underline hover:text-yellow-300">
-          <Link href="/admin/warnings">⚠️ 警告管理</Link>
-        </div>
       </div>
 
       {/* 重算完整度 */}
