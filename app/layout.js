@@ -22,7 +22,7 @@ import StorageManagerInit from "@/components/common/StorageManagerInit";
 export const metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://www.aicreateaworld.com'),
   title: {
-    default: "AI 創界 - AI 圖像創作分享平台",
+    default: "AI 創界 - AI 創作分享平台",
     template: "%s | AI 創界"
   },
   description: "探索 AI 生成藝術的無限可能。分享你的 Stable Diffusion、ComfyUI 創作，學習 Prompt 技巧，獲取模型參數，加入創作者社群。",
@@ -44,7 +44,7 @@ export const metadata = {
     locale: "zh_TW",
     url: "/",
     siteName: "AI 創界",
-    title: "AI 創界 - AI 圖像創作分享平台",
+    title: "AI 創界 - AI 創作分享平台",
     description: "探索 AI 生成藝術的無限可能。分享你的 Stable Diffusion、ComfyUI 創作，學習 Prompt 技巧，獲取模型參數。",
     images: [
       {
@@ -57,7 +57,7 @@ export const metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "AI 創界 - AI 圖像創作分享平台",
+    title: "AI 創界 - AI 創作分享平台",
     description: "探索 AI 生成藝術的無限可能。分享創作，學習技巧，加入社群。",
     images: ["/api/og"],
   },
