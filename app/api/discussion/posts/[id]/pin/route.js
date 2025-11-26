@@ -36,8 +36,15 @@ export async function POST(req, { params }) {
     }
     
     if (action === 'pin') {
-      // 置頂
+      // 置頂 - 設置為最大的 pinOrder + 1（放在最後）
+      const maxPinOrder = await DiscussionPost.findOne({ isPinned: true })
+        .sort({ pinOrder: -1 })
+        .select('pinOrder')
+        .lean();
+      const newPinOrder = maxPinOrder ? maxPinOrder.pinOrder + 1 : 1;
+      
       post.isPinned = true;
+      post.pinOrder = newPinOrder;
       post.pinnedAt = new Date();
       post.pinnedBy = currentUser._id;
       await post.save();
@@ -52,6 +59,7 @@ export async function POST(req, { params }) {
     } else if (action === 'unpin') {
       // 取消置頂
       post.isPinned = false;
+      post.pinOrder = 0;
       post.pinnedAt = null;
       post.pinnedBy = null;
       await post.save();

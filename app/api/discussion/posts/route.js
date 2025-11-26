@@ -47,28 +47,49 @@ export async function GET(req) {
       query.rating = { $ne: excludeRating };
     }
     
-    // 排序选项（置頂帖子永遠在最前面）
-    let sortOption = { isPinned: -1, createdAt: -1 };
+    // 排序选项（置頂帖子永遠在最前面，按 pinOrder 排序）
+    // 注意：如果 pinOrder 為 0，需要按 pinnedAt 或 createdAt 排序
+    let sortOption = { isPinned: -1, pinOrder: 1, createdAt: -1 };
     switch (sort) {
       case "popular":
-        sortOption = { isPinned: -1, likesCount: -1, commentsCount: -1, createdAt: -1 };
+        sortOption = { isPinned: -1, pinOrder: 1, likesCount: -1, commentsCount: -1, createdAt: -1 };
         break;
       case "oldest":
-        sortOption = { isPinned: -1, createdAt: 1 };
+        sortOption = { isPinned: -1, pinOrder: 1, createdAt: 1 };
         break;
       case "most_commented":
-        sortOption = { isPinned: -1, commentsCount: -1, createdAt: -1 };
+        sortOption = { isPinned: -1, pinOrder: 1, commentsCount: -1, createdAt: -1 };
         break;
     }
     
     // 执行查询
-    const posts = await DiscussionPost.find(query)
+    let posts = await DiscussionPost.find(query)
       .populate("author", "username image currentFrame frameSettings")
       .populate("imageRef", "title imageId")
       .sort(sortOption)
       .skip((page - 1) * limit)
       .limit(limit)
       .lean();
+    
+    // 手動處理置頂帖子的排序（確保 pinOrder 為 0 的帖子也能正確排序）
+    const pinnedPosts = posts.filter(p => p.isPinned);
+    const nonPinnedPosts = posts.filter(p => !p.isPinned);
+    
+    if (pinnedPosts.length > 0) {
+      // 對置頂帖子進行手動排序
+      pinnedPosts.sort((a, b) => {
+        const aOrder = a.pinOrder || 0;
+        const bOrder = b.pinOrder || 0;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        // 如果 pinOrder 相同或為 0，按 pinnedAt 或 createdAt 排序
+        const aDate = a.pinnedAt || a.createdAt || new Date(0);
+        const bDate = b.pinnedAt || b.createdAt || new Date(0);
+        return new Date(aDate) - new Date(bDate);
+      });
+      
+      // 合併：置頂帖子在前，非置頂帖子在後
+      posts = [...pinnedPosts, ...nonPinnedPosts];
+    }
     
     // 获取总数
     const total = await DiscussionPost.countDocuments(query);

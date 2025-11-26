@@ -11,6 +11,11 @@ import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import ReportModal from "@/components/common/ReportModal";
 import NotificationModal from "@/components/common/NotificationModal";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import BackToTopButton from "@/components/common/BackToTopButton";
+import ReactMarkdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import remarkGfm from 'remark-gfm';
+import rehypeSlug from 'rehype-slug';
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -34,6 +39,35 @@ export default function PostDetailPage() {
     { id: "tutorial", name: "教學分享", icon: "📚" },
     { id: "general", name: "閒聊", icon: "💬" }
   ];
+
+  const handleAnchorClick = (event, href) => {
+    if (!href || !href.startsWith('#')) return;
+    event.preventDefault();
+    const decodedId = decodeURIComponent(href.slice(1));
+    let targetElement = document.getElementById(decodedId);
+
+    // 如果找不到，嘗試匹配目錄自動生成的 heading-{index}- 標識
+    if (!targetElement && decodedId.startsWith('heading-')) {
+      const match = decodedId.match(/^heading-(\d+)-/);
+      if (match) {
+        const targetIndex = Number(match[1]);
+        const allHeadings = document.querySelectorAll('.markdown-content h1, .markdown-content h2, .markdown-content h3');
+        if (allHeadings[targetIndex]) {
+          allHeadings[targetIndex].id = decodedId;
+          targetElement = allHeadings[targetIndex];
+        }
+      }
+    }
+
+    // 再次嘗試匹配手動插入的 <a id="..."></a>
+    if (!targetElement) {
+      targetElement = document.querySelector(`a[id="${decodedId}"]`);
+    }
+
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   // currentUser 由 CurrentUserContext 提供，無需額外獲取
 
@@ -414,7 +448,7 @@ export default function PostDetailPage() {
             </div>
           )}
 
-          {/* 內容 - 支持 {{image:N}} 插入 */}
+          {/* 內容 - 支持 {{image:N}} 插入 + Markdown/HTML 渲染 */}
           <div className="prose prose-invert max-w-none mb-6">
             {(() => {
               const content = post.content || '';
@@ -447,10 +481,79 @@ export default function PostDetailPage() {
                   }
                 }
                 
+                // 如果内容为空，不渲染
+                if (!part.trim()) {
+                  return null;
+                }
+                
+                // 使用 ReactMarkdown 渲染 Markdown/HTML
                 return (
-                  <p key={index} className="text-gray-300 whitespace-pre-wrap">
-                    {part}
-                  </p>
+                  <div key={index} className="markdown-content">
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw, rehypeSlug]}
+                      components={{
+                        a: ({ node, ...props }) => (
+                          <a 
+                            {...props} 
+                            className="text-blue-400 hover:text-blue-300 underline"
+                            onClick={(e) => handleAnchorClick(e, props.href)}
+                          />
+                        ),
+                        h1: ({ node, ...props }) => (
+                          <h1
+                            {...props}
+                            className={`text-3xl font-bold mt-8 mb-4 text-white border-b border-zinc-700 pb-2 ${props.className || ''}`}
+                          />
+                        ),
+                        h2: ({ node, ...props }) => (
+                          <h2
+                            {...props}
+                            className={`text-2xl font-bold mt-6 mb-3 text-white border-b border-zinc-700 pb-2 ${props.className || ''}`}
+                          />
+                        ),
+                        h3: ({ node, ...props }) => (
+                          <h3
+                            {...props}
+                            className={`text-xl font-bold mt-5 mb-2 text-white ${props.className || ''}`}
+                          />
+                        ),
+                        p: ({ node, ...props }) => (
+                          <p {...props} className="text-gray-300 mb-4 leading-relaxed" />
+                        ),
+                        code: ({ node, inline, ...props }) => {
+                          if (inline) {
+                            return (
+                              <code {...props} className="bg-zinc-800 px-1.5 py-0.5 rounded text-sm text-pink-300 font-mono" />
+                            );
+                          }
+                          return (
+                            <code {...props} className="block bg-zinc-900 p-4 rounded-lg overflow-x-auto text-sm text-gray-200 font-mono" />
+                          );
+                        },
+                        pre: ({ node, ...props }) => (
+                          <pre {...props} className="bg-zinc-900 p-4 rounded-lg overflow-x-auto my-4" />
+                        ),
+                        ul: ({ node, ...props }) => (
+                          <ul {...props} className="list-disc list-inside mb-4 text-gray-300 space-y-1" />
+                        ),
+                        ol: ({ node, ...props }) => (
+                          <ol {...props} className="list-decimal list-inside mb-4 text-gray-300 space-y-1" />
+                        ),
+                        li: ({ node, ...props }) => (
+                          <li {...props} className="ml-4" />
+                        ),
+                        blockquote: ({ node, ...props }) => (
+                          <blockquote {...props} className="border-l-4 border-blue-500 pl-4 my-4 italic text-gray-400" />
+                        ),
+                        img: ({ node, ...props }) => (
+                          <img {...props} className="max-w-full rounded-lg my-4" />
+                        ),
+                      }}
+                    >
+                      {part}
+                    </ReactMarkdown>
+                  </div>
                 );
               });
             })()}
@@ -514,6 +617,8 @@ export default function PostDetailPage() {
       </div>
 
       {/* ImageModal - 點擊引用圖片時打開 */}
+      <BackToTopButton />
+
       {selectedImage && (
         <ImageModal
           imageId={selectedImage}

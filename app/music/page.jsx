@@ -6,6 +6,7 @@ import MusicGrid from "@/components/music/MusicGrid";
 import MusicModal from "@/components/music/MusicModal";
 import EditMusicModal from "@/components/music/EditMusicModal";
 import SortSelect from "@/components/common/SortSelect";
+import BackToTopButton from "@/components/common/BackToTopButton";
 import { usePlayer } from "@/components/context/PlayerContext";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import {
@@ -549,6 +550,8 @@ const MusicPage = () => {
           }}
         />
       )}
+
+      <BackToTopButton />
     </div>
   );
 };

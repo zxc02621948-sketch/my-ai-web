@@ -11,6 +11,7 @@ import { useFilterContext, labelToRating } from '@/components/context/FilterCont
 import usePinnedPlayerBootstrap from '@/hooks/usePinnedPlayerBootstrap';
 import usePaginatedResource from '@/hooks/usePaginatedResource';
 import { notify } from '@/components/common/GlobalNotificationManager';
+import BackToTopButton from '@/components/common/BackToTopButton';
 
 const PAGE_SIZE = 20;
 
@@ -398,6 +399,8 @@ const VideosPage = () => {
           }}
         />
       )}
+
+      <BackToTopButton />
     </div>
   );
 };

@@ -121,6 +121,11 @@ const DiscussionPostSchema = new mongoose.Schema({
     default: false,
     index: true
   },
+  pinOrder: {
+    type: Number,
+    default: 0,
+    index: true
+  },
   pinnedAt: {
     type: Date,
     default: null

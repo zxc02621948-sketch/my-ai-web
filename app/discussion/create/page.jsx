@@ -6,6 +6,7 @@ import { ArrowLeft, Upload, X, Search, Image as ImageIcon, Camera, Link as LinkI
 import Link from "next/link";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import RichTextEditor from "@/components/discussion/RichTextEditor";
 
 export default function CreatePostPage() {
   const router = useRouter();
@@ -463,20 +464,16 @@ export default function CreatePostPage() {
             <label className="block text-sm font-medium text-gray-300 mb-2">
               帖子內容 *
             </label>
-            <textarea
-              name="content"
-              required
-              rows={8}
-              value={formData.content}
-              onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-              placeholder="分享你的想法、經驗或問題...&#10;&#10;提示：使用 {{image:0}} 來插入第 0 張圖片"
-              className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg 
-                         text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500
-                         resize-y"
+            <RichTextEditor
+              content={formData.content}
+              onChange={(html) => setFormData(prev => ({ ...prev, content: html }))}
+              placeholder="分享你的想法、經驗或問題..."
+              uploadedImages={formData.uploadedImages}
+              onInsertImage={insertImageTag}
             />
             {formData.uploadedImages.length > 0 && (
               <div className="text-xs text-gray-400 mt-2">
-                💡 提示：點擊圖片上的「插入」按鈕，或手動輸入 {'{{image:N}}'} 來插入圖片到內容中
+                💡 提示：點擊工具列上的圖片按鈕，或手動輸入 {'{{image:N}}'} 來插入圖片到內容中
               </div>
             )}
           </div>

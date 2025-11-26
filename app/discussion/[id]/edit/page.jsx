@@ -6,6 +6,7 @@ import { ArrowLeft, Upload, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import RichTextEditor from "@/components/discussion/RichTextEditor";
 
 const categories = [
   { id: "announcement", name: "官方公告", icon: "📢", adminOnly: true },
@@ -409,13 +410,11 @@ export default function EditDiscussionPost() {
             <label htmlFor="content" className="block text-sm font-medium text-gray-300 mb-2">
               內容 *
             </label>
-            <textarea
-              id="content"
-              value={formData.content}
-              onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-              className="w-full bg-zinc-800 text-white rounded-lg px-4 py-3 min-h-[300px] focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            <RichTextEditor
+              content={formData.content}
+              onChange={(html) => setFormData(prev => ({ ...prev, content: html }))}
               placeholder="輸入帖子內容..."
-              required
+              uploadedImages={[]}
             />
           </div>
 

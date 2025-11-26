@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { MessageSquare, Plus, Search, Filter, Heart, MessageCircle, Bookmark, Share2, Trash2, Pin } from "lucide-react";
+import { MessageSquare, Plus, Search, Filter, Heart, MessageCircle, Bookmark, Share2, Trash2, Pin, ArrowUp, ArrowDown } from "lucide-react";
 import Link from "next/link";
+import BackToTopButton from "@/components/common/BackToTopButton";
 
 import ImageModal from "@/components/image/ImageModal";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
@@ -30,6 +31,46 @@ export default function DiscussionPage() {
     { id: "tutorial", name: "教學分享", icon: "📚" },
     { id: "general", name: "閒聊", icon: "💬" }
   ];
+
+  const getTextPreview = (html, maxLength = 200) => {
+    if (!html) return "";
+    let text = html
+      .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
+      // 將換行標籤轉換為換行符
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<\/div>/gi, "\n")
+      .replace(/<\/h[1-6]>/gi, "\n")
+      .replace(/<\/li>/gi, "\n")
+      // 移除其他 HTML 標籤
+      .replace(/<[^>]+>/g, "")
+      // 解碼 HTML 實體
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      // 清理多餘的空白字符，但保留換行
+      .replace(/[ \t]+/g, " ")  // 多個空格/製表符合併為一個空格
+      .replace(/[ \t]*\n[ \t]*/g, "\n")  // 清理換行符前後的空白
+      .replace(/\n{3,}/g, "\n\n")  // 多個換行符合併為兩個
+      .trim();
+    
+    if (text.length <= maxLength) return text;
+    // 在截斷時，盡量在換行符或空格處截斷
+    let truncated = text.slice(0, maxLength);
+    const lastNewline = truncated.lastIndexOf("\n");
+    const lastSpace = truncated.lastIndexOf(" ");
+    // 優先在換行符處截斷，其次在空格處
+    if (lastNewline > maxLength * 0.7) {
+      truncated = truncated.slice(0, lastNewline);
+    } else if (lastSpace > maxLength * 0.7) {
+      truncated = truncated.slice(0, lastSpace);
+    }
+    return `${truncated}...`;
+  };
 
   // 合併數據載入邏輯，避免重複調用
   useEffect(() => {
@@ -201,6 +242,78 @@ export default function DiscussionPage() {
     }
   };
 
+  // 調整置頂順序
+  const handlePinOrder = async (postId, direction) => {
+    if (!currentUser || (currentUser.role !== 'admin' && !currentUser.isAdmin)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/api/discussion/posts/${postId}/pin-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direction })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // 清除緩存，強制重新載入
+        lastFetchParamsRef.current = null;
+        
+        // 重新載入帖子列表以反映新順序
+        const fetchPosts = async () => {
+          try {
+            const params = new URLSearchParams({
+              page: "1",
+              limit: "20",
+              category: selectedCategory,
+              sort: "newest"
+            });
+            
+            if (searchQuery) {
+              params.append("search", searchQuery);
+            }
+            
+            // 根據當前標籤過濾內容
+            if (activeTab === "adult") {
+              params.append("rating", "18");
+            } else {
+              params.append("excludeRating", "18");
+            }
+            
+            // 添加時間戳強制刷新
+            params.append('_t', Date.now().toString());
+            
+            const res = await fetch(`/api/discussion/posts?${params}`);
+            const data = await res.json();
+            
+            if (data.success && data.data) {
+              setPosts(data.data);
+            } else {
+              console.error('載入帖子失敗:', data.error);
+              setPosts([]);
+            }
+          } catch (error) {
+            console.error('載入帖子失敗:', error);
+            setPosts([]);
+          }
+        };
+        
+        await fetchPosts();
+        // 稍微延遲一下，確保數據已更新
+        setTimeout(() => {
+          notify.success("成功", result.message || '順序已更新');
+        }, 100);
+      } else {
+        notify.error("操作失敗", result.error || '操作失敗');
+      }
+    } catch (error) {
+      console.error('❌ [討論區] 調整順序錯誤:', error);
+      notify.error("操作失敗", '操作失敗，請稍後再試');
+    }
+  };
+
   // 分享（複製鏈接）
   const handleShare = async (postId) => {
     const url = `${window.location.origin}/discussion/${postId}`;
@@ -307,7 +420,7 @@ export default function DiscussionPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredPosts.map(post => {
+            {filteredPosts.map((post, index) => {
               // 處理圖片 URL
               const imageUrl = post.imageRef?.imageId 
                 ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${post.imageRef.imageId}/public`
@@ -357,10 +470,31 @@ export default function DiscussionPage() {
                       <div className="flex items-center gap-2 mb-2">
                         {/* 置頂標誌 */}
                         {post.isPinned && (
-                          <span className="flex items-center gap-1 px-2 py-1 bg-amber-500/20 text-amber-500 text-xs rounded-full font-semibold">
-                            <Pin className="w-3 h-3" />
-                            置頂
-                          </span>
+                          <>
+                            <span className="flex items-center gap-1 px-2 py-1 bg-amber-500/20 text-amber-500 text-xs rounded-full font-semibold">
+                              <Pin className="w-3 h-3" />
+                              置頂
+                            </span>
+                            {/* 管理員調整順序按鈕 */}
+                            {currentUser && (currentUser.role === 'admin' || currentUser.isAdmin) && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handlePinOrder(post._id, 'up')}
+                                  className="p-1 text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 rounded transition-colors"
+                                  title="上移（在列表中更靠前）"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => handlePinOrder(post._id, 'down')}
+                                  className="p-1 text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 rounded transition-colors"
+                                  title="下移（在列表中更靠后）"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </>
                         )}
                         
                         <span className="px-2 py-1 bg-zinc-700 text-xs rounded-full">
@@ -392,8 +526,8 @@ export default function DiscussionPage() {
                         </h2>
                       </Link>
 
-                      <p className="text-gray-300 mb-4 line-clamp-2">
-                        {post.content}
+                      <p className="text-gray-300 mb-4 line-clamp-3 whitespace-pre-line">
+                        {getTextPreview(post.content)}
                       </p>
 
                       {/* 互动按钮 */}
@@ -468,6 +602,7 @@ export default function DiscussionPage() {
           onClose={() => setSelectedImage(null)}
         />
       )}
+      <BackToTopButton />
     </div>
   );
 }

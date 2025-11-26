@@ -7,6 +7,7 @@ import MiniPlayerArt from "@/components/common/MiniPlayerArt";
 import CatPlayerArt from "@/components/player/MiniPlayerArt";
 import CatHeadphoneCanvas from "@/components/player/CatHeadphoneCanvas";
 import PinPlayerButton from "@/components/player/PinPlayerButton";
+import PlayerTutorialModal from "@/components/player/PlayerTutorialModal";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import axios from "axios";
 import { notify } from "@/components/common/GlobalNotificationManager";
@@ -37,6 +38,7 @@ export default function MiniPlayer() {
   const [theme, setTheme] = useState("modern");
   const [imgFailed] = useState(false);
   const showInteractiveVolume = true; // 啟用直式音量拉條（右下角偏上一點）
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false); // 教學彈窗狀態
   
   // 釘選狀態管理
   const [pinnedPlayerData, setPinnedPlayerData] = useState(null);
@@ -482,6 +484,10 @@ export default function MiniPlayer() {
   };
 
   const handleMouseDown = (e) => {
+    // 如果教學彈窗打開，禁用拖拽
+    if (isTutorialOpen) {
+      return;
+    }
     if (isInteractiveTarget(e.target)) {
       return;
     }
@@ -499,6 +505,10 @@ export default function MiniPlayer() {
   };
 
   const handleTouchStart = (e) => {
+    // 如果教學彈窗打開，禁用拖拽
+    if (isTutorialOpen) {
+      return;
+    }
     if (isInteractiveTarget(e.target)) {
       return;
     }
@@ -1710,6 +1720,25 @@ export default function MiniPlayer() {
             </div>
           )}
  
+          {/* 教學按鈕 - 在播放器圖示右上方 */}
+          <button
+            data-no-drag="true"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsTutorialOpen(true);
+            }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+            }}
+            className="absolute top-2 right-2 z-10 w-6 h-6 flex items-center justify-center rounded-full bg-blue-600/80 border border-blue-400/50 text-white hover:bg-blue-500/80 transition-all duration-200 backdrop-blur-sm shadow hover:scale-110"
+            title="播放器使用教學"
+          >
+            <span className="text-xs font-bold">?</span>
+          </button>
+
           {globalShuffleAllowed && currentPlaylistLength > 1 && (
             <button
               data-no-drag="true"
@@ -1723,7 +1752,7 @@ export default function MiniPlayer() {
               onTouchStart={(e) => {
                 e.stopPropagation();
               }}
-              className={`absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-full border transition-all duration-200 backdrop-blur-sm shadow
+              className={`absolute bottom-4 right-2 z-10 w-6 h-6 flex items-center justify-center rounded-full border transition-all duration-200 backdrop-blur-sm shadow
                 ${globalShuffleEnabled
                   ? "bg-purple-600/80 border-purple-300 text-white hover:bg-purple-500/80"
                   : "bg-black/60 border-white/20 text-gray-200 hover:text-white hover:bg-black/70"}
@@ -1735,8 +1764,8 @@ export default function MiniPlayer() {
               }
             >
               <svg
-                width="14"
-                height="14"
+                width="12"
+                height="12"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -1752,7 +1781,6 @@ export default function MiniPlayer() {
               </svg>
             </button>
           )}
-
  
           {/* 播放進度條：置於唱片下方居中顯示 */}
           {showProgressBar && (
@@ -2002,6 +2030,12 @@ export default function MiniPlayer() {
           100% { transform: translateX(-100%); }
         }
       `}</style>
+      
+      {/* 教學彈窗 */}
+      <PlayerTutorialModal
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+      />
     </div>
   );
 }
