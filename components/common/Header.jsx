@@ -103,6 +103,7 @@ export default function Header({
   // ==== 新增：哪些路由支援「就地搜尋」 ====
   const LOCAL_SEARCH_PATHS = [
     /^\/$/, // 首頁（圖片搜尋）
+    /^\/images$/, // 圖片頁
     /^\/videos$/, // 影片頁
     /^\/music$/, // 音樂頁（如有）
     /^\/user\//, // 個人頁
