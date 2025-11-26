@@ -88,6 +88,27 @@ export default async function RootLayout({ children }) {
         {/* ✅ 性能優化：預先連結外部資源 */}
         <link rel="preconnect" href="https://imagedelivery.net" />
         <link rel="preconnect" href="https://media.aicreateaworld.com" />
+        {/* ✅ 網站結構化數據 */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: "AI 創界",
+              url: process.env.NEXT_PUBLIC_BASE_URL || "https://www.aicreateaworld.com",
+              description: "探索 AI 生成藝術的無限可能。分享你的 Stable Diffusion、ComfyUI 創作，學習 Prompt 技巧，獲取模型參數，加入創作者社群。",
+              potentialAction: {
+                "@type": "SearchAction",
+                target: {
+                  "@type": "EntryPoint",
+                  urlTemplate: `${process.env.NEXT_PUBLIC_BASE_URL || "https://www.aicreateaworld.com"}/?search={search_term_string}`,
+                },
+                "query-input": "required name=search_term_string",
+              },
+            }),
+          }}
+        />
       </head>
 
       <body className={`antialiased min-h-screen bg-zinc-950 text-white`}>

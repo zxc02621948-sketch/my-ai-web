@@ -1,6 +1,8 @@
 // app/sitemap.xml/route.js
 import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
+import Video from "@/models/Video";
+import Music from "@/models/Music";
 import User from "@/models/User";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://www.aicreateaworld.com";
@@ -12,6 +14,9 @@ export async function GET() {
     // 靜態頁面
     const staticPages = [
       { url: "", priority: "1.0", changefreq: "daily" }, // 首頁
+      { url: "/images", priority: "0.9", changefreq: "daily" },
+      { url: "/videos", priority: "0.9", changefreq: "daily" },
+      { url: "/music", priority: "0.9", changefreq: "daily" },
       { url: "/discussion", priority: "0.9", changefreq: "daily" },
       { url: "/models", priority: "0.8", changefreq: "weekly" },
       { url: "/qa", priority: "0.8", changefreq: "monthly" },
@@ -22,10 +27,24 @@ export async function GET() {
     ];
 
     // 獲取最新的公開圖片（限制數量避免 sitemap 過大）
-    const recentImages = await Image.find({ rating: { $ne: "18+" } })
-      .select("_id updatedAt")
+    const recentImages = await Image.find({ rating: { $ne: "18+" }, isPublic: { $ne: false } })
+      .select("_id updatedAt createdAt")
       .sort({ createdAt: -1 })
       .limit(1000)
+      .lean();
+
+    // 獲取最新的公開視頻
+    const recentVideos = await Video.find({ isPublic: true })
+      .select("_id updatedAt createdAt")
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean();
+
+    // 獲取最新的公開音樂
+    const recentMusic = await Music.find({ isPublic: { $ne: false } })
+      .select("_id updatedAt createdAt")
+      .sort({ createdAt: -1 })
+      .limit(500)
       .lean();
 
     // 獲取活躍用戶的個人頁面（只包含允許索引的用戶）
@@ -73,6 +92,26 @@ ${recentImages
     (img) => `  <url>
     <loc>${BASE_URL}/?image=${img._id}</loc>
     <lastmod>${new Date(img.updatedAt || img.createdAt || Date.now()).toISOString()}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`
+  )
+  .join("\n")}
+${recentVideos
+  .map(
+    (video) => `  <url>
+    <loc>${BASE_URL}/videos?video=${video._id}</loc>
+    <lastmod>${new Date(video.updatedAt || video.createdAt || Date.now()).toISOString()}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`
+  )
+  .join("\n")}
+${recentMusic
+  .map(
+    (music) => `  <url>
+    <loc>${BASE_URL}/music?music=${music._id}</loc>
+    <lastmod>${new Date(music.updatedAt || music.createdAt || Date.now()).toISOString()}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>`

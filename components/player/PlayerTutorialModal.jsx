@@ -192,7 +192,7 @@ export default function PlayerTutorialModal({ isOpen, onClose }) {
                         <ul className="list-disc list-inside space-y-1 ml-2">
                           <li>播放器會記住你的位置和展開狀態，下次使用時會自動恢復</li>
                           <li>釘選的播放器可以在任何頁面使用，不受頁面切換影響</li>
-                          <li>播放器支援背景播放，即使切換到其他頁面也能繼續播放</li>
+                          <li>釘選播放器支援背景播放，即使切換到其他頁面也能繼續播放</li>
                           <li>如果遇到播放問題，可以嘗試重新整理頁面或解除釘選後重新釘選</li>
                         </ul>
                       </div>

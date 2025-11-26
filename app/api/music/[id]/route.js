@@ -19,11 +19,15 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: "音樂不存在" }, { status: 404 });
     }
 
-    // 返回音樂信息（用於 Media Session API）
+    // 返回音樂信息（用於 Media Session API 和 SEO）
     return NextResponse.json({
       music: {
         _id: music._id,
         title: music.title,
+        description: music.description,
+        tags: music.tags,
+        genre: music.genre,
+        language: music.language,
         coverImageUrl: music.coverImageUrl || "",
         authorName: music.authorName || music.author?.username || "",
         authorAvatar: music.authorAvatar || music.author?.avatar || "",
@@ -32,6 +36,8 @@ export async function GET(request, { params }) {
           username: music.author.username,
           avatar: music.author.avatar,
         } : null,
+        createdAt: music.createdAt,
+        updatedAt: music.updatedAt,
       },
     });
   } catch (error) {

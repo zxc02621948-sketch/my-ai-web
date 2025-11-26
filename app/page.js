@@ -21,6 +21,7 @@ const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr:
 const VideoModal = dynamic(() => import("@/components/video/VideoModal"), { ssr: false });
 const BackToTopButton = dynamic(() => import("@/components/common/BackToTopButton"), { ssr: false });
 const StarrySky = dynamic(() => import("@/components/homepage/StarrySky"), { ssr: false });
+const StructuredData = dynamic(() => import("@/components/seo/StructuredData"), { ssr: false });
 
 const SHOWCASE_LIMIT = 12;
 const CF_IMAGE_BASE = "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A";
@@ -1435,6 +1436,8 @@ const musicPreviewStateRef = useRef({
     />
   )}
   <BackToTopButton />
+      {/* ✅ SEO: 結構化數據 */}
+      <StructuredData />
     </div>
   );
 }
