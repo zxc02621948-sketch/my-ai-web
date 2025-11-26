@@ -20,7 +20,7 @@ export async function POST(req) {
     }
 
     // 可用的造型列表
-    const availableSkins = ['default', 'cassette-player', 'cat-headphone'];
+    const availableSkins = ['default', 'cat-headphone'];
     
     if (!availableSkins.includes(skinId)) {
       return Response.json({ error: '不支援的造型' }, { status: 400 });
@@ -45,7 +45,6 @@ export async function POST(req) {
     // 造型名稱對應
     const skinNames = {
       'default': '預設造型',
-      'cassette-player': '卡帶播放器',
       'cat-headphone': '貓咪耳機造型'
     };
 

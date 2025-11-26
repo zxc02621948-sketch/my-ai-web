@@ -59,6 +59,7 @@ export default function UploadStep2({
   const [loraName, setLoraName] = useState("");
   const [originalSize, setOriginalSize] = useState(0);
   const [compressedSize, setCompressedSize] = useState(0);
+  const [customPlatform, setCustomPlatform] = useState(""); // 自定义平台名称
 
   // 手機簡化模式：設置默認 rating 為 "sfw"
   useEffect(() => {
@@ -950,7 +951,7 @@ export default function UploadStep2({
         category: categories.length > 0 ? categories[0] : (category || ""), // 保持向後兼容
         categories: categories || [],
         rating: normalizedRating,
-        platform: platform?.trim() || "",
+        platform: platform === "其他" ? (customPlatform?.trim() || "") : (platform?.trim() || ""),
         modelName: mobileSimple ? "" : (modelName?.trim() || ""),
         loraName: mobileSimple ? "" : (loraName?.trim() || ""),
         modelLink: mobileSimple ? "" : (modelLink?.trim() || ""),
@@ -1447,6 +1448,15 @@ export default function UploadStep2({
               className="flex-1"
               buttonClassName="bg-zinc-700 text-white"
             />
+            {platform === "其他" && (
+              <input
+                type="text"
+                placeholder="請輸入平台名稱"
+                value={customPlatform}
+                onChange={(e) => setCustomPlatform(e.target.value)}
+                className="flex-1 px-3 py-2 rounded bg-zinc-700 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            )}
 
               {/* ComfyUI：上傳 workflow 按鈕 - 手機簡化模式隱藏 */}
               {!mobileSimple && platform === "ComfyUI" && (

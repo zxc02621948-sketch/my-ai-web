@@ -110,6 +110,12 @@ export default function MiniPlayer() {
       return;
     }
 
+    // ✅ 如果没有 playerOwner，但播放列表长度 > 1，也允许随机播放（预设播放器）
+    if (!globalPlayerOwner && currentPlaylistLength > 1) {
+      ref.setShuffleAllowed?.(true);
+      return;
+    }
+
     const allowPinned = pinnedPlayerData?.allowShuffle === true;
     const allowOwner = globalPlayerOwner?.allowShuffle === true;
     if (allowOwner || (allowPinned && globalPlayerOwner?.allowShuffle !== false)) {
@@ -119,6 +125,7 @@ export default function MiniPlayer() {
     globalShuffleAllowed,
     pinnedPlayerData?.allowShuffle,
     globalPlayerOwner?.allowShuffle,
+    currentPlaylistLength,
   ]);
 
   // ✅ 檢查當前路徑是否是用戶頁面（需要在 useMemo 之前定義）

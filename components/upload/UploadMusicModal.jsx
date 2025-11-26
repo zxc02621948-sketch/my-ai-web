@@ -40,6 +40,7 @@ export default function UploadMusicModal() {
 
   // AI 生成元數據
   const [platform, setPlatform] = useState("");
+  const [customPlatform, setCustomPlatform] = useState(""); // 自定义平台名称
   const [prompt, setPrompt] = useState("");
   const [modelName, setModelName] = useState("");
   const [modelLink, setModelLink] = useState("");
@@ -118,6 +119,7 @@ export default function UploadMusicModal() {
       setLyrics("");
       setSingerGender("");
       setPlatform("");
+      setCustomPlatform("");
       setPrompt("");
       setModelName("");
       setModelLink("");
@@ -308,6 +310,10 @@ export default function UploadMusicModal() {
       toast.error("請選擇生成平台");
       return;
     }
+    if (platform === "其他" && !customPlatform?.trim()) {
+      toast.error("請輸入平台名稱");
+      return;
+    }
     if (category === "song" && !language) {
       toast.error("請選擇歌曲語言");
       return;
@@ -387,7 +393,8 @@ export default function UploadMusicModal() {
         if (singerGender) formData.append("singerGender", singerGender);
       }
 
-      formData.append("platform", platform);
+      const finalPlatform = platform === "其他" ? (customPlatform?.trim() || "") : platform;
+      if (finalPlatform) formData.append("platform", finalPlatform);
       if (prompt) formData.append("prompt", prompt);
       if (modelName) formData.append("modelName", modelName);
       if (modelLink) formData.append("modelLink", modelLink);
@@ -787,6 +794,15 @@ export default function UploadMusicModal() {
                         { value: "其他", label: "其他" },
                       ]}
                     />
+                    {platform === "其他" && (
+                      <input
+                        type="text"
+                        placeholder="請輸入平台名稱"
+                        value={customPlatform}
+                        onChange={(e) => setCustomPlatform(e.target.value)}
+                        className="mt-2 w-full px-3 py-2 rounded bg-zinc-700 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    )}
                   </div>
                 </div>
 

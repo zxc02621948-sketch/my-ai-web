@@ -33,6 +33,7 @@ export default function UploadVideoModal({
   
   // AI 生成元數據
   const [platform, setPlatform] = useState('');
+  const [customPlatform, setCustomPlatform] = useState(''); // 自定义平台名称
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
   
@@ -120,6 +121,7 @@ export default function UploadVideoModal({
     setVideoHeight(null);
     setDuration(null);
     setPlatform('');
+    setCustomPlatform('');
     setPrompt('');
     setNegativePrompt('');
     setFps('');
@@ -282,6 +284,10 @@ export default function UploadVideoModal({
       toast.error('請選擇生成平台');
       return;
     }
+    if (platform === '其他' && !customPlatform?.trim()) {
+      toast.error('請輸入平台名稱');
+      return;
+    }
     if (rating === '18' && !confirmAdult) {
       toast.error('請勾選成年聲明');
       return;
@@ -339,7 +345,7 @@ export default function UploadVideoModal({
         category: categories.length > 0 ? categories[0] : '', // 保持向後兼容
         categories,
         rating,
-        platform,
+        platform: platform === '其他' ? (customPlatform?.trim() || '') : platform,
         prompt,
         negativePrompt,
         fps,
@@ -725,6 +731,15 @@ export default function UploadVideoModal({
                       { value: '其他', label: '其他' },
                     ]}
                   />
+                  {platform === '其他' && (
+                    <input
+                      type="text"
+                      placeholder="請輸入平台名稱"
+                      value={customPlatform}
+                      onChange={(e) => setCustomPlatform(e.target.value)}
+                      className="mt-2 w-full px-3 py-2 rounded bg-zinc-700 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  )}
                 </div>
 
                 {/* 進階參數（可折疊） */}

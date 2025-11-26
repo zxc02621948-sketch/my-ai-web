@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import CatHeadphoneCanvas from '@/components/player/CatHeadphoneCanvas';
-import CassettePlayerCanvas from '@/components/player/CassettePlayerCanvas';
 import axios from 'axios';
 
 export default function PlayerSkinSettings({ currentUser, onSettingsSaved }) {
@@ -124,7 +123,7 @@ export default function PlayerSkinSettings({ currentUser, onSettingsSaved }) {
           {/* 預覽效果 */}
           <div className="mb-6 relative inline-block">
             <div className="w-40 h-40 bg-white dark:bg-gray-800 rounded-2xl shadow-xl flex items-center justify-center relative overflow-visible">
-              <CassettePlayerCanvas 
+              <CatHeadphoneCanvas 
                 isPlaying={true} 
                 size={150} 
                 colorSettings={{
@@ -158,7 +157,6 @@ export default function PlayerSkinSettings({ currentUser, onSettingsSaved }) {
   // 可用的造型列表（根據購買狀態動態生成）
   const availableSkins = [
     { id: 'default', name: '預設造型', icon: '🎧', description: '經典播放器外觀', requiresPurchase: false },
-    { id: 'cassette-player', name: '卡帶播放器', icon: '🎵', description: '復古卡帶 + 樂譜動畫', requiresPurchase: true, isPremium: true },
     { id: 'cat-headphone', name: '貓咪耳機', icon: '🐱', description: 'RGB 流光動畫', requiresPurchase: true, isPremium: true }
     // 未來可以在這裡新增更多造型，例如：
     // { id: 'neon-glow', name: '霓虹光暈', icon: '💫', description: '賽博朋克風格', requiresPurchase: true, isPremium: true }
@@ -248,49 +246,11 @@ export default function PlayerSkinSettings({ currentUser, onSettingsSaved }) {
             </div>
           </div>
         </div>
-      ) : activeSkin === 'cassette-player' || activeSkin === 'cat-headphone' ? (
-        // 卡帶播放器或貓咪耳機造型：顯示調整介面
+      ) : activeSkin === 'cat-headphone' ? (
+        // 貓咪耳機造型：顯示調整介面
         <div className="grid md:grid-cols-2 gap-6">
           {/* 左側：設定選項 */}
           <div className="space-y-6">
-          
-          {/* 卡帶播放器專屬：螢光棒流光效果 */}
-          {activeSkin === 'cassette-player' && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                🎵 卡帶特效
-              </label>
-              <div className="space-y-3">
-                {/* 螢光棒流光效果開關 */}
-                <div className="p-4 bg-gradient-to-br from-cyan-50 via-purple-50 to-pink-50 dark:from-cyan-900/30 dark:via-purple-900/30 dark:to-pink-900/30 rounded-xl border-2 border-cyan-300 dark:border-cyan-600">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="font-semibold text-gray-900 dark:text-white mb-1">
-                        🌟 螢光棒流光效果
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">
-                        播放時外框會像螢光棒一樣流動發光
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleChange('neonGlow', !settings.neonGlow)}
-                      className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
-                        settings.neonGlow 
-                          ? 'bg-gradient-to-r from-cyan-500 to-purple-500' 
-                          : 'bg-gray-300 dark:bg-gray-600'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform ${
-                          settings.neonGlow ? 'translate-x-7' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
           
           {/* 顏色模式選擇 */}
           <div>
@@ -549,13 +509,6 @@ export default function PlayerSkinSettings({ currentUser, onSettingsSaved }) {
                     key={`preview-${isPlaying ? 'playing' : 'paused'}`}
                     isPlaying={isPlaying} 
                     size={130} 
-                    colorSettings={settings}
-                  />
-                ) : activeSkin === 'cassette-player' ? (
-                  <CassettePlayerCanvas 
-                    key={`preview-${isPlaying ? 'playing' : 'paused'}`}
-                    isPlaying={isPlaying} 
-                    size={150} 
                     colorSettings={settings}
                   />
                 ) : (

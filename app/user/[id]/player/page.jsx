@@ -11,7 +11,6 @@ import MiniPlayerArt from "@/components/common/MiniPlayerArt";
 import AudioMonitor from "@/components/common/AudioMonitor";
 import PlayerSkinSettings from "@/components/player/PlayerSkinSettings";
 import CatHeadphoneCanvas from "@/components/player/CatHeadphoneCanvas";
-import CassettePlayerCanvas from "@/components/player/CassettePlayerCanvas";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import { warmupAudioBatch } from "@/utils/audioWarmup";
 
@@ -757,26 +756,6 @@ export default function UserPlayerPage() {
                         </div>
                       </>
                     )}
-                  </div>
-                ) : userData?.activePlayerSkin === 'cassette-player' ? (
-                  // 卡帶播放器造型預覽
-                  <div
-                    className="drop-shadow-2xl relative"
-                    style={{ width: "200px", height: "200px", transform: "scale(1.2)", transformOrigin: "center" }}
-                    aria-label="Cassette Player"
-                  >
-                    <CassettePlayerCanvas 
-                      isPlaying={player.isPlaying} 
-                      size={200} 
-                      colorSettings={userData?.playerSkinSettings || {
-                        mode: 'rgb',
-                        speed: 0.02,
-                        saturation: 50,
-                        lightness: 60,
-                        hue: 0,
-                        opacity: 0.7
-                      }}
-                    />
                   </div>
                 ) : (
                   // 預設造型預覽
