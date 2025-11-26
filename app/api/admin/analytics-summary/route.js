@@ -21,21 +21,30 @@ export async function GET(req) {
 
   const summary = [];
 
-  for (let i = 0; i < 7; i++) {
-    // 計算本地日期
-    const localDate = new Date();
-    localDate.setDate(localDate.getDate() - i);
-    
-    // 取出當地年月日
-    const dateLabel = localDate.toISOString().split("T")[0];
+  // 使用台灣時區（UTC+8）
+  const timezone = '+08:00';
 
-    // 建構本地時間的開始和結束，然後轉換為 UTC 進行查詢
-    const localStart = new Date(dateLabel + 'T00:00:00');
-    const localEnd = new Date(dateLabel + 'T23:59:59.999');
+  for (let i = 6; i >= 0; i--) {
+    // 計算本地日期（從6天前到今天）
+    const today = new Date();
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() - i);
+    targetDate.setHours(0, 0, 0, 0);
+    
+    // 取出當地年月日（使用本地時間格式化）
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const day = String(targetDate.getDate()).padStart(2, '0');
+    const dateLabel = `${year}-${month}-${day}`;
+
+    // 建構台灣時區的開始和結束時間（轉換為 UTC）
+    // 台灣時區 UTC+8，所以需要減去 8 小時
+    const localStart = new Date(`${dateLabel}T00:00:00${timezone}`);
+    const localEnd = new Date(`${dateLabel}T23:59:59.999${timezone}`);
     
     // 轉換為 UTC 時間進行數據庫查詢
-    const start = new Date(localStart.getTime() - localStart.getTimezoneOffset() * 60000);
-    const end = new Date(localEnd.getTime() - localEnd.getTimezoneOffset() * 60000);
+    const start = new Date(localStart.getTime());
+    const end = new Date(localEnd.getTime());
 
     const [uniqueUsersResult, totalVisitsResult, newUsers, uploads, likes, comments] = await Promise.all([
       // 計算獨立用戶數（混合識別：已登錄用戶按 userId，匿名用戶按 IP+UserAgent）
@@ -92,6 +101,9 @@ export async function GET(req) {
       commentsPosted: comments,
     });
   }
+
+  // 按日期排序（從最新到最舊）
+  summary.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return NextResponse.json({ summary }, { status: 200 });
   } catch (error) {
