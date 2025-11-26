@@ -4,10 +4,11 @@ import { Dialog } from '@headlessui/react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
+import { notify } from '@/components/common/GlobalNotificationManager';
 import VIDEO_CATEGORIES from '@/constants/videoCategories';
 import SelectField from '@/components/common/SelectField';
 
-const SUCCESS_TOAST_STORAGE_KEY = 'videoUploadSuccessMessage';
+const SUCCESS_MESSAGE_STORAGE_KEY = 'videoUploadSuccessMessage';
 
 export default function UploadVideoModal({
   isOpen,
@@ -54,10 +55,19 @@ export default function UploadVideoModal({
   useEffect(() => {
     if (!mounted) return;
     try {
-      const pendingMessage = sessionStorage.getItem(SUCCESS_TOAST_STORAGE_KEY);
-      if (pendingMessage) {
-        sessionStorage.removeItem(SUCCESS_TOAST_STORAGE_KEY);
-        toast.success(pendingMessage, { duration: 6000 });
+      const rawMessage = sessionStorage.getItem(SUCCESS_MESSAGE_STORAGE_KEY);
+      if (!rawMessage) return;
+      sessionStorage.removeItem(SUCCESS_MESSAGE_STORAGE_KEY);
+      let payload;
+      try {
+        payload = JSON.parse(rawMessage);
+      } catch {
+        payload = null;
+      }
+      if (payload && typeof payload === "object") {
+        notify.success(payload.title ?? "上傳成功", payload.body ?? "");
+      } else {
+        notify.success("上傳成功", rawMessage);
       }
     } catch (error) {
       console.warn('讀取上傳成功提示失敗:', error);
@@ -379,38 +389,41 @@ export default function UploadVideoModal({
 
       const completeness = saveData.completenessScore || 0;
       
-      // ✅ 根據完整度分數顯示不同的質量加成提示
-      let qualityMessage = '';
+      // ✅ 根據完整度分數顯示不同的質量加成提示（與圖片上傳一致）
+      let successBody;
       if (completeness >= 80) {
-        qualityMessage = `\n\n⭐ 此影片已標記為「優質影片」\n✨ 將獲得更多曝光機會\n🎓 其他用戶可以學習您的高質量生成參數`;
+        successBody = "⭐ 此影片已標記為「優質影片」\n✨ 將獲得更多曝光機會\n🎓 其他用戶可以學習您的高質量生成參數";
       } else if (completeness >= 60) {
-        qualityMessage = `\n\n✓ 此影片已標記為「標準影片」\n✨ 將獲得適中的曝光機會\n📚 其他用戶可以參考您的生成參數`;
+        successBody = "✓ 此影片已標記為「標準影片」\n✨ 將獲得適中的曝光機會\n📚 其他用戶可以參考您的生成參數";
       } else {
-        qualityMessage = `\n\n🎨 此影片已標記為「展示影片」\n📸 將出現在影片列表中供欣賞\n💡 建議填寫有意義的參數以獲得更多曝光`;
+        successBody = "🎨 此影片已標記為「展示影片」\n📸 將出現在影片列表中供欣賞\n💡 建議填寫有意義的參數以獲得更多曝光";
       }
-      
-      // 更新每日配額顯示
-      let successMessage = `✅ 影片上傳成功！完整度：${completeness}分${qualityMessage}`;
 
+      // 更新每日配額顯示
       if (saveData.dailyUploads) {
         setDailyQuota({
           current: saveData.dailyUploads.current,
           limit: saveData.dailyUploads.limit,
           remaining: saveData.dailyUploads.remaining
         });
-        successMessage += `\n\n今日剩餘：${saveData.dailyUploads.remaining}/${saveData.dailyUploads.limit}`;
+        successBody += `\n\n今日剩餘：${saveData.dailyUploads.remaining}/${saveData.dailyUploads.limit}`;
       }
 
       let storedMessage = false;
       try {
-        sessionStorage.setItem(SUCCESS_TOAST_STORAGE_KEY, successMessage);
+        const payload = {
+          title: "✅ 上傳成功！",
+          body: successBody,
+          completeness: completeness,
+        };
+        sessionStorage.setItem(SUCCESS_MESSAGE_STORAGE_KEY, JSON.stringify(payload));
         storedMessage = true;
       } catch (error) {
         console.warn('儲存上傳成功提示失敗:', error);
       }
 
       if (!storedMessage) {
-        toast.success(successMessage, { duration: 6000 });
+        notify.success("上傳成功", successBody, { autoClose: true, autoCloseDelay: 6000 });
       }
 
       handleClose();
