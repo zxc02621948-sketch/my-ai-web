@@ -189,7 +189,7 @@ export async function POST(request) {
       duration: metadata.duration,
       author: user._id,
       authorName: user.username || user.email,
-      authorAvatar: user.avatar || '',
+      authorAvatar: user.image || '',
       completenessScore,
       popScore: 0, // 初始流行度分數
       isHighQuality: completenessScore >= 80,

@@ -12,7 +12,7 @@ export async function GET(request, { params }) {
 
     // 查找音樂
     const music = await Music.findById(id)
-      .populate("author", "_id username avatar currentFrame frameSettings")
+      .populate("author", "_id username image currentFrame frameSettings")
       .lean();
 
     if (!music) {
@@ -30,11 +30,13 @@ export async function GET(request, { params }) {
         language: music.language,
         coverImageUrl: music.coverImageUrl || "",
         authorName: music.authorName || music.author?.username || "",
-        authorAvatar: music.authorAvatar || music.author?.avatar || "",
+        authorAvatar: music.authorAvatar || music.author?.image || "",
         author: music.author ? {
           _id: music.author._id,
           username: music.author.username,
-          avatar: music.author.avatar,
+          image: music.author.image,
+          currentFrame: music.author.currentFrame,
+          frameSettings: music.author.frameSettings,
         } : null,
         createdAt: music.createdAt,
         updatedAt: music.updatedAt,

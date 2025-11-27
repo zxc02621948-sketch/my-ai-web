@@ -63,10 +63,19 @@ export default function DesktopVideoRightPane({
     }
   };
 
-  // 頭像 URL
+  // 頭像 URL（與 MobileVideoSheet 保持一致）
   const avatarUrl = (() => {
+    // 優先使用 video.authorAvatar（影片上傳時保存的頭像）
     if (video?.authorAvatar) {
       return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${video.authorAvatar}/public`;
+    }
+    // 其次使用 video.author.image（從 User 模型 populate 的頭像）
+    if (typeof video?.author?.image === "string" && video.author.image.trim() !== "") {
+      if (video.author.image.startsWith("http")) {
+        return video.author.image;
+      }
+      // 如果是 Cloudflare Images ID，構建 URL
+      return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${video.author.image}/avatar`;
     }
     return null;
   })();

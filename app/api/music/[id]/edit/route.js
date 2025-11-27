@@ -249,7 +249,7 @@ export async function PATCH(req, { params }) {
     await music.save();
 
     // 重新填充作者資訊
-    await music.populate("author", "username avatar currentFrame frameSettings");
+    await music.populate("author", "username image currentFrame frameSettings");
 
     // 回傳最新資料
     const saved = await Music.findById(id)

@@ -103,7 +103,7 @@ export async function PUT(req, { params }) {
     await video.save();
 
     // 重新填充作者資訊
-    await video.populate('author', 'username avatar currentFrame frameSettings');
+    await video.populate('author', 'username image currentFrame frameSettings');
 
     return NextResponse.json(
       { 

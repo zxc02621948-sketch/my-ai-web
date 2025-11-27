@@ -285,8 +285,17 @@ export default function MobileMusicSheet({
 
   const ownerId = music?.author?._id || music?.author;
   const avatarUrl = (() => {
+    // 優先使用 music.authorAvatar（音樂上傳時保存的頭像）
     if (music?.authorAvatar) {
       return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${music.authorAvatar}/public`;
+    }
+    // 其次使用 music.author.image（從 User 模型 populate 的頭像）
+    if (typeof music?.author?.image === "string" && music.author.image.trim() !== "") {
+      if (music.author.image.startsWith("http")) {
+        return music.author.image;
+      }
+      // 如果是 Cloudflare Images ID，構建 URL
+      return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${music.author.image}/avatar`;
     }
     return null;
   })();

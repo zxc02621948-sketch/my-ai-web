@@ -77,7 +77,10 @@ export default function AnalyticsPage() {
                 <tr>
                   <th className="border px-2 py-1">📅 日期</th>
                   <th className="border px-2 py-1">👤 註冊</th>
-                  <th className="border px-2 py-1">🖼️ 上傳</th>
+                  <th className="border px-2 py-1">🖼️ 圖片</th>
+                  <th className="border px-2 py-1">🎬 影片</th>
+                  <th className="border px-2 py-1">🎵 音樂</th>
+                  <th className="border px-2 py-1">📊 總上傳</th>
                   <th className="border px-2 py-1">❤️ 愛心</th>
                   <th className="border px-2 py-1">💬 留言</th>
                   <th className="border px-2 py-1">👁️ 人數</th>
@@ -87,7 +90,7 @@ export default function AnalyticsPage() {
               <tbody>
                 {summary.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="border px-2 py-4 text-center text-zinc-400">
+                    <td colSpan="10" className="border px-2 py-4 text-center text-zinc-400">
                       暫無數據
                     </td>
                   </tr>
@@ -97,6 +100,9 @@ export default function AnalyticsPage() {
                       <td className="border px-2 py-1">{row.date}</td>
                       <td className="border px-2 py-1">{row.newUsers ?? 0}</td>
                       <td className="border px-2 py-1">{row.imagesUploaded ?? 0}</td>
+                      <td className="border px-2 py-1">{row.videosUploaded ?? 0}</td>
+                      <td className="border px-2 py-1">{row.musicUploaded ?? 0}</td>
+                      <td className="border px-2 py-1 font-semibold">{row.totalUploads ?? 0}</td>
                       <td className="border px-2 py-1">{row.likesGiven ?? 0}</td>
                       <td className="border px-2 py-1">{row.commentsPosted ?? 0}</td>
                       <td className="border px-2 py-1">{row.uniqueUsers ?? 0}</td>

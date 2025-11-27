@@ -6,7 +6,7 @@
  * 作者資訊要 populate 的欄位
  * 統一管理，確保所有 API 返回一致的作者資訊
  */
-export const VIDEO_AUTHOR_FIELDS = 'username avatar currentFrame frameSettings';
+export const VIDEO_AUTHOR_FIELDS = 'username image currentFrame frameSettings';
 
 /**
  * 作者資訊的 aggregate $project 配置
@@ -15,7 +15,7 @@ export const VIDEO_AUTHOR_FIELDS = 'username avatar currentFrame frameSettings';
 export const VIDEO_AUTHOR_PROJECT = {
   _id: 1,
   username: 1,
-  avatar: 1,
+  image: 1, // ✅ 修正：User 模型使用 image 字段，不是 avatar
   currentFrame: 1,
   frameSettings: 1
 };

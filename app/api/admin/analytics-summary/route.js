@@ -3,6 +3,8 @@ import { dbConnect } from "@/lib/db";
 import VisitorLog from "@/models/VisitorLog";
 import User from "@/models/User";
 import Image from "@/models/Image";
+import Video from "@/models/Video";
+import Music from "@/models/Music";
 import Comment from "@/models/Comment";
 import LikeLog from "@/models/LikeLog";
 import { getCurrentUserFromRequest } from "@/lib/serverAuth";
@@ -46,7 +48,7 @@ export async function GET(req) {
     const start = new Date(localStart.getTime());
     const end = new Date(localEnd.getTime());
 
-    const [uniqueUsersResult, totalVisitsResult, newUsers, uploads, likes, comments] = await Promise.all([
+    const [uniqueUsersResult, totalVisitsResult, newUsers, imageUploads, videoUploads, musicUploads, likes, comments] = await Promise.all([
       // 計算獨立用戶數（混合識別：已登錄用戶按 userId，匿名用戶按 IP+UserAgent）
       VisitorLog.aggregate([
         {
@@ -87,6 +89,8 @@ export async function GET(req) {
       ]),
       User.countDocuments({ createdAt: { $gte: start, $lte: end } }),
       Image.countDocuments({ createdAt: { $gte: start, $lte: end } }),
+      Video.countDocuments({ createdAt: { $gte: start, $lte: end } }),
+      Music.countDocuments({ createdAt: { $gte: start, $lte: end } }),
       LikeLog.countDocuments({ createdAt: { $gte: start, $lte: end } }),
       Comment.countDocuments({ createdAt: { $gte: start, $lte: end } }),
     ]);
@@ -96,7 +100,10 @@ export async function GET(req) {
       uniqueUsers: uniqueUsersResult[0]?.uniqueUsers || 0,
       totalVisits: totalVisitsResult[0]?.totalVisits || 0,
       newUsers,
-      imagesUploaded: uploads,
+      imagesUploaded: imageUploads,
+      videosUploaded: videoUploads,
+      musicUploaded: musicUploads,
+      totalUploads: imageUploads + videoUploads + musicUploads, // 總上傳數
       likesGiven: likes,
       commentsPosted: comments,
     });

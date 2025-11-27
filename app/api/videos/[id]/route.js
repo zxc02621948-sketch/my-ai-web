@@ -12,7 +12,7 @@ export async function GET(request, { params }) {
 
     // 查找視頻
     const video = await Video.findById(id)
-      .populate("author", "_id username avatar")
+      .populate("author", "_id username image currentFrame frameSettings")
       .lean();
 
     if (!video) {
@@ -35,6 +35,9 @@ export async function GET(request, { params }) {
         author: video.author ? {
           _id: video.author._id,
           username: video.author.username,
+          image: video.author.image,
+          currentFrame: video.author.currentFrame,
+          frameSettings: video.author.frameSettings,
         } : null,
         createdAt: video.createdAt,
         updatedAt: video.updatedAt,
