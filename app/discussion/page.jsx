@@ -9,6 +9,7 @@ import BackToTopButton from "@/components/common/BackToTopButton";
 import ImageModal from "@/components/image/ImageModal";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import useVisitTracking from "@/hooks/useVisitTracking";
 
 export default function DiscussionPage() {
   const { currentUser } = useCurrentUser(); // 使用 Context
@@ -18,6 +19,9 @@ export default function DiscussionPage() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [activeTab, setActiveTab] = useState("general"); // "general" 或 "adult"
   const [selectedImage, setSelectedImage] = useState(null);
+  
+  // ✅ 訪問記錄追蹤
+  useVisitTracking();
   
   // 防止重複調用
   const lastFetchParamsRef = useRef(null);

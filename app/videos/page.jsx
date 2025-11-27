@@ -12,6 +12,7 @@ import usePinnedPlayerBootstrap from '@/hooks/usePinnedPlayerBootstrap';
 import usePaginatedResource from '@/hooks/usePaginatedResource';
 import { notify } from '@/components/common/GlobalNotificationManager';
 import BackToTopButton from '@/components/common/BackToTopButton';
+import useVisitTracking from '@/hooks/useVisitTracking';
 
 const PAGE_SIZE = 20;
 
@@ -21,6 +22,9 @@ const VideosPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [sort, setSort] = useState('popular');
+  
+  // ✅ 訪問記錄追蹤
+  useVisitTracking();
   
   const player = usePlayer();
   const router = useRouter();

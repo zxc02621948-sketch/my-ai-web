@@ -13,6 +13,7 @@ import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import usePinnedPlayerBootstrap from "@/hooks/usePinnedPlayerBootstrap";
 import usePaginatedResource from "@/hooks/usePaginatedResource";
+import useVisitTracking from "@/hooks/useVisitTracking";
 
 /** ====== 超精簡資料流：去掉預覽/快取/一次性旗標，只保留 inFlightId ====== */
 
@@ -108,124 +109,8 @@ export default function ImagesPage() {
   const loadMoreRef = useRef(null);
   usePinnedPlayerBootstrap({ player, currentUser });
 
-  // 雙軌制訪問追蹤 - 同時記錄防刷量統計和廣告收益統計
-  useEffect(() => {
-    let isLogging = false; // 防止並發請求
-
-    const logDualTrackVisit = async () => {
-      try {
-        // 防止並發請求
-        if (isLogging) {
-          return;
-        }
-
-        isLogging = true;
-        const currentPath = window.location.pathname;
-
-        // 🛡️ 防刷量統計 - 保持原有的嚴格防重複機制
-        const logAntiSpamVisit = async () => {
-          try {
-            // 檢查是否已經在此會話中記錄過訪問
-            const sessionKey = `visit_logged_${currentPath}`;
-            const hasLoggedThisSession = sessionStorage.getItem(sessionKey);
-
-            if (hasLoggedThisSession) {
-              return { success: true, skipped: true, reason: "session" };
-            }
-
-            // 檢查最近是否剛記錄過（防抖機制）
-            const lastLogTime = sessionStorage.getItem("last_visit_log_time");
-            const now = Date.now();
-            if (lastLogTime && now - parseInt(lastLogTime, 10) < 1000) {
-              // 1秒內不重複記錄
-              return { success: true, skipped: true, reason: "debounce" };
-            }
-
-            const response = await fetch("/api/log-visit", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              credentials: "include",
-              body: JSON.stringify({
-                path: currentPath,
-              }),
-            });
-
-            if (response.ok) {
-              // 標記此會話已記錄過訪問
-              sessionStorage.setItem(sessionKey, "true");
-              sessionStorage.setItem("last_visit_log_time", now.toString());
-              return { success: true, skipped: false };
-            } else {
-              throw new Error(`HTTP ${response.status}`);
-            }
-          } catch (error) {
-            console.warn("🛡️ [防刷量] 訪問記錄失敗:", error);
-            return { success: false, error };
-          }
-        };
-
-        // 💰 廣告收益統計 - 更寬鬆的防重複機制
-        const logAdRevenueVisit = async () => {
-          try {
-            // 廣告統計只檢查很短時間內的重複（避免同一次點擊產生多次記錄）
-            const adLastLogTime = sessionStorage.getItem(
-              "last_ad_visit_log_time",
-            );
-            const now = Date.now();
-            if (adLastLogTime && now - parseInt(adLastLogTime, 10) < 200) {
-              // 200ms內不重複記錄
-              return { success: true, skipped: true, reason: "rapid_click" };
-            }
-
-            const response = await fetch("/api/log-ad-visit", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              credentials: "include",
-              body: JSON.stringify({
-                path: currentPath,
-              }),
-            });
-
-            if (response.ok) {
-              sessionStorage.setItem(
-                "last_ad_visit_log_time",
-                now.toString(),
-              );
-              const result = await response.json();
-              return {
-                success: true,
-                skipped: false,
-                isDuplicate: result.isDuplicate,
-              };
-            } else {
-              throw new Error(`HTTP ${response.status}`);
-            }
-          } catch (error) {
-            console.warn("💰 [廣告統計] 訪問記錄失敗:", error);
-            return { success: false, error };
-          }
-        };
-
-        // 並行執行兩個統計
-        await Promise.allSettled([logAntiSpamVisit(), logAdRevenueVisit()]);
-      } catch (error) {
-        console.warn("📊 [雙軌統計] 整體失敗:", error);
-      } finally {
-        isLogging = false;
-      }
-    };
-
-    // 使用 setTimeout 延遲執行，確保頁面完全加載
-    const timeoutId = setTimeout(logDualTrackVisit, 100);
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, []); // 只在組件掛載時執行一次
+  // ✅ 訪問記錄追蹤（使用統一的 Hook）
+  useVisitTracking();
 
   // 排序參數對應後端
   const mapSortForApi = (s) => {

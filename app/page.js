@@ -13,6 +13,7 @@ import {
 // ✅ 性能優化：使用動態導入延遲加載非關鍵組件，減少初始包大小
 import dynamic from "next/dynamic";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import useVisitTracking from "@/hooks/useVisitTracking";
 
 // 動態導入 Modal 組件（只在需要時加載）
 const ShowcaseImageModal = dynamic(() => import("@/components/homepage/ShowcaseImageModal"), { ssr: false });
@@ -908,6 +909,9 @@ function HeroSection({ isMobile }) {
 }
 
 export default function LandingPage() {
+  // ✅ 訪問記錄追蹤
+  useVisitTracking();
+  
   // ✅ 性能優化：延遲加載背景動畫，優先渲染內容
   const [showStarrySky, setShowStarrySky] = useState(false);
   

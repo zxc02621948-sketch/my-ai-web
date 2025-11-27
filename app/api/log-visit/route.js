@@ -45,11 +45,14 @@ export async function POST(req) {
     });
 
     if (existingVisit) {
-      console.log(`🔄 跳過重複訪問記錄: ${path} - IP: ${ip.substring(0, 10)}... - User: ${userId || 'anonymous'}`);
+      console.log(`🔄 [LOG-VISIT] 跳過重複訪問記錄: ${path} - IP: ${ip.substring(0, 10)}... - User: ${userId || 'anonymous'} - 時間差: ${Math.round((Date.now() - new Date(existingVisit.createdAt).getTime()) / 1000)}秒`);
       return NextResponse.json({ 
         success: true, 
         visitId: existingVisit.visitId,
-        message: "訪問記錄已存在（跳過重複記錄）" 
+        message: "訪問記錄已存在（跳過重複記錄）",
+        skipped: true,
+        reason: "duplicate_within_30s",
+        existingVisitTime: existingVisit.createdAt
       });
     }
 
@@ -61,11 +64,14 @@ export async function POST(req) {
     });
 
     if (recentSameIpVisit) {
-      console.log(`🔄 跳過同 IP 短時間重複訪問: ${ip.substring(0, 10)}...`);
+      console.log(`🔄 [LOG-VISIT] 跳過同 IP 短時間重複訪問: ${ip.substring(0, 10)}... - 時間差: ${Math.round((Date.now() - new Date(recentSameIpVisit.createdAt).getTime()) / 1000)}秒`);
       return NextResponse.json({ 
         success: true, 
         visitId: recentSameIpVisit.visitId,
-        message: "同 IP 短時間內重複訪問（跳過記錄）" 
+        message: "同 IP 短時間內重複訪問（跳過記錄）",
+        skipped: true,
+        reason: "same_ip_within_5s",
+        existingVisitTime: recentSameIpVisit.createdAt
       });
     }
 
@@ -84,10 +90,14 @@ export async function POST(req) {
 
     await visitorLog.save();
 
+    console.log(`✅ [LOG-VISIT] 訪問記錄成功: ${path} - IP: ${ip.substring(0, 10)}... - User: ${userId || 'anonymous'} - VisitID: ${visitId}`);
+
     return NextResponse.json({ 
       success: true, 
       visitId,
-      message: "訪問記錄成功" 
+      message: "訪問記錄成功",
+      logged: true,
+      timestamp: new Date().toISOString()
     });
 
   } catch (error) {

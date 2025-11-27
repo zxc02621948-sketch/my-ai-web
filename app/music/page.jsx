@@ -15,6 +15,7 @@ import {
 } from "@/components/context/FilterContext";
 import usePinnedPlayerBootstrap from "@/hooks/usePinnedPlayerBootstrap";
 import usePaginatedResource from "@/hooks/usePaginatedResource";
+import useVisitTracking from "@/hooks/useVisitTracking";
 import { audioManager } from "@/utils/audioManager";
 import { warmupAudioBatch } from "@/utils/audioWarmup";
 import {
@@ -29,6 +30,10 @@ const MusicPage = () => {
   const [editingMusic, setEditingMusic] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [sort, setSort] = useState("popular");
+  
+  // ✅ 訪問記錄追蹤
+  useVisitTracking();
+  
   const player = usePlayer();
   const { currentUser } = useCurrentUser();
   const router = useRouter();
