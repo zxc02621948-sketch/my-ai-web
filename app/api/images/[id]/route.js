@@ -14,14 +14,13 @@ export const GET = withErrorHandling(async (_req, ctx) => {
     return apiError("無效的圖片 ID", 400);
   }
 
-  const currentUser = await getCurrentUser().catch(() => null);
-
-  // ✅ 優化：只選擇前端實際需要的字段
-  // 前端使用的字段：_id, username, image, isAdmin, currentFrame, frameSettings
-  // level 字段在圖片詳情彈窗中未使用，已移除以提升性能
-  const doc = await Image.findById(id)
-    .populate({ path: "user", select: "_id username image isAdmin currentFrame frameSettings" })
-    .lean();
+  // ✅ 優化：並行執行用戶認證和圖片查詢，不阻塞主查詢
+  const [currentUser, doc] = await Promise.all([
+    getCurrentUser().catch(() => null),
+    Image.findById(id)
+      .populate({ path: "user", select: "_id username image isAdmin currentFrame frameSettings" })
+      .lean(),
+  ]);
 
   if (!doc) {
     return apiError("找不到圖片", 404);

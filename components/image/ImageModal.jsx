@@ -93,7 +93,16 @@ export default function ImageModal({
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/images/${imageId}`, { cache: "no-store" });
+        // ✅ 添加超時控制，避免長時間等待
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超時
+        
+        const res = await fetch(`/api/images/${imageId}`, { 
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        
         const data = await res.json();
         if (!res.ok) throw new Error("找不到該圖片，可能已被刪除");
         if (alive) {
@@ -101,7 +110,13 @@ export default function ImageModal({
           setError(null);
         }
       } catch (err) {
-        if (alive) setError(err.message || "載入失敗");
+        if (alive) {
+          if (err.name === 'AbortError') {
+            setError("請求超時，請稍後再試");
+          } else {
+            setError(err.message || "載入失敗");
+          }
+        }
       } finally {
         if (alive) setLoading(false);
       }
@@ -167,49 +182,36 @@ export default function ImageModal({
   }, [image?._id, imageId, imageData]);
 
   // ✅ 優化：若 user 是字串 → 補抓作者物件
-  // 優先檢查圖片詳情API（因為它已經populate了user信息），避免重複調用user API
+  // 只在必要時調用 API，避免重複請求
   useEffect(() => {
     if (!image) return;
     const u = image.user ?? image.userId;
+    
+    // 如果 user 已經是對象，不需要再次請求
+    if (u && typeof u === "object" && u._id) return;
+    
+    // 如果 user 是字符串，才需要補抓
     if (!u || typeof u !== "string") return;
 
     let alive = true;
     (async () => {
       try {
-        let userObj = null;
-        
-        // ✅ 優化：優先調用圖片詳情API（因為它已經populate了user信息）
-        // 這樣可以避免多餘的user API調用
-        if (image?._id) {
-          try {
-            const r2 = await fetch(`/api/images/${image._id}`, { cache: "no-store" });
-            if (r2.ok) {
-              const d2 = await r2.json();
-              userObj = d2?.image?.user || null;
-            }
-          } catch {}
-        }
-        
-        // ✅ 如果圖片詳情API失敗，才調用user API（fallback）
-        if (!userObj) {
-          try {
-            const r = await fetch(`/api/user/${u}`, { cache: "no-store" });
-            if (r.ok) {
-              const data = await r.json();
-              userObj = data?.user || data?.data || null;
-            }
-          } catch {}
-        }
-        
-        if (alive && userObj && typeof userObj === "object") {
-          setImage((prev) => (prev ? { ...prev, user: userObj } : prev));
+        // ✅ 直接調用 user API，避免重複調用圖片詳情 API
+        // 因為圖片詳情 API 已經在第一次加載時調用過了
+        const r = await fetch(`/api/user/${u}`, { cache: "no-store" });
+        if (r.ok && alive) {
+          const data = await r.json();
+          const userObj = data?.user || data?.data || null;
+          if (userObj && typeof userObj === "object") {
+            setImage((prev) => (prev ? { ...prev, user: userObj } : prev));
+          }
         }
       } catch {}
     })();
     return () => {
       alive = false;
     };
-  }, [image]);
+  }, [image?._id, image?.user, image?.userId]); // ✅ 優化依賴項，避免不必要的觸發
 
   // 根據 followOverrides / currentUser.following 計算是否已追蹤（覆蓋優先）
   const ownerId = getOwnerId(image);

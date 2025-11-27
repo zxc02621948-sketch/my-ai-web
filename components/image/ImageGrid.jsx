@@ -202,7 +202,7 @@ export default function ImageGrid({
                   onLocalLikeChange={onLocalLikeChange}
                   onLikeUpdate={onLikeUpdate}
                   viewMode={viewMode}
-                  isFirstInColumn={imageIndex === 0}
+                  isFirstInColumn={imageIndex < 2} // ✅ 優化：前2張圖片使用eager加載
                 />
               </div>
             ))}

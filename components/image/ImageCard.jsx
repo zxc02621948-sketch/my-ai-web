@@ -160,10 +160,10 @@ export default function ImageCard({
   // - 移動端：顯示尺寸更小，需要更小的圖片尺寸
   // Cloudflare Images 支持通過 variant 或 URL 參數來調整尺寸
   const getOptimizedImageUrl = () => {
-    // 根據設備類型選擇圖片尺寸
+    // 根據設備類型選擇圖片尺寸（縮圖不需要太大，優化加載速度）
     // 移動端使用更小的尺寸以節省帶寬
-    const targetWidth = isMobile ? 300 : 500;  // 移動端 300px，桌面端 500px
-    const targetHeight = isMobile ? 200 : 333; // 移動端 200px，桌面端 333px
+    const targetWidth = isMobile ? 240 : 360;  // 移動端 240px，桌面端 360px（1.5x顯示尺寸）
+    const targetHeight = isMobile ? 160 : 240; // 移動端 160px，桌面端 240px
     
     if (img?.imageUrl) {
       // 如果已有完整 URL，檢查是否為 Cloudflare Images
@@ -175,7 +175,7 @@ export default function ImageCard({
             url.searchParams.set('width', String(targetWidth));
             url.searchParams.set('height', String(targetHeight));
             url.searchParams.set('fit', 'cover');
-            url.searchParams.set('quality', '85');
+            url.searchParams.set('quality', '75'); // 降低質量以加快加載速度
           }
           return url.toString();
         } catch {
