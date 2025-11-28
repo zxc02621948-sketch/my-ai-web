@@ -35,6 +35,12 @@ export default function LoginModal() {
       const response = await axios.post("/api/auth/login", { email, password });
       if (response.status === 200) {
         localStorage.setItem("token", response.data.token);
+        
+        // ✅ 如果有註冊獎勵，將標記存到 sessionStorage，等頁面刷新後再顯示
+        if (response.data.hasRegisterBonus) {
+          sessionStorage.setItem("showRegisterBonus", "true");
+        }
+        
         window.location.reload();
       }
     } catch (err) {

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import Modal from '@/components/common/Modal';
 import Mailcheck from 'mailcheck';
 import { DEFAULT_AVATAR_IDS } from "@/lib/constants";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function RegisterModal({ isOpen, onClose }) {
   const [internalOpen, setIsOpen] = useState(isOpen || false);
@@ -172,6 +173,12 @@ export default function RegisterModal({ isOpen, onClose }) {
         setIsLoading(false);
         return;
       }
+
+      // ✅ 顯示驗證信箱彈窗
+      notify.info(
+        "請驗證您的信箱",
+        "我們已發送驗證信至您的信箱，請點擊信件中的連結完成驗證。\n\n驗證後即可登入使用所有功能！"
+      );
 
       setSuccess(true);
       setTimeout(() => {

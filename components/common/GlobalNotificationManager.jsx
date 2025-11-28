@@ -108,6 +108,81 @@ export default function GlobalNotificationManager() {
   useEffect(() => {
     if (typeof window === "undefined" || !globalNotificationManager) return;
 
+    // ✅ 將註冊獎勵檢查邏輯移到單獨的異步函數中
+    const checkRegisterBonus = async () => {
+      const showRegisterBonus = sessionStorage.getItem("showRegisterBonus");
+      if (showRegisterBonus !== "true") return;
+      
+      sessionStorage.removeItem("showRegisterBonus");
+      
+      // ✅ 檢查用戶是否已經看過這個彈窗（使用 localStorage 持久化記錄）
+      try {
+        // 先嘗試從 token 解析用戶 ID（更快，不需要 API 調用）
+        let userId = null;
+        const token = localStorage.getItem("token");
+        
+        if (token) {
+          try {
+            // JWT token 格式：header.payload.signature
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            userId = payload.id || payload._id;
+          } catch (e) {
+            // Token 解析失敗，嘗試從 API 獲取
+          }
+        }
+        
+        // 如果無法從 token 解析，從 API 獲取當前用戶 ID
+        if (!userId) {
+          try {
+            const userRes = await fetch("/api/current-user", { credentials: "include" });
+            if (userRes.ok) {
+              const userData = await userRes.json();
+              userId = userData?._id || userData?.user?._id;
+            }
+          } catch (e) {
+            // 從 API 獲取失敗，使用 sessionStorage 作為後備方案
+          }
+        }
+        
+        if (userId) {
+          // ✅ 將 userId 轉換為字符串，確保格式一致
+          const userIdStr = String(userId);
+          const bonusShownKey = `registerBonusShown_${userIdStr}`;
+          const hasShown = localStorage.getItem(bonusShownKey);
+          
+          if (!hasShown) {
+            // 第一次顯示，記錄到 localStorage
+            localStorage.setItem(bonusShownKey, "true");
+            globalNotificationManager.success(
+              "🎉 歡迎加入！",
+              "恭喜您成功註冊！我們已為您送上 100 積分作為歡迎禮物。\n\n您可以使用積分在積分商店購買各種功能與道具！"
+            );
+          }
+          // 如果已經顯示過，就不顯示了
+          return;
+        }
+        // 如果無法獲取用戶 ID，使用 sessionStorage 避免同一次會話重複顯示
+        const sessionShown = sessionStorage.getItem("registerBonusShownThisSession");
+        if (!sessionShown) {
+          sessionStorage.setItem("registerBonusShownThisSession", "true");
+          globalNotificationManager.success(
+            "🎉 歡迎加入！",
+            "恭喜您成功註冊！我們已為您送上 100 積分作為歡迎禮物。\n\n您可以使用積分在積分商店購買各種功能與道具！"
+          );
+        }
+      } catch (error) {
+        // 發生錯誤時，使用 sessionStorage 避免同一次會話重複顯示
+        const sessionShown = sessionStorage.getItem("registerBonusShownThisSession");
+        if (!sessionShown) {
+          sessionStorage.setItem("registerBonusShownThisSession", "true");
+          globalNotificationManager.success(
+            "🎉 歡迎加入！",
+            "恭喜您成功註冊！我們已為您送上 100 積分作為歡迎禮物。\n\n您可以使用積分在積分商店購買各種功能與道具！"
+          );
+        }
+      }
+    };
+
     try {
       // 檢查刪除圖片成功的提示
       const deletedNotification = sessionStorage.getItem("imageDeletedSuccess");
@@ -115,6 +190,7 @@ export default function GlobalNotificationManager() {
         const { title, message } = JSON.parse(deletedNotification);
         sessionStorage.removeItem("imageDeletedSuccess");
         globalNotificationManager.success(title, message);
+        checkRegisterBonus(); // 異步執行，不阻塞
         return; // 只顯示一個提示，優先顯示刪除提示
       }
 
@@ -138,6 +214,7 @@ export default function GlobalNotificationManager() {
             autoCloseDelay: 6000 
           });
         }
+        checkRegisterBonus(); // 異步執行，不阻塞
         return;
       }
 
@@ -147,6 +224,7 @@ export default function GlobalNotificationManager() {
         const { title, message } = JSON.parse(purchaseNotification);
         sessionStorage.removeItem("purchaseSuccess");
         globalNotificationManager.success(title, message);
+        checkRegisterBonus(); // 異步執行，不阻塞
         return;
       }
 
@@ -157,6 +235,9 @@ export default function GlobalNotificationManager() {
         sessionStorage.removeItem("actionSuccess");
         globalNotificationManager.success(title, message);
       }
+
+      // ✅ 檢查是否需要顯示註冊獎勵彈窗
+      checkRegisterBonus();
     } catch (err) {
       console.error("讀取保存的提示失敗:", err);
       // 清除可能損壞的數據

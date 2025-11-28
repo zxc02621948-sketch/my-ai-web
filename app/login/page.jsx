@@ -23,8 +23,16 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
-        notify.success("登入成功", "登入成功！");
-        router.push("/"); // ✅ 登入成功後跳轉首頁
+        // ✅ 如果有註冊獎勵，將標記存到 sessionStorage，等頁面刷新後再顯示
+        if (data.hasRegisterBonus) {
+          sessionStorage.setItem("showRegisterBonus", "true");
+        }
+        
+        // 設置 token 並刷新頁面
+        if (typeof window !== "undefined") {
+          localStorage.setItem("token", data.token);
+          window.location.reload();
+        }
       } else {
         // ✅ API 返回的錯誤訊息在 error 欄位，不是 message
         const errorMessage = data.error || data.message || "登入失敗，請稍後再試";

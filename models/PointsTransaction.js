@@ -12,7 +12,8 @@ const PointsTransactionSchema = new mongoose.Schema(
         "discussion_post_cost",      // 發多圖教學帖消耗積分
         "discussion_like_reward",    // 多圖教學帖收到愛心獎勵
         "discussion_claim_reward",   // 提領討論區獎勵積分
-        "playlist_expansion"         // 播放清單擴充
+        "playlist_expansion",        // 播放清單擴充
+        "register_bonus"             // ✅ 註冊獎勵（新用戶註冊贈送100積分）
       ], 
       required: true 
     },

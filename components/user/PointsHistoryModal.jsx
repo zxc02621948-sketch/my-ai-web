@@ -19,6 +19,7 @@ const TYPE_LABEL = {
   discussion_like_reward: "討論區愛心獎勵",
   discussion_claim_reward: "討論區收益提領",
   playlist_expansion: "播放清單擴充",
+  register_bonus: "註冊獎勵", // ✅ 新用戶註冊贈送100積分
 };
 
 const TYPE_COLOR = {
@@ -37,6 +38,7 @@ const TYPE_COLOR = {
   discussion_like_reward: "text-pink-400",
   discussion_claim_reward: "text-green-400",
   playlist_expansion: "text-indigo-400",
+  register_bonus: "text-emerald-300", // ✅ 註冊獎勵使用綠色系
 };
 
 export default function PointsHistoryModal({ isOpen, onClose }) {

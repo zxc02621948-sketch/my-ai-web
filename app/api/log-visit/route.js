@@ -34,18 +34,39 @@ export async function POST(req) {
       });
     }
 
-    // 檢查是否在最近 30 秒內有相同的訪問記錄（避免重複記錄）
+    // ✅ 檢查是否在最近 30 秒內有相同的訪問記錄（避免重複記錄）
+    // 注意：對於不同用戶（userId），即使路徑和 IP 相同，也應該記錄
+    // 對於匿名用戶，使用 IP + UserAgent 組合來識別
     const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
-    const existingVisit = await VisitorLog.findOne({
-      path: path || "/",
-      ip,
-      userAgent,
-      userId,
-      createdAt: { $gte: thirtySecondsAgo }
-    });
+    
+    // 構建查詢條件：已登錄用戶按 userId 匹配，匿名用戶按 IP + UserAgent 匹配
+    let duplicateQuery;
+    if (userId) {
+      // 已登錄用戶：必須匹配 userId、path、ip、userAgent
+      duplicateQuery = {
+        path: path || "/",
+        ip,
+        userAgent,
+        userId: userId,
+        createdAt: { $gte: thirtySecondsAgo }
+      };
+    } else {
+      // 匿名用戶：匹配 userId 為 null 或不存在，且 path、ip、userAgent 相同
+      duplicateQuery = {
+        path: path || "/",
+        ip,
+        userAgent,
+        $or: [
+          { userId: null },
+          { userId: { $exists: false } }
+        ],
+        createdAt: { $gte: thirtySecondsAgo }
+      };
+    }
+    
+    const existingVisit = await VisitorLog.findOne(duplicateQuery);
 
     if (existingVisit) {
-      console.log(`🔄 [LOG-VISIT] 跳過重複訪問記錄: ${path} - IP: ${ip.substring(0, 10)}... - User: ${userId || 'anonymous'} - 時間差: ${Math.round((Date.now() - new Date(existingVisit.createdAt).getTime()) / 1000)}秒`);
       return NextResponse.json({ 
         success: true, 
         visitId: existingVisit.visitId,
@@ -56,15 +77,34 @@ export async function POST(req) {
       });
     }
 
-    // 額外檢查：防止同一 IP 在 5 秒內的任何重複記錄
+    // ✅ 額外檢查：防止同一 IP + UserAgent 在 5 秒內的任何重複記錄（但允許不同用戶）
+    // 這個檢查主要是防止同一個用戶快速刷新頁面
     const fiveSecondsAgo = new Date(Date.now() - 5 * 1000);
-    const recentSameIpVisit = await VisitorLog.findOne({
-      ip,
-      createdAt: { $gte: fiveSecondsAgo }
-    });
+    let recentSameIpQuery;
+    if (userId) {
+      // 已登錄用戶：必須匹配 userId、ip、userAgent
+      recentSameIpQuery = {
+        ip,
+        userAgent,
+        userId: userId,
+        createdAt: { $gte: fiveSecondsAgo }
+      };
+    } else {
+      // 匿名用戶：匹配 userId 為 null 或不存在，且 ip、userAgent 相同
+      recentSameIpQuery = {
+        ip,
+        userAgent,
+        $or: [
+          { userId: null },
+          { userId: { $exists: false } }
+        ],
+        createdAt: { $gte: fiveSecondsAgo }
+      };
+    }
+    
+    const recentSameIpVisit = await VisitorLog.findOne(recentSameIpQuery);
 
     if (recentSameIpVisit) {
-      console.log(`🔄 [LOG-VISIT] 跳過同 IP 短時間重複訪問: ${ip.substring(0, 10)}... - 時間差: ${Math.round((Date.now() - new Date(recentSameIpVisit.createdAt).getTime()) / 1000)}秒`);
       return NextResponse.json({ 
         success: true, 
         visitId: recentSameIpVisit.visitId,
@@ -90,14 +130,15 @@ export async function POST(req) {
 
     await visitorLog.save();
 
-    console.log(`✅ [LOG-VISIT] 訪問記錄成功: ${path} - IP: ${ip.substring(0, 10)}... - User: ${userId || 'anonymous'} - VisitID: ${visitId}`);
-
     return NextResponse.json({ 
       success: true, 
       visitId,
       message: "訪問記錄成功",
       logged: true,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      path: path || "/",
+      userId: userId || null,
+      ip: ip.substring(0, 10) + "..."
     });
 
   } catch (error) {

@@ -19,17 +19,26 @@ export default function useVisitTracking() {
         // 🛡️ 防刷量统计 - 保持原有的严格防重复机制
         const logAntiSpamVisit = async () => {
           try {
-            // 检查是否已经在此会话中记录过访问
-            const sessionKey = `visit_logged_${currentPath}`;
-            const hasLoggedThisSession = sessionStorage.getItem(sessionKey);
+            // ✅ 检查 sessionStorage 是否可用（无痕模式可能不支持）
+            let hasLoggedThisSession = false;
+            let lastLogTime = null;
+            const now = Date.now();
+            
+            try {
+              // 检查是否已经在此会话中记录过访问
+              const sessionKey = `visit_logged_${currentPath}`;
+              hasLoggedThisSession = sessionStorage.getItem(sessionKey);
+              
+              // 检查最近是否刚记录过（防抖机制）
+              lastLogTime = sessionStorage.getItem("last_visit_log_time");
+            } catch (e) {
+              // sessionStorage 不可用（可能是无痕模式），继续执行
+            }
 
             if (hasLoggedThisSession) {
               return { success: true, skipped: true, reason: "session" };
             }
 
-            // 检查最近是否刚记录过（防抖机制）
-            const lastLogTime = sessionStorage.getItem("last_visit_log_time");
-            const now = Date.now();
             if (lastLogTime && now - parseInt(lastLogTime, 10) < 1000) {
               // 1秒内不重复记录
               return { success: true, skipped: true, reason: "debounce" };
@@ -47,12 +56,18 @@ export default function useVisitTracking() {
             });
 
             if (response.ok) {
-              // 标记此会话已记录过访问
-              sessionStorage.setItem(sessionKey, "true");
-              sessionStorage.setItem("last_visit_log_time", now.toString());
+              // ✅ 标记此会话已记录过访问（如果 sessionStorage 可用）
+              try {
+                const sessionKey = `visit_logged_${currentPath}`;
+                sessionStorage.setItem(sessionKey, "true");
+                sessionStorage.setItem("last_visit_log_time", now.toString());
+              } catch (e) {
+                // sessionStorage 不可用，忽略
+              }
               return { success: true, skipped: false };
             } else {
-              throw new Error(`HTTP ${response.status}`);
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(`HTTP ${response.status}: ${errorData.message || errorData.error || 'Unknown error'}`);
             }
           } catch (error) {
             console.warn("🛡️ [防刷量] 访问记录失败:", error);
@@ -63,11 +78,17 @@ export default function useVisitTracking() {
         // 💰 广告收益统计 - 更宽松的防重复机制
         const logAdRevenueVisit = async () => {
           try {
-            // 广告统计只检查很短时间内的重复（避免同一次点击产生多次记录）
-            const adLastLogTime = sessionStorage.getItem(
-              "last_ad_visit_log_time",
-            );
+            // ✅ 检查 sessionStorage 是否可用（无痕模式可能不支持）
+            let adLastLogTime = null;
             const now = Date.now();
+            
+            try {
+              // 广告统计只检查很短时间内的重复（避免同一次点击产生多次记录）
+              adLastLogTime = sessionStorage.getItem("last_ad_visit_log_time");
+            } catch (e) {
+              // sessionStorage 不可用，继续执行
+            }
+            
             if (adLastLogTime && now - parseInt(adLastLogTime, 10) < 200) {
               // 200ms内不重复记录
               return { success: true, skipped: true, reason: "rapid_click" };
@@ -85,10 +106,12 @@ export default function useVisitTracking() {
             });
 
             if (response.ok) {
-              sessionStorage.setItem(
-                "last_ad_visit_log_time",
-                now.toString(),
-              );
+              // ✅ 保存时间戳（如果 sessionStorage 可用）
+              try {
+                sessionStorage.setItem("last_ad_visit_log_time", now.toString());
+              } catch (e) {
+                // sessionStorage 不可用，忽略
+              }
               const result = await response.json();
               return {
                 success: true,
@@ -96,7 +119,8 @@ export default function useVisitTracking() {
                 isDuplicate: result.isDuplicate,
               };
             } else {
-              throw new Error(`HTTP ${response.status}`);
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(`HTTP ${response.status}: ${errorData.message || errorData.error || 'Unknown error'}`);
             }
           } catch (error) {
             console.warn("💰 [广告统计] 访问记录失败:", error);
