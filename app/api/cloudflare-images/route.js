@@ -40,6 +40,8 @@ export async function GET(req) {
         title: img.title,
         imageId: img.imageId,
         imageUrl: img.imageUrl,
+        originalImageId: img.originalImageId || "",
+        originalImageUrl: img.originalImageUrl || "",
         platform: img.platform || "",
         positivePrompt: img.positivePrompt || "",
         negativePrompt: img.negativePrompt || "",
@@ -140,6 +142,8 @@ export async function POST(req) {
       modelRef,
       loraHashes,
       loraRefs,
+      originalImageId,
+      originalImageUrl,
     } = body;
 
     const rawRating = typeof rating === "string" ? rating.trim().toLowerCase() : "";
@@ -248,10 +252,33 @@ export async function POST(req) {
     );
 
     // 先組資料（空值不塞）
+    console.log("💾 保存圖片到數據庫:", {
+      imageId,
+      imageUrl,
+      originalImageId,
+      originalImageUrl,
+      hasOriginalImageUrl: !!originalImageUrl,
+    });
+
+    // ✅ 確保 originalImageUrl 優先使用傳入的值，不要被 imageUrl 覆蓋
+    const finalOriginalImageUrl = originalImageUrl && originalImageUrl.trim() !== "" 
+      ? originalImageUrl 
+      : imageUrl;
+    
+    console.log("💾 最終保存的 originalImageUrl:", {
+      receivedOriginalImageUrl: originalImageUrl,
+      finalOriginalImageUrl,
+      isR2: finalOriginalImageUrl.includes('media.aicreateaworld.com'),
+      imageUrl,
+    });
+
     const doc = {
       title,
       imageId,
       imageUrl,
+      originalImageId: originalImageId || imageId,
+      // ✅ 優先使用 R2 原圖 URL，如果沒有則回退到 Cloudflare Images URL
+      originalImageUrl: finalOriginalImageUrl,
       platform: platform || "",
       positivePrompt: positivePrompt || "",
       negativePrompt: negativePrompt || "",
@@ -295,7 +322,122 @@ export async function POST(req) {
     // 👇 即時計算完整度，讓熱門度立即生效
     doc.completenessScore = computeCompleteness(doc);
 
-    const newImage = await Image.create(doc);
+    // ✅ 驗證保存前的數據
+    console.log("📋 保存前的 doc 對象:", {
+      hasOriginalImageUrl: !!doc.originalImageUrl,
+      originalImageUrl: doc.originalImageUrl,
+      originalImageId: doc.originalImageId,
+      imageUrl: doc.imageUrl,
+      imageId: doc.imageId,
+      docKeys: Object.keys(doc).filter(k => k.includes('original') || k.includes('image')),
+    });
+
+    // ✅ 創建一個深拷貝，確保 originalImageUrl 不會被修改
+    const docToInsert = JSON.parse(JSON.stringify(doc));
+    console.log("📋 準備插入的 docToInsert:", {
+      hasOriginalImageUrl: !!docToInsert.originalImageUrl,
+      originalImageUrl: docToInsert.originalImageUrl,
+      docToInsertKeys: Object.keys(docToInsert).filter(k => k.includes('original') || k.includes('image')),
+    });
+
+    // ✅ 先使用原生 MongoDB 直接插入，確保 originalImageUrl 被保存
+    const insertResult = await Image.collection.insertOne(docToInsert);
+    console.log("📝 原生 MongoDB insertOne 結果:", {
+      insertedId: insertResult.insertedId,
+      acknowledged: insertResult.acknowledged,
+    });
+    
+    // ✅ 驗證插入後的原始文檔
+    const rawDocAfterInsert = await Image.collection.findOne({ _id: insertResult.insertedId });
+    console.log("🔍 插入後原始文檔:", {
+      hasOriginalImageUrl: !!rawDocAfterInsert?.originalImageUrl,
+      originalImageUrl: rawDocAfterInsert?.originalImageUrl,
+      allImageKeys: Object.keys(rawDocAfterInsert || {}).filter(k => k.includes('original') || k.includes('image')),
+    });
+    
+    // ✅ 如果 originalImageUrl 在插入後丟失，立即更新
+    if (!rawDocAfterInsert?.originalImageUrl && finalOriginalImageUrl) {
+      console.log("⚠️ 插入後 originalImageUrl 丟失，立即更新...");
+      const updateResult = await Image.collection.updateOne(
+        { _id: insertResult.insertedId },
+        { $set: { originalImageUrl: finalOriginalImageUrl } }
+      );
+      console.log("📝 更新結果:", {
+        matchedCount: updateResult.matchedCount,
+        modifiedCount: updateResult.modifiedCount,
+        acknowledged: updateResult.acknowledged,
+      });
+    }
+    
+    // ✅ 重新讀取以觸發 Mongoose hooks（計算分數等）
+    const newImage = await Image.findById(insertResult.insertedId);
+    
+    // ✅ 如果 Mongoose 讀取的 originalImageUrl 丟失，從原生 MongoDB 補回
+    if (!newImage.originalImageUrl && finalOriginalImageUrl) {
+      const rawDoc = await Image.collection.findOne({ _id: insertResult.insertedId });
+      if (rawDoc?.originalImageUrl) {
+        newImage.originalImageUrl = rawDoc.originalImageUrl;
+        console.log("🔧 從原生 MongoDB 補回 originalImageUrl 到 Mongoose 文檔:", newImage.originalImageUrl);
+      }
+    }
+    
+    // ✅ 因為使用了 insertOne 繞過了 pre-save hook，需要手動計算 initialBoost 和 popScore
+    const { ensureLikesCount, computePopScore, POP_NEW_BASE_RATIO } = await import("@/utils/score");
+    
+    // 計算 initialBoost（基於當前最高分）
+    const maxPopScore = await Image.findOne({}, { popScore: 1 }).sort({ popScore: -1 }).lean();
+    const maxScore = Number.isFinite(maxPopScore?.popScore) ? maxPopScore.popScore : 0;
+    newImage.initialBoost = Math.max(0, Math.floor(maxScore * POP_NEW_BASE_RATIO));
+    
+    // 確保 likesCount 正確
+    newImage.likesCount = ensureLikesCount(newImage);
+    
+    // 計算 popScore
+    newImage.popScore = computePopScore(newImage);
+    
+    console.log("📊 計算新圖片分數:", {
+      initialBoost: newImage.initialBoost,
+      popScore: newImage.popScore,
+      likesCount: newImage.likesCount,
+      maxScore,
+    });
+    
+    // 保存分數（使用 save 會觸發其他 hooks，但不會重複計算 initialBoost，因為 isNew 已經是 false）
+    await newImage.save();
+    
+    // ✅ 驗證保存後的數據
+    console.log("✅ 圖片已保存到數據庫:", {
+      imageId: newImage._id,
+      savedOriginalImageUrl: newImage.originalImageUrl,
+      savedOriginalImageId: newImage.originalImageId,
+      savedImageUrl: newImage.imageUrl,
+      isR2: newImage.originalImageUrl?.includes('media.aicreateaworld.com'),
+    });
+    
+    // ✅ 如果保存後 originalImageUrl 丟失或與 imageUrl 相同，立即使用原生 MongoDB 更新
+    if ((!newImage.originalImageUrl || newImage.originalImageUrl === newImage.imageUrl) && finalOriginalImageUrl && finalOriginalImageUrl !== newImage.imageUrl) {
+      console.log("⚠️ 檢測到 originalImageUrl 丟失或與 imageUrl 相同，立即更新...");
+      // ✅ 使用原生 MongoDB collection 直接更新，完全繞過 Mongoose
+      const updateResult = await Image.collection.updateOne(
+        { _id: newImage._id },
+        { $set: { originalImageUrl: finalOriginalImageUrl } }
+      );
+      console.log("📝 原生 MongoDB updateOne 結果:", {
+        matchedCount: updateResult.matchedCount,
+        modifiedCount: updateResult.modifiedCount,
+        acknowledged: updateResult.acknowledged,
+      });
+      // ✅ 重新讀取以確認更新成功（使用原生查詢）
+      const rawDoc = await Image.collection.findOne({ _id: newImage._id });
+      console.log("✅ 已更新 originalImageUrl:", {
+        requested: finalOriginalImageUrl,
+        dbValue: rawDoc?.originalImageUrl,
+        dbValueType: typeof rawDoc?.originalImageUrl,
+        isR2: rawDoc?.originalImageUrl?.includes('media.aicreateaworld.com'),
+        matches: rawDoc?.originalImageUrl === finalOriginalImageUrl,
+        allImageKeys: Object.keys(rawDoc || {}).filter(k => k.includes('original') || k.includes('image')),
+      });
+    }
 
     // ✅ 積分：上傳成功入帳 +5（每日上限 20）
     try {

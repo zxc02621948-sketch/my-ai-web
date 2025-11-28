@@ -81,23 +81,32 @@ export default function ImageModal({
 
   // 載入圖片（若只有 id）
   useEffect(() => {
+    // ✅ 如果 imageData 沒有 originalImageUrl，即使有 _id 也要去 API 獲取完整數據
     if (imageData?._id) {
-      setImage(imageData);
-      setLoading(false);
-      setError(null);
-      return;
+      // 如果 imageData 已經有 originalImageUrl，直接使用（避免不必要的 API 調用）
+      if (imageData.originalImageUrl) {
+        setImage(imageData);
+        setLoading(false);
+        setError(null);
+        return;
+      }
+      // 如果沒有 originalImageUrl，去 API 獲取完整數據
+      // 繼續執行下面的 API 調用邏輯
     }
-    if (!imageId) return;
+    if (!imageId && !imageData?._id) return;
 
     let alive = true;
+    let controller = null;
     (async () => {
       setLoading(true);
       try {
         // ✅ 添加超時控制，避免長時間等待
-        const controller = new AbortController();
+        controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超時
         
-        const res = await fetch(`/api/images/${imageId}`, { 
+        // ✅ 使用 imageId 或 imageData._id
+        const targetId = imageId || imageData?._id;
+        const res = await fetch(`/api/images/${targetId}`, { 
           cache: "no-store",
           signal: controller.signal,
         });
@@ -106,16 +115,18 @@ export default function ImageModal({
         const data = await res.json();
         if (!res.ok) throw new Error("找不到該圖片，可能已被刪除");
         if (alive) {
+          console.log("📥 ImageModal 從 API 獲取圖片數據:", {
+            imageId: targetId,
+            hasOriginalImageUrl: !!data.image?.originalImageUrl,
+            originalImageUrl: data.image?.originalImageUrl,
+          });
           setImage(data.image);
           setError(null);
         }
       } catch (err) {
-        if (alive) {
-          if (err.name === 'AbortError') {
-            setError("請求超時，請稍後再試");
-          } else {
-            setError(err.message || "載入失敗");
-          }
+        // ✅ 忽略被取消的請求（AbortError），這是正常的清理行為
+        if (alive && err.name !== 'AbortError') {
+          setError(err.message || "載入失敗");
         }
       } finally {
         if (alive) setLoading(false);
@@ -123,8 +134,12 @@ export default function ImageModal({
     })();
     return () => {
       alive = false;
+      // ✅ 清理時取消正在進行的請求
+      if (controller) {
+        controller.abort();
+      }
     };
-  }, [imageId, imageData]);
+  }, [imageId, imageData?._id]); // ✅ 只依賴 imageId 和 imageData._id，避免對象引用變化導致重複請求
 
   // ✅ 每次「切換到新圖片」時，呼叫一次點擊 API，並把回傳寫回本地 state
   useEffect(() => {

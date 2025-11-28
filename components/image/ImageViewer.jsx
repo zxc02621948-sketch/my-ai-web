@@ -1,7 +1,7 @@
 // components/image/ImageViewer.jsx
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, X } from "lucide-react";
 import { updateLikeCacheAndBroadcast } from "@/lib/likeSync";
@@ -35,6 +35,8 @@ export default function ImageViewer({
   const [startPointer, setStartPointer] = useState({ x: 0, y: 0 });
   const [clicked, setClicked] = useState(false);
   const pinchingRef = useRef(false);
+  const dragDistanceRef = useRef(0); // ✅ 記錄拖曳距離，用於判斷是否為拖曳操作
+  const [useOriginalImage, setUseOriginalImage] = useState(false); // ✅ 智能加载：放大时使用原图
 
   // Prevent gallery-level left/right navigation while typing in inputs/textarea/contenteditable
   useEffect(() => {
@@ -100,30 +102,71 @@ export default function ImageViewer({
   };
 
   const handleClick = useCallback((e) => {
-    if (disableTapZoom) return;
-    if (isDragging || pinchingRef.current) return;
-    if (shouldIgnoreClick(e)) return; // ⬅️ 新增
-    setIsZoomed((z) => !z);
-    setScale((z) => (z > 1 ? 1 : 2));
+    console.log("🖱️ handleClick 被觸發:", {
+      disableTapZoom,
+      isDragging,
+      pinching: pinchingRef.current,
+      dragDistance: dragDistanceRef.current,
+      shouldIgnore: shouldIgnoreClick(e),
+      currentScale: scale,
+      target: e?.target?.tagName,
+    });
+    if (disableTapZoom) {
+      console.log("❌ 點擊被阻止：disableTapZoom");
+      return;
+    }
+    if (isDragging || pinchingRef.current) {
+      console.log("❌ 點擊被阻止：isDragging 或 pinching");
+      return;
+    }
+    // ✅ 如果拖曳距離超過 5px，視為拖曳操作，不觸發縮放
+    if (dragDistanceRef.current > 5) {
+      console.log("❌ 點擊被阻止：拖曳距離過大", dragDistanceRef.current);
+      dragDistanceRef.current = 0; // 重置
+      return;
+    }
+    if (shouldIgnoreClick(e)) {
+      console.log("❌ 點擊被阻止：shouldIgnoreClick");
+      return;
+    }
+    const newScale = scale > 1 ? 1 : 2;
+    console.log("✅ 執行放大/縮小:", { currentScale: scale, newScale });
+    setScale(newScale);
+    setIsZoomed(newScale > 1);
     setPosition({ x: 0, y: 0 });
-  }, [disableTapZoom, isDragging]);
+  }, [disableTapZoom, isDragging, scale]);
 
   const handleMouseDown = useCallback((e) => {
     if (!isZoomed) return;
     setIsDragging(true);
     setStartPointer({ x: e.clientX, y: e.clientY });
     setStartPos(position);
+    dragDistanceRef.current = 0; // ✅ 重置拖曳距離
   }, [isZoomed, position]);
 
   const handleMouseMove = useCallback((e) => {
     if (!isDragging) return;
     const dx = e.clientX - startPointer.x;
     const dy = e.clientY - startPointer.y;
+    // ✅ 計算拖曳距離（用於判斷是否為拖曳操作）
+    dragDistanceRef.current = Math.hypot(dx, dy);
     setPosition((p) => getClampedPos({ x: startPos.x + dx, y: startPos.y + dy }, scale));
   }, [isDragging, startPointer, startPos, scale, getClampedPos]);
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e) => {
+    // ✅ 如果拖曳距離超過 5px，則視為拖曳操作，阻止後續的 click 事件
+    const wasDragging = dragDistanceRef.current > 5;
     setIsDragging(false);
+    
+    // ✅ 如果是拖曳操作，阻止 click 事件
+    if (wasDragging && e) {
+      e.preventDefault();
+      e.stopPropagation();
+      // ✅ 設置一個短暫的標記，防止 click 事件觸發
+      setTimeout(() => {
+        dragDistanceRef.current = 0;
+      }, 100);
+    }
   }, []);
 
   // Basic pinch zoom
@@ -143,6 +186,7 @@ export default function ImageViewer({
       setIsDragging(true);
       setStartPointer({ x: t[0].clientX, y: t[0].clientY });
       setStartPos(position);
+      dragDistanceRef.current = 0; // ✅ 重置拖曳距離
     }
   }, [isZoomed, position, scale]);
 
@@ -157,20 +201,143 @@ export default function ImageViewer({
     } else if (t.length === 1 && isDragging) {
       const dx = t[0].clientX - startPointer.x;
       const dy = t[0].clientY - startPointer.y;
+      // ✅ 計算拖曳距離（用於判斷是否為拖曳操作）
+      dragDistanceRef.current = Math.hypot(dx, dy);
       setPosition((p) => getClampedPos({ x: startPos.x + dx, y: startPos.y + dy }, scale));
     }
   }, [isDragging, startPointer, startPos, scale, getClampedPos]);
 
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((e) => {
+    // ✅ 如果拖曳距離超過 5px，則視為拖曳操作，阻止後續的 click 事件
+    const wasDragging = dragDistanceRef.current > 5;
     pinchingRef.current = false;
     setIsDragging(false);
+    
+    // ✅ 如果是拖曳操作，阻止 click 事件
+    if (wasDragging && e) {
+      e.preventDefault();
+      e.stopPropagation();
+      // ✅ 設置一個短暫的標記，防止 click 事件觸發
+      setTimeout(() => {
+        dragDistanceRef.current = 0;
+      }, 100);
+    }
   }, []);
 
-  if (!image || (!image.imageId && !image.imageUrl)) {
+  // ✅ 優先使用高品質 WebP 格式（畫質高、檔案小），回退到原圖
+  // ✅ 智能加载策略：根据缩放级别选择图片源
+  // - 默认（scale <= 1）：使用 Cloudflare Images WebP（快速加载，文件小）
+  // - 放大时（scale > 1）：使用 R2 原图（最高画质，确保清晰）
+  useEffect(() => {
+    // ✅ 延迟切换，避免在放大过程中立即切换导致图片重新加载
+    const timer = setTimeout(() => {
+      if (scale > 1 && image?.originalImageUrl && image.originalImageUrl.includes('media.aicreateaworld.com')) {
+        setUseOriginalImage(true);
+      } else if (scale <= 1) {
+        setUseOriginalImage(false);
+      }
+    }, 100); // 延迟 100ms，确保放大动画完成后再切换
+    
+    return () => clearTimeout(timer);
+  }, [scale, image?.originalImageUrl]);
+
+  const resolvedImageUrl = useMemo(() => {
+    // ✅ 智能加载：放大时使用 R2 原图（最高画质）
+    // ⚠️ 注意：只在 scale > 1 时才切换，避免在放大过程中触发重新加载
+    if (useOriginalImage && scale > 1 && image?.originalImageUrl && image.originalImageUrl.includes('media.aicreateaworld.com')) {
+      console.log("✅ ImageViewer 使用 R2 原圖（放大時，最高畫質）:", image.originalImageUrl);
+      return image.originalImageUrl;
+    }
+    
+    // ✅ 默认：使用 Cloudflare Images 的 WebP 格式（快速加载，文件小）
+    // 目的：同等畫質檔案更小、載入更快
+    // 策略：使用 Cloudflare Images 從原圖生成的 WebP（quality=100），確保清晰且文件小
+    if (image?.imageId) {
+      try {
+        const url = new URL(`https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`);
+        url.searchParams.set('format', 'webp');
+        url.searchParams.set('quality', '100'); // 最高品質，確保放大後不模糊
+        // 移除可能導致壓縮的參數
+        url.searchParams.delete('width');
+        url.searchParams.delete('height');
+        url.searchParams.delete('fit');
+        console.log("✅ ImageViewer 使用 Cloudflare Images WebP (quality=100，快速加載):", url.toString());
+        return url.toString();
+      } catch {
+        return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`;
+      }
+    }
+    
+    // 回退到 R2 原图（如果没有 imageId）
+    if (image?.originalImageUrl && image.originalImageUrl.includes('media.aicreateaworld.com')) {
+      console.log("✅ ImageViewer 使用 R2 原圖（回退）:", image.originalImageUrl);
+      return image.originalImageUrl;
+    }
+    
+    // 回退到 originalImageUrl（僅當沒有 imageId 時）
+    if (image?.originalImageUrl) {
+      // 如果是 Cloudflare Images URL，轉換為 WebP 格式
+      if (image.originalImageUrl.includes('imagedelivery.net')) {
+        try {
+          const url = new URL(image.originalImageUrl);
+          url.searchParams.set('format', 'webp');
+          url.searchParams.set('quality', '100');
+          // 移除其他壓縮參數，保留最高品質
+          url.searchParams.delete('width');
+          url.searchParams.delete('height');
+          url.searchParams.delete('fit');
+          return url.toString();
+        } catch {
+          return image.originalImageUrl;
+        }
+      }
+      return image.originalImageUrl;
+    }
+    
+    // 最後回退到 imageUrl（Cloudflare Images 壓縮圖）
+    if (image?.imageUrl) {
+      if (image.imageUrl.includes('imagedelivery.net')) {
+        try {
+          const url = new URL(image.imageUrl);
+          url.searchParams.set('format', 'webp');
+          url.searchParams.set('quality', '100');
+          // 移除尺寸限制，保留最高品質
+          url.searchParams.delete('width');
+          url.searchParams.delete('height');
+          url.searchParams.delete('fit');
+          return url.toString();
+        } catch {
+          return image.imageUrl;
+        }
+      }
+      return image.imageUrl;
+    }
+    
+    return null;
+  }, [useOriginalImage, scale, image?.originalImageUrl, image?.imageId, image?.imageUrl]);
+
+  const imageUrl = resolvedImageUrl;
+  
+  if (!image || !imageUrl) {
     return <div className="text-sm text-red-400 bg-neutral-800 p-2 rounded">⚠️ 無法顯示圖片：缺少 imageId 或 imageUrl。</div>;
   }
-
-  const imageUrl = image.imageUrl || `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`;
+  const finalLogData = {
+    timestamp: new Date().toISOString(),
+    imageId: image?._id,
+    finalUrl: imageUrl,
+    hasOriginalImageUrl: !!image?.originalImageUrl,
+    originalImageUrl: image?.originalImageUrl,
+    imageUrl: image?.imageUrl,
+    imageId: image?.imageId,
+  };
+  console.log("🖼️ ImageViewer 最終使用的圖片 URL:", finalLogData);
+  // 保存到 localStorage
+  try {
+    const logs = JSON.parse(localStorage.getItem('imageViewerFinalLogs') || '[]');
+    logs.push(finalLogData);
+    if (logs.length > 10) logs.shift();
+    localStorage.setItem('imageViewerFinalLogs', JSON.stringify(logs));
+  } catch {}
   const combinedTransform = `translate(${position.x}px, ${position.y}px) scale(${scale})`;
 
   return (
@@ -264,9 +431,51 @@ export default function ImageViewer({
           className="rounded select-none object-contain"
           style={{ maxHeight: "calc(var(--app-vh, 1vh) * 100)", maxWidth: "100%" }}
           draggable={false}
+          loading="eager"
+          decoding="async"
           onLoad={() => {
-            computeBaseSize();
-            setPosition((p) => getClampedPos(p, scale));
+            const loadData = {
+              timestamp: new Date().toISOString(),
+              imageId: image?._id,
+              url: imageUrl,
+              naturalWidth: imgRef.current?.naturalWidth,
+              naturalHeight: imgRef.current?.naturalHeight,
+              displayedWidth: imgRef.current?.width,
+              displayedHeight: imgRef.current?.height,
+            };
+            console.log("✅ 圖片載入完成:", loadData);
+            // 保存到 localStorage
+            try {
+              const logs = JSON.parse(localStorage.getItem('imageLoadLogs') || '[]');
+              logs.push(loadData);
+              if (logs.length > 10) logs.shift();
+              localStorage.setItem('imageLoadLogs', JSON.stringify(logs));
+            } catch {}
+            // ✅ 只在初始加载（scale <= 1）时调用 computeBaseSize，避免在放大时重置
+            // ⚠️ 重要：如果当前已经放大（scale > 1），不要重置，只更新位置
+            if (scale <= 1) {
+              console.log("📐 初始載入，重置縮放狀態");
+              computeBaseSize();
+            } else {
+              console.log("🔍 放大狀態，保持縮放，只更新位置");
+              setPosition((p) => getClampedPos(p, scale));
+            }
+          }}
+          onError={(e) => {
+            const errorData = {
+              timestamp: new Date().toISOString(),
+              imageId: image?._id,
+              url: imageUrl,
+              error: e.toString(),
+            };
+            console.error("❌ 圖片載入失敗:", errorData);
+            // 保存到 localStorage
+            try {
+              const logs = JSON.parse(localStorage.getItem('imageErrorLogs') || '[]');
+              logs.push(errorData);
+              if (logs.length > 10) logs.shift();
+              localStorage.setItem('imageErrorLogs', JSON.stringify(logs));
+            } catch {}
           }}
         />
       </div>

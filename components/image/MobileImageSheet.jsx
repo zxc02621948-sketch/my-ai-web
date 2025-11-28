@@ -6,10 +6,67 @@ import ImageInfoBox from "./ImageInfoBox";
 import CommentBox from "./CommentBox";
 import AvatarFrame from "@/components/common/AvatarFrame";
 
-const fileUrlOf = (image) =>
-  image?.imageId
-    ? `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`
-    : image?.imageUrl || "";
+const fileUrlOf = (image) => {
+  if (!image) return "";
+  
+  // ✅ 優先使用高品質 WebP 格式（畫質高、檔案小）
+  // 如果有 imageId，優先使用 Cloudflare Images 的 WebP 格式
+  if (image.imageId) {
+    try {
+      const url = new URL(`https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`);
+      url.searchParams.set('format', 'webp');
+      url.searchParams.set('quality', '90'); // 高品質 WebP
+      return url.toString();
+    } catch {
+      return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public`;
+    }
+  }
+  
+  // 優先使用 originalImageUrl（R2 原圖 URL）
+  if (image.originalImageUrl) {
+    // R2 URL 直接使用（無法轉換為 WebP）
+    if (image.originalImageUrl.includes('media.aicreateaworld.com')) {
+      return image.originalImageUrl;
+    }
+    // Cloudflare Images URL 轉換為 WebP 格式
+    if (image.originalImageUrl.includes('imagedelivery.net')) {
+      try {
+        const url = new URL(image.originalImageUrl);
+        url.searchParams.set('format', 'webp');
+        url.searchParams.set('quality', '90');
+        // 移除尺寸限制，保留高品質
+        url.searchParams.delete('width');
+        url.searchParams.delete('height');
+        url.searchParams.delete('fit');
+        return url.toString();
+      } catch {
+        return image.originalImageUrl;
+      }
+    }
+    return image.originalImageUrl;
+  }
+  
+  // 回退到 imageUrl
+  if (image.imageUrl) {
+    if (image.imageUrl.includes('imagedelivery.net')) {
+      try {
+        const url = new URL(image.imageUrl);
+        url.searchParams.set('format', 'webp');
+        url.searchParams.set('quality', '90');
+        // 移除尺寸限制，保留高品質
+        url.searchParams.delete('width');
+        url.searchParams.delete('height');
+        url.searchParams.delete('fit');
+        return url.toString();
+      } catch {
+        return image.imageUrl;
+      }
+    }
+    return image.imageUrl;
+  }
+  
+  return "";
+};
 
 export default function MobileImageSheet({
   image,

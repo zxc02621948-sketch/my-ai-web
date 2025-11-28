@@ -54,6 +54,8 @@ const ImageSchema = new mongoose.Schema(
     tags: [String],
     imageId: String,
     imageUrl: String,
+    originalImageId: { type: String, default: "" },
+    originalImageUrl: { type: String, default: "" },
     variant: String,
 
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

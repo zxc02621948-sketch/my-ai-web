@@ -23,8 +23,6 @@ export default function UploadStep2({
   setPreview,
   compressionInfo,
   setCompressionInfo,
-  useOriginal,
-  setUseOriginal,
   title,
   setTitle,
   platform,
@@ -724,12 +722,16 @@ export default function UploadStep2({
   }, [compressedImage, setPreview]);
 
   const compressImage = async (originalFile) => {
+    // ✅ 為了確保大圖顯示清晰，不再壓縮圖片
+    // 壓縮圖只用於預覽，實際上傳時使用原圖
+    // 這樣 Cloudflare Images 可以從原圖生成高品質 WebP/AVIF
     const img = new Image();
     img.src = URL.createObjectURL(originalFile);
     img.onload = async () => {
       // 尺寸已在选择文件时读取，这里不再重复设置
       const canvas = document.createElement("canvas");
-      const MAX_WIDTH = 1280;
+      // ✅ 提高最大寬度限制，確保大圖也能保持清晰
+      const MAX_WIDTH = 2560; // 從 1280 提高到 2560
       const scaleSize = Math.min(1, MAX_WIDTH / img.width);
       canvas.width = Math.floor(img.width * scaleSize);
       canvas.height = Math.floor(img.height * scaleSize);
@@ -744,7 +746,7 @@ export default function UploadStep2({
           }
         },
         "image/jpeg",
-        0.85
+        0.95 // ✅ 提高品質從 0.85 到 0.95，確保預覽也清晰
       );
     };
   };
@@ -799,8 +801,7 @@ export default function UploadStep2({
       return;
     }
     
-    // 验证是否有可上传的文件（原图或压缩图）
-    if (!useOriginal && !compressedImage) {
+    if (!compressedImage) {
       notify.warning("提示", "圖片正在壓縮中，請稍候...");
       return;
     }
@@ -886,12 +887,52 @@ export default function UploadStep2({
         console.warn("⚠️ 上傳限制檢查失敗（繼續上傳）：", limitErr);
       }
 
-      // 获取要上传的文件信息
-      const fileToUpload = useOriginal ? imageFile : compressedImage;
+      // ✅ 雙重上傳策略：
+      // 1. 原圖上傳到 R2（用於大圖顯示，不壓縮）
+      // 2. 壓縮圖上傳到 Cloudflare Images（用於列表縮略圖，優化加載速度）
       
-      // ✅ 直接使用服務器端上傳（v1 API）
+      // 步驟 1: 上傳原圖到 R2
+      // ✅ 確保使用原始文件，不是壓縮後的
+      console.log("📤 準備上傳原圖到 R2:", {
+        fileName: imageFile.name,
+        fileSize: imageFile.size,
+        fileType: imageFile.type,
+        isCompressed: !!compressedImage,
+        compressedSize: compressedImage?.size || 0,
+      });
+      
+      const originalFormData = new FormData();
+      originalFormData.append("file", imageFile); // ✅ 使用原始 imageFile，不是 compressedImage
+      
+      const originalRes = await fetch("/api/images/upload-original-r2", {
+        method: "POST",
+        body: originalFormData,
+        credentials: "include",
+      });
+      
+      if (!originalRes.ok) {
+        let originalError;
+        try {
+          originalError = await originalRes.json();
+        } catch {
+          originalError = { message: "原圖上傳失敗" };
+        }
+        throw new Error(originalError.message || "原圖上傳失敗");
+      }
+      
+      const originalData = await originalRes.json();
+      if (!originalData.success || !originalData.originalImageUrl) {
+        throw new Error("原圖上傳失敗：未獲取到原圖 URL");
+      }
+      
+      const uploadedOriginalImageUrl = originalData.originalImageUrl;
+      console.log("✅ R2 原圖上傳成功:", uploadedOriginalImageUrl);
+      
+      // 步驟 2: 上傳到 Cloudflare Images（用於高品質 WebP/AVIF 顯示）
+      // ✅ 使用原圖上傳，讓 Cloudflare Images 負責格式轉換和優化
+      // 這樣可以確保放大後仍然清晰，同時獲得 WebP/AVIF 的文件大小優勢
       const serverFormData = new FormData();
-      serverFormData.append("file", fileToUpload);
+      serverFormData.append("file", imageFile); // ✅ 使用原圖，不是壓縮圖
       
       const serverRes = await fetch("/api/cloudflare-upload", {
         method: "POST",
@@ -903,19 +944,16 @@ export default function UploadStep2({
         try {
           serverError = await serverRes.json();
         } catch (parseError) {
-          // 如果響應不是 JSON，使用狀態文本
           serverError = { 
             message: `服務器錯誤 (${serverRes.status}): ${serverRes.statusText || "未知錯誤"}` 
           };
         }
         
-        // ✅ 特殊處理 429 錯誤（速率限制）
         if (serverRes.status === 429) {
           const errorMessage = serverError.message || "上傳請求過於頻繁，請稍後再試（建議等待 1-2 分鐘後重試）";
           throw new Error(errorMessage);
         }
         
-        // ✅ 優先使用詳細的錯誤訊息
         const errorMessage = serverError.error || serverError.message || "服務器端上傳失敗";
         throw new Error(errorMessage);
       }
@@ -927,6 +965,8 @@ export default function UploadStep2({
       
       imageId = serverData.imageId;
       const imageUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageId}/public`;
+      // ✅ 原圖 URL 來自 R2，壓縮圖 ID 來自 Cloudflare Images
+      const uploadedOriginalImageId = null; // R2 不使用 imageId，使用 URL
 
       // 使用之前聲明的 token（在第840行）
       const decoded = token ? jwtDecode(token) : null;
@@ -961,6 +1001,8 @@ export default function UploadStep2({
         description: description || "",
         tags: tagsArray,
         fileName: imageFile.name,
+        originalImageId: uploadedOriginalImageId || undefined,
+        originalImageUrl: uploadedOriginalImageUrl || undefined,
         likes: 0,
         userId,
         username,
@@ -1039,6 +1081,16 @@ export default function UploadStep2({
         ...(modelRef ? { modelRef } : {}),
         ...(loraRefs.length ? { loraHashes, loraRefs } : {}),
       };
+
+      console.log("📤 準備保存到數據庫:", {
+        imageId,
+        imageUrl,
+        originalImageUrl: uploadedOriginalImageUrl,
+        originalImageId: uploadedOriginalImageId,
+        hasOriginalImageUrl: !!uploadedOriginalImageUrl,
+        metadataOriginalImageUrl: metadata.originalImageUrl,
+        metadataOriginalImageId: metadata.originalImageId,
+      });
 
       const metaRes = await fetch("/api/cloudflare-images", {
         method: "POST",
@@ -1281,24 +1333,17 @@ export default function UploadStep2({
               <div className="text-xs text-zinc-400 space-y-2">
                 <div className="flex items-center justify-between">
                   <span>原始文件: {(imageFile.size / 1024 / 1024).toFixed(2)} MB</span>
-                  {compressedImage && !useOriginal && (
+                  {compressedImage && (
                     <span className="text-emerald-400">
-                      压缩后: {(compressedImage.size / 1024 / 1024).toFixed(2)} MB 
-                      (节省 {(((imageFile.size - compressedImage.size) / imageFile.size) * 100).toFixed(0)}%)
+                      壓縮後: {(compressedImage.size / 1024 / 1024).toFixed(2)} MB 
+                      (節省 {(((imageFile.size - compressedImage.size) / imageFile.size) * 100).toFixed(0)}%)
                     </span>
                   )}
                 </div>
                 
-                {/* 使用原图选项 */}
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={useOriginal}
-                    onChange={(e) => setUseOriginal(e.target.checked)}
-                    className="rounded"
-                  />
-                  <span>上传原图（不压缩，文件会更大但质量更高）</span>
-                </label>
+                <p className="text-zinc-300">
+                  系統會自動壓縮一份用於加速上傳與列表顯示，同時備份原檔；大圖與細節預覽一律使用原圖。
+                </p>
               </div>
             )}
           </div>

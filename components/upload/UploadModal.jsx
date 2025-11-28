@@ -27,7 +27,6 @@ export default function UploadModal() {
   const [negativePrompt, setNegativePrompt] = useState("");
   const [imageFile, setImageFile] = useState(null);
   const [compressedImage, setCompressedImage] = useState(null);
-  const [useOriginal, setUseOriginal] = useState(false);
   const [compressionInfo, setCompressionInfo] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -128,7 +127,6 @@ export default function UploadModal() {
       setNegativePrompt("");
       setImageFile(null);
       setCompressedImage(null);
-      setUseOriginal(false);
       setCompressionInfo(null);
       setIsUploading(false);
       setPreview(null);
@@ -214,8 +212,6 @@ export default function UploadModal() {
                     setImageFile={setImageFile}
                     compressedImage={compressedImage}
                     setCompressedImage={setCompressedImage}
-                    useOriginal={useOriginal}
-                    setUseOriginal={setUseOriginal}
                     compressionInfo={compressionInfo}
                     setCompressionInfo={setCompressionInfo}
                     title={title}

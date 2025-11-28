@@ -372,8 +372,6 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
     }
   };
 
-  const downloadUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${image.imageId}/public?download=true`;
-
   // ======= 生成參數彙整 =======
   const adv = useMemo(
     () => ({
