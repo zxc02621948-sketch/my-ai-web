@@ -4,6 +4,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import Modal from "@/components/common/Modal";
 
 export default function AdminPanel() {
   const [dryRun, setDryRun] = useState(true);
@@ -25,6 +26,13 @@ export default function AdminPanel() {
   // 重置體驗券相關狀態
   const [resetCouponUsername, setResetCouponUsername] = useState("");
   const [resetCouponLoading, setResetCouponLoading] = useState(false);
+  
+  // Prompt 相關狀態
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [promptTitle, setPromptTitle] = useState("");
+  const [promptMessage, setPromptMessage] = useState("");
+  const [promptValue, setPromptValue] = useState("");
+  const [promptResolve, setPromptResolve] = useState(null);
 
   const handleCreateTestUser = async () => {
     const res = await fetch("/api/dev-create-user", {
@@ -144,6 +152,35 @@ export default function AdminPanel() {
     return res;
   };
 
+  // 自定義 prompt 函數
+  const customPrompt = (title, message, defaultValue = "") => {
+    return new Promise((resolve) => {
+      setPromptTitle(title);
+      setPromptMessage(message);
+      setPromptValue(defaultValue);
+      setShowPrompt(true);
+      setPromptResolve(() => resolve);
+    });
+  };
+
+  const handlePromptConfirm = () => {
+    if (promptResolve) {
+      promptResolve(promptValue);
+      setPromptResolve(null);
+    }
+    setShowPrompt(false);
+    setPromptValue("");
+  };
+
+  const handlePromptCancel = () => {
+    if (promptResolve) {
+      promptResolve(null);
+      setPromptResolve(null);
+    }
+    setShowPrompt(false);
+    setPromptValue("");
+  };
+
   const handleRecomputeCompleteness = async () => {
     try {
       setLoading(true);
@@ -151,7 +188,7 @@ export default function AdminPanel() {
 
       let res = await callRecomputeCompleteness();
       if (res.status === 401) {
-        const secret = window.prompt("需要管理密鑰（x-admin-secret）：");
+        const secret = await customPrompt("需要管理密鑰", "請輸入管理密鑰（x-admin-secret）：");
         if (!secret) {
           setLoading(false);
           return;
@@ -198,8 +235,7 @@ export default function AdminPanel() {
 
       let res = await callRecomputePop();
       if (res.status === 401) {
-        // ✅ 修正：這裡原本反引號收尾造成字串未結束
-        const secret = window.prompt("需要管理密鑰（x-admin-secret）：");
+        const secret = await customPrompt("需要管理密鑰", "請輸入管理密鑰（x-admin-secret）：");
         if (!secret) {
           setLoading(false);
           return;
@@ -467,6 +503,46 @@ export default function AdminPanel() {
           )}
         </div>
       )}
+
+      {/* Prompt 彈窗 */}
+      <Modal
+        isOpen={showPrompt}
+        onClose={handlePromptCancel}
+        title={promptTitle}
+      >
+        <div className="space-y-4">
+          <p className="text-gray-300">{promptMessage}</p>
+          <input
+            type="text"
+            value={promptValue}
+            onChange={(e) => setPromptValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handlePromptConfirm();
+              } else if (e.key === "Escape") {
+                handlePromptCancel();
+              }
+            }}
+            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-white"
+            placeholder="請輸入..."
+            autoFocus
+          />
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={handlePromptCancel}
+              className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded transition-colors"
+            >
+              取消
+            </button>
+            <button
+              onClick={handlePromptConfirm}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+            >
+              確定
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

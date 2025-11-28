@@ -93,6 +93,12 @@ export default function ImageModal({
       // 如果沒有 originalImageUrl，去 API 獲取完整數據
       // 繼續執行下面的 API 調用邏輯
     }
+    // ✅ 檢查 imageData 是否為音樂或視頻類型，如果是則不調用圖片 API
+    if (imageData?.type === 'music' || imageData?.type === 'video') {
+      // 音樂和視頻不應該進入 ImageModal，應該由父組件處理
+      return;
+    }
+    
     if (!imageId && !imageData?._id) return;
 
     let alive = true;

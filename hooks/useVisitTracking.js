@@ -16,31 +16,23 @@ export default function useVisitTracking() {
         isLogging = true;
         const currentPath = window.location.pathname;
 
-        // 🛡️ 防刷量统计 - 保持原有的严格防重复机制
+        // 🛡️ 防刷量统计 - 只做短时间防抖，依赖后端30秒防重复机制
         const logAntiSpamVisit = async () => {
           try {
             // ✅ 检查 sessionStorage 是否可用（无痕模式可能不支持）
-            let hasLoggedThisSession = false;
             let lastLogTime = null;
             const now = Date.now();
             
             try {
-              // 检查是否已经在此会话中记录过访问
-              const sessionKey = `visit_logged_${currentPath}`;
-              hasLoggedThisSession = sessionStorage.getItem(sessionKey);
-              
-              // 检查最近是否刚记录过（防抖机制）
+              // ✅ 只检查最近是否刚记录过（防抖机制，1秒内不重复）
+              // 移除永久标记，让后端处理30秒防重复
               lastLogTime = sessionStorage.getItem("last_visit_log_time");
             } catch (e) {
               // sessionStorage 不可用（可能是无痕模式），继续执行
             }
 
-            if (hasLoggedThisSession) {
-              return { success: true, skipped: true, reason: "session" };
-            }
-
             if (lastLogTime && now - parseInt(lastLogTime, 10) < 1000) {
-              // 1秒内不重复记录
+              // 1秒内不重复记录（防止快速连续请求）
               return { success: true, skipped: true, reason: "debounce" };
             }
 
@@ -56,10 +48,9 @@ export default function useVisitTracking() {
             });
 
             if (response.ok) {
-              // ✅ 标记此会话已记录过访问（如果 sessionStorage 可用）
+              // ✅ 只保存时间戳（如果 sessionStorage 可用）
+              // 移除永久标记，让后端处理30秒防重复机制
               try {
-                const sessionKey = `visit_logged_${currentPath}`;
-                sessionStorage.setItem(sessionKey, "true");
                 sessionStorage.setItem("last_visit_log_time", now.toString());
               } catch (e) {
                 // sessionStorage 不可用，忽略

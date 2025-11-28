@@ -36,7 +36,7 @@ export async function GET(req) {
 
     // 查找該用戶收藏的所有音樂，並填充作者資訊
     const items = await Music.find(query)
-      .populate('author', '_id username avatar currentFrame frameSettings')
+      .populate('author', '_id username image currentFrame frameSettings')
       .sort({ createdAt: -1 })
       .lean()
       .exec();

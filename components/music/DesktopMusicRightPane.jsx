@@ -68,17 +68,30 @@ export default function DesktopMusicRightPane({
 
   // 頭像 URL（與 MobileMusicSheet 和 DesktopVideoRightPane 保持一致）
   const avatarUrl = (() => {
-    // 優先使用 music.authorAvatar（音樂上傳時保存的頭像）
-    if (music?.authorAvatar) {
-      return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${music.authorAvatar}/public`;
-    }
-    // 其次使用 music.author.image（從 User 模型 populate 的頭像）
+    // ✅ 優先使用 music.author.image（從 User 模型 populate 的當前頭像，最準確）
     if (typeof music?.author?.image === "string" && music.author.image.trim() !== "") {
       if (music.author.image.startsWith("http")) {
         return music.author.image;
       }
       // 如果是 Cloudflare Images ID，構建 URL
       return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${music.author.image}/avatar`;
+    }
+    // ✅ 兼容性：檢查 author.avatar（舊數據可能使用此字段）
+    if (typeof music?.author?.avatar === "string" && music.author.avatar.trim() !== "") {
+      if (music.author.avatar.startsWith("http")) {
+        return music.author.avatar;
+      }
+      // 如果是 Cloudflare Images ID，構建 URL
+      return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${music.author.avatar}/avatar`;
+    }
+    // 最後使用 music.authorAvatar（音樂上傳時保存的頭像，可能已過時）
+    if (music?.authorAvatar && typeof music.authorAvatar === "string" && music.authorAvatar.trim() !== "") {
+      // 如果已經是完整 URL，直接返回
+      if (music.authorAvatar.startsWith("http")) {
+        return music.authorAvatar;
+      }
+      // 如果是 Cloudflare Images ID，構建 URL
+      return `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${music.authorAvatar}/public`;
     }
     return null;
   })();

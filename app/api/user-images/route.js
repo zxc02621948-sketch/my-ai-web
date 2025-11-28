@@ -27,7 +27,7 @@ export async function GET(req) {
 
     // ✅ 優化：populate user 信息，避免前端重複調用 API
     const items = await Image.find({ user: id })
-      .populate('user', '_id username avatar currentFrame frameSettings')
+      .populate('user', '_id username image currentFrame frameSettings')
       .sort({ createdAt: -1 })
       .lean()
       .exec();

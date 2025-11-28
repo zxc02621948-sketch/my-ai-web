@@ -255,7 +255,7 @@ export async function PATCH(req, { params }) {
     const saved = await Music.findById(id)
       .populate({
         path: "author",
-        select: "_id username avatar currentFrame frameSettings",
+        select: "_id username image currentFrame frameSettings",
       })
       .lean();
 

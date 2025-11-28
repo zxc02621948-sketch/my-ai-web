@@ -10,6 +10,7 @@ import {
   LANGUAGE_MAP,
 } from "@/constants/musicCategories";
 import SelectField from "@/components/common/SelectField";
+import { notify } from "@/components/common/GlobalNotificationManager";
 
 export default function EditMusicModal({
   music,
@@ -109,7 +110,7 @@ export default function EditMusicModal({
         ? `⚠️ 您將音樂分級從「18+」改為「${form.rating === "all" ? "全年齡" : "15+"}」，請確認封面內容符合新的分級規範。\n\n是否繼續保存？`
         : `⚠️ 此音樂分級為「${form.rating === "all" ? "全年齡" : "15+"}」，請確認封面內容符合分級規範。\n\n是否繼續保存？`;
       
-      const confirmed = window.confirm(message);
+      const confirmed = await notify.confirm("分級確認", message);
       if (!confirmed) {
         return;
       }

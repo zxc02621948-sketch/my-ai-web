@@ -133,7 +133,7 @@ export async function GET(request) {
                   $project: {
                     _id: 1,
                     username: 1,
-                    avatar: 1,
+                    image: 1,
                     currentFrame: 1,
                     frameSettings: 1,
                   },
@@ -165,7 +165,7 @@ export async function GET(request) {
                   $project: {
                     _id: 1,
                     username: 1,
-                    avatar: 1,
+                    image: 1,
                     currentFrame: 1,
                     frameSettings: 1,
                   },
@@ -208,7 +208,7 @@ export async function GET(request) {
                   $project: {
                     _id: 1,
                     username: 1,
-                    avatar: 1,
+                    image: 1,
                     currentFrame: 1,
                     frameSettings: 1,
                   },
@@ -240,7 +240,7 @@ export async function GET(request) {
                   $project: {
                     _id: 1,
                     username: 1,
-                    avatar: 1,
+                    image: 1,
                     currentFrame: 1,
                     frameSettings: 1,
                   },
@@ -270,7 +270,7 @@ export async function GET(request) {
                   $project: {
                     _id: 1,
                     username: 1,
-                    avatar: 1,
+                    image: 1,
                     currentFrame: 1,
                     frameSettings: 1,
                   },
@@ -302,7 +302,7 @@ export async function GET(request) {
                   $project: {
                     _id: 1,
                     username: 1,
-                    avatar: 1,
+                    image: 1,
                     currentFrame: 1,
                     frameSettings: 1,
                   },
@@ -360,7 +360,7 @@ export async function GET(request) {
           const docs = await Music.find(match)
             .populate({
               path: "author",
-              select: "_id username avatar currentFrame frameSettings",
+              select: "_id username image currentFrame frameSettings",
             })
             .lean();
 

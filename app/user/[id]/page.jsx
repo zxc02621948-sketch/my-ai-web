@@ -767,8 +767,53 @@ export default function UserProfilePage() {
       return full;
     }
     
-    // 如果是音樂，直接返回（音樂有自己的處理邏輯）
+    // ✅ 如果是音樂，確保作者信息正確
     if (img.type === 'music') {
+      try {
+        // 確保作者信息完整
+        const authorId = typeof full.author === "string" ? full.author : full.author?._id || full.author?.id || full.user?._id || full.user;
+        
+        // ✅ 改進：如果 author 是對象但缺少 image 或 username，也需要補全
+        const needsEnrichment = authorId && (
+          !full.author || 
+          typeof full.author === "string" || 
+          !full.author.username || 
+          (!full.author.image && !full.author.avatar) ||
+          (full.author.image === "" && full.author.avatar === "")
+        );
+        
+        if (needsEnrichment) {
+          const u = await axios.get(`/api/user-info?id=${authorId}`);
+          if (u?.data) {
+            // ✅ 確保使用正確的頭像字段（優先 image，其次 avatar）
+            const userAvatar = u.data.image || u.data.avatar || "";
+            full = { 
+              ...full, 
+              author: {
+                ...u.data,
+                image: userAvatar, // 確保使用 image 字段
+                avatar: userAvatar, // 同時設置 avatar 以保持兼容性
+              },
+              user: u.data, // 保持兼容性
+              authorAvatar: full.authorAvatar || userAvatar, // 確保 authorAvatar 存在
+              authorName: full.authorName || u.data.username // 確保 authorName 存在
+            };
+          }
+        } else if (full.author && typeof full.author === "object") {
+          // ✅ 如果 author 已存在但缺少 image，嘗試從 avatar 獲取
+          if (!full.author.image && full.author.avatar) {
+            full.author.image = full.author.avatar;
+          }
+          // ✅ 確保 authorAvatar 存在（但優先使用 author.image）
+          if (!full.authorAvatar && full.author.image) {
+            full.authorAvatar = full.author.image;
+          } else if (!full.authorAvatar && full.author.avatar) {
+            full.authorAvatar = full.author.avatar;
+          }
+        }
+      } catch (error) {
+        console.error('❌ enrichImage 音樂處理失敗:', error);
+      }
       return full;
     }
     
@@ -989,22 +1034,38 @@ export default function UserProfilePage() {
 
   // 在 filteredImages 陣列中左右移動（切換時也補抓完整欄位）
   const navigateFromSelected = async (dir) => {
-    if (!selectedImage) return;
+    // ✅ 支持从 selectedImage 或 selectedMusic 导航
+    const currentItem = selectedImage || selectedMusic;
+    if (!currentItem) return;
+    
     const list = filteredImages;
-    const idx = list.findIndex((img) => String(img._id) === String(selectedImage._id));
+    const idx = list.findIndex((img) => String(img._id) === String(currentItem._id));
     if (idx < 0) return;
 
     const nextIdx = dir === "next" ? idx + 1 : idx - 1;
     if (nextIdx < 0 || nextIdx >= list.length) return;
 
     const target = list[nextIdx];
+    
+    // ✅ 如果目标是音乐，设置 selectedMusic 并清空 selectedImage
+    if (target.type === 'music') {
+      const enriched = await enrichImage(target);
+      setSelectedMusic(enriched);
+      setSelectedImage(null);
+      return;
+    }
+    
+    // ✅ 如果目标是视频或图片，设置 selectedImage 并清空 selectedMusic
     const enriched = await enrichImage(target);
     setSelectedImage(enriched);
+    setSelectedMusic(null);
   };
 
   // ✅ 計算前/後一張（給手機拖曳預覽）
-  const selectedIndex = selectedImage
-    ? filteredImages.findIndex((img) => String(img._id) === String(selectedImage._id))
+  // ✅ 支持从 selectedImage 或 selectedMusic 计算索引
+  const currentItem = selectedImage || selectedMusic;
+  const selectedIndex = currentItem
+    ? filteredImages.findIndex((img) => String(img._id) === String(currentItem._id))
     : -1;
 
   const prevImage =
@@ -1206,7 +1267,6 @@ export default function UserProfilePage() {
                   setUploadedMusic(prev => prev.filter(m => m._id !== musicId));
                   // 關閉 Modal
                   setSelectedMusic(null);
-                  console.log('✅ 音樂刪除成功');
                 } else {
                   const error = await response.json();
                   console.error('❌ 刪除音樂失敗:', error);
@@ -1302,14 +1362,13 @@ export default function UserProfilePage() {
                     method: 'DELETE',
                   });
 
-                  if (response.ok) {
-                    // 從列表中移除影片
-                    setUploadedVideos(prev => prev.filter(v => v._id !== videoId));
-                    setLikedVideos(prev => prev.filter(v => v._id !== videoId));
-                    // 關閉 Modal
-                    setSelectedImage(null);
-                    console.log('✅ 影片刪除成功');
-                  } else {
+                         if (response.ok) {
+                           // 從列表中移除影片
+                           setUploadedVideos(prev => prev.filter(v => v._id !== videoId));
+                           setLikedVideos(prev => prev.filter(v => v._id !== videoId));
+                           // 關閉 Modal
+                           setSelectedImage(null);
+                         } else {
                     const error = await response.json();
                     console.error('❌ 刪除影片失敗:', error);
                     notify.error('刪除失敗', error.error || '未知錯誤');
