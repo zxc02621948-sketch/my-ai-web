@@ -49,21 +49,27 @@ export async function calculateUserStats(userId) {
     }
 
     // ✅ 計算作品數量：圖片 + 音樂 + 影片
-    const imageCount = await Image.countDocuments({ userId });
+    // 圖片查詢：同時匹配 user (ObjectId) 和 userId (String) 字段，確保兼容性
+    // 確保 userId 使用字符串格式進行查詢
+    const userIdString = validUserId.toString();
+    const imageQuery = { $or: [{ user: validUserId }, { userId: userIdString }, { userId: userId }] };
+    const imageCount = await Image.countDocuments(imageQuery);
     const musicCount = await Music.countDocuments({ author: validUserId });
     const videoCount = await Video.countDocuments({ author: validUserId });
     const worksCount = imageCount + musicCount + videoCount;
 
-    const followersCount = await User.countDocuments({ "following.userId": userId });
-    const user = await User.findById(userId);
+    const followersCount = await User.countDocuments({ "following.userId": userIdString });
+    const user = await User.findById(validUserId);
     const followingCount = user?.following?.length || 0;
     
     // ✅ 獲取所有作品用於計算點讚數
-    const userImages = await Image.find({ userId }, { likes: 1, _id: 1 }).lean();
+    // 圖片查詢：同時匹配 user (ObjectId) 和 userId (String) 字段
+    const userImages = await Image.find(imageQuery, { likes: 1, _id: 1 }).lean();
     const userMusic = await Music.find({ author: validUserId }, { likes: 1, _id: 1 }).lean();
     const userVideos = await Video.find({ author: validUserId }, { likes: 1, _id: 1 }).lean();
     
-    const commentsCount = await Comment.countDocuments({ userId });
+    // Comment 模型的 userId 是 ObjectId，使用 validUserId
+    const commentsCount = await Comment.countDocuments({ userId: validUserId });
 
     // ✅ 計算總點讚數 - 用戶所有作品（圖片、音樂、影片）獲得的點讚總數
     const imageLikes = userImages.reduce((total, image) => {
@@ -77,8 +83,34 @@ export async function calculateUserStats(userId) {
     }, 0);
     const likesCount = imageLikes + musicLikes + videoLikes;
 
-    // 計算收藏數 - 這裡假設收藏就是點讚（根據實際業務邏輯調整）
-    const favoritesCount = likesCount;
+    // ✅ 計算收藏數 - 用戶收藏的作品數（即用戶點讚的作品數）
+    // 查詢所有包含該用戶 ID 的 likes 數組的圖片、音樂、影片
+    // 使用多種格式匹配，確保兼容性
+    const favoritedImagesCount = await Image.countDocuments({
+      $or: [
+        { likes: validUserId },
+        { likes: userId },
+        { likes: userIdString },
+        { likes: validUserId.toString() }
+      ]
+    });
+    const favoritedMusicCount = await Music.countDocuments({
+      $or: [
+        { likes: validUserId },
+        { likes: userId },
+        { likes: userIdString },
+        { likes: validUserId.toString() }
+      ]
+    });
+    const favoritedVideosCount = await Video.countDocuments({
+      $or: [
+        { likes: validUserId },
+        { likes: userId },
+        { likes: userIdString },
+        { likes: validUserId.toString() }
+      ]
+    });
+    const favoritesCount = favoritedImagesCount + favoritedMusicCount + favoritedVideosCount;
 
     // ===== 新增：本月獲得 & 總計獲得積分 =====
     const now = new Date();

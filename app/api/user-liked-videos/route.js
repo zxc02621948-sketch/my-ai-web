@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
 import Video from "@/models/Video";
+import User from "@/models/User";
 import { VIDEO_AUTHOR_FIELDS } from "@/utils/videoQuery";
 
 const noStore = { headers: { "Cache-Control": "no-store" } };
@@ -18,16 +19,39 @@ export async function GET(req) {
     return NextResponse.json({ items: [] }, { status: 200, ...noStore });
   }
 
-  // 安全：ObjectId 格式檢查（格式不對直接回空）
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ items: [] }, { status: 200, ...noStore });
-  }
-
   try {
     await dbConnect();
 
-    // 查找該用戶收藏的所有影片，並填充作者資訊
-    const items = await Video.find({ likes: id })
+    let userId = null;
+
+    // ✅ 支持 ObjectId 和 username 兩種查詢方式
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      // 如果是有效的 ObjectId，直接使用
+      userId = id;
+    } else {
+      // 如果不是 ObjectId，嘗試作為 username 查詢
+      const user = await User.findOne({ username: id }).select('_id').lean();
+      if (user) {
+        userId = user._id.toString();
+      } else {
+        // 找不到用戶，返回空陣列
+        return NextResponse.json({ items: [] }, { status: 200, ...noStore });
+      }
+    }
+
+    if (!userId) {
+      return NextResponse.json({ items: [] }, { status: 200, ...noStore });
+    }
+
+    // ✅ 查詢時同時匹配 ObjectId 和字符串格式的 likes（兼容舊數據）
+    const userIdObjectId = new mongoose.Types.ObjectId(userId);
+
+    // ✅ 使用 $in 查詢數組字段，同時匹配 ObjectId 和字符串格式
+    const items = await Video.find({
+      likes: {
+        $in: [userIdObjectId, userId, userIdObjectId.toString(), userId.toString()]
+      }
+    })
       .populate('author', VIDEO_AUTHOR_FIELDS)
       .sort({ createdAt: -1 })
       .lean()

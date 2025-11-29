@@ -238,7 +238,11 @@ export default function UserProfilePage() {
         setUploadedImages(list);
         console.log("✅ 圖片列表已刷新，新圖片數量:", list.length);
       } catch (err) {
-        if (err.name !== 'AbortError') {
+        const isAbortError = err.name === 'AbortError' || 
+                             err.name === 'DOMException' ||
+                             err.message?.includes('abort') ||
+                             err.message?.includes('Component unmounted');
+        if (!isAbortError) {
           console.warn("[user-images] 刷新失敗:", err);
         }
       }
@@ -683,7 +687,12 @@ export default function UserProfilePage() {
             if (list.length || uploadedImages.length === 0) setUploadedImages(list);
           })
           .catch((err) => {
-            if (err.name !== 'AbortError') {
+            // ✅ 忽略所有取消相關的錯誤（AbortError、DOMException、或包含 abort 消息的錯誤）
+            const isAbortError = err.name === 'AbortError' || 
+                                 err.name === 'DOMException' ||
+                                 err.message?.includes('abort') ||
+                                 err.message?.includes('Component unmounted');
+            if (!isAbortError) {
               console.warn("[user-images] failed:", err);
             }
           });
@@ -695,7 +704,11 @@ export default function UserProfilePage() {
             if (list.length || uploadedVideos.length === 0) setUploadedVideos(list);
           })
           .catch((err) => {
-            if (err.name !== 'AbortError') {
+            const isAbortError = err.name === 'AbortError' || 
+                                 err.name === 'DOMException' ||
+                                 err.message?.includes('abort') ||
+                                 err.message?.includes('Component unmounted');
+            if (!isAbortError) {
               console.warn("[user-videos] failed:", err);
             }
           });
@@ -707,7 +720,11 @@ export default function UserProfilePage() {
             if (list.length || uploadedMusic.length === 0) setUploadedMusic(list);
           })
           .catch((err) => {
-            if (err.name !== 'AbortError') {
+            const isAbortError = err.name === 'AbortError' || 
+                                 err.name === 'DOMException' ||
+                                 err.message?.includes('abort') ||
+                                 err.message?.includes('Component unmounted');
+            if (!isAbortError) {
               console.warn("[user-music] failed:", err);
             }
           });
@@ -721,7 +738,11 @@ export default function UserProfilePage() {
             if (list.length || likedImages.length === 0) setLikedImages(list);
           })
           .catch((err) => {
-            if (err.name !== 'AbortError') {
+            const isAbortError = err.name === 'AbortError' || 
+                                 err.name === 'DOMException' ||
+                                 err.message?.includes('abort') ||
+                                 err.message?.includes('Component unmounted');
+            if (!isAbortError) {
               console.warn("[user-liked-images] failed:", err);
             }
           });
@@ -733,7 +754,11 @@ export default function UserProfilePage() {
             if (list.length || likedVideos.length === 0) setLikedVideos(list);
           })
           .catch((err) => {
-            if (err.name !== 'AbortError') {
+            const isAbortError = err.name === 'AbortError' || 
+                                 err.name === 'DOMException' ||
+                                 err.message?.includes('abort') ||
+                                 err.message?.includes('Component unmounted');
+            if (!isAbortError) {
               console.warn("[user-liked-videos] failed:", err);
             }
           });
@@ -745,7 +770,11 @@ export default function UserProfilePage() {
             if (list.length || likedMusic.length === 0) setLikedMusic(list);
           })
           .catch((err) => {
-            if (err.name !== 'AbortError') {
+            const isAbortError = err.name === 'AbortError' || 
+                                 err.name === 'DOMException' ||
+                                 err.message?.includes('abort') ||
+                                 err.message?.includes('Component unmounted');
+            if (!isAbortError) {
               console.warn("[user-liked-music] failed:", err);
             }
           });
