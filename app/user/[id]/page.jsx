@@ -207,6 +207,47 @@ export default function UserProfilePage() {
     return () => window.removeEventListener("image-updated", onImageUpdated);
   }, []);
 
+  // 🔔 監聽圖片上傳成功事件，刷新個人頁面的圖片列表
+  useEffect(() => {
+    const onImageUploaded = async (e) => {
+      const { userId: uploadedUserId, imageId: uploadedImageId } = e.detail || {};
+      if (!uploadedUserId || !uploadedImageId) return;
+
+      // ✅ 檢查是否為當前用戶的個人頁面
+      const currentUserId = id;
+      const isMatch = String(uploadedUserId) === String(currentUserId) || 
+                     (userData && String(uploadedUserId) === String(userData._id));
+      
+      if (!isMatch) return;
+
+      console.log("✅ 檢測到新上傳的圖片，刷新列表:", { uploadedUserId, uploadedImageId, currentUserId });
+
+      // ✅ 重新加載圖片列表
+      try {
+        const getJSON = async (url) => {
+          const r = await fetch(url, { cache: "no-store" });
+          if (!r.ok) {
+            const text = await r.text().catch(() => "");
+            throw new Error(`${url} -> HTTP ${r.status}${text ? ` | ${text.slice(0, 160)}` : ""}`);
+          }
+          return r.json();
+        };
+
+        const val = await getJSON(`/api/user-images?id=${currentUserId}`);
+        const list = pickList(val);
+        setUploadedImages(list);
+        console.log("✅ 圖片列表已刷新，新圖片數量:", list.length);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.warn("[user-images] 刷新失敗:", err);
+        }
+      }
+    };
+
+    window.addEventListener("image-uploaded", onImageUploaded);
+    return () => window.removeEventListener("image-uploaded", onImageUploaded);
+  }, [id, userData]);
+
   const isOwnProfile =
     currentUser && (currentUser._id === id || currentUser.id === id || currentUser.username === id);
 
@@ -992,8 +1033,15 @@ export default function UserProfilePage() {
         else if (rating === 'nsfw') rating = '18';
       }
       
-      const matchLevel =
-        selectedRatings.length === 0 ? rating !== "18" : selectedRatings.includes(rating);
+      // ✅ 個人頁面：如果選擇了所有分級，或沒有明確選擇過濾器，顯示所有內容
+      // 否則應用過濾器（用戶明確選擇了特定分級時）
+      const allPossibleRatings = ["all", "15", "18"];
+      const hasAllRatingsSelected = allPossibleRatings.every(r => selectedRatings.includes(r));
+      
+      // 如果選擇了所有分級，就顯示所有內容；否則應用過濾器
+      const matchLevel = hasAllRatingsSelected
+        ? true  // 選擇了所有分級，顯示所有內容（包括18+）
+        : selectedRatings.includes(rating);  // 有明確選擇過濾器時，只顯示符合的內容
 
       // ✅ 支援多分類篩選：檢查 categories 陣列中是否有任何一個在 categoryFilters 中
       const itemCategories = Array.isArray(item.categories) && item.categories.length > 0

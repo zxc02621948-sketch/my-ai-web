@@ -1098,32 +1098,41 @@ export default function UploadStep2({
         headers: { "Content-Type": "application/json" },
       });
       
+      // ✅ 解析響應數據
+      let metaResData = null;
       if (!metaRes.ok) {
-        let errorData;
         try {
-          errorData = await metaRes.json();
+          metaResData = await metaRes.json();
         } catch (parseError) {
-          errorData = { message: `HTTP ${metaRes.status}: ${metaRes.statusText}` };
+          metaResData = { message: `HTTP ${metaRes.status}: ${metaRes.statusText}` };
         }
         
         // ✅ 記錄詳細的錯誤信息（用於調試）
         console.error("❌ Metadata API 失敗：", {
           status: metaRes.status,
           statusText: metaRes.statusText,
-          errorData
+          errorData: metaResData
         });
         
         // ✅ 特殊處理 429 錯誤（每日上傳限制）
         if (metaRes.status === 429) {
-          const errorMessage = errorData.message || "今日上傳限制已達上限，請明天再試";
+          const errorMessage = metaResData.message || "今日上傳限制已達上限，請明天再試";
           // ✅ 圖片已經上傳到 Cloudflare，但 metadata 保存失敗，需要清理
           console.warn("⚠️ 圖片已上傳但 metadata 保存失敗（429），將清理已上傳的圖片");
           throw new Error(errorMessage);
         }
         
         // ✅ 其他錯誤
-        const errorMessage = errorData.message || `Metadata API failed (${metaRes.status})`;
+        const errorMessage = metaResData.message || `Metadata API failed (${metaRes.status})`;
         throw new Error(errorMessage);
+      } else {
+        // ✅ 成功時解析響應
+        try {
+          metaResData = await metaRes.json();
+        } catch (parseError) {
+          console.warn("⚠️ 解析成功響應失敗:", parseError);
+          metaResData = { insertedId: imageId };
+        }
       }
 
       // ✅ 上傳成功提示（根據元數據質量顯示結果）
@@ -1155,9 +1164,39 @@ export default function UploadStep2({
         notify.success("上傳成功", successBody, { autoClose: true, autoCloseDelay: 6000 });
       }
 
+      // ✅ 觸發圖片上傳成功事件，讓個人頁面可以刷新列表
+      if (typeof window !== "undefined" && userId) {
+        try {
+          const insertedId = metaResData?.insertedId || imageId;
+          
+          window.dispatchEvent(new CustomEvent("image-uploaded", {
+            detail: {
+              userId: userId,
+              imageId: insertedId,
+              image: {
+                _id: insertedId,
+                imageId: imageId,
+                imageUrl: imageUrl,
+                title: title?.trim() || "",
+                userId: userId,
+                user: userId,
+                createdAt: new Date().toISOString(),
+              }
+            }
+          }));
+          console.log("✅ 已觸發 image-uploaded 事件:", { userId, imageId: insertedId });
+        } catch (e) {
+          console.warn("⚠️ 觸發 image-uploaded 事件失敗:", e);
+        }
+      }
+
       setStep(1);
       onClose?.();
-      location.reload();
+      
+      // ✅ 延遲刷新，讓事件先處理（如果事件處理成功，可能不需要完整刷新）
+      setTimeout(() => {
+        location.reload();
+      }, 100);
     } catch (err) {
       console.error("❌ 上傳失敗：", {
         error: err.message,

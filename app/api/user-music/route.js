@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { dbConnect } from "@/lib/db";
 import Music from "@/models/Music";
+import User from "@/models/User";
 import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
 
 const noStore = { headers: { "Cache-Control": "no-store" } };
@@ -18,18 +19,34 @@ export async function GET(req) {
     return NextResponse.json({ items: [] }, { status: 200, ...noStore });
   }
 
-  // 安全：ObjectId 格式檢查（格式不對直接回空）
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ items: [] }, { status: 200, ...noStore });
-  }
-
   try {
     const viewer = await getCurrentUserFromRequest(req);
 
     await dbConnect();
 
-    const query = { author: id };
-    const isOwner = viewer && String(viewer._id) === String(id);
+    let userId = null;
+
+    // ✅ 支持 ObjectId 和 username 兩種查詢方式
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      // 如果是有效的 ObjectId，直接使用
+      userId = id;
+    } else {
+      // 如果不是 ObjectId，嘗試作為 username 查詢
+      const user = await User.findOne({ username: id }).select('_id').lean();
+      if (user) {
+        userId = user._id.toString();
+      } else {
+        // 找不到用戶，返回空陣列
+        return NextResponse.json({ items: [] }, { status: 200, ...noStore });
+      }
+    }
+
+    if (!userId) {
+      return NextResponse.json({ items: [] }, { status: 200, ...noStore });
+    }
+
+    const query = { author: userId };
+    const isOwner = viewer && String(viewer._id) === String(userId);
     if (!isOwner) {
       query.isPublic = true;
     }

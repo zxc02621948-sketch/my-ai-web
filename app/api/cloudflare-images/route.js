@@ -301,7 +301,10 @@ export async function POST(req) {
       height: height ?? null,
       modelHash: modelHash || "",
       userId,
-      user: userId,
+      // ✅ 確保 user 字段是 ObjectId 類型，用於正確的查詢和 populate
+      user: userId && mongoose.Types.ObjectId.isValid(userId) 
+        ? new mongoose.Types.ObjectId(userId) 
+        : userId,
       username: username || "", // 若 schema 有支援就能存
       hasMetadata, // ✅ 自動標記
 
@@ -333,11 +336,21 @@ export async function POST(req) {
     });
 
     // ✅ 創建一個深拷貝，確保 originalImageUrl 不會被修改
+    // 注意：JSON.parse(JSON.stringify()) 會丟失 ObjectId 類型，所以需要手動處理 user 字段
     const docToInsert = JSON.parse(JSON.stringify(doc));
+    
+    // ✅ 確保 user 字段是 ObjectId 類型（JSON 序列化後會變成字符串）
+    if (docToInsert.user && mongoose.Types.ObjectId.isValid(docToInsert.user)) {
+      docToInsert.user = new mongoose.Types.ObjectId(docToInsert.user);
+    }
+    
     console.log("📋 準備插入的 docToInsert:", {
       hasOriginalImageUrl: !!docToInsert.originalImageUrl,
       originalImageUrl: docToInsert.originalImageUrl,
-      docToInsertKeys: Object.keys(docToInsert).filter(k => k.includes('original') || k.includes('image')),
+      userId: docToInsert.userId,
+      userType: typeof docToInsert.user,
+      userIsObjectId: docToInsert.user instanceof mongoose.Types.ObjectId,
+      docToInsertKeys: Object.keys(docToInsert).filter(k => k.includes('original') || k.includes('image') || k.includes('user')),
     });
 
     // ✅ 先使用原生 MongoDB 直接插入，確保 originalImageUrl 被保存
