@@ -74,6 +74,8 @@ export default function usePinnedPlayerBootstrap({
 } = {}) {
   const lastAppliedRef = useRef(null);
   const lastShufflePreferenceRef = useRef(null);
+  const bootstrapExecutedRef = useRef(false); // 追踪是否已執行過 bootstrap，避免重複執行
+  const lastPinnedSignatureRef = useRef(null); // 追踪上次的 pinned 簽名，避免重複執行
   const pathname = usePathname();
   
   // ✅ 檢查當前是否在用戶頁面（用戶頁面會自己管理播放器啟用狀態）
@@ -122,13 +124,16 @@ export default function usePinnedPlayerBootstrap({
         lastAppliedRef.current = signature;
       }
 
-      player.setPlayerOwner?.({
+      // ✅ 構建 playerOwner 對象，確保結構一致
+      const playerOwnerObj = {
         userId: pinned.userId,
         username: pinned.username,
-        ...(typeof pinned.allowShuffle === "boolean"
-          ? { allowShuffle: pinned.allowShuffle }
-          : {}),
-      });
+      };
+      if (typeof pinned.allowShuffle === "boolean") {
+        playerOwnerObj.allowShuffle = pinned.allowShuffle;
+      }
+      
+      player.setPlayerOwner?.(playerOwnerObj);
       player.setPinnedOwnerInfo?.({
         userId: pinned.userId,
         allowShuffle: pinned.allowShuffle,
@@ -229,23 +234,34 @@ export default function usePinnedPlayerBootstrap({
     }
     if (currentUser === null) {
       clearPinnedPlayerCache();
+      bootstrapExecutedRef.current = false; // 重置標記
       return;
     }
+    
+    // ✅ 如果已經執行過 bootstrap，不再重複執行（避免無限循環）
+    if (bootstrapExecutedRef.current) {
+      return;
+    }
+    
     try {
       const cached = readPinnedPlayerCache();
       if (!cached) {
+        bootstrapExecutedRef.current = true; // 標記為已執行
         return;
       }
       if (!isPinnedActive(cached)) {
         clearPinnedPlayerCache();
+        bootstrapExecutedRef.current = true; // 標記為已執行
         return;
       }
+      bootstrapExecutedRef.current = true; // 標記為已執行
       applyPinnedState(cached);
     } catch (error) {
       debugLog("failed to bootstrap from cache", error);
       clearPinnedPlayerCache();
+      bootstrapExecutedRef.current = false; // 執行失敗時重置，允許重試
     }
-  }, [applyPinnedState, player, currentUser]);
+  }, [applyPinnedState, player, currentUser?._id]); // ✅ 只依賴關鍵字段，避免 currentUser 對象引用變化
 
   useEffect(() => {
     if (currentUser === undefined || !player) {
@@ -255,6 +271,16 @@ export default function usePinnedPlayerBootstrap({
     const rawPinned =
       currentUser?.user?.pinnedPlayer || currentUser?.pinnedPlayer;
     const normalized = normalizePinned(rawPinned);
+    
+    // ✅ 生成簽名來檢查是否與上次相同，避免重複執行
+    const pinnedSignature = normalized 
+      ? `${normalized.userId}-${normalized.expiresAt || ''}-${normalized.allowShuffle || ''}`
+      : 'no-pinned';
+    
+    if (lastPinnedSignatureRef.current === pinnedSignature) {
+      return; // 如果與上次相同，不重複執行
+    }
+    lastPinnedSignatureRef.current = pinnedSignature;
 
     if (isPinnedActive(normalized)) {
       debugLog("init pinned", normalized?.userId);
@@ -271,6 +297,6 @@ export default function usePinnedPlayerBootstrap({
       lastShufflePreferenceRef.current = null;
       player.setPinnedOwnerInfo?.(null);
     }
-  }, [applyPinnedState, currentUser, disableOnUnpinned, player, shareMode, isUserPage]);
+  }, [applyPinnedState, currentUser?.pinnedPlayer?.userId, currentUser?.pinnedPlayer?.expiresAt, currentUser?.pinnedPlayer?.allowShuffle, disableOnUnpinned, player, shareMode, isUserPage]); // ✅ 只依賴關鍵字段，避免 currentUser 對象引用變化
 }
 

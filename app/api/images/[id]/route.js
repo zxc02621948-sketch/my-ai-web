@@ -27,7 +27,6 @@ export const GET = withErrorHandling(async (_req, ctx) => {
     const rawDoc = await Image.collection.findOne({ _id: doc._id });
     if (rawDoc?.originalImageUrl) {
       doc.originalImageUrl = rawDoc.originalImageUrl;
-      console.log("🔧 從原生 MongoDB 補回 originalImageUrl:", doc.originalImageUrl);
     }
   }
 
@@ -48,15 +47,6 @@ export const GET = withErrorHandling(async (_req, ctx) => {
   const originalImageId = (doc.originalImageId && doc.originalImageId.trim() !== "" && doc.originalImageId !== doc.imageId)
     ? doc.originalImageId 
     : (doc.imageId || "");
-
-  console.log("📥 從數據庫讀取圖片:", {
-    imageId: doc._id,
-    dbOriginalImageUrl: doc.originalImageUrl,
-    dbImageUrl: doc.imageUrl,
-    finalOriginalImageUrl: originalImageUrl,
-    isR2: originalImageUrl.includes('media.aicreateaworld.com'),
-    isSameAsImageUrl: doc.originalImageUrl === doc.imageUrl,
-  });
 
   const normalized = {
     ...doc,
@@ -81,12 +71,6 @@ export const GET = withErrorHandling(async (_req, ctx) => {
   if (!sanitized.originalImageId) {
     sanitized.originalImageId = normalized.originalImageId;
   }
-
-  console.log("📤 返回圖片數據:", {
-    imageId: sanitized._id,
-    hasOriginalImageUrl: !!sanitized.originalImageUrl,
-    originalImageUrl: sanitized.originalImageUrl,
-  });
 
   return apiSuccess({ image: sanitized, isOwner, canEdit });
 });

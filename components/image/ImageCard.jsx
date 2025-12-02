@@ -165,11 +165,14 @@ export default function ImageCard({
     const targetWidth = isMobile ? 240 : 360;  // 移動端 240px，桌面端 360px（1.5x顯示尺寸）
     const targetHeight = isMobile ? 160 : 240; // 移動端 160px，桌面端 240px
     
-    if (img?.imageUrl) {
+    // ✅ 優先使用 imageUrl，然後是 originalImageUrl，最後是 imageId
+    const urlToProcess = img?.imageUrl || img?.originalImageUrl;
+    
+    if (urlToProcess) {
       // 如果已有完整 URL，檢查是否為 Cloudflare Images
-      if (img.imageUrl.includes('imagedelivery.net')) {
+      if (urlToProcess.includes('imagedelivery.net')) {
         try {
-          const url = new URL(img.imageUrl);
+          const url = new URL(urlToProcess);
           // 嘗試添加尺寸參數（2x 顯示尺寸以支持高 DPI 屏幕）
           if (!url.searchParams.has('width')) {
             url.searchParams.set('width', String(targetWidth));
@@ -179,26 +182,30 @@ export default function ImageCard({
           }
           return url.toString();
         } catch {
-          return img.imageUrl;
+          return urlToProcess;
         }
       }
-      return img.imageUrl;
+      return urlToProcess;
     }
-    if (img?.imageId) {
+    
+    // ✅ 如果沒有 imageUrl 或 originalImageUrl，嘗試使用 imageId 或 originalImageId
+    const imageIdToUse = img?.imageId || img?.originalImageId;
+    if (imageIdToUse) {
       // 構建 Cloudflare Images URL
-      const baseUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${img.imageId}/${img?.variant || "public"}`;
+      const baseUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageIdToUse}/${img?.variant || "public"}`;
       try {
         const url = new URL(baseUrl);
         // 嘗試添加尺寸參數
         url.searchParams.set('width', String(targetWidth));
         url.searchParams.set('height', String(targetHeight));
         url.searchParams.set('fit', 'cover');
-        url.searchParams.set('quality', '85');
+        url.searchParams.set('quality', '75'); // ✅ 統一使用 75% 質量
         return url.toString();
       } catch {
         return baseUrl;
       }
     }
+    
     return "/default-image.svg";
   };
 

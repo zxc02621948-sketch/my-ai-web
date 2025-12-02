@@ -315,7 +315,7 @@ export default function UserPlayerPage() {
     return () => {
       abortController.abort("Component unmounted or dependencies changed");
     };
-  }, [id, currentUser?.pinnedPlayer, applyShufflePreference, setShuffleAllowed]);
+  }, [id, currentUser?.pinnedPlayer?.userId, currentUser?.pinnedPlayer?.expiresAt, applyShufflePreference, setShuffleAllowed]); // ✅ 只依賴關鍵字段，避免對象引用變化導致重複執行
 
     // 監聽播放狀態變化事件
     useEffect(() => {

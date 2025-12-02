@@ -27,13 +27,13 @@ export async function GET() {
     ];
 
     // 獲取最新的公開圖片（限制數量避免 sitemap 過大）
-    const recentImages = await Image.find({ rating: { $ne: "18+" }, isPublic: { $ne: false } })
+    const recentImages = await Image.find({ rating: { $ne: "18" }, isPublic: { $ne: false } })
       .select("_id updatedAt createdAt")
       .sort({ createdAt: -1 })
       .limit(1000)
       .lean();
 
-    // 獲取最新的公開視頻
+    // 獲取最新的公開視頻（18+ 仍會存在，但 metadata 會標記為 noindex）
     const recentVideos = await Video.find({ isPublic: true })
       .select("_id updatedAt createdAt")
       .sort({ createdAt: -1 })
@@ -61,17 +61,20 @@ export async function GET() {
       .limit(500)
       .lean();
 
-    // 獲取討論貼文（假設你有討論模型）
-    // 如果沒有可以註釋掉
+    // 獲取討論貼文
     let discussionPosts = [];
     try {
-      const DiscussionPost = (await import("@/models/Comment")).default;
-      discussionPosts = await DiscussionPost.find({ isDiscussionPost: true })
-        .select("_id updatedAt")
+      const DiscussionPost = (await import("@/models/DiscussionPost")).default;
+      // 只包含非 18+ 的公開文章
+      discussionPosts = await DiscussionPost.find({ 
+        rating: { $ne: "18" } 
+      })
+        .select("_id updatedAt createdAt")
         .sort({ createdAt: -1 })
-        .limit(500)
+        .limit(1000)
         .lean();
     } catch (e) {
+      console.error("獲取討論貼文失敗:", e);
       // 如果沒有討論模型，忽略錯誤
     }
 
@@ -90,7 +93,7 @@ ${staticPages
 ${recentImages
   .map(
     (img) => `  <url>
-    <loc>${BASE_URL}/?image=${img._id}</loc>
+    <loc>${BASE_URL}/images/${img._id}</loc>
     <lastmod>${new Date(img.updatedAt || img.createdAt || Date.now()).toISOString()}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
@@ -100,7 +103,7 @@ ${recentImages
 ${recentVideos
   .map(
     (video) => `  <url>
-    <loc>${BASE_URL}/videos?video=${video._id}</loc>
+    <loc>${BASE_URL}/videos/${video._id}</loc>
     <lastmod>${new Date(video.updatedAt || video.createdAt || Date.now()).toISOString()}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
@@ -110,7 +113,7 @@ ${recentVideos
 ${recentMusic
   .map(
     (music) => `  <url>
-    <loc>${BASE_URL}/music?music=${music._id}</loc>
+    <loc>${BASE_URL}/music/${music._id}</loc>
     <lastmod>${new Date(music.updatedAt || music.createdAt || Date.now()).toISOString()}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>

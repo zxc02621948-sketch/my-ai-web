@@ -1,7 +1,7 @@
 // components/user/UserHeader.jsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import axios from "axios";
@@ -40,8 +40,10 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
   // 使用 Context 獲取訂閱狀態
   const { hasValidSubscription } = useCurrentUser();
   const router = useRouter();
-  const isOwnProfile =
-    !!currentUser && !!userData && String(currentUser._id) === String(userData._id);
+  // ✅ 使用 useMemo 穩定 isOwnProfile 值，避免每次渲染都重新計算
+  const isOwnProfile = useMemo(() => {
+    return !!currentUser && !!userData && String(currentUser._id) === String(userData._id);
+  }, [currentUser?._id, userData?._id]);
 
   // ====== 頭像 / 追蹤狀態 ======
   const [isFollowing, setIsFollowing] = useState(false);
@@ -50,6 +52,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
   // ====== 權力券數量 ======
   const [couponCount, setCouponCount] = useState(0);
   const [isCouponGuideOpen, setIsCouponGuideOpen] = useState(false);
+  const couponCountLoadedRef = useRef(false); // 追踪是否已載入，避免重複請求
 
   // ====== 統計數據狀態 ======
   const [userStats, setUserStats] = useState({
@@ -196,7 +199,15 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       // ====== 獲取加成券數量（僅自己的個人頁） ======
   useEffect(() => {
     const fetchCouponCount = async () => {
-      if (!isOwnProfile) return;
+      if (!isOwnProfile) {
+        couponCountLoadedRef.current = false; // 如果不是自己的頁面，重置標記
+        return;
+      }
+      
+      // ✅ 如果已經載入過，不再重複請求
+      if (couponCountLoadedRef.current) return;
+      
+      couponCountLoadedRef.current = true;
       
       try {
         const res = await axios.get('/api/power-coupon/user-coupons', {
@@ -208,6 +219,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
         }
       } catch (error) {
         console.error('獲取加成券數量失敗:', error);
+        couponCountLoadedRef.current = false; // 載入失敗時重置，允許重試
       }
     };
 

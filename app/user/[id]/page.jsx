@@ -64,11 +64,13 @@ export default function UserProfilePage() {
   const [pinnedPlayerData, setPinnedPlayerData] = useState(null);
   const playlistLoadedRef = useRef(null); // 追踪已載入的播放清單，避免重複載入
   const lastPageIdRef = useRef(id); // 追踪上次訪問的頁面 ID
+  const pinnedPlaylistLoadedRef = useRef(null); // 追踪已載入的釘選播放清單，避免重複載入
 
   // ✅ 當頁面 ID 改變時，清除播放清單載入標記
   useEffect(() => {
     if (lastPageIdRef.current !== id) {
       playlistLoadedRef.current = null;
+      pinnedPlaylistLoadedRef.current = null; // 同時清除釘選播放清單載入標記
       lastPageIdRef.current = id;
     }
   }, [id]);
@@ -269,6 +271,83 @@ export default function UserProfilePage() {
       }
     }
   }, [currentUser]);
+
+  // ✅ 當 currentUser 加載完成後，檢查並載入釘選播放清單（解決刷新後 currentUser 未加載導致的問題）
+  useEffect(() => {
+    if (!currentUser || currentUser === undefined) return;
+    if (!id || id === "undefined") return;
+    
+    const pinned = currentUser.pinnedPlayer;
+    if (!pinned?.userId) return;
+    
+    // 檢查是否過期
+    const now = new Date();
+    if (pinned.expiresAt && new Date(pinned.expiresAt) <= now) return;
+    
+    const pinnedUserIdStr = pinned.userId?.toString() || '';
+    const currentPageIdStr = String(id || '');
+    
+    // 如果釘選的不是當前頁面，且還沒有載入過，才載入釘選用戶的播放清單
+    if (pinnedUserIdStr && pinnedUserIdStr !== currentPageIdStr) {
+      // ✅ 檢查是否已經載入過（避免重複載入）
+      const loadKey = `${pinnedUserIdStr}-${currentPageIdStr}`;
+      if (pinnedPlaylistLoadedRef.current === loadKey) return;
+      
+      pinnedPlaylistLoadedRef.current = loadKey;
+      
+      const loadPinnedPlaylist = async () => {
+        try {
+          const response = await fetch(`/api/user-info?id=${encodeURIComponent(pinnedUserIdStr)}`, { cache: "no-store" });
+          if (!response.ok) return;
+          
+          const userInfo = await response.json();
+          const pinnedPicked = pickUser(userInfo);
+          const pinnedPlaylist = Array.isArray(pinnedPicked?.playlist) && pinnedPicked.playlist.length > 0 ? pinnedPicked.playlist : [];
+          
+          // ✅ 設置釘選用戶的 playerOwner
+          if (pinnedPicked?.username) {
+            const pinnedAllowShuffle = typeof pinnedPicked?.playlistAllowShuffle === "boolean" ? pinnedPicked.playlistAllowShuffle : null;
+            player?.setPlayerOwner?.({
+              userId: pinnedUserIdStr,
+              username: pinnedPicked.username,
+              ...(typeof pinnedAllowShuffle === "boolean" ? { allowShuffle: pinnedAllowShuffle } : {}),
+            });
+          }
+          
+          // ✅ 載入釘選用戶的播放清單
+          if (pinnedPlaylist.length > 0) {
+            const firstItem = pinnedPlaylist[0];
+            const firstUrl = String(firstItem.url || "");
+            const firstTitle = String(firstItem.title || firstUrl);
+            
+            if (firstUrl) {
+              // ✅ 先設置播放清單和 activeIndex，確保播放器狀態正確
+              player?.setPlaylist?.(pinnedPlaylist);
+              player?.setActiveIndex?.(0);
+              
+              // ✅ 使用 setTimeout 確保播放器組件已經準備好後再設置 src 和 originUrl
+              setTimeout(() => {
+                player?.setSrc?.(firstUrl);
+                player?.setOriginUrl?.(firstUrl);
+                player?.setTrackTitle?.(firstTitle);
+              }, 0);
+            }
+          } else {
+            // ✅ 即使沒有播放清單，也設置空的播放清單
+            player?.setPlaylist?.([]);
+          }
+        } catch (error) {
+          console.error('[個人頁面] 延遲載入釘選播放清單錯誤:', error);
+          pinnedPlaylistLoadedRef.current = null; // 載入失敗時重置，允許重試
+        }
+      };
+      
+      loadPinnedPlaylist();
+    } else {
+      // 如果釘選的是當前頁面或沒有釘選，重置載入標記
+      pinnedPlaylistLoadedRef.current = null;
+    }
+  }, [currentUser?.pinnedPlayer?.userId, currentUser?.pinnedPlayer?.expiresAt, id]);
 
   // 篩選面板快捷事件（保留）
   useEffect(() => {
@@ -530,45 +609,99 @@ export default function UserProfilePage() {
       isPinnedThisPage = pinnedUserIdStr === currentPageIdStr;
     }
     
-    // ✅ 如果有釘選 + 釘選的不是當前頁面 → 不做任何操作（保持釘選狀態）
+    // ✅ 如果有釘選 + 釘選的不是當前頁面 → 載入釘選用戶的播放清單
     if (hasPinnedPlayer && !isPinnedThisPage) {
-      // ✅ 什麼都不做，保持釘選的播放器狀態
-      // playerOwner 應該維持釘選的用戶，不應該改為當前頁面的用戶
-      // 播放清單應該維持釘選的播放清單，不應該重新載入
+      // ✅ 從數據庫載入釘選用戶的播放清單，確保刷新後也能正常播放
+      try {
+        const pinnedUserInfo = await getJSON(`/api/user-info?id=${encodeURIComponent(pinnedUserIdStr)}`).catch(() => null);
+        if (pinnedUserInfo) {
+          const pinnedPicked = pickUser(pinnedUserInfo);
+          const pinnedPlaylist = Array.isArray(pinnedPicked?.playlist) && pinnedPicked.playlist.length > 0 ? pinnedPicked.playlist : [];
+          
+          // ✅ 設置釘選用戶的 playerOwner
+          if (pinnedPicked?.username) {
+            const pinnedAllowShuffle = typeof pinnedPicked?.playlistAllowShuffle === "boolean" ? pinnedPicked.playlistAllowShuffle : null;
+            player?.setPlayerOwner?.({
+              userId: pinnedUserIdStr,
+              username: pinnedPicked.username,
+              ...(typeof pinnedAllowShuffle === "boolean" ? { allowShuffle: pinnedAllowShuffle } : {}),
+            });
+          }
+          
+          // ✅ 載入釘選用戶的播放清單
+          if (pinnedPlaylist.length > 0) {
+            const firstItem = pinnedPlaylist[0];
+            const firstUrl = String(firstItem.url || "");
+            const firstTitle = String(firstItem.title || firstUrl);
+            
+            if (firstUrl) {
+              // ✅ 先設置播放清單和 activeIndex，確保播放器狀態正確
+              player?.setPlaylist?.(pinnedPlaylist);
+              player?.setActiveIndex?.(0);
+              
+              // ✅ 使用 setTimeout 確保播放器組件已經準備好後再設置 src 和 originUrl
+              setTimeout(() => {
+                player?.setSrc?.(firstUrl);
+                player?.setOriginUrl?.(firstUrl);
+                player?.setTrackTitle?.(firstTitle);
+              }, 0);
+            }
+          } else {
+            // ✅ 即使沒有播放清單，也設置空的播放清單
+            player?.setPlaylist?.([]);
+          }
+        }
+      } catch (error) {
+        console.error('[個人頁面] 載入釘選播放清單錯誤:', error);
+      }
     }
     // ✅ 如果沒有釘選 OR 釘選的就是當前頁面 → 設置當前頁面的播放器信息
     // ✅ 即使沒有播放清單，也應該設置 playerOwner 和空播放清單（只要用戶有權限）
     else {
-      // ✅ 無論是否有播放清單，都設置 playerOwner（用於顯示釘選按鈕）
-      if (picked?.username) {
-        const allowShuffleRaw =
-          picked?.playlistAllowShuffle ?? userData?.playlistAllowShuffle;
-        const allowShuffle =
-          typeof allowShuffleRaw === "boolean" ? allowShuffleRaw : null;
-        player?.setPlayerOwner?.({
-          userId: id,
-          username: picked.username,
-          ...(typeof allowShuffle === "boolean" ? { allowShuffle } : {}),
-        });
-      }
+      // ✅ 再次檢查 currentUser 是否已加載（防止在 currentUser 加載前就設置了當前頁面的播放清單）
+      // 如果 currentUser 還在加載中（undefined），且當前頁面播放清單為空，則不設置播放清單
+      // 等待 currentUser 加載完成後，由上面的 useEffect 來決定是否載入釘選播放清單
+      const shouldSetCurrentPagePlaylist = currentUser !== undefined || userPlaylist.length > 0;
       
-      if (userPlaylist.length > 0) {
-        // 有播放清單：載入第一首
-        const firstItem = userPlaylist[0];
-        const firstUrl = String(firstItem.url || "");
-        const firstTitle = String(firstItem.title || firstUrl);
-        
-        if (firstUrl) {
-          // ✅ 必須同時設置 src 和 originUrl 確保 YouTube 播放器正確渲染
-          player?.setSrc?.(firstUrl);
-          player?.setOriginUrl?.(firstUrl);
-          player?.setTrackTitle?.(firstTitle);
-          player?.setPlaylist?.(userPlaylist);
-          player?.setActiveIndex?.(0);
+      if (shouldSetCurrentPagePlaylist) {
+        // ✅ 無論是否有播放清單，都設置 playerOwner（用於顯示釘選按鈕）
+        if (picked?.username) {
+          const allowShuffleRaw =
+            picked?.playlistAllowShuffle ?? userData?.playlistAllowShuffle;
+          const allowShuffle =
+            typeof allowShuffleRaw === "boolean" ? allowShuffleRaw : null;
+          player?.setPlayerOwner?.({
+            userId: id,
+            username: picked.username,
+            ...(typeof allowShuffle === "boolean" ? { allowShuffle } : {}),
+          });
         }
-      } else {
-        // ✅ 即使沒有播放清單，也設置空的播放清單，這樣播放器才能顯示
-        player?.setPlaylist?.([]);
+        
+        if (userPlaylist.length > 0) {
+          // 有播放清單：載入第一首
+          const firstItem = userPlaylist[0];
+          const firstUrl = String(firstItem.url || "");
+          const firstTitle = String(firstItem.title || firstUrl);
+          
+          if (firstUrl) {
+            // ✅ 先設置播放清單和 activeIndex，確保播放器狀態正確
+            player?.setPlaylist?.(userPlaylist);
+            player?.setActiveIndex?.(0);
+            
+            // ✅ 使用 setTimeout 確保播放器組件已經準備好後再設置 src 和 originUrl
+            setTimeout(() => {
+              player?.setSrc?.(firstUrl);
+              player?.setOriginUrl?.(firstUrl);
+              player?.setTrackTitle?.(firstTitle);
+            }, 0);
+          }
+        } else {
+          // ✅ 只有在 currentUser 已加載完成且確認沒有釘選播放器時，才設置空的播放清單
+          // 如果 currentUser 還在加載中，不設置空播放清單，等待 currentUser 加載完成後再決定
+          if (currentUser !== undefined) {
+            player?.setPlaylist?.([]);
+          }
+        }
       }
     }
   } catch (error) {
@@ -621,9 +754,51 @@ export default function UserProfilePage() {
                   isPinnedThisPage = pinnedUserIdStr === currentPageIdStr;
                 }
                 
-                // ✅ 如果有釘選 + 釘選的不是當前頁面 → 不做任何操作（保持釘選狀態）
+                // ✅ 如果有釘選 + 釘選的不是當前頁面 → 載入釘選用戶的播放清單
                 if (hasPinnedPlayer && !isPinnedThisPage) {
-                  // ✅ 什麼都不做，保持釘選的播放器狀態
+                  // ✅ 從數據庫載入釘選用戶的播放清單，確保刷新後也能正常播放
+                  try {
+                    const pinnedUserInfo = await getJSON(`/api/user-info?id=${encodeURIComponent(pinnedUserIdStr)}`).catch(() => null);
+                    if (pinnedUserInfo) {
+                      const pinnedPicked = pickUser(pinnedUserInfo);
+                      const pinnedPlaylist = Array.isArray(pinnedPicked?.playlist) && pinnedPicked.playlist.length > 0 ? pinnedPicked.playlist : [];
+                      
+                      // ✅ 設置釘選用戶的 playerOwner
+                      if (pinnedPicked?.username) {
+                        const pinnedAllowShuffle = typeof pinnedPicked?.playlistAllowShuffle === "boolean" ? pinnedPicked.playlistAllowShuffle : null;
+                        player?.setPlayerOwner?.({
+                          userId: pinnedUserIdStr,
+                          username: pinnedPicked.username,
+                          ...(typeof pinnedAllowShuffle === "boolean" ? { allowShuffle: pinnedAllowShuffle } : {}),
+                        });
+                      }
+                      
+                      // ✅ 載入釘選用戶的播放清單
+                      if (pinnedPlaylist.length > 0) {
+                        const firstItem = pinnedPlaylist[0];
+                        const firstUrl = String(firstItem.url || "");
+                        const firstTitle = String(firstItem.title || firstUrl);
+                        
+                        if (firstUrl) {
+                          // ✅ 先設置播放清單和 activeIndex，確保播放器狀態正確
+                          player?.setPlaylist?.(pinnedPlaylist);
+                          player?.setActiveIndex?.(0);
+                          
+                          // ✅ 使用 setTimeout 確保播放器組件已經準備好後再設置 src 和 originUrl
+                          setTimeout(() => {
+                            player?.setSrc?.(firstUrl);
+                            player?.setOriginUrl?.(firstUrl);
+                            player?.setTrackTitle?.(firstTitle);
+                          }, 0);
+                        }
+                      } else {
+                        // ✅ 即使沒有播放清單，也設置空的播放清單
+                        player?.setPlaylist?.([]);
+                      }
+                    }
+                  } catch (error) {
+                    console.error('[個人頁面] 載入釘選播放清單錯誤（備援流程）:', error);
+                  }
                 }
                 // ✅ 如果沒有釘選 OR 釘選的就是當前頁面 → 設置當前頁面的播放器信息
                 // ✅ 即使沒有播放清單，也應該設置 playerOwner 和空播放清單（只要用戶有權限）
@@ -650,11 +825,16 @@ export default function UserProfilePage() {
                     const firstTitle = String(firstItem.title || firstUrl);
                     
                     if (firstUrl) {
-                      player?.setSrc?.(firstUrl);
-                      player?.setOriginUrl?.(firstUrl);
-                      player?.setTrackTitle?.(firstTitle);
+                      // ✅ 先設置播放清單和 activeIndex，確保播放器狀態正確
                       player?.setPlaylist?.(userPlaylist);
                       player?.setActiveIndex?.(0);
+                      
+                      // ✅ 使用 setTimeout 確保播放器組件已經準備好後再設置 src 和 originUrl
+                      setTimeout(() => {
+                        player?.setSrc?.(firstUrl);
+                        player?.setOriginUrl?.(firstUrl);
+                        player?.setTrackTitle?.(firstTitle);
+                      }, 0);
                     }
                   } else {
                     // ✅ 沒有播放清單：設置空清單即可（不再支援單首預設音樂 URL）
@@ -684,7 +864,16 @@ export default function UserProfilePage() {
         getJSON(`/api/user-images?id=${uid}`)
           .then((val) => {
             const list = pickList(val);
-            if (list.length || uploadedImages.length === 0) setUploadedImages(list);
+            // ✅ 使用函數式更新，避免依賴 uploadedImages 狀態
+            // ✅ 修復：總是更新數據，確保數據同步
+            setUploadedImages((prev) => {
+              // 如果新數據為空且舊數據不為空，可能是 API 錯誤，保留舊數據
+              // 否則總是使用新數據
+              if (list.length === 0 && prev.length > 0) {
+                return prev;
+              }
+              return list;
+            });
           })
           .catch((err) => {
             // ✅ 忽略所有取消相關的錯誤（AbortError、DOMException、或包含 abort 消息的錯誤）
@@ -701,7 +890,13 @@ export default function UserProfilePage() {
         getJSON(`/api/user-videos?id=${uid}`)
           .then((val) => {
             const list = pickList(val);
-            if (list.length || uploadedVideos.length === 0) setUploadedVideos(list);
+            // ✅ 使用函數式更新，避免依賴 uploadedVideos 狀態
+            setUploadedVideos((prev) => {
+              if (list.length > 0 || prev.length === 0) {
+                return list;
+              }
+              return prev;
+            });
           })
           .catch((err) => {
             const isAbortError = err.name === 'AbortError' || 
@@ -717,7 +912,13 @@ export default function UserProfilePage() {
         getJSON(`/api/user-music?id=${uid}`)
           .then((val) => {
             const list = pickList(val);
-            if (list.length || uploadedMusic.length === 0) setUploadedMusic(list);
+            // ✅ 使用函數式更新，避免依賴 uploadedMusic 狀態
+            setUploadedMusic((prev) => {
+              if (list.length > 0 || prev.length === 0) {
+                return list;
+              }
+              return prev;
+            });
           })
           .catch((err) => {
             const isAbortError = err.name === 'AbortError' || 
@@ -735,7 +936,13 @@ export default function UserProfilePage() {
         getJSON(`/api/user-liked-images?id=${uid}`)
           .then((val) => {
             const list = pickList(val);
-            if (list.length || likedImages.length === 0) setLikedImages(list);
+            // ✅ 使用函數式更新，避免依賴 likedImages 狀態
+            setLikedImages((prev) => {
+              if (list.length > 0 || prev.length === 0) {
+                return list;
+              }
+              return prev;
+            });
           })
           .catch((err) => {
             const isAbortError = err.name === 'AbortError' || 
@@ -751,7 +958,13 @@ export default function UserProfilePage() {
         getJSON(`/api/user-liked-videos?id=${uid}`)
           .then((val) => {
             const list = pickList(val);
-            if (list.length || likedVideos.length === 0) setLikedVideos(list);
+            // ✅ 使用函數式更新，避免依賴 likedVideos 狀態
+            setLikedVideos((prev) => {
+              if (list.length > 0 || prev.length === 0) {
+                return list;
+              }
+              return prev;
+            });
           })
           .catch((err) => {
             const isAbortError = err.name === 'AbortError' || 
@@ -767,7 +980,13 @@ export default function UserProfilePage() {
         getJSON(`/api/user-liked-music?id=${uid}`)
           .then((val) => {
             const list = pickList(val);
-            if (list.length || likedMusic.length === 0) setLikedMusic(list);
+            // ✅ 使用函數式更新，避免依賴 likedMusic 狀態
+            setLikedMusic((prev) => {
+              if (list.length > 0 || prev.length === 0) {
+                return list;
+              }
+              return prev;
+            });
           })
           .catch((err) => {
             const isAbortError = err.name === 'AbortError' || 
@@ -810,7 +1029,7 @@ export default function UserProfilePage() {
       } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, currentUser]); // 重新加回 currentUser，但用 ref 防止重複載入
+  }, [id, currentUser?.pinnedPlayer?.userId, currentUser?.pinnedPlayer?.expiresAt, activeTab]); // 只依賴關鍵字段，避免 currentUser 對象引用變化導致重複執行
 
   // 取完整圖片/影片資訊並合併（模型/提示詞/生成參數等）
   const enrichImage = async (img) => {
@@ -1169,9 +1388,18 @@ export default function UserProfilePage() {
     try {
       await axios.delete('/api/player/pin');
       setPinnedPlayerData(null);
-      player?.setIsPlaying?.(false);
       
-      // 更新 CurrentUserContext，移除釘選數據
+      // ✅ 1. 立即清除钉选播放器缓存（必须在更新 currentUser 之前）
+      if (typeof window !== "undefined") {
+        try {
+          const { clearPinnedPlayerCache } = await import("@/utils/pinnedPlayerCache");
+          clearPinnedPlayerCache();
+        } catch (e) {
+          console.warn("清除钉选缓存失败:", e);
+        }
+      }
+      
+      // ✅ 2. 更新 CurrentUserContext，移除釘選數據（这会触发 usePinnedPlayerBootstrap 的清理）
       if (setCurrentUser) {
         setCurrentUser(prevUser => {
           if (!prevUser) return prevUser;
@@ -1179,6 +1407,83 @@ export default function UserProfilePage() {
           return rest;
         });
       }
+      
+      // ✅ 3. 立即停止播放并清空播放器状态
+      // 先清空播放清单
+      player?.setPlaylist?.([]);
+      player?.setActiveIndex?.(0);
+      
+      // 然后停止播放并清空播放源
+      player?.pause?.();
+      player?.setIsPlaying?.(false);
+      player?.setPinnedOwnerInfo?.(null);
+      
+      // ✅ 强制重置音频元素（如果可以直接访问）
+      if (player?.audioRef?.current) {
+        try {
+          const audio = player.audioRef.current;
+          audio.pause();
+          audio.currentTime = 0;
+          audio.removeAttribute("src");
+          audio.load();
+        } catch (e) {
+          console.warn("直接重置音频元素失败:", e);
+        }
+      }
+      
+      // 清空播放源（这会触发 setSrcWithAudio，自动重置 currentTime 和 duration）
+      player?.setSrc?.("");
+      player?.setOriginUrl?.("");
+      player?.setTrackTitle?.("");
+      
+      // ✅ 4. 使用 requestAnimationFrame 确保 DOM 更新后再加载当前页面播放清单
+      requestAnimationFrame(() => {
+        // ✅ 5. 检查当前页面是否有播放器功能，如果有则加载当前页面的播放清单
+        const hasValidPlayer = !!userData?.miniPlayerPurchased || 
+          (userData?.playerCouponUsed && 
+           userData?.miniPlayerExpiry && 
+           new Date(userData.miniPlayerExpiry) > new Date());
+        
+        if (hasValidPlayer && userData?.username) {
+          // ✅ 6. 设置当前页面的 playerOwner
+          const allowShuffleRaw = userData?.playlistAllowShuffle;
+          const allowShuffle = typeof allowShuffleRaw === "boolean" ? allowShuffleRaw : null;
+          player?.setPlayerOwner?.({
+            userId: id,
+            username: userData.username,
+            ...(typeof allowShuffle === "boolean" ? { allowShuffle } : {}),
+          });
+          
+          // 加载当前页面的播放清单（即使为空）
+          const userPlaylist = Array.isArray(userData?.playlist) && userData.playlist.length > 0 ? userData.playlist : [];
+          
+          if (userPlaylist.length > 0) {
+            // 有播放清單：載入第一首
+            const firstItem = userPlaylist[0];
+            const firstUrl = String(firstItem.url || "");
+            const firstTitle = String(firstItem.title || firstUrl);
+            
+            if (firstUrl) {
+              // ✅ 先設置播放清單和 activeIndex，確保播放器狀態正確
+              player?.setPlaylist?.(userPlaylist);
+              player?.setActiveIndex?.(0);
+              
+              // ✅ 使用 setTimeout 確保播放器組件已經準備好後再設置 src 和 originUrl
+              setTimeout(() => {
+                player?.setSrc?.(firstUrl);
+                player?.setOriginUrl?.(firstUrl);
+                player?.setTrackTitle?.(firstTitle);
+              }, 0);
+            }
+          } else {
+            // ✅ 即使沒有播放清單，也設置空的播放清單
+            player?.setPlaylist?.([]);
+          }
+        } else {
+          // ✅ 如果当前页面没有播放器功能，清除 playerOwner
+          player?.setPlayerOwner?.(null);
+        }
+      });
       
       // 觸發全局事件
       window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
