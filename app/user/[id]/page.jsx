@@ -12,6 +12,7 @@ import useLikeHandler from "@/hooks/useLikeHandler";
 import { usePlayer } from "@/components/context/PlayerContext";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { readPinnedPlayerCache } from "@/utils/pinnedPlayerCache";
 
 // 動態導入 Modal 組件（只在需要時加載）
 const ImageModal = dynamic(() => import("@/components/image/ImageModal"), { ssr: false });
@@ -30,6 +31,21 @@ const labelToRating = {
   "一般圖片": "all",
   "15+ 圖片": "15",
   "18+ 圖片": "18",
+};
+
+// ✅ 共用工具：判斷目前是否有有效的釘選播放器
+const hasActivePinnedGlobal = (currentUser) => {
+  if (typeof window === "undefined") return false;
+  try {
+    const pinnedFromUser = currentUser?.pinnedPlayer;
+    const cached = readPinnedPlayerCache();
+    const pinned = pinnedFromUser || cached;
+    if (!pinned || !pinned.userId) return false;
+    if (!pinned.expiresAt) return true;
+    return new Date(pinned.expiresAt) > new Date();
+  } catch {
+    return false;
+  }
 };
 
 export default function UserProfilePage() {
@@ -110,13 +126,25 @@ export default function UserProfilePage() {
   
   // ✅ 當 userData 載入後，檢查並啟用播放器
   useEffect(() => {
+    // ✅ 如果目前登入用戶有有效的釘選播放器，優先讓釘選維持顯示，不要被個人頁面的權限關掉
+    const hasActivePinned = hasActivePinnedGlobal(currentUser);
+
     // ✅ 檢查頁面主人是否有有效的播放器功能（購買或體驗券未過期）
-    const hasValidPlayer = !!userData?.miniPlayerPurchased || 
-      (userData?.playerCouponUsed && 
-       userData?.miniPlayerExpiry && 
-       new Date(userData.miniPlayerExpiry) > new Date());
-    
-    // ✅ 只要有有效的播放器功能就顯示（不需要檢查播放清單）
+    const hasValidPlayer =
+      !!userData?.miniPlayerPurchased ||
+      (userData?.playerCouponUsed &&
+        userData?.miniPlayerExpiry &&
+        new Date(userData.miniPlayerExpiry) > new Date());
+
+    // ✅ 只要登入用戶有有效的釘選，就保持播放器啟用（交由釘選系統控制）
+    if (hasActivePinned) {
+      try {
+        player?.setMiniPlayerEnabled?.(true);
+      } catch {}
+      return;
+    }
+
+    // ✅ 否則才依照頁面主人的播放器權限決定是否顯示
     if (hasValidPlayer) {
       try {
         player?.setMiniPlayerEnabled?.(true);
@@ -127,23 +155,44 @@ export default function UserProfilePage() {
         player?.setMiniPlayerEnabled?.(false);
       } catch {}
     }
-  }, [userData?.miniPlayerPurchased, userData?.playerCouponUsed, userData?.miniPlayerExpiry]); // 依賴播放器權限
+  }, [
+    userData?.miniPlayerPurchased,
+    userData?.playerCouponUsed,
+    userData?.miniPlayerExpiry,
+    currentUser?.pinnedPlayer?.userId,
+    currentUser?.pinnedPlayer?.expiresAt,
+  ]); // 依賴播放器權限與釘選狀態
   
   // ✅ 設置頁面主人的播放器造型信息（獨立的 useEffect，避免循環）
   useEffect(() => {
     if (userData) {
+      // ✅ 只有在頁面主人「真的有播放器權限」時，才套用 pageOwnerSkin
+      const hasValidPlayer =
+        !!userData?.miniPlayerPurchased ||
+        (userData?.playerCouponUsed &&
+          userData?.miniPlayerExpiry &&
+          new Date(userData.miniPlayerExpiry) > new Date());
+
+      if (!hasValidPlayer) {
+        // 頁主尚未解鎖播放器：不要覆蓋目前登入者的皮膚
+        try {
+          player?.setPageOwnerSkin?.(null);
+        } catch {}
+        return;
+      }
+
       try {
         player?.setPageOwnerSkin?.({
-          activePlayerSkin: userData.activePlayerSkin || 'default',
+          activePlayerSkin: userData.activePlayerSkin || "default",
           playerSkinSettings: userData.playerSkinSettings || {
-            mode: 'rgb',
+            mode: "rgb",
             speed: 0.02,
             saturation: 50,
             lightness: 60,
             hue: 0,
-            opacity: 0.7
+            opacity: 0.7,
           },
-          premiumPlayerSkin: !!userData.premiumPlayerSkin
+          premiumPlayerSkin: !!userData.premiumPlayerSkin,
         });
       } catch {}
     } else {
@@ -152,7 +201,15 @@ export default function UserProfilePage() {
         player?.setPageOwnerSkin?.(null);
       } catch {}
     }
-  }, [userData?.activePlayerSkin, userData?.playerSkinSettings, userData?.premiumPlayerSkin, userData?._id]); // 使用 _id 作為穩定的依賴
+  }, [
+    userData?.activePlayerSkin,
+    userData?.playerSkinSettings,
+    userData?.premiumPlayerSkin,
+    userData?.miniPlayerPurchased,
+    userData?.playerCouponUsed,
+    userData?.miniPlayerExpiry,
+    userData?._id,
+  ]); // 使用 _id 作為穩定的依賴，並僅在頁主有播放器權限時套用造型
 
   // ✅ 讀 URL 的 search 當唯一資料源（就地搜尋）
   const [searchQuery, setSearchQuery] = useState("");
@@ -568,22 +625,38 @@ export default function UserProfilePage() {
         if (userJson) {
           const picked = pickUser(userJson);
           setUserData(picked);
+
+          // ✅ 檢查目前是否有有效的釘選播放器（同時考慮 currentUser 與快取）
+          const hasActivePinned = hasActivePinnedGlobal(currentUser);
+
           // ✅ 檢查頁面主人是否有有效的播放器功能（購買或體驗券未過期）
-          const hasValidPlayer = !!picked?.miniPlayerPurchased || 
-            (picked?.playerCouponUsed && 
-             picked?.miniPlayerExpiry && 
-             new Date(picked.miniPlayerExpiry) > new Date());
+          const hasValidPlayer =
+            !!picked?.miniPlayerPurchased ||
+            (picked?.playerCouponUsed &&
+              picked?.miniPlayerExpiry &&
+              new Date(picked.miniPlayerExpiry) > new Date());
           
-          // ✅ 只要有有效的播放器功能就顯示（不需要檢查播放清單）
-          if (hasValidPlayer) {
+          // ✅ 釘選優先：只要登入用戶有有效釘選，就保持播放器啟用，不受頁面主人權限影響
+          if (hasActivePinned) {
+            try {
+              player?.setMiniPlayerEnabled?.(true);
+            } catch {}
+          } else if (hasValidPlayer) {
+            // ✅ 否則才依照頁面主人的播放器權限決定是否顯示
             try {
               player?.setMiniPlayerEnabled?.(true);
               player?.setShareMode?.("page");
-              localStorage.setItem("miniPlayerTheme", String(picked?.miniPlayerTheme || "modern"));
+              localStorage.setItem(
+                "miniPlayerTheme",
+                String(picked?.miniPlayerTheme || "modern"),
+              );
             } catch {}
           } else {
-            try { player?.setMiniPlayerEnabled?.(false); } catch {}
+            try {
+              player?.setMiniPlayerEnabled?.(false);
+            } catch {}
           }
+
           try {
     const u = picked || {};
     
@@ -714,21 +787,36 @@ export default function UserProfilePage() {
               const backup = pickUser(r2?.data || r2);
             if (backup) {
               setUserData(backup);
+
+              // ✅ 檢查目前是否有有效的釘選播放器（同時考慮 currentUser 與快取）
+              const hasActivePinned = hasActivePinnedGlobal(currentUser);
+
               // ✅ 檢查頁面主人是否有有效的播放器功能（購買或體驗券未過期）
-              const hasBackupValidPlayer = !!backup?.miniPlayerPurchased || 
-                (backup?.playerCouponUsed && 
-                 backup?.miniPlayerExpiry && 
-                 new Date(backup.miniPlayerExpiry) > new Date());
+              const hasBackupValidPlayer =
+                !!backup?.miniPlayerPurchased ||
+                (backup?.playerCouponUsed &&
+                  backup?.miniPlayerExpiry &&
+                  new Date(backup.miniPlayerExpiry) > new Date());
               
-              // ✅ 只要有有效的播放器功能就顯示（不需要檢查播放清單）
-              if (hasBackupValidPlayer) {
+              // ✅ 釘選優先：只要登入用戶有有效釘選，就保持播放器啟用
+              if (hasActivePinned) {
+                try {
+                  player?.setMiniPlayerEnabled?.(true);
+                } catch {}
+              } else if (hasBackupValidPlayer) {
+                // ✅ 否則才依照頁面主人的播放器權限決定是否顯示
                 try {
                   player?.setMiniPlayerEnabled?.(true);
                   player?.setShareMode?.("page");
-                  localStorage.setItem("miniPlayerTheme", String(backup?.miniPlayerTheme || "modern"));
+                  localStorage.setItem(
+                    "miniPlayerTheme",
+                    String(backup?.miniPlayerTheme || "modern"),
+                  );
                 } catch {}
               } else {
-                try { player?.setMiniPlayerEnabled?.(false); } catch {}
+                try {
+                  player?.setMiniPlayerEnabled?.(false);
+                } catch {}
               }
               // 同步載入使用者預設音樂（即使走備援資料流也要載入）
               try {
@@ -844,18 +932,33 @@ export default function UserProfilePage() {
               } catch {}
             } else {
               setUserData({ _id: uid, pointsBalance: 0 });
-              // 找不到使用者時不啟用播放器（需購買才顯示）
-              try { player?.setMiniPlayerEnabled?.(false); } catch {}
+              // 找不到使用者時不啟用播放器（需購買才顯示），但保留有效的釘選播放器
+              const hasActivePinned = hasActivePinnedGlobal(currentUser);
+              if (!hasActivePinned) {
+                try {
+                  player?.setMiniPlayerEnabled?.(false);
+                } catch {}
+              }
             }
           } catch (e) {
             setUserData({ _id: uid, pointsBalance: 0 });
-            try { player?.setMiniPlayerEnabled?.(false); } catch {}
+            const hasActivePinned = hasActivePinnedGlobal(currentUser);
+            if (!hasActivePinned) {
+              try {
+                player?.setMiniPlayerEnabled?.(false);
+              } catch {}
+            }
           }
         }
       } catch (e) {
         console.error('🔧 [最外層錯誤] 用戶資料載入失敗:', e);
         setUserData({ _id: uid, pointsBalance: 0 });
-        try { player?.setMiniPlayerEnabled?.(false); } catch {}
+        const hasActivePinned = hasActivePinnedGlobal(currentUser);
+        if (!hasActivePinned) {
+          try {
+            player?.setMiniPlayerEnabled?.(false);
+          } catch {}
+        }
       }
 
       // ✅ 優化：按需加載 - 先加載當前 tab 的數據，其他數據延遲加載

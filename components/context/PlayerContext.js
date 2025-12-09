@@ -91,7 +91,8 @@ export function PlayerProvider({
   }, []);
   const [trackTitle, setTrackTitle] = useState("");
   const [shareMode, setShareMode] = useState(defaultShareMode);
-  const [miniPlayerEnabled, setMiniPlayerEnabled] = useState(
+  // ✅ 內部狀態：是否啟用 MiniPlayer（顯示用）
+  const [miniPlayerEnabledState, setMiniPlayerEnabled] = useState(
     defaultMiniPlayerEnabled,
   );
   const [seekable, setSeekable] = useState(defaultSeekable);
@@ -126,6 +127,10 @@ export function PlayerProvider({
   const backgroundPauseTimerRef = useRef(null); // ✅ 非釘選背景延時自動暫停計時器
   const backgroundHiddenSinceRef = useRef(null); // ✅ 記錄背景開始的時間
   const backgroundPollIntervalRef = useRef(null); // ✅ 循環輪詢，避免事件漏發
+  // ✅ 釘選時，無論內部 state 如何，都強制視為啟用（避免被單一頁面誤關掉）
+  const miniPlayerEnabled = pinnedOwnerRef.current
+    ? true
+    : miniPlayerEnabledState;
 
   const cancelPlaybackAttempt = useCallback(() => {
     const attempt = playbackAttemptRef.current;
@@ -2371,7 +2376,7 @@ export function PlayerProvider({
     playlist,
     activeIndex,
     trackTitle,
-    playerOwner?.username,
+    playerOwner, // ✅ 直接依賴整個 playerOwner 物件，避免少算依賴
     isPlaying,
     src, // ✅ 添加 src 依賴，確保音樂來源改變時更新 metadata
     // ✅ 不包含 currentTime 和 duration，避免 useEffect 頻繁重新運行
@@ -2380,21 +2385,25 @@ export function PlayerProvider({
     pause,
     next,
     previous,
+    updateMediaSessionMetadata, // ✅ 補上依賴，避免閉包拿到舊的 callback
   ]);
 
   // ✅ 組件卸載時清理音頻元素和緩衝區
   useEffect(() => {
+    // ✅ 在 effect 內部先抓住當前的 audio 實例，避免在 cleanup 時 ref 已指向其他節點
+    const audio = audioRef.current;
+
     return () => {
-      if (audioRef.current) {
+      if (audio) {
         try {
           // ✅ 強制清理音頻元素
-          audioRef.current.pause();
+          audio.pause();
           // ✅ 移除音頻來源，釋放內存
-          audioRef.current.removeAttribute("src");
+          audio.removeAttribute("src");
           // ✅ 清空音頻緩衝區
-          audioRef.current.load();
+          audio.load();
           // ✅ 重置時間位置
-          audioRef.current.currentTime = 0;
+          audio.currentTime = 0;
         } catch (error) {
           console.warn("⚠️ [PlayerContext] 清理音頻元素失敗:", error);
         }

@@ -1,0 +1,17 @@
+啟動伺服器
+npm run dev
+
+模擬部屬啟動
+pnpm install
+pnpm build
+pnpm start
+
+
+git pull同步鏡像改動檔案
+
+更新網站用
+git add .
+git commit -m "v0.8.86"
+git push
+
+aicreateaworld.com

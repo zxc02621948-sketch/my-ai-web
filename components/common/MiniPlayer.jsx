@@ -133,34 +133,35 @@ export default function MiniPlayer() {
   // ✅ 檢查當前路徑是否是用戶頁面（需要在 useMemo 之前定義）
   const isUserPage = pathname.startsWith("/user/") && pathname !== "/user/following";
   
-  // 當前啟用的造型
+  // 當前啟用的造型（不受釘選影響）
   const activePlayerSkin = useMemo(() => {
     // ✅ 如果在用戶頁面，使用頁面主人的造型
     if (isUserPage && player?.pageOwnerSkin) {
       if (!player.pageOwnerSkin.premiumPlayerSkin) {
-        return 'default';
+        return "default";
       }
-      return player.pageOwnerSkin.activePlayerSkin || 'default';
+      return player.pageOwnerSkin.activePlayerSkin || "default";
     }
     
-    // ✅ 否則使用當前用戶的造型
-    if (!currentUser) return 'default';
+    // ✅ 否則使用當前登入使用者自己的造型
+    if (!currentUser) return "default";
     
     // 如果沒有購買高階造型，強制使用預設造型
     if (!currentUser.premiumPlayerSkin) {
-      return 'default';
+      return "default";
     }
     
     // 如果有過期時間且已過期，強制使用預設造型
     if (currentUser.premiumPlayerSkinExpiry) {
-      const isExpired = new Date(currentUser.premiumPlayerSkinExpiry) <= new Date();
+      const isExpired =
+        new Date(currentUser.premiumPlayerSkinExpiry) <= new Date();
       if (isExpired) {
-        return 'default';
+        return "default";
       }
     }
     
     // 返回用戶選擇的造型（預設為 'default'）
-    return currentUser.activePlayerSkin || 'default';
+    return currentUser.activePlayerSkin || "default";
   }, [currentUser, isUserPage, player?.pageOwnerSkin]);
   
   // 顏色設定狀態（優先使用數據庫設定，否則使用預設值）
@@ -170,19 +171,19 @@ export default function MiniPlayer() {
       return currentUser.playerSkinSettings;
     }
     return {
-      mode: 'rgb',
+      mode: "rgb",
       speed: 0.02,
       saturation: 50,
       lightness: 60,
-      hue: 0
+      hue: 0,
     };
   });
   
-  // 當 currentUser 或頁面主人造型更新時，同步顏色設定
+  // 當 currentUser 或頁面主人造型更新時，同步顏色設定（不受釘選影響）
   useEffect(() => {
     // ✅ 如果在用戶頁面，使用頁面主人的設定
     if (isUserPage && player?.pageOwnerSkin?.playerSkinSettings) {
-      setColorSettings(prev => {
+      setColorSettings((prev) => {
         // 只在設定真的改變時才更新，避免無限循環
         const newSettings = player.pageOwnerSkin.playerSkinSettings;
         if (JSON.stringify(prev) !== JSON.stringify(newSettings)) {
@@ -193,9 +194,9 @@ export default function MiniPlayer() {
       return;
     }
     
-    // 否則使用當前用戶的設定
+    // 否則使用當前登入使用者的設定
     if (currentUser?.playerSkinSettings) {
-      setColorSettings(prev => {
+      setColorSettings((prev) => {
         const newSettings = currentUser.playerSkinSettings;
         if (JSON.stringify(prev) !== JSON.stringify(newSettings)) {
           return newSettings;
@@ -295,19 +296,21 @@ export default function MiniPlayer() {
   // 依照 Hooks 規則：所有 hooks 必須在每次 render 都被呼叫，
   // 因此不在條件分支中提前 return；改用條件渲染控制輸出。
   
-  // 檢查用戶是否有播放器功能（LV3 或體驗券 或 購買過 或 有訂閱）
   // 顯示邏輯：
-  // 1. 如果釘選了 → 全站顯示 ✅（需要 miniPlayerEnabled 和 currentUser 載入完成）
-  // 2. 如果在用戶頁面 → 顯示（由頁面主人控制，只要頁面主人有播放清單，miniPlayerEnabled 就會被設置為 true）✅
+  // 1. 如果釘選了 → 只要 currentUser 載入完成，就在全站顯示（不再受 miniPlayerEnabled / 頁面權限影響）
+  // 2. 如果在用戶頁面 → 顯示（由頁面主人控制，只要 miniPlayerEnabled 為 true 就顯示）
   //    在用戶頁面時，即使 currentUser 還在載入中，只要 miniPlayerEnabled 為 true 就顯示
   // 3. shareMode === "page" 時顯示（用於分享頁，需要 miniPlayerEnabled 和 currentUser 載入完成）
   // 注意：在個人頁面，只要頁面主人有播放清單，就會設置 miniPlayerEnabled 為 true，所有人都可以看到
   const isPageModeActive = player?.shareMode === "page";
   // ✅ 在用戶頁面時，允許在 currentUser 載入中時也顯示（只要 miniPlayerEnabled 為 true）
-  // ✅ 其他情況（釘選、分享頁）需要等待 currentUser 載入完成
-  const showMini = player?.miniPlayerEnabled && 
-    (isPinned || isUserPage || isPageModeActive) &&
-    (isUserPage || currentUser !== undefined); // 用戶頁面不需要等待 currentUser，其他情況需要
+  // ✅ 釘選狀態：不再受 miniPlayerEnabled 影響，只要 currentUser 已載入就顯示
+  // ✅ 其他情況（非釘選的分享頁）需要等待 currentUser 載入完成
+  const showMini = isPinned
+    ? currentUser !== undefined // 只要登入狀態已知，就允許顯示釘選播放器
+    : !!player?.miniPlayerEnabled &&
+      (isUserPage || isPageModeActive) &&
+      (isUserPage || currentUser !== undefined); // 用戶頁面不需要等待 currentUser，其他情況需要
   
   // 確保所有值都是有效數字後才計算進度
   const currentTime = typeof player?.currentTime === 'number' && isFinite(player.currentTime) ? player.currentTime : 0;

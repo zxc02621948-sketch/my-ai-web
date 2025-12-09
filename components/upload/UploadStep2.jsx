@@ -458,8 +458,15 @@ export default function UploadStep2({
 
   function applyParsed(parsed) {
     if (!parsed) return;
-    if (typeof parsed.prompt === "string") setPositivePrompt(parsed.prompt);
-    if (typeof parsed.negative === "string") setNegativePrompt(parsed.negative);
+    // ✅ 兼容多种格式：ComfyUI 使用 positive/negative，A1111 使用 prompt/negative
+    const positiveText = parsed.positive ?? parsed.prompt;
+    const negativeText = parsed.negative;
+    if (typeof positiveText === "string" && positiveText.trim()) {
+      setPositivePrompt(positiveText);
+    }
+    if (typeof negativeText === "string" && negativeText.trim()) {
+      setNegativePrompt(negativeText);
+    }
     
     // ✅ 兼容 ComfyUI canonical 格式（cfg -> cfgScale, modelName -> model）
     const cfgValue = parsed.cfgScale ?? parsed.cfg;
@@ -505,10 +512,10 @@ export default function UploadStep2({
       setModelName(String(modelValue));
     }
     
-    // 只有当有 LoRA hashes（链接）时，才自动填入 LoRA 名称
+    // ✅ LoRA 处理逻辑
     if (Array.isArray(parsed.loraHashes) && parsed.loraHashes.length) {
+      // 如果有 hashes，设置 hashes 并自动填入名称
       setLoraHashes(parsed.loraHashes);
-      // 如果有 hashes，说明有链接，可以安全填入名称
       if (Array.isArray(parsed.loras) && parsed.loras.length) {
         // ✅ 兼容 ComfyUI loras 格式：可能是对象数组 {name, weight} 或字符串数组
         const loraNames = parsed.loras.map(l => typeof l === 'string' ? l : l.name).filter(Boolean);
@@ -517,11 +524,14 @@ export default function UploadStep2({
         }
       }
     } else if (Array.isArray(parsed.loras) && parsed.loras.length) {
-      // 如果只有名称没有链接，不自动填入，让用户手动选择
+      // ✅ 即使没有 hashes，也自动填入 LoRA 名称（ComfyUI 通常没有 hashes）
       // ✅ 兼容 ComfyUI loras 格式
       const loraNames = parsed.loras.map(l => typeof l === 'string' ? l : l.name).filter(Boolean);
-      console.log("检测到 LoRA 名称但没有链接，不自动填入:", loraNames);
-      setDetectedLorasWithoutLinks(loraNames);
+      if (loraNames.length) {
+        // 自动填入名称（即使没有链接）
+        setLoraName(loraNames.join(", "));
+        console.log("✅ 自动填入 LoRA 名称（无链接）:", loraNames);
+      }
     }
   }
 
@@ -537,45 +547,73 @@ export default function UploadStep2({
 
         if (imageFile.type === "image/png") {
           const chunks = await extractPngTextChunks(imageFile);
+          
+          // ✅ 调试：输出所有找到的 chunk 名称（仅在开发环境）
+          if (process.env.NODE_ENV === 'development') {
+            console.log("📋 PNG chunks found:", Object.keys(chunks));
+          }
 
           // ✅ 優先判斷 ComfyUI：workflow（最準）
-          if (!parsed && (chunks.workflow || chunks.Workflow)) {
+          // 检查所有可能的 workflow chunk 名称变体
+          const workflowChunk = chunks.workflow || chunks.Workflow || chunks.WORKFLOW || 
+                               chunks["comfyui_workflow"] || chunks["ComfyUI_Workflow"];
+          
+          if (!parsed && workflowChunk) {
             try {
-              const wfVal = chunks.workflow || chunks.Workflow;
+              const wfVal = workflowChunk;
               const comfy = parseComfyWorkflow(wfVal);
               if (comfy && Array.isArray(comfy.nodes) && comfy.nodes.length > 0) {
                 parsed = comfy.canonical;
                 detectedPlatform = "ComfyUI";
                 const wfStr = typeof wfVal === "string" ? wfVal : JSON.stringify(wfVal, null, 2);
                 setWorkflowRaw(wfStr);
+                console.log("✅ ComfyUI workflow parsed:", {
+                  hasPositive: !!parsed.positive,
+                  hasNegative: !!parsed.negative,
+                  positiveLength: parsed.positive?.length || 0,
+                  negativeLength: parsed.negative?.length || 0,
+                });
               }
-            } catch {}
+            } catch (e) {
+              console.warn("⚠️ Failed to parse ComfyUI workflow:", e);
+            }
           }
 
           // ✅ ComfyUI：prompt 內就是 Comfy JSON
-          if (!parsed && chunks.prompt) {
+          // 检查所有可能的 prompt chunk 名称变体
+          const promptChunk = chunks.prompt || chunks.Prompt || chunks.PROMPT || 
+                             chunks["comfyui_prompt"] || chunks["ComfyUI_Prompt"];
+          
+          if (!parsed && promptChunk) {
             try {
-              const maybe = parseComfyWorkflow(chunks.prompt);
+              const maybe = parseComfyWorkflow(promptChunk);
               if (maybe && Array.isArray(maybe.nodes) && maybe.nodes.length > 0) {
                 parsed = maybe.canonical;
                 detectedPlatform = "ComfyUI";
-                const prStr = typeof chunks.prompt === "string" ? chunks.prompt : JSON.stringify(chunks.prompt, null, 2);
+                const prStr = typeof promptChunk === "string" ? promptChunk : JSON.stringify(promptChunk, null, 2);
                 setPromptRaw(prStr);
+                console.log("✅ ComfyUI prompt chunk parsed:", {
+                  hasPositive: !!parsed.positive,
+                  hasNegative: !!parsed.negative,
+                  positiveLength: parsed.positive?.length || 0,
+                  negativeLength: parsed.negative?.length || 0,
+                });
               } else {
-                const comfyLite = tryParseComfy(chunks.prompt);
+                const comfyLite = tryParseComfy(promptChunk);
                 if (comfyLite) {
                   parsed = comfyLite;
                   detectedPlatform = "ComfyUI";
-                  const prStr = typeof chunks.prompt === "string" ? chunks.prompt : JSON.stringify(chunks.prompt, null, 2);
+                  const prStr = typeof promptChunk === "string" ? promptChunk : JSON.stringify(promptChunk, null, 2);
                   setPromptRaw(prStr);
                 }
               }
-            } catch {
-              const comfyLite = tryParseComfy(chunks.prompt);
+            } catch (e) {
+              console.warn("⚠️ Failed to parse ComfyUI prompt chunk:", e);
+              const comfyLite = tryParseComfy(promptChunk);
               if (comfyLite) {
                 parsed = comfyLite;
                 detectedPlatform = "ComfyUI";
-                const prStr = typeof chunks.prompt === "string" ? chunks.prompt : JSON.stringify(chunks.prompt, null, 2);
+                const prStr = typeof promptChunk === "string" ? promptChunk : JSON.stringify(promptChunk, null, 2);
                 setPromptRaw(prStr);
               }
             }
@@ -1633,12 +1671,7 @@ export default function UploadStep2({
               value={loraName}
               onChange={(e) => setLoraName(e.target.value)}
             />
-            {detectedLorasWithoutLinks.length > 0 && (
-              <div className="text-xs text-yellow-400 mt-1">
-                ⚠️ 检测到 LoRA 名称但无链接：{detectedLorasWithoutLinks.join(", ")}<br/>
-                如需填入，请手动复制粘贴到上方字段
-              </div>
-            )}
+            {/* ✅ 已移除：现在会自动填入 LoRA 名称，无需警告提示 */}
             {autoFilledLoraLink && (
               <div className="text-xs text-emerald-400 mt-1">
                 已自動偵測並填入 LoRA civitai 連結
