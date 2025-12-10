@@ -48,7 +48,7 @@ export default function ImageGrid({
     return () => window.removeEventListener('resize', updateColumns);
   }, []); // 移除 columns 依賴避免無限循環
 
-  // 將圖片按左到右順序分配到各列
+  // ✅ 將圖片智能分配到各列（總是放入最短的列，使布局更均勻）
   useEffect(() => {
     if (!list || list.length === 0) {
       setColumnArrays([]);
@@ -56,11 +56,44 @@ export default function ImageGrid({
     }
 
     const newColumnArrays = Array.from({ length: columns }, () => []);
+    const columnHeights = Array.from({ length: columns }, () => 0);
     
-    // 按順序將圖片分配到各列（左到右）
-    list.forEach((image, index) => {
-      const columnIndex = index % columns;
-      newColumnArrays[columnIndex].push(image);
+    // ✅ 智能分配：總是將圖片放入當前最短的列
+    list.forEach((image) => {
+      // 找到最短的列
+      let shortestColumnIndex = 0;
+      let shortestHeight = columnHeights[0];
+      
+      for (let i = 1; i < columns; i++) {
+        if (columnHeights[i] < shortestHeight) {
+          shortestHeight = columnHeights[i];
+          shortestColumnIndex = i;
+        }
+      }
+      
+      // 將圖片放入最短的列
+      newColumnArrays[shortestColumnIndex].push(image);
+      
+      // ✅ 估算列高度（基於圖片寬高比）
+      // 假設圖片寬度固定，高度取決於寬高比
+      // 使用一個合理的估算值（實際高度會在渲染後由瀏覽器計算）
+      const aspectRatio = image.width && image.height 
+        ? image.height / image.width 
+        : 1.5; // 默認寬高比（假設是豎圖）
+      
+      // ✅ 根據視窗寬度估算列寬，然後計算圖片高度
+      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+      let columnWidth;
+      if (viewportWidth >= 1024) {
+        columnWidth = (viewportWidth - 10 * (columns - 1) - 20) / columns; // 減去 gap 和 padding
+      } else if (viewportWidth >= 768) {
+        columnWidth = (viewportWidth - 10 * (columns - 1) - 20) / columns;
+      } else {
+        columnWidth = (viewportWidth - 10 * (columns - 1) - 20) / columns;
+      }
+      
+      const estimatedHeight = columnWidth * aspectRatio;
+      columnHeights[shortestColumnIndex] += estimatedHeight + 10; // +10 是 gap
     });
 
     setColumnArrays(newColumnArrays);

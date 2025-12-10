@@ -329,23 +329,63 @@ export default function ImagesPage() {
     return () => window.removeEventListener("image-updated", onUpdated);
   }, [applyUpdatedImage]);
 
-  // —— 無限捲動（共用 hook） ——
+  // —— 無限捲動（共用 hook，優化：提前加載） ——
   useEffect(() => {
     if (!filtersReady || !hasMore || loading || loadingMore) return;
     const el = loadMoreRef.current;
     if (!el) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMore();
-        }
-      },
-      { root: null, rootMargin: "500px 0px", threshold: 0.01 },
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
+    // ✅ 動態計算 rootMargin：根據視窗高度提前加載
+    // 提前 2.5 個視窗高度的距離，確保用戶滾動時不會等待
+    const calculatePreloadDistance = () => {
+      const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+      // 提前 2.5 個視窗高度，至少 1200px，確保快速滾動時也能提前加載
+      return Math.max(viewportHeight * 2.5, 1200);
+    };
+    
+    let currentObserver = null;
+    let preloadDistance = calculatePreloadDistance();
+    
+    const createObserver = () => {
+      if (currentObserver) {
+        currentObserver.disconnect();
+      }
+      preloadDistance = calculatePreloadDistance();
+      currentObserver = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            loadMore();
+          }
+        },
+        { 
+          root: null, 
+          rootMargin: `${preloadDistance}px 0px`, // ✅ 動態提前距離
+          threshold: 0.01 
+        },
+      );
+      currentObserver.observe(el);
+      return currentObserver;
+    };
+    
+    createObserver();
+    
+    // ✅ 監聽窗口大小變化，重新計算提前距離
+    const handleResize = () => {
+      const newDistance = calculatePreloadDistance();
+      if (Math.abs(newDistance - preloadDistance) > 200) {
+        // 如果距離變化超過 200px，重新創建 observer
+        createObserver();
+      }
+    };
+    
+    window.addEventListener('resize', handleResize, { passive: true });
+    
+    return () => {
+      if (currentObserver) {
+        currentObserver.disconnect();
+      }
+      window.removeEventListener('resize', handleResize);
+    };
   }, [filtersReady, hasMore, loadMore, loading, loadingMore]);
 
   // Like hook
