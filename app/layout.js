@@ -11,10 +11,9 @@ import LoginModal from "@/components/auth/LoginModal";
 import RegisterModal from "@/components/auth/RegisterModal";
 import SessionProviderWrapper from "@/components/auth/SessionProviderWrapper";
 import { FilterProvider } from "@/components/context/FilterContext";
-import ClientToaster from "@/components/common/ClientToaster";
 import { PlayerProvider } from "@/components/context/PlayerContext";
 import ConditionalPlayer from "@/components/common/ConditionalPlayer";
-import AdFooterPlaceholder from "@/components/common/AdFooterPlaceholder";
+import ClientOnlyComponents from "@/components/common/ClientOnlyComponents";
 import GlobalNotificationManager from "@/components/common/GlobalNotificationManager";
 import StorageManagerInit from "@/components/common/StorageManagerInit";
 // 移除全域 MiniPlayer / YouTubeBridge 與字型變數，恢復到較乾淨的版型
@@ -112,6 +111,221 @@ export default async function RootLayout({ children }) {
       </head>
 
       <body className={`antialiased min-h-screen bg-zinc-950 text-white`}>
+        {/* ✅ 全局清理脚本：確保頁面加載時移除所有殘留的遮罩 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                // ✅ 激進清理函數：移除所有可能的遮罩和阻止交互的元素
+                function aggressiveCleanup() {
+                  console.log('🧹 開始清理遮罩...');
+                  
+                  // 1. 重置 body 樣式
+                  document.body.style.overflow = "";
+                  document.body.style.pointerEvents = "";
+                  document.body.style.position = "";
+                  document.documentElement.style.overflow = "";
+                  document.documentElement.style.pointerEvents = "";
+                  
+                  // 2. 移除所有固定定位的遮罩層（更激進）
+                  const allFixedElements = document.querySelectorAll('*');
+                  allFixedElements.forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    if (style.position === 'fixed' && 
+                        (el.classList.contains('inset-0') || 
+                         el.classList.contains('backdrop-blur-sm') ||
+                         el.classList.contains('bg-black') ||
+                         el.getAttribute('class')?.includes('bg-black/60') ||
+                         el.getAttribute('class')?.includes('backdrop'))) {
+                      // 檢查是否是遮罩層（通常是固定定位 + 全屏 + 半透明背景）
+                      const rect = el.getBoundingClientRect();
+                      const isFullScreen = rect.width >= window.innerWidth * 0.9 && 
+                                         rect.height >= window.innerHeight * 0.9;
+                      if (isFullScreen && el !== document.body && el !== document.documentElement) {
+                        console.log('🗑️ 移除遮罩元素:', el);
+                        if (el.parentNode) {
+                          el.parentNode.removeChild(el);
+                        }
+                      }
+                    }
+                  });
+                  
+                  // 3. 移除所有 Dialog 相關的元素（Headless UI）
+                  const dialogs = document.querySelectorAll('[role="dialog"]');
+                  dialogs.forEach(dialog => {
+                    // 檢查 Dialog 是否應該被關閉（沒有 data-keep 屬性）
+                    if (!dialog.hasAttribute('data-keep')) {
+                      const backdrop = dialog.querySelector('[class*="backdrop"], [class*="bg-black/60"]');
+                      if (backdrop) {
+                        console.log('🗑️ 移除 Dialog 遮罩:', backdrop);
+                        if (backdrop.parentNode) {
+                          backdrop.parentNode.removeChild(backdrop);
+                        }
+                      }
+                      // 如果 Dialog 本身是遮罩層，也移除
+                      const dialogStyle = window.getComputedStyle(dialog);
+                      if (dialogStyle.position === 'fixed' && dialog.classList.contains('inset-0')) {
+                        console.log('🗑️ 移除 Dialog 本身:', dialog);
+                        if (dialog.parentNode) {
+                          dialog.parentNode.removeChild(dialog);
+                        }
+                      }
+                    }
+                  });
+                  
+                  // 4. 移除所有阻止交互的樣式（但只針對 body 和 html，避免影響其他元素）
+                  // ✅ 注意：不要移除其他元素的 pointerEvents，因為某些元素可能需要它
+                  if (document.body.style.pointerEvents === 'none') {
+                    document.body.style.pointerEvents = "";
+                  }
+                  if (document.documentElement.style.pointerEvents === 'none') {
+                    document.documentElement.style.pointerEvents = "";
+                  }
+                  
+                  // 5. 強制移除所有 z-index 很高的固定元素（可能是殘留的遮罩）
+                  const highZElements = document.querySelectorAll('*');
+                  highZElements.forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    const zIndex = parseInt(style.zIndex);
+                    if (zIndex >= 50 && style.position === 'fixed' && 
+                        el.classList.contains('inset-0') &&
+                        !el.hasAttribute('data-keep')) {
+                      const rect = el.getBoundingClientRect();
+                      if (rect.width >= window.innerWidth * 0.9 && 
+                          rect.height >= window.innerHeight * 0.9) {
+                        console.log('🗑️ 移除高 z-index 遮罩:', el);
+                        if (el.parentNode) {
+                          el.parentNode.removeChild(el);
+                        }
+                      }
+                    }
+                  });
+                  
+                  console.log('✅ 清理完成');
+                }
+                
+                // ✅ 檢查 URL 參數，如果有 ?forceCleanup=true，立即執行激進清理
+                if (typeof window !== 'undefined' && window.location.search.includes('forceCleanup=true')) {
+                  aggressiveCleanup();
+                  // 移除 URL 參數
+                  const url = new URL(window.location);
+                  url.searchParams.delete('forceCleanup');
+                  window.history.replaceState({}, '', url);
+                }
+                
+                // 頁面加載時立即執行
+                if (document.readyState === 'loading') {
+                  document.addEventListener('DOMContentLoaded', aggressiveCleanup);
+                } else {
+                  aggressiveCleanup();
+                }
+                
+                // ✅ 頁面可見時檢查是否有殘留遮罩（但不激進清理，避免影響正常交互）
+                document.addEventListener('visibilitychange', function() {
+                  if (!document.hidden) {
+                    // ✅ 只重置 body 樣式，不移除元素（避免誤刪正常的 Modal）
+                    // ✅ 但要注意：如果 body 的 overflow 是 hidden（表示有 Modal 打開），不要重置
+                    const bodyOverflow = window.getComputedStyle(document.body).overflow;
+                    if (bodyOverflow !== 'hidden') {
+                      document.body.style.overflow = "";
+                    }
+                    document.body.style.pointerEvents = "";
+                    document.documentElement.style.overflow = "";
+                    document.documentElement.style.pointerEvents = "";
+                    
+                    // ✅ 檢查是否有打開的 Modal（通過檢查 Dialog 或 Modal 組件）
+                    // 1. Headless UI Dialog 打開時會有特定的結構
+                    const dialogs = document.querySelectorAll('[role="dialog"]');
+                    const openDialogs = new Set(); // 記錄所有打開的 Dialog 及其父元素
+                    
+                    dialogs.forEach(dialog => {
+                      // ✅ 檢查 Dialog 是否打開（Headless UI 的 Dialog 打開時 aria-hidden 為 false 或不存在）
+                      const ariaHidden = dialog.getAttribute('aria-hidden');
+                      if (ariaHidden !== 'true') {
+                        // ✅ 檢查 Dialog 是否有可見的內容（不是隱藏的）
+                        const style = window.getComputedStyle(dialog);
+                        if (style.display !== 'none' && style.visibility !== 'hidden') {
+                          // ✅ 記錄這個 Dialog 及其所有父元素（包括遮罩層）
+                          let parent = dialog.parentNode;
+                          while (parent && parent !== document.body) {
+                            openDialogs.add(parent);
+                            parent = parent.parentNode;
+                          }
+                          openDialogs.add(dialog);
+                        }
+                      }
+                    });
+                    
+                    // 2. ✅ 檢測自定義 Modal 組件（使用 createPortal，有 fixed inset-0 容器 + bg-zinc-900 內容）
+                    const modalContainers = document.querySelectorAll('.fixed.inset-0.overflow-hidden');
+                    modalContainers.forEach(container => {
+                      const style = window.getComputedStyle(container);
+                      // ✅ 檢查容器是否可見
+                      if (style.display !== 'none' && style.visibility !== 'hidden') {
+                        // ✅ 檢查內部是否有 Modal 內容（bg-zinc-900 或其他 Modal 特徵）
+                        const hasModalContent = container.querySelector('.bg-zinc-900, .bg-neutral-900, [class*="rounded-2xl"], [class*="rounded-xl"]');
+                        if (hasModalContent) {
+                          // ✅ 記錄這個 Modal 容器及其所有子元素（包括遮罩層）
+                          openDialogs.add(container);
+                          const allChildren = container.querySelectorAll('*');
+                          allChildren.forEach(child => openDialogs.add(child));
+                        }
+                      }
+                    });
+                    
+                    // ✅ 只移除明顯是殘留的遮罩（全屏 + 固定定位 + 半透明 + 沒有關聯的 Dialog）
+                    const allFixedElements = document.querySelectorAll('*');
+                    allFixedElements.forEach(el => {
+                      // ✅ 如果這個元素是打開的 Dialog 的一部分，跳過
+                      if (openDialogs.has(el)) {
+                        return;
+                      }
+                      
+                      const style = window.getComputedStyle(el);
+                      if (style.position === 'fixed') {
+                        const rect = el.getBoundingClientRect();
+                        const isFullScreen = rect.width >= window.innerWidth * 0.95 && 
+                                           rect.height >= window.innerHeight * 0.95;
+                        // ✅ 只移除明顯是遮罩的元素（全屏 + 半透明背景）
+                        if (isFullScreen && 
+                            el !== document.body && 
+                            el !== document.documentElement &&
+                            (el.classList.contains('backdrop-blur-sm') || 
+                             el.getAttribute('class')?.includes('bg-black/60'))) {
+                          // ✅ 檢查是否有關聯的 Dialog（在同一個父元素中或父元素的父元素中）
+                          let parent = el.parentNode;
+                          let hasDialog = false;
+                          while (parent && parent !== document.body) {
+                            if (parent.querySelector('[role="dialog"]')) {
+                              hasDialog = true;
+                              break;
+                            }
+                            parent = parent.parentNode;
+                          }
+                          
+                          // ✅ 如果沒有關聯的 Dialog，才移除（可能是殘留的遮罩）
+                          if (!hasDialog) {
+                            const childCount = el.children.length;
+                            // ✅ 如果只有遮罩層本身，沒有實際內容，才移除
+                            if (childCount === 0 || (childCount === 1 && el.querySelector('[role="dialog"]') === null)) {
+                              console.log('🗑️ 移除殘留遮罩:', el);
+                              if (el.parentNode) {
+                                el.parentNode.removeChild(el);
+                              }
+                            }
+                          }
+                        }
+                      }
+                    });
+                  }
+                });
+                
+                // ✅ 暴露全局清理函數，方便在控制台調用
+                window.forceCleanup = aggressiveCleanup;
+              })();
+            `,
+          }}
+        />
         <SessionProviderWrapper>
           <CurrentUserProvider>
             <FilterProvider>
@@ -130,8 +344,7 @@ export default async function RootLayout({ children }) {
               </div>
 
               <FeedbackButton />
-              <ClientToaster />
-              <AdFooterPlaceholder />
+              <ClientOnlyComponents />
 
               {/* 全域通知管理器 */}
               <GlobalNotificationManager />

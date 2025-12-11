@@ -34,8 +34,20 @@ export default function Modal({ isOpen, onClose, title, children, bottomOffset =
 
   useEffect(() => {
     setMounted(true);
-    return () => setMounted(false);
-  }, []);
+    
+    // ✅ 監聽關閉所有模態框的事件（登出時使用）
+    const handleCloseAll = () => {
+      if (isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener("closeAllModals", handleCloseAll);
+    
+    return () => {
+      setMounted(false);
+      window.removeEventListener("closeAllModals", handleCloseAll);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen || !mounted) return null;
 

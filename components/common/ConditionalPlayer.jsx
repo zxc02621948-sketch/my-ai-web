@@ -25,10 +25,25 @@ export default function ConditionalPlayer() {
       player?.setMiniPlayerEnabled?.(pinned);
     };
     
+    // ✅ 監聽登出事件，清理播放器狀態
+    const handleLogout = () => {
+      if (player) {
+        player.setMiniPlayerEnabled?.(false);
+        player.pause?.();
+        player.setPlaylist?.([]);
+        player.setActiveIndex?.(0);
+        player.setPinnedOwnerInfo?.(null);
+        player.setPlayerOwner?.(null);
+        setIsPinned(false);
+      }
+    };
+    
     window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
+    window.addEventListener('userLogout', handleLogout);
     
     return () => {
       window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
+      window.removeEventListener('userLogout', handleLogout);
     };
   }, [player]);
   

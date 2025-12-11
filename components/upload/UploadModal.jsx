@@ -105,8 +105,15 @@ export default function UploadModal() {
       setStep(1);
       setIsOpen(true);
     };
+    const closeAll = () => {
+      setIsOpen(false);
+    };
     window.addEventListener("openUploadModal", open);
-    return () => window.removeEventListener("openUploadModal", open);
+    window.addEventListener("closeAllModals", closeAll);
+    return () => {
+      window.removeEventListener("openUploadModal", open);
+      window.removeEventListener("closeAllModals", closeAll);
+    };
   }, []);
 
   const onClose = () => setIsOpen(false);

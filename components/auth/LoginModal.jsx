@@ -20,11 +20,37 @@ export default function LoginModal() {
 
   useEffect(() => {
     const open = () => setIsOpen(true);
+    const closeAll = () => {
+      setIsOpen(false);
+      // ✅ 強制清理遮罩
+      document.body.style.overflow = "";
+      document.body.style.pointerEvents = "";
+    };
+    
     window.addEventListener("openLoginModal", open);
-    return () => window.removeEventListener("openLoginModal", open);
+    window.addEventListener("closeAllModals", closeAll);
+    
+    // ✅ 確保頁面加載時關閉登入模態框（避免登出後遮罩殘留）
+    setIsOpen(false);
+    document.body.style.overflow = "";
+    document.body.style.pointerEvents = "";
+    
+    return () => {
+      window.removeEventListener("openLoginModal", open);
+      window.removeEventListener("closeAllModals", closeAll);
+    };
   }, []);
 
-  const onClose = () => setIsOpen(false);
+  const onClose = () => {
+    setIsOpen(false);
+    // ✅ 確保關閉時重置所有狀態
+    setEmail("");
+    setPassword("");
+    setError("");
+    setIsLoading(false);
+    setShowResendButton(false);
+    setCooldown(0);
+  };
 
   const handleLogin = async () => {
     setIsLoading(true);

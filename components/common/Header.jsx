@@ -534,13 +534,92 @@ export default function Header({
                             <button
                               onClick={async () => {
                                 setUserMenuOpen(false);
+                                // ✅ 登出前強制清理所有遮罩和模態框
+                                window.dispatchEvent(new CustomEvent("closeAllModals"));
+                                
+                                // ✅ 調用全局清理函數（如果存在）
+                                if (typeof window !== 'undefined' && window.forceCleanup) {
+                                  window.forceCleanup();
+                                } else {
+                                  // ✅ 備用清理邏輯
+                                  // 強制移除所有可能的遮罩元素
+                                  const overlays = document.querySelectorAll('[class*="backdrop"], [class*="bg-black/60"], [role="dialog"]');
+                                  overlays.forEach(el => {
+                                    if (el.parentNode) {
+                                      el.parentNode.removeChild(el);
+                                    }
+                                  });
+                                  
+                                  // 移除所有固定定位的遮罩層
+                                  const fixedOverlays = document.querySelectorAll('.fixed.inset-0[class*="bg-black"]');
+                                  fixedOverlays.forEach(el => {
+                                    if (el.parentNode) {
+                                      el.parentNode.removeChild(el);
+                                    }
+                                  });
+                                  
+                                  // 重置 body 樣式
+                                  document.body.style.overflow = "";
+                                  document.body.style.pointerEvents = "";
+                                  
+                                  // 移除所有可能阻止交互的元素
+                                  const blockingElements = document.querySelectorAll('[style*="pointer-events: none"]');
+                                  blockingElements.forEach(el => {
+                                    el.style.pointerEvents = "";
+                                  });
+                                }
+                                
+                                // ✅ 清理釘選播放器相關的狀態和緩存
+                                try {
+                                  const { clearPinnedPlayerCache } = await import("@/utils/pinnedPlayerCache");
+                                  clearPinnedPlayerCache();
+                                  
+                                  // ✅ 清理 sessionStorage 中的釘選播放器緩存
+                                  if (typeof sessionStorage !== 'undefined') {
+                                    sessionStorage.removeItem('app_pinned_player_cache');
+                                  }
+                                  
+                                  // ✅ 觸發播放器重置事件
+                                  window.dispatchEvent(new CustomEvent('pinnedPlayerChanged', { 
+                                    detail: { isPinned: false } 
+                                  }));
+                                  
+                                  // ✅ 觸發登出事件，讓播放器組件可以清理狀態
+                                  window.dispatchEvent(new CustomEvent('userLogout'));
+                                  
+                                  // ✅ 清理播放器相關的 localStorage（在 localStorage.clear() 之前）
+                                  const playerKeys = [];
+                                  for (let i = 0; i < localStorage.length; i++) {
+                                    const key = localStorage.key(i);
+                                    if (key && (
+                                      key.includes('pinnedPlayer') || 
+                                      key.includes('playlist_') ||
+                                      key.includes('miniPlayer') ||
+                                      key.startsWith('player_')
+                                    )) {
+                                      playerKeys.push(key);
+                                    }
+                                  }
+                                  playerKeys.forEach(key => localStorage.removeItem(key));
+                                } catch (e) {
+                                  console.warn("清理播放器狀態失敗:", e);
+                                }
+                                
                                 localStorage.clear();
                                 await axios.post(
                                   "/api/auth/logout",
                                   {},
                                   { withCredentials: true },
                                 );
-                                location.reload();
+                                
+                                // ✅ 再次確保清理（在 reload 前）
+                                document.body.style.overflow = "";
+                                document.body.style.pointerEvents = "";
+                                
+                                // ✅ 使用 setTimeout 確保清理完成後再 reload
+                                setTimeout(() => {
+                                  location.reload();
+                                }, 100);
                               }}
                               className="block w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-red-400"
                               role="menuitem"

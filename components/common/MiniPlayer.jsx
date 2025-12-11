@@ -1366,10 +1366,27 @@ export default function MiniPlayer() {
       }
     };
     
+    // ✅ 監聽登出事件，清理播放器狀態
+    const handleLogout = () => {
+      const ref = playerRef.current;
+      if (ref) {
+        ref.setMiniPlayerEnabled?.(false);
+        ref.pause?.();
+        ref.setPlaylist?.([]);
+        ref.setActiveIndex?.(0);
+        ref.setPinnedOwnerInfo?.(null);
+        ref.setPlayerOwner?.(null);
+        setIsPinned(false);
+        setPinnedPlayerData(null);
+      }
+    };
+    
     window.addEventListener('pinnedPlayerChanged', handlePinnedChange);
+    window.addEventListener('userLogout', handleLogout);
     
     return () => {
       window.removeEventListener('pinnedPlayerChanged', handlePinnedChange);
+      window.removeEventListener('userLogout', handleLogout);
     };
   }, []);
 

@@ -29,8 +29,13 @@ export default function RegisterModal({ isOpen, onClose }) {
 
   useEffect(() => {
     const handleOpen = () => setIsOpen(true);
+    const closeAll = () => setIsOpen(false);
     window.addEventListener("openRegisterModal", handleOpen);
-    return () => window.removeEventListener("openRegisterModal", handleOpen);
+    window.addEventListener("closeAllModals", closeAll);
+    return () => {
+      window.removeEventListener("openRegisterModal", handleOpen);
+      window.removeEventListener("closeAllModals", closeAll);
+    };
   }, []);
 
   const resetForm = () => {

@@ -3,8 +3,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload } from 'lucide-react';
+import { useCurrentUser } from '@/contexts/CurrentUserContext';
+import { notify } from '@/components/common/GlobalNotificationManager';
 
 const UploadDropdown = () => {
+  const { currentUser } = useCurrentUser();
   const [isOpen, setIsOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [isMobile, setIsMobile] = useState(false); // 使用 state 避免 hydration mismatch
@@ -58,6 +61,17 @@ const UploadDropdown = () => {
   }, [isOpen]);
 
   const handleUpload = (type) => {
+    // ✅ 檢查是否已登錄
+    if (!currentUser) {
+      setIsOpen(false);
+      notify.warning("請先登錄", "您需要先登錄才能上傳內容。");
+      // 延遲一下再打開登錄彈窗，讓提示先顯示
+      setTimeout(() => {
+        window.dispatchEvent(new Event('openLoginModal'));
+      }, 300);
+      return;
+    }
+    
     setIsOpen(false);
     
     if (type === 'image') {
@@ -77,6 +91,16 @@ const UploadDropdown = () => {
 
   // 手機版：直接觸發圖片上傳，不顯示下拉選單
   const handleMobileUpload = () => {
+    // ✅ 檢查是否已登錄
+    if (!currentUser) {
+      notify.warning("請先登錄", "您需要先登錄才能上傳內容。");
+      // 延遲一下再打開登錄彈窗，讓提示先顯示
+      setTimeout(() => {
+        window.dispatchEvent(new Event('openLoginModal'));
+      }, 300);
+      return;
+    }
+    
     window.dispatchEvent(new CustomEvent('openUploadModal', { 
       detail: { user: null, mobileSimple: true }
     }));
