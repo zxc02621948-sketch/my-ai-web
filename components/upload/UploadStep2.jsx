@@ -11,6 +11,10 @@ import SelectField from "@/components/common/SelectField";
 
 const IMAGE_UPLOAD_SUCCESS_STORAGE_KEY = "imageUploadSuccessMessage";
 
+// ✅ Step 1: 上傳模式開關（從環境變數讀取）
+const UPLOAD_MODE = process.env.NEXT_PUBLIC_UPLOAD_MODE || "vercel";
+const IS_DIRECT_UPLOAD = UPLOAD_MODE === "direct";
+
 export default function UploadStep2({
   rating,
   setRating,
@@ -833,6 +837,136 @@ export default function UploadStep2({
   // ====== Submit ======
   const allowedModelRegex = /^https?:\/\/(www\.)?(civitai\.com|seaart\.ai)(\/|$)/i;
 
+  // ✅ Step 2: 直傳模式（實現）
+  const uploadDirect = async (imageFile, uploadedOriginalImageUrl) => {
+    console.log("[UPLOAD] direct mode enabled");
+    
+    try {
+      // Step 2-1: 獲取 Direct Upload URL 和 imageId
+      const urlRes = await fetch("/api/images/direct-upload-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          // 可選：傳遞 metadata 給 API（用於追蹤）
+          metadata: {},
+        }),
+        credentials: "include",
+      });
+
+      if (!urlRes.ok) {
+        let urlError;
+        try {
+          urlError = await urlRes.json();
+        } catch {
+          urlError = { message: `HTTP ${urlRes.status}: ${urlRes.statusText}` };
+        }
+        throw new Error(urlError.message || urlError.error || "無法獲取上傳 URL");
+      }
+
+      const urlData = await urlRes.json();
+      if (!urlData.success || !urlData.uploadURL || !urlData.imageId) {
+        throw new Error("無法獲取上傳 URL：API 響應格式錯誤");
+      }
+
+      const { uploadURL, imageId } = urlData;
+      console.log("[UPLOAD] 獲取到 Direct Upload URL，imageId:", imageId);
+
+      // Step 2-2: 直接上傳文件到 Cloudflare
+      const formData = new FormData();
+      formData.append("file", imageFile); // Cloudflare Images 使用 'file' 欄位名
+
+      const uploadRes = await fetch(uploadURL, {
+        method: "POST",
+        body: formData,
+        // ✅ 注意：不要設置 Content-Type header，讓瀏覽器自動設置 multipart/form-data boundary
+      });
+
+      if (!uploadRes.ok) {
+        let uploadError;
+        try {
+          uploadError = await uploadRes.json();
+        } catch {
+          const errorText = await uploadRes.text();
+          uploadError = { message: errorText || `HTTP ${uploadRes.status}: ${uploadRes.statusText}` };
+        }
+
+        const errorMessage = uploadError.errors?.[0]?.message || uploadError.message || "上傳失敗";
+        console.error("[UPLOAD] Cloudflare 直傳失敗：", {
+          status: uploadRes.status,
+          error: uploadError,
+        });
+        throw new Error(errorMessage);
+      }
+
+      const uploadResult = await uploadRes.json();
+      if (!uploadResult.success) {
+        const errorMessage = uploadResult.errors?.[0]?.message || "上傳失敗";
+        throw new Error(errorMessage);
+      }
+
+      console.log("[UPLOAD] Cloudflare 直傳成功，imageId:", imageId);
+
+      // Step 2-3: 返回結果（格式與 uploadViaVercelApi 一致）
+      return {
+        imageId,
+        imageUrl: `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageId}/public`,
+        originalImageId: null, // R2 不使用 imageId，使用 URL
+      };
+    } catch (error) {
+      console.error("[UPLOAD] 直傳錯誤：", error);
+      // ✅ 可選：fallback 到舊流程（如果需要保命功能，可以取消註解）
+      // console.warn("[UPLOAD] 直傳失敗，回退到舊流程");
+      // return await uploadViaVercelApi(imageFile);
+      throw error;
+    }
+  };
+
+  // ✅ Step 1: 舊流程（Vercel API 路由）
+  const uploadViaVercelApi = async (imageFile) => {
+    // 步驟 2: 上傳到 Cloudflare Images（用於高品質 WebP/AVIF 顯示）
+    // ✅ 使用原圖上傳，讓 Cloudflare Images 負責格式轉換和優化
+    // 這樣可以確保放大後仍然清晰，同時獲得 WebP/AVIF 的文件大小優勢
+    const serverFormData = new FormData();
+    serverFormData.append("file", imageFile); // ✅ 使用原圖，不是壓縮圖
+    
+    const serverRes = await fetch("/api/cloudflare-upload", {
+      method: "POST",
+      body: serverFormData,
+    });
+    
+    if (!serverRes.ok) {
+      let serverError;
+      try {
+        serverError = await serverRes.json();
+      } catch (parseError) {
+        serverError = { 
+          message: `服務器錯誤 (${serverRes.status}): ${serverRes.statusText || "未知錯誤"}` 
+        };
+      }
+      
+      if (serverRes.status === 429) {
+        const errorMessage = serverError.message || "上傳請求過於頻繁，請稍後再試（建議等待 1-2 分鐘後重試）";
+        throw new Error(errorMessage);
+      }
+      
+      const errorMessage = serverError.error || serverError.message || "服務器端上傳失敗";
+      throw new Error(errorMessage);
+    }
+    
+    const serverData = await serverRes.json();
+    if (!serverData.success || !serverData.imageId) {
+      throw new Error("服務器端上傳失敗：未獲取到圖片 ID");
+    }
+    
+    return {
+      imageId: serverData.imageId,
+      imageUrl: `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${serverData.imageId}/public`,
+      originalImageId: serverData.originalImageId || null,
+    };
+  };
+
   const handleUpload = async () => {
     if (!imageFile) {
       notify.warning("提示", "請先選擇圖片檔");
@@ -966,45 +1100,20 @@ export default function UploadStep2({
       const uploadedOriginalImageUrl = originalData.originalImageUrl;
       console.log("✅ R2 原圖上傳成功:", uploadedOriginalImageUrl);
       
-      // 步驟 2: 上傳到 Cloudflare Images（用於高品質 WebP/AVIF 顯示）
-      // ✅ 使用原圖上傳，讓 Cloudflare Images 負責格式轉換和優化
-      // 這樣可以確保放大後仍然清晰，同時獲得 WebP/AVIF 的文件大小優勢
-      const serverFormData = new FormData();
-      serverFormData.append("file", imageFile); // ✅ 使用原圖，不是壓縮圖
-      
-      const serverRes = await fetch("/api/cloudflare-upload", {
-        method: "POST",
-        body: serverFormData,
-      });
-      
-      if (!serverRes.ok) {
-        let serverError;
-        try {
-          serverError = await serverRes.json();
-        } catch (parseError) {
-          serverError = { 
-            message: `服務器錯誤 (${serverRes.status}): ${serverRes.statusText || "未知錯誤"}` 
-          };
-        }
-        
-        if (serverRes.status === 429) {
-          const errorMessage = serverError.message || "上傳請求過於頻繁，請稍後再試（建議等待 1-2 分鐘後重試）";
-          throw new Error(errorMessage);
-        }
-        
-        const errorMessage = serverError.error || serverError.message || "服務器端上傳失敗";
-        throw new Error(errorMessage);
+      // ✅ Step 1: 分流層 - 根據環境變數選擇上傳方式
+      let uploadResult;
+      if (IS_DIRECT_UPLOAD) {
+        // 直傳模式（未實作）
+        uploadResult = await uploadDirect(imageFile, uploadedOriginalImageUrl);
+      } else {
+        // 舊流程（Vercel API 路由）
+        uploadResult = await uploadViaVercelApi(imageFile);
       }
       
-      const serverData = await serverRes.json();
-      if (!serverData.success || !serverData.imageId) {
-        throw new Error("服務器端上傳失敗：未獲取到圖片 ID");
-      }
-      
-      imageId = serverData.imageId;
-      const imageUrl = `https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/${imageId}/public`;
+      imageId = uploadResult.imageId;
+      const imageUrl = uploadResult.imageUrl;
       // ✅ 原圖 URL 來自 R2，壓縮圖 ID 來自 Cloudflare Images
-      const uploadedOriginalImageId = null; // R2 不使用 imageId，使用 URL
+      const uploadedOriginalImageId = uploadResult.originalImageId || null; // R2 不使用 imageId，使用 URL
 
       // 使用之前聲明的 token（在第840行）
       const decoded = token ? jwtDecode(token) : null;
@@ -1349,7 +1458,7 @@ export default function UploadStep2({
                 return;
               }
               
-              // 验证文件大小（最大 20MB）
+              // ✅ 验证文件大小（图片上传限制：20MB）
               const maxSize = 20 * 1024 * 1024; // 20MB
               if (f.size > maxSize) {
                 notify.warning("文件太大", `最大支持 20MB，当前文件: ${(f.size / 1024 / 1024).toFixed(2)}MB`);

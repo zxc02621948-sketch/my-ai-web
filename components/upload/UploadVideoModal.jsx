@@ -10,6 +10,10 @@ import SelectField from '@/components/common/SelectField';
 
 const SUCCESS_MESSAGE_STORAGE_KEY = 'videoUploadSuccessMessage';
 
+// ✅ Step 1: 上傳模式開關（從環境變數讀取，與圖片上傳一致）
+const UPLOAD_MODE = process.env.NEXT_PUBLIC_UPLOAD_MODE || "vercel";
+const IS_DIRECT_UPLOAD = UPLOAD_MODE === "direct";
+
 export default function UploadVideoModal({
   isOpen,
   onClose,
@@ -144,10 +148,11 @@ export default function UploadVideoModal({
       return;
     }
 
-    // 驗證檔案大小（20MB）
-    const maxSize = 20 * 1024 * 1024;
+    // ✅ 驗證檔案大小（提高限制以支持更大的影片檔案）
+    // 注意：雖然上傳到 R2，但文件仍會經過 Vercel，所以受 Next.js 限制
+    const maxSize = 100 * 1024 * 1024; // 100MB（提高限制以方便測試）
     if (selectedFile.size > maxSize) {
-      toast.error(`❌ 檔案過大！最大 20MB，當前：${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`);
+      toast.error(`❌ 檔案過大！最大 100MB，當前：${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`);
       e.target.value = '';
       return;
     }
@@ -263,6 +268,123 @@ export default function UploadVideoModal({
     video.src = videoUrl;
   };
 
+  // ✅ Step 2: 直傳模式（實現）
+  const uploadDirect = async (file, metadata) => {
+    console.log("[VIDEO UPLOAD] direct mode enabled");
+    
+    try {
+      // Step 2-1: 獲取 Presigned URL
+      const urlRes = await fetch("/api/videos/upload-presigned-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+          metadata,
+        }),
+        credentials: "include",
+      });
+
+      if (!urlRes.ok) {
+        let urlError;
+        try {
+          urlError = await urlRes.json();
+        } catch {
+          urlError = { error: `HTTP ${urlRes.status}: ${urlRes.statusText}` };
+        }
+        throw new Error(urlError.error || "無法獲取上傳 URL");
+      }
+
+      const urlData = await urlRes.json();
+      if (!urlData.success || !urlData.uploadUrl || !urlData.key) {
+        throw new Error("無法獲取上傳 URL：API 響應格式錯誤");
+      }
+
+      const { uploadUrl, key, publicUrl } = urlData;
+      console.log("[VIDEO UPLOAD] 獲取到 Presigned URL，key:", key);
+      
+      // ✅ 驗證：確保 uploadUrl 是 path-style（bucket 在 path 中，不在 host 中）
+      const urlObj = new URL(uploadUrl);
+      const isPathStyle = !urlObj.hostname.includes(process.env.NEXT_PUBLIC_R2_BUCKET_NAME || 'my-ai-web-media');
+      console.log("[VIDEO UPLOAD] URL 驗證:", {
+        hostname: urlObj.hostname,
+        pathname: urlObj.pathname,
+        isPathStyle: isPathStyle || "無法驗證（缺少環境變數）",
+        urlPreview: uploadUrl.substring(0, 120) + "...",
+      });
+
+      // Step 2-2: 直接上傳文件到 R2
+      // ✅ 方案 A：不手動設置 Content-Type header，讓瀏覽器自動處理
+      // presigned URL 簽名時只簽了 host，不包含 content-type，所以不會有簽名不匹配的問題
+      // 🔴 關鍵：直接使用 uploadUrl，不要修改 path 或 host
+      console.log("[VIDEO UPLOAD] 準備上傳到 R2（不設置 Content-Type header，直接使用 uploadUrl）");
+      
+      let uploadRes;
+      try {
+        // ✅ 直接使用 uploadUrl，不做任何修改
+        uploadRes = await fetch(uploadUrl, {
+          method: "PUT",
+          body: file,
+          // ✅ 不設置 Content-Type header，讓瀏覽器根據 file 自動設置
+          // ✅ 不設置任何其他 header，避免影響簽名驗證
+        });
+      } catch (fetchError) {
+        // ✅ 捕獲網絡錯誤（如 CORS、連接失敗等）
+        console.error("[VIDEO UPLOAD] Fetch 錯誤：", fetchError);
+        const errorMessage = fetchError.message || "網絡錯誤";
+        throw new Error(`上傳失敗: ${errorMessage}`);
+      }
+
+      if (!uploadRes.ok) {
+        const errorText = await uploadRes.text().catch(() => "無法讀取錯誤信息");
+        console.error("[VIDEO UPLOAD] R2 直傳失敗：", {
+          status: uploadRes.status,
+          statusText: uploadRes.statusText,
+          error: errorText,
+          uploadUrl: uploadUrl.substring(0, 100) + "...", // 只顯示前100字符，避免洩露完整URL
+        });
+        throw new Error(`上傳失敗: ${uploadRes.status} ${uploadRes.statusText} - ${errorText}`);
+      }
+
+      console.log("[VIDEO UPLOAD] R2 直傳成功，key:", key);
+
+      // Step 2-3: 返回結果（包含 key 和 publicUrl，用於後續處理）
+      return {
+        key,
+        publicUrl,
+      };
+    } catch (error) {
+      console.error("[VIDEO UPLOAD] 直傳錯誤：", error);
+      throw error;
+    }
+  };
+
+  // ✅ Step 1: 舊流程（Vercel API 路由）
+  const uploadViaVercelApi = async (file, metadata) => {
+    // 建立 FormData
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('metadata', JSON.stringify(metadata));
+
+    // 直接上傳到後端，讓後端處理 R2 上傳、縮圖生成和 DB 寫入
+    const uploadRes = await fetch('/api/videos/upload-r2-direct', {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+
+    if (!uploadRes.ok) {
+      const errorData = await uploadRes.json();
+      throw new Error(errorData.error || `上傳失敗 (${uploadRes.status})`);
+    }
+
+    const saveData = await uploadRes.json();
+    return saveData;
+  };
+
   const handleUpload = async () => {
     if (!file) {
       toast.error('請選擇影片檔案');
@@ -368,30 +490,40 @@ export default function UploadVideoModal({
         metadata
       });
 
-      // ✅ 簡化的後端代理上傳流程
-      console.log('🚀 開始後端代理上傳流程...');
-      
-      // 直接上傳到後端，讓後端處理 R2 上傳
-      const uploadRes = await fetch('/api/videos/upload-r2-direct', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-      });
+      // ✅ Step 1: 分流層 - 根據環境變數選擇上傳方式
+      let saveData;
+      if (IS_DIRECT_UPLOAD) {
+        // 直傳模式：先直接上傳到 R2，然後處理縮圖和 DB
+        console.log('🚀 開始直傳流程...');
+        const uploadResult = await uploadDirect(file, metadata);
+        
+        // 直傳成功後，調用 API 處理縮圖生成和數據庫寫入
+        const processRes = await fetch('/api/videos/process-after-direct-upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            videoKey: uploadResult.key,
+            videoUrl: uploadResult.publicUrl,
+            metadata,
+          }),
+          credentials: 'include',
+        });
 
-      console.log('🔍 後端代理上傳回應:', {
-        status: uploadRes.status,
-        statusText: uploadRes.statusText,
-        ok: uploadRes.ok,
-      });
+        if (!processRes.ok) {
+          const errorData = await processRes.json();
+          throw new Error(errorData.error || `處理失敗 (${processRes.status})`);
+        }
 
-      if (!uploadRes.ok) {
-        const errorData = await uploadRes.json();
-        console.error('後端代理上傳失敗:', errorData);
-        throw new Error(errorData.error || `上傳失敗 (${uploadRes.status})`);
+        saveData = await processRes.json();
+        console.log('✅ 直傳流程完成:', saveData);
+      } else {
+        // 舊流程：通過 Vercel API 路由
+        console.log('🚀 開始後端代理上傳流程...');
+        saveData = await uploadViaVercelApi(file, metadata);
+        console.log('✅ 後端代理上傳成功:', saveData);
       }
-
-      const saveData = await uploadRes.json();
-      console.log('✅ 後端代理上傳成功:', saveData);
 
       const completeness = saveData.completenessScore || 0;
       
@@ -475,7 +607,7 @@ export default function UploadVideoModal({
             <div className="flex items-center justify-between px-4 py-3">
               <div className="text-center flex-1">
                 <div className="text-lg font-semibold">上傳影片 +10／每日上限 {dailyQuota.limit}</div>
-                <div className="text-xs text-zinc-400 mt-1">最大 20MB，建議 10-20 秒短影片</div>
+                <div className="text-xs text-zinc-400 mt-1">最大 100MB，建議 10-20 秒短影片</div>
                 <div className="text-xs mt-2">
                   <span className={`font-medium ${dailyQuota.remaining > 0 ? 'text-green-400' : 'text-red-400'}`}>
                     今日配額：{dailyQuota.current} / {dailyQuota.limit} 部

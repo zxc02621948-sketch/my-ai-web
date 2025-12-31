@@ -160,11 +160,11 @@ export default function UploadMusicModal() {
       return;
     }
 
-    // 驗證檔案大小（10MB）
-    const maxSize = 10 * 1024 * 1024;
+    // 驗證檔案大小（20MB）
+    const maxSize = 20 * 1024 * 1024;
     if (selectedFile.size > maxSize) {
       toast.error(
-        `❌ 檔案過大！最大 10MB，當前：${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
+        `❌ 檔案過大！最大 20MB，當前：${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
       );
       e.target.value = "";
       return;
@@ -491,7 +491,7 @@ export default function UploadMusicModal() {
               <div className="text-center flex-1">
                 <div className="text-lg font-semibold">上傳音樂 +10／每日上限 {dailyQuota.limit}</div>
                 <div className="text-xs text-zinc-400 mt-1">
-                  最大 10MB，建議 2-5 分鐘
+                  最大 20MB，建議 2-5 分鐘
                 </div>
                 <div className="text-xs mt-2">
                   <span className={`font-medium ${dailyQuota.remaining > 0 ? 'text-green-400' : 'text-red-400'}`}>

@@ -6,7 +6,9 @@ import ClientVideosPage from "./ClientVideosPage";
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://www.aicreateaworld.com";
 
 export async function generateMetadata({ searchParams }) {
-  const videoId = searchParams?.video;
+  // ✅ Next.js 15: searchParams 需要 await
+  const params = await searchParams;
+  const videoId = params?.video;
   
   // 如果没有 video 参数，返回列表页的 metadata
   if (!videoId) {

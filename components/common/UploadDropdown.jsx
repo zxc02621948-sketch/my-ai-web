@@ -152,7 +152,7 @@ const UploadDropdown = () => {
             <span className="text-2xl">📷</span>
             <div>
               <div className="font-medium text-white">上傳圖片</div>
-              <div className="text-sm text-gray-400">AI 生成圖片</div>
+              <div className="text-sm text-gray-400">AI 生成圖片 (20MB)</div>
             </div>
           </button>
           
@@ -163,7 +163,7 @@ const UploadDropdown = () => {
             <span className="text-2xl">🎬</span>
             <div>
               <div className="font-medium text-white">上傳影片</div>
-              <div className="text-sm text-gray-400">10-20秒短影片 (20MB)</div>
+              <div className="text-sm text-gray-400">10-20秒短影片 (100MB)</div>
             </div>
           </button>
           
@@ -174,7 +174,7 @@ const UploadDropdown = () => {
             <span className="text-2xl">🎵</span>
             <div>
               <div className="font-medium text-white">上傳音樂</div>
-              <div className="text-sm text-gray-400">2-5分鐘音樂 (10MB)</div>
+              <div className="text-sm text-gray-400">2-5分鐘音樂 (20MB)</div>
             </div>
           </button>
         </div>
