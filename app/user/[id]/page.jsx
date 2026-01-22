@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import axios from "axios";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation";
 // ✅ 性能優化：使用動態導入延遲加載非關鍵組件，減少初始包大小
 import dynamic from "next/dynamic";
 import UserHeader from "@/components/user/UserHeader";
@@ -52,6 +52,7 @@ export default function UserProfilePage() {
   const { id } = useParams();
   const params = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
   const player = usePlayer();
   const { currentUser, setCurrentUser } = useCurrentUser(); // 使用 Context
   
@@ -108,6 +109,17 @@ export default function UserProfilePage() {
   const [isPowerCouponModalOpen, setPowerCouponModalOpen] = useState(false);
   const [isPointsModalOpen, setPointsModalOpen] = useState(false);
   const [isStoreOpen, setStoreOpen] = useState(false);
+
+  // ✅ 修復：監聽路由變化，確保頁面切換時關閉彈窗並恢復頁面狀態
+  useEffect(() => {
+    // 當路由變化時，強制關閉所有彈窗並恢復頁面狀態
+    if (selectedMusic || selectedImage) {
+      setSelectedMusic(null);
+      setSelectedImage(null);
+      // 確保恢復 body 滾動
+      document.body.style.overflow = "";
+    }
+  }, [pathname]);
 
   // ✅ 確保返回個人頁面時播放器狀態正確恢復
   useEffect(() => {

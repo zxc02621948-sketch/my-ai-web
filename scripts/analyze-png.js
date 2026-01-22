@@ -235,3 +235,5 @@ if (!imagePath) {
 
 analyzePNG(imagePath);
 
+
+

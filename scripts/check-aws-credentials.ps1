@@ -43,3 +43,5 @@ Write-Host "   - .env.local 中的 R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY" -For
 Write-Host "   - 是否重啟了 Next.js dev server（環境變數需要重啟才能生效）" -ForegroundColor Yellow
 Write-Host "   - 環境變數名稱是否一致（AWS_ vs R2_）" -ForegroundColor Yellow
 
+
+

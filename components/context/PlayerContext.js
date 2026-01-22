@@ -902,20 +902,20 @@ export function PlayerProvider({
               console.log('⏸️ 非釘選背景超時（play 啟動），自動暫停');
             }
           } catch {}
-        }, 30000);
+        }, 15000); // 15秒
         if (!backgroundPollIntervalRef.current) {
           backgroundPollIntervalRef.current = setInterval(() => {
             try {
               if (!document.hidden || pinnedOwnerRef.current) {
                 return;
               }
-              const started = backgroundHiddenSinceRef.current || Date.now();
-              const elapsed = Date.now() - started;
-              if (elapsed >= 30000 && audioRef.current && !audioRef.current.paused) {
-                audioRef.current.pause();
-                setIsPlaying(false);
-                console.log('⏸️ 非釘選背景輪詢自動暫停（play 啟動）');
-              }
+                  const started = backgroundHiddenSinceRef.current || Date.now();
+                  const elapsed = Date.now() - started;
+                  if (elapsed >= 15000 && audioRef.current && !audioRef.current.paused) {
+                    audioRef.current.pause();
+                    setIsPlaying(false);
+                    console.log('⏸️ 非釘選背景輪詢自動暫停（play 啟動）');
+                  }
             } catch {}
           }, 5000);
         }
@@ -1520,7 +1520,7 @@ export function PlayerProvider({
                   setIsPlaying(false);
                 }
               } catch {}
-            }, 30000); // 30s，可依需求調整
+            }, 15000); // 15秒
 
             // ✅ 啟動輪詢保險：每 5 秒檢查一次是否超過 30 秒
             if (!backgroundPollIntervalRef.current) {
@@ -1531,7 +1531,7 @@ export function PlayerProvider({
                   }
                   const started = backgroundHiddenSinceRef.current || Date.now();
                   const elapsed = Date.now() - started;
-                  if (elapsed >= 30000 && audioRef.current && !audioRef.current.paused) {
+                  if (elapsed >= 15000 && audioRef.current && !audioRef.current.paused) {
                     audioRef.current.pause();
                     setIsPlaying(false);
                   }

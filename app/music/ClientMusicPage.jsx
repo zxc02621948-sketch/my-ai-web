@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import MusicGrid from "@/components/music/MusicGrid";
 import MusicModal from "@/components/music/MusicModal";
 import EditMusicModal from "@/components/music/EditMusicModal";
@@ -25,11 +25,26 @@ import {
 } from "@/constants/musicCategories";
 
 const MusicPage = () => {
+  console.log('🎵 [MusicPage] ⚠️ 組件渲染', {
+    timestamp: new Date().toISOString(),
+    pathname: typeof window !== 'undefined' ? window.location.pathname : 'unknown'
+  });
+  
   const [selectedMusic, setSelectedMusic] = useState(null);
   const [showMusicModal, setShowMusicModal] = useState(false);
   const [editingMusic, setEditingMusic] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [sort, setSort] = useState("popular");
+  
+  // ✅ 修復：使用 useCallback 穩定 onClose 函數引用，避免 MusicModal 重新掛載
+  const handleMusicModalClose = useCallback(() => {
+    console.log('🎵 [MusicPage] handleMusicModalClose 被調用');
+    setShowMusicModal(false);
+    setSelectedMusic(null);
+    // 確保恢復 body 滾動
+    document.body.style.overflow = "";
+    document.body.style.position = "";
+  }, []);
   
   // ✅ 訪問記錄追蹤
   useVisitTracking();
@@ -38,6 +53,74 @@ const MusicPage = () => {
   const { currentUser } = useCurrentUser();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const prevPathnameRef = useRef(pathname); // ✅ 記錄上次的 pathname，用於檢測真正的頁面切換
+  
+  // ✅ 修復：組件掛載時強制檢查並恢復 body 狀態（防止殘留狀態）
+  useEffect(() => {
+    console.log('🔍 [MusicPage] ⚠️ 組件掛載 useEffect 執行', {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      showMusicModal,
+      pathname,
+      timestamp: new Date().toISOString(),
+      windowPathname: typeof window !== 'undefined' ? window.location.pathname : 'unknown',
+      computedOverflow: typeof window !== 'undefined' ? window.getComputedStyle(document.body).overflow : 'unknown'
+    });
+    
+    // ✅ 修復：組件掛載時，如果彈窗沒有打開，但 body 被鎖定，強制恢復
+    if (!showMusicModal) {
+      const currentOverflow = document.body.style.overflow;
+      const currentComputedOverflow = typeof window !== 'undefined' ? window.getComputedStyle(document.body).overflow : '';
+      if (currentOverflow === "hidden" || currentComputedOverflow === "hidden" || document.body.style.position === "fixed") {
+        console.log('🔧 [MusicPage] 組件掛載時檢測到 body 被鎖定但彈窗未打開，強制恢復', {
+          currentOverflow,
+          currentComputedOverflow
+        });
+        document.body.style.overflow = "";
+        document.body.style.position = "";
+        document.body.style.width = "";
+        document.body.style.height = "";
+        console.log('🔧 [MusicPage] body 狀態已恢復', {
+          afterOverflow: document.body.style.overflow,
+          afterComputedOverflow: typeof window !== 'undefined' ? window.getComputedStyle(document.body).overflow : 'unknown'
+        });
+      }
+    }
+    
+    // ✅ 組件卸載時的清理
+    return () => {
+      console.log('🔍 [MusicPage] ⚠️ 組件卸載 cleanup 執行', {
+        pathname,
+        showMusicModal,
+        selectedMusicId: selectedMusic?._id,
+        timestamp: new Date().toISOString()
+      });
+      
+      // ✅ 組件卸載時，如果彈窗還開著，強制關閉並恢復 body 狀態
+      if (showMusicModal) {
+        console.log('🔧 [MusicPage] 組件卸載時檢測到彈窗還開著，強制關閉');
+        document.body.style.overflow = "";
+        document.body.style.position = "";
+        document.body.style.width = "";
+        document.body.style.height = "";
+      }
+    };
+    
+    // 檢查 body 狀態，如果被設置為 hidden，強制恢復
+    const currentOverflow = document.body.style.overflow;
+    const currentPosition = document.body.style.position;
+    
+    // 如果 body 被鎖定但彈窗沒有打開，強制恢復
+    if ((currentOverflow === "hidden" || currentPosition === "fixed") && !showMusicModal) {
+      console.log('🔧 [MusicPage] 檢測到 body 被鎖定但彈窗未打開，強制恢復');
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.height = "";
+    }
+  }, []); // 只在組件掛載時執行一次
+  
   const {
     levelFilters,
     categoryFilters,
@@ -265,6 +348,140 @@ const MusicPage = () => {
   // 播放器邏輯（參考首頁）
   usePinnedPlayerBootstrap({ player, currentUser, shareMode: "global" });
 
+  // ✅ 修復：監聽路由變化，只在真正切換頁面時關閉彈窗
+  useEffect(() => {
+    const prevPath = prevPathnameRef.current;
+    const currentPath = pathname;
+    const isPathChanged = prevPath !== currentPath;
+    
+    console.log('🔍 [MusicPage] ⚠️ 路由變化檢查 useEffect 執行', {
+      prevPathname: prevPath,
+      currentPathname: currentPath,
+      isPathChanged,
+      showMusicModal,
+      selectedMusicId: selectedMusic?._id,
+      bodyOverflow: document.body.style.overflow,
+      bodyPosition: document.body.style.position,
+      bodyComputedOverflow: window.getComputedStyle(document.body).overflow,
+      timestamp: new Date().toISOString(),
+      stackTrace: new Error().stack?.split('\n').slice(0, 5).join('\n')
+    });
+    
+    // 只在 pathname 真正變化時（切換到不同頁面）才清理
+    // 首次掛載時，prevPathnameRef.current === pathname，不會觸發清理
+    if (isPathChanged) {
+      console.log('🔄 [MusicPage] ⚠️ 檢測到頁面切換！', {
+        from: prevPath,
+        to: currentPath,
+        showMusicModal,
+        selectedMusicId: selectedMusic?._id,
+        bodyOverflow: document.body.style.overflow,
+        bodyComputedOverflow: window.getComputedStyle(document.body).overflow,
+        timestamp: new Date().toISOString()
+      });
+      
+      prevPathnameRef.current = currentPath;
+      
+      // ✅ 強制清理：無論狀態如何，都確保恢復 body 滾動（立即執行）
+      console.log('🔧 [MusicPage] 開始清理 body 狀態（頁面切換）', {
+        beforeOverflow: document.body.style.overflow,
+        beforeComputedOverflow: window.getComputedStyle(document.body).overflow
+      });
+      
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.height = "";
+      
+      console.log('🔧 [MusicPage] 清理 body 狀態後', {
+        afterOverflow: document.body.style.overflow,
+        afterComputedOverflow: window.getComputedStyle(document.body).overflow
+      });
+      
+      // ✅ 強制清理：移除所有可能的彈窗遮罩層
+      const allModals = document.querySelectorAll('[class*="fixed"][class*="inset-0"][class*="z-[1200]"]');
+      console.log('🔧 [MusicPage] 找到彈窗遮罩層數量:', allModals.length);
+      allModals.forEach((modal, index) => {
+        console.log(`🔧 [MusicPage] 處理遮罩層 ${index}`, {
+          display: modal.style.display,
+          className: modal.className.substring(0, 50)
+        });
+        if (modal.style.display !== 'none') {
+          modal.style.display = 'none';
+        }
+      });
+      
+      // ✅ 強制清理：確保彈窗狀態被重置
+      console.log('🔧 [MusicPage] 關閉彈窗狀態（頁面切換）', {
+        beforeShowMusicModal: showMusicModal,
+        beforeSelectedMusicId: selectedMusic?._id
+      });
+      setShowMusicModal(false);
+      setSelectedMusic(null);
+      console.log('🔧 [MusicPage] 彈窗狀態已重置');
+      
+      // ✅ 使用多個時機確保 body 狀態被恢復
+      requestAnimationFrame(() => {
+        document.body.style.overflow = "";
+        document.body.style.position = "";
+        console.log('🔧 [MusicPage] requestAnimationFrame 恢復 body');
+      });
+      
+      setTimeout(() => {
+        document.body.style.overflow = "";
+        document.body.style.position = "";
+        console.log('🔧 [MusicPage] setTimeout(0) 恢復 body');
+      }, 0);
+      
+      setTimeout(() => {
+        document.body.style.overflow = "";
+        document.body.style.position = "";
+        console.log('🔧 [MusicPage] setTimeout(100) 恢復 body，最終狀態:', {
+          overflow: document.body.style.overflow,
+          position: document.body.style.position,
+          computedOverflow: window.getComputedStyle(document.body).overflow,
+          showMusicModal: showMusicModal, // 注意：這裡可能還是舊值
+          timestamp: new Date().toISOString()
+        });
+      }, 100);
+    } else {
+      console.log('🔍 [MusicPage] 路由未變化，跳過清理', {
+        pathname: currentPath,
+        showMusicModal
+      });
+    }
+  }, [pathname]); // ✅ 移除 showMusicModal 依賴，避免彈窗打開時觸發
+  
+  // ✅ 修復：每次 pathname 變化時，都檢查並恢復 body 狀態（防止殘留）
+  useEffect(() => {
+    console.log('🔍 [MusicPage] ⚠️ 檢查 body 狀態 useEffect 執行', {
+      pathname,
+      showMusicModal,
+      bodyOverflow: document.body.style.overflow,
+      bodyPosition: document.body.style.position,
+      timestamp: new Date().toISOString(),
+      windowPathname: typeof window !== 'undefined' ? window.location.pathname : 'unknown'
+    });
+    
+    // 如果彈窗沒有打開，但 body 被鎖定，強制恢復
+    if (!showMusicModal) {
+      const currentOverflow = document.body.style.overflow;
+      const currentPosition = document.body.style.position;
+      
+      if (currentOverflow === "hidden" || currentPosition === "fixed") {
+        console.log('🔧 [MusicPage] 檢測到 body 被鎖定但彈窗未打開，強制恢復');
+        document.body.style.overflow = "";
+        document.body.style.position = "";
+        document.body.style.width = "";
+        document.body.style.height = "";
+        console.log('🔧 [MusicPage] 恢復後狀態:', {
+          overflow: document.body.style.overflow,
+          position: document.body.style.position
+        });
+      }
+    }
+  }, [pathname, showMusicModal]);
+
   // 監聽查詢參數中的 id，如果存在則打開音樂彈窗
   useEffect(() => {
     const musicId = searchParams.get("id");
@@ -437,8 +654,23 @@ const MusicPage = () => {
             <MusicGrid
               music={music}
               onSelectMusic={(track) => {
+                console.log('🎵 [MusicPage] 點擊音樂卡片', {
+                  trackId: track?._id,
+                  currentSelectedId: selectedMusic?._id,
+                  showMusicModal,
+                  bodyOverflow: document.body.style.overflow
+                });
+                
                 // ✅ 只打開 Modal，不設置播放器
                 // MusicModal 有自己的播放功能，不應該影響到網站播放器
+                // ✅ 如果點擊的是同一首歌，不重新打開（避免閃爍）
+                if (showMusicModal && selectedMusic?._id === track?._id) {
+                  console.log('🎵 [MusicPage] 同一首歌，跳過');
+                  return;
+                }
+                
+                // ✅ 直接打開新彈窗（React 會自動處理狀態更新）
+                console.log('🎵 [MusicPage] 打開彈窗');
                 setSelectedMusic(track);
                 setShowMusicModal(true);
               }}
@@ -462,15 +694,13 @@ const MusicPage = () => {
       </div>
 
       {/* 音樂播放 Modal */}
-      {showMusicModal && selectedMusic && (
+      {/* ✅ 修復：確保彈窗只在狀態正確時才渲染，避免隱形彈窗 */}
+      {showMusicModal && selectedMusic && selectedMusic._id && (
         <MusicModal
           music={selectedMusic}
           currentUser={currentUser}
           displayMode="gallery"
-          onClose={() => {
-            setShowMusicModal(false);
-            setSelectedMusic(null);
-          }}
+          onClose={handleMusicModalClose}
           onUserClick={() => {
             const authorId =
               selectedMusic?.author?._id || selectedMusic?.author;
