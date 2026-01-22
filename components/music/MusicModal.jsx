@@ -89,10 +89,6 @@ const MusicModal = ({
   isLiked,
   onToggleLike,
 }) => {
-  console.log('🎵 [MusicModal] 組件渲染', {
-    musicId: music?._id,
-    hasOnClose: !!onClose
-  });
   const modalRef = useRef(null);
   const audioRef = useRef(null);
   const [musicState, setMusicState] = useState(music);
@@ -240,11 +236,6 @@ const MusicModal = ({
 
   // 當 props 的 music 改變時，更新內部 state
   useEffect(() => {
-    console.log('🎵 [MusicModal] music props 變化', {
-      oldMusicId: musicState?._id,
-      newMusicId: music?._id,
-      musicChanged: musicState?._id !== music?._id
-    });
     setMusicState(music);
   }, [music]);
 
@@ -369,26 +360,13 @@ const MusicModal = ({
   
   // ✅ 如果 music._id 變化，重置標記（切換到不同的音樂）
   if (musicIdRef.current !== music?._id) {
-    console.log('🔄 [MusicModal] 音樂 ID 變化，重置 body.overflow 標記', {
-      oldId: musicIdRef.current,
-      newId: music?._id
-    });
     musicIdRef.current = music?._id;
     hasSetBodyOverflowRef.current = false;
   }
   
   useEffect(() => {
-    console.log('🎵 [MusicModal] 組件掛載/更新 useEffect', {
-      musicId: music?._id,
-      bodyOverflow: document.body.style.overflow,
-      bodyPosition: document.body.style.position,
-      hasSetBodyOverflow: hasSetBodyOverflowRef.current,
-      computedOverflow: window.getComputedStyle(document.body).overflow
-    });
-    
     // ✅ 如果已經設置過，跳過（避免重複設置）
     if (hasSetBodyOverflowRef.current) {
-      console.log('🔧 [MusicModal] 已經設置過 body.overflow，跳過');
       return;
     }
     
@@ -398,10 +376,6 @@ const MusicModal = ({
     const currentComputedOverflow = window.getComputedStyle(document.body).overflow;
     
     if (currentOverflow === "hidden" || currentComputedOverflow === "hidden" || document.body.style.position === "fixed") {
-      console.log('🔧 [MusicModal] 檢測到 body 已被鎖定，先恢復再設置', {
-        styleOverflow: currentOverflow,
-        computedOverflow: currentComputedOverflow
-      });
       // 先恢復，然後再設置（確保狀態正確）
       document.body.style.overflow = "";
       document.body.style.position = "";
@@ -411,11 +385,9 @@ const MusicModal = ({
       requestAnimationFrame(() => {
         document.body.style.overflow = "hidden";
         hasSetBodyOverflowRef.current = true;
-        console.log('🔧 [MusicModal] 設置 body.overflow = hidden (requestAnimationFrame)');
       });
     } else {
       // 禁止背景滾動
-      console.log('🔧 [MusicModal] 設置 body.overflow = hidden');
       document.body.style.overflow = "hidden";
       hasSetBodyOverflowRef.current = true;
     }
@@ -433,12 +405,6 @@ const MusicModal = ({
     document.addEventListener("keydown", handleEsc);
 
     return () => {
-      console.log('🎵 [MusicModal] 組件清理函數執行', {
-        musicId: music?._id,
-        bodyOverflow: document.body.style.overflow,
-        hasSetBodyOverflow: hasSetBodyOverflowRef.current
-      });
-      
       // ✅ 重置標記
       hasSetBodyOverflowRef.current = false;
       
@@ -447,11 +413,6 @@ const MusicModal = ({
       document.body.style.position = "";
       document.body.style.width = "";
       document.body.style.height = "";
-      console.log('🔧 [MusicModal] 清理函數恢復 body，最終狀態:', {
-        overflow: document.body.style.overflow,
-        position: document.body.style.position,
-        computedOverflow: window.getComputedStyle(document.body).overflow
-      });
       document.removeEventListener("keydown", handleEsc);
 
       // ✅ 注意：釋放邏輯移到 handleBackdropClick 和 onClose 中處理
@@ -553,20 +514,11 @@ const MusicModal = ({
   const releaseAudioManager = useCallback(() => {
     const musicId = music?._id?.substring(0, 8) || 'unknown';
     
-    console.log('🎵 [MusicModal] releaseAudioManager 被調用', {
-      musicId,
-      bodyOverflow: document.body.style.overflow
-    });
-    
     // ✅ 修復：確保恢復 body 滾動
     document.body.style.overflow = "";
     document.body.style.position = "";
     document.body.style.width = "";
     document.body.style.height = "";
-    console.log('🔧 [MusicModal] releaseAudioManager 恢復 body，最終狀態:', {
-      overflow: document.body.style.overflow,
-      position: document.body.style.position
-    });
     
     // 釋放 AudioManager
     if (audioRef.current) {
@@ -620,10 +572,6 @@ const MusicModal = ({
   
   // ✅ 包裝 onClose，確保在關閉前釋放 AudioManager
   const handleClose = () => {
-    console.log('🎵 [MusicModal] handleClose 被調用', {
-      musicId: music?._id,
-      bodyOverflow: document.body.style.overflow
-    });
     releaseAudioManager();
     onClose();
   };

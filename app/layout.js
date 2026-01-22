@@ -222,90 +222,68 @@ export default async function RootLayout({ children }) {
                 
                 // ✅ 頁面可見時檢查是否有殘留遮罩（但不激進清理，避免影響正常交互）
                 document.addEventListener('visibilitychange', function() {
-                  console.log('👁️ [Layout] visibilitychange 事件觸發', {
-                    hidden: document.hidden,
-                    pathname: window.location.pathname,
-                    timestamp: new Date().toISOString(),
-                    bodyOverflow: document.body.style.overflow,
-                    bodyComputedOverflow: window.getComputedStyle(document.body).overflow
-                  });
                   if (!document.hidden) {
-                    // ✅ 修復：當頁面重新可見時，強制檢查並恢復 body 狀態
-                    // 因為切換頁面時，彈窗可能已經關閉，但 body.overflow 可能還是 hidden
-                    console.log('👁️ [Layout] 頁面重新可見，檢查 body 狀態', {
-                      pathname: window.location.pathname,
-                      bodyOverflow: document.body.style.overflow,
-                      bodyComputedOverflow: window.getComputedStyle(document.body).overflow,
-                      hasOpenModal: document.querySelector('[role="dialog"]:not([aria-hidden="true"])') !== null
-                    });
+                    // ✅ 修復：當頁面重新可見時（切換標籤頁回來），檢查並恢復 body 狀態
+                    // 但必須非常保守，避免誤判導致彈窗被關閉
                     
-                    // ✅ 檢查是否有打開的 Modal（通過檢查 Dialog 或 Modal 組件）
-                    // 1. 檢查 Headless UI Dialog
-                    const hasHeadlessDialog = document.querySelector('[role="dialog"]:not([aria-hidden="true"])') !== null;
+                    // ✅ 檢查 body.overflow 狀態（如果被設置為 hidden，通常意味著有 Modal 打開）
+                    const bodyOverflow = window.getComputedStyle(document.body).overflow;
+                    const bodyOverflowStyle = document.body.style.overflow;
+                    const isBodyLocked = bodyOverflow === 'hidden' || bodyOverflowStyle === 'hidden';
                     
-                    // 2. 檢查自定義 Modal（MusicModal 使用 createPortal，有 fixed inset-0 容器）
-                    // MusicModal 的容器是: fixed inset-0 bg-black/90 backdrop-blur-sm z-[1200]
-                    const modalContainers = document.querySelectorAll('.fixed.inset-0');
-                    let hasCustomModal = false;
-                    modalContainers.forEach(container => {
-                      const style = window.getComputedStyle(container);
-                      // ✅ 檢查容器是否可見（不是 display: none 或 visibility: hidden）
-                      if (style.display !== 'none' && style.visibility !== 'hidden') {
-                        // ✅ 檢查是否是 Modal 容器（有 backdrop-blur 或 bg-black 或 z-index 很高）
-                        const hasBackdrop = container.classList.contains('backdrop-blur-sm') || 
-                                           container.classList.contains('backdrop-blur') ||
-                                           (container.getAttribute('class') && container.getAttribute('class').includes('backdrop-blur'));
-                        const hasBgBlack = container.classList.contains('bg-black') ||
-                                         (container.getAttribute('class') && container.getAttribute('class').includes('bg-black'));
-                        const zIndex = parseInt(style.zIndex);
-                        const isHighZIndex = zIndex >= 1000; // MusicModal 的 z-index 是 1200
-                        
-                        // ✅ 檢查內部是否有 Modal 內容（bg-zinc-900, bg-neutral-900, 或其他 Modal 特徵）
-                        const hasModalContent = container.querySelector('.bg-zinc-900, .bg-neutral-900, .bg-\\[\\#1a1a1a\\], [class*="rounded-2xl"], [class*="rounded-xl"]');
-                        
-                        // ✅ 如果符合 Modal 特徵，認為有打開的 Modal
-                        if ((hasBackdrop || hasBgBlack || isHighZIndex) && hasModalContent) {
-                          hasCustomModal = true;
-                          console.log('👁️ [Layout] 檢測到自定義 Modal', {
-                            container: container,
-                            hasBackdrop,
-                            hasBgBlack,
-                            isHighZIndex,
-                            zIndex,
-                            hasModalContent: !!hasModalContent
-                          });
+                    // ✅ 如果 body 被鎖定，保守起見不恢復（避免誤判導致彈窗被關閉）
+                    // 只有在 body 沒有被鎖定時，才進行清理
+                    if (!isBodyLocked) {
+                      // ✅ 檢查是否有打開的 Modal（通過檢查 Dialog 或 Modal 組件）
+                      // 1. 檢查 Headless UI Dialog
+                      const hasHeadlessDialog = document.querySelector('[role="dialog"]:not([aria-hidden="true"])') !== null;
+                      
+                      // 2. 檢查自定義 Modal（MusicModal 使用 createPortal，有 fixed inset-0 容器）
+                      // MusicModal 的容器是: fixed inset-0 bg-black/90 backdrop-blur-sm z-[1200]
+                      // 更簡單的檢測：如果有一個 fixed inset-0 容器，z-index >= 1000，且有 backdrop-blur，就認為是 Modal
+                      const modalContainers = document.querySelectorAll('.fixed.inset-0');
+                      let hasCustomModal = false;
+                      modalContainers.forEach(container => {
+                        const style = window.getComputedStyle(container);
+                        // ✅ 檢查容器是否可見（不是 display: none 或 visibility: hidden）
+                        if (style.display !== 'none' && style.visibility !== 'hidden') {
+                          const zIndex = parseInt(style.zIndex) || 0;
+                          const hasBackdrop = container.classList.contains('backdrop-blur-sm') || 
+                                             container.classList.contains('backdrop-blur') ||
+                                             (container.getAttribute('class') && container.getAttribute('class').includes('backdrop-blur'));
+                          const hasBgBlack = container.classList.contains('bg-black') ||
+                                           (container.getAttribute('class') && container.getAttribute('class').includes('bg-black'));
+                          
+                          // ✅ 簡化檢測：如果 z-index >= 1000 且有 backdrop 或 bg-black，就認為是 Modal
+                          // 這樣可以避免因為內容檢測失敗而誤判
+                          if (zIndex >= 1000 && (hasBackdrop || hasBgBlack)) {
+                            hasCustomModal = true;
+                            return; // 找到一個就足夠了
+                          }
                         }
-                      }
-                    });
-                    
-                    const hasOpenModal = hasHeadlessDialog || hasCustomModal;
-                    
-                    console.log('👁️ [Layout] Modal 檢測結果', {
-                      hasHeadlessDialog,
-                      hasCustomModal,
-                      hasOpenModal,
-                      modalContainersCount: modalContainers.length,
-                      pathname: window.location.pathname
-                    });
-                    
-                    // ✅ 如果沒有打開的 Modal，強制恢復 body 狀態
-                    if (!hasOpenModal) {
-                      console.log('👁️ [Layout] 沒有打開的 Modal，強制恢復 body 狀態');
-                      document.body.style.overflow = "";
-                      document.body.style.position = "";
-                      document.body.style.width = "";
-                      document.body.style.height = "";
-                      document.body.style.pointerEvents = "";
-                      document.documentElement.style.overflow = "";
-                      document.documentElement.style.pointerEvents = "";
-                      console.log('👁️ [Layout] body 狀態已恢復', {
-                        bodyOverflow: document.body.style.overflow,
-                        bodyComputedOverflow: window.getComputedStyle(document.body).overflow
                       });
+                      
+                      const hasOpenModal = hasHeadlessDialog || hasCustomModal;
+                      
+                      // ✅ 如果沒有打開的 Modal 且 body 沒有被鎖定，才恢復 body 狀態
+                      if (!hasOpenModal) {
+                        document.body.style.overflow = "";
+                        document.body.style.position = "";
+                        document.body.style.width = "";
+                        document.body.style.height = "";
+                        document.body.style.pointerEvents = "";
+                        document.documentElement.style.overflow = "";
+                        document.documentElement.style.pointerEvents = "";
+                      }
                     } else {
-                      console.log('👁️ [Layout] 檢測到打開的 Modal，跳過 body 狀態恢復');
+                      // ✅ 如果 body 被鎖定，完全跳過後續的清理邏輯（包括移除殘留遮罩）
+                      // 這樣可以避免誤刪正在打開的彈窗
+                      return;
                     }
+                    // ✅ 如果 body 被鎖定，即使沒有檢測到 Modal，也不恢復（避免誤判）
+                    // 這樣可以避免在 Modal 打開時誤清理 body 狀態，導致彈窗被關閉
                     
+                    // ✅ 只有在 body 沒有被鎖定時，才執行後續的清理邏輯
                     // ✅ 檢查是否有打開的 Modal（通過檢查 Dialog 或 Modal 組件）
                     // 1. Headless UI Dialog 打開時會有特定的結構
                     const dialogs = document.querySelectorAll('[role="dialog"]');
@@ -348,6 +326,7 @@ export default async function RootLayout({ children }) {
                     });
                     
                     // ✅ 只移除明顯是殘留的遮罩（全屏 + 固定定位 + 半透明 + 沒有關聯的 Dialog）
+                    // ✅ 重要：只有在 body 沒有被鎖定時才執行此邏輯
                     const allFixedElements = document.querySelectorAll('*');
                     allFixedElements.forEach(el => {
                       // ✅ 如果這個元素是打開的 Dialog 的一部分，跳過
