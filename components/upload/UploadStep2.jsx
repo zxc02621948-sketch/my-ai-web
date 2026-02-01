@@ -557,39 +557,55 @@ export default function UploadStep2({
             console.log("📋 PNG chunks found:", Object.keys(chunks));
           }
 
-          // ✅ 優先判斷 ComfyUI：workflow（最準）
-          // 检查所有可能的 workflow chunk 名称变体
-          const workflowChunk = chunks.workflow || chunks.Workflow || chunks.WORKFLOW || 
-                               chunks["comfyui_workflow"] || chunks["ComfyUI_Workflow"];
+          // ✅ 優先：檢查是否有 final_prompt 字段（自定義節點保存的最終提示詞）
+          const finalPrompt = chunks.final_prompt || chunks["final_prompt"] || chunks.FinalPrompt;
           
-          if (!parsed && workflowChunk) {
-            try {
-              const wfVal = workflowChunk;
-              const comfy = parseComfyWorkflow(wfVal);
-              if (comfy && Array.isArray(comfy.nodes) && comfy.nodes.length > 0) {
-                parsed = comfy.canonical;
-                detectedPlatform = "ComfyUI";
-                const wfStr = typeof wfVal === "string" ? wfVal : JSON.stringify(wfVal, null, 2);
-                setWorkflowRaw(wfStr);
-                console.log("✅ ComfyUI workflow parsed:", {
-                  hasPositive: !!parsed.positive,
-                  hasNegative: !!parsed.negative,
-                  positiveLength: parsed.positive?.length || 0,
-                  negativeLength: parsed.negative?.length || 0,
-                });
-              }
-            } catch (e) {
-              console.warn("⚠️ Failed to parse ComfyUI workflow:", e);
+          if (finalPrompt && typeof finalPrompt === "string" && finalPrompt.trim().length > 0) {
+            // ✅ 如果有 final_prompt，直接使用它作為正面提示詞
+            parsed = {
+              positive: finalPrompt.trim(),
+              negative: "",
+              model: "",
+              loras: [],
+              sampler: "",
+              steps: 0,
+              cfg: 0,
+              seed: 0,
+              width: 0,
+              height: 0,
+            };
+            detectedPlatform = "ComfyUI";
+            setPromptRaw(finalPrompt);
+            if (process.env.NODE_ENV === 'development') {
+              console.log("✅ 從 final_prompt 字段提取提示詞:", {
+                length: finalPrompt.length,
+                preview: finalPrompt.substring(0, 100),
+              });
             }
           }
-
-          // ✅ ComfyUI：prompt 內就是 Comfy JSON
+          
+          // ✅ 其次：判斷 ComfyUI：prompt chunk（實際執行的提示詞，包含隨機抽詞結果）
           // 检查所有可能的 prompt chunk 名称变体
           const promptChunk = chunks.prompt || chunks.Prompt || chunks.PROMPT || 
                              chunks["comfyui_prompt"] || chunks["ComfyUI_Prompt"];
           
           if (!parsed && promptChunk) {
             try {
+              // ✅ 調試：檢查 prompt chunk 的格式
+              if (process.env.NODE_ENV === 'development') {
+                const promptChunkType = typeof promptChunk;
+                const promptChunkPreview = typeof promptChunk === "string" 
+                  ? promptChunk.substring(0, 200) 
+                  : JSON.stringify(promptChunk, null, 2).substring(0, 200);
+                console.log("🔍 Prompt chunk 格式檢查:", {
+                  type: promptChunkType,
+                  preview: promptChunkPreview,
+                  isString: typeof promptChunk === "string",
+                  isObject: typeof promptChunk === "object",
+                  keys: typeof promptChunk === "object" ? Object.keys(promptChunk).slice(0, 10) : null
+                });
+              }
+              
               const maybe = parseComfyWorkflow(promptChunk);
               if (maybe && Array.isArray(maybe.nodes) && maybe.nodes.length > 0) {
                 parsed = maybe.canonical;
@@ -601,6 +617,8 @@ export default function UploadStep2({
                   hasNegative: !!parsed.negative,
                   positiveLength: parsed.positive?.length || 0,
                   negativeLength: parsed.negative?.length || 0,
+                  positivePreview: parsed.positive?.substring(0, 100),
+                  negativePreview: parsed.negative?.substring(0, 100),
                 });
               } else {
                 const comfyLite = tryParseComfy(promptChunk);
@@ -620,6 +638,32 @@ export default function UploadStep2({
                 const prStr = typeof promptChunk === "string" ? promptChunk : JSON.stringify(promptChunk, null, 2);
                 setPromptRaw(prStr);
               }
+            }
+          }
+
+          // ✅ ComfyUI：workflow chunk（後備方案，如果 prompt chunk 不存在或解析失敗）
+          // 检查所有可能的 workflow chunk 名称变体
+          const workflowChunk = chunks.workflow || chunks.Workflow || chunks.WORKFLOW || 
+                               chunks["comfyui_workflow"] || chunks["ComfyUI_Workflow"];
+          
+          if (!parsed && workflowChunk) {
+            try {
+              const wfVal = workflowChunk;
+              const comfy = parseComfyWorkflow(wfVal);
+              if (comfy && Array.isArray(comfy.nodes) && comfy.nodes.length > 0) {
+                parsed = comfy.canonical;
+                detectedPlatform = "ComfyUI";
+                const wfStr = typeof wfVal === "string" ? wfVal : JSON.stringify(wfVal, null, 2);
+                setWorkflowRaw(wfStr);
+                console.log("✅ ComfyUI workflow parsed (fallback, may not reflect actual executed prompt):", {
+                  hasPositive: !!parsed.positive,
+                  hasNegative: !!parsed.negative,
+                  positiveLength: parsed.positive?.length || 0,
+                  negativeLength: parsed.negative?.length || 0,
+                });
+              }
+            } catch (e) {
+              console.warn("⚠️ Failed to parse ComfyUI workflow:", e);
             }
           }
 

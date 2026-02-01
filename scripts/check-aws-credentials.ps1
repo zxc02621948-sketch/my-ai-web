@@ -45,3 +45,7 @@ Write-Host "   - 環境變數名稱是否一致（AWS_ vs R2_）" -ForegroundCol
 
 
 
+
+
+
+

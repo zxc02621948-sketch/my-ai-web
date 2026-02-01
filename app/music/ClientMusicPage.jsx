@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import MusicGrid from "@/components/music/MusicGrid";
 import MusicModal from "@/components/music/MusicModal";
 import EditMusicModal from "@/components/music/EditMusicModal";
@@ -31,15 +31,6 @@ const MusicPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [sort, setSort] = useState("popular");
   
-  // ✅ 修復：使用 useCallback 穩定 onClose 函數引用，避免 MusicModal 重新掛載
-  const handleMusicModalClose = useCallback(() => {
-    setShowMusicModal(false);
-    setSelectedMusic(null);
-    // 確保恢復 body 滾動
-    document.body.style.overflow = "";
-    document.body.style.position = "";
-  }, []);
-  
   // ✅ 訪問記錄追蹤
   useVisitTracking();
   
@@ -47,47 +38,6 @@ const MusicPage = () => {
   const { currentUser } = useCurrentUser();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const pathname = usePathname();
-  const prevPathnameRef = useRef(pathname); // ✅ 記錄上次的 pathname，用於檢測真正的頁面切換
-  
-  // ✅ 修復：組件掛載時強制檢查並恢復 body 狀態（防止殘留狀態）
-  useEffect(() => {
-    // ✅ 修復：組件掛載時，如果彈窗沒有打開，但 body 被鎖定，強制恢復
-    if (!showMusicModal) {
-      const currentOverflow = document.body.style.overflow;
-      const currentComputedOverflow = typeof window !== 'undefined' ? window.getComputedStyle(document.body).overflow : '';
-      if (currentOverflow === "hidden" || currentComputedOverflow === "hidden" || document.body.style.position === "fixed") {
-        document.body.style.overflow = "";
-        document.body.style.position = "";
-        document.body.style.width = "";
-        document.body.style.height = "";
-      }
-    }
-    
-    // ✅ 組件卸載時的清理
-    return () => {
-      // ✅ 組件卸載時，如果彈窗還開著，強制關閉並恢復 body 狀態
-      if (showMusicModal) {
-        document.body.style.overflow = "";
-        document.body.style.position = "";
-        document.body.style.width = "";
-        document.body.style.height = "";
-      }
-    };
-    
-    // 檢查 body 狀態，如果被設置為 hidden，強制恢復
-    const currentOverflow = document.body.style.overflow;
-    const currentPosition = document.body.style.position;
-    
-    // 如果 body 被鎖定但彈窗沒有打開，強制恢復
-    if ((currentOverflow === "hidden" || currentPosition === "fixed") && !showMusicModal) {
-      document.body.style.overflow = "";
-      document.body.style.position = "";
-      document.body.style.width = "";
-      document.body.style.height = "";
-    }
-  }, []); // 只在組件掛載時執行一次
-  
   const {
     levelFilters,
     categoryFilters,
@@ -315,87 +265,6 @@ const MusicPage = () => {
   // 播放器邏輯（參考首頁）
   usePinnedPlayerBootstrap({ player, currentUser, shareMode: "global" });
 
-  // ✅ 修復：監聽路由變化，只在真正切換到不同頁面時關閉彈窗
-  useEffect(() => {
-    const prevPath = prevPathnameRef.current;
-    const currentPath = pathname;
-    const isPathChanged = prevPath !== currentPath;
-    
-    // 只在 pathname 真正變化時（切換到不同頁面）才清理
-    // 首次掛載時，prevPathnameRef.current === pathname，不會觸發清理
-    if (isPathChanged) {
-      prevPathnameRef.current = currentPath;
-      
-      // ✅ 無論切換到哪個頁面，都先確保恢復 body 狀態（防止頁面卡死）
-      // 這是關鍵修復：即使彈窗狀態還沒更新，也要先恢復 body
-      document.body.style.overflow = "";
-      document.body.style.position = "";
-      document.body.style.width = "";
-      document.body.style.height = "";
-      
-      // ✅ 強制清理：移除所有可能的彈窗遮罩層
-      const allModals = document.querySelectorAll('[class*="fixed"][class*="inset-0"][class*="z-[1200]"]');
-      allModals.forEach((modal) => {
-        if (modal.style.display !== 'none') {
-          modal.style.display = 'none';
-        }
-      });
-      
-      // ✅ 強制清理：確保彈窗狀態被重置
-      setShowMusicModal(false);
-      setSelectedMusic(null);
-      
-      // ✅ 使用多個時機確保 body 狀態被恢復（防止頁面卡死）
-      requestAnimationFrame(() => {
-        document.body.style.overflow = "";
-        document.body.style.position = "";
-        document.body.style.width = "";
-        document.body.style.height = "";
-      });
-      
-      setTimeout(() => {
-        document.body.style.overflow = "";
-        document.body.style.position = "";
-        document.body.style.width = "";
-        document.body.style.height = "";
-      }, 0);
-      
-      setTimeout(() => {
-        document.body.style.overflow = "";
-        document.body.style.position = "";
-        document.body.style.width = "";
-        document.body.style.height = "";
-      }, 100);
-      
-      // ✅ 額外保險：延遲再次檢查並恢復
-      setTimeout(() => {
-        const finalOverflow = window.getComputedStyle(document.body).overflow;
-        if (finalOverflow === 'hidden') {
-          document.body.style.overflow = "";
-          document.body.style.position = "";
-          document.body.style.width = "";
-          document.body.style.height = "";
-        }
-      }, 200);
-    }
-  }, [pathname]); // ✅ 移除 showMusicModal 依賴，避免在彈窗打開時觸發
-  
-  // ✅ 修復：每次 pathname 變化時，都檢查並恢復 body 狀態（防止殘留）
-  useEffect(() => {
-    // 如果彈窗沒有打開，但 body 被鎖定，強制恢復
-    if (!showMusicModal) {
-      const currentOverflow = document.body.style.overflow;
-      const currentPosition = document.body.style.position;
-      
-      if (currentOverflow === "hidden" || currentPosition === "fixed") {
-        document.body.style.overflow = "";
-        document.body.style.position = "";
-        document.body.style.width = "";
-        document.body.style.height = "";
-      }
-    }
-  }, [pathname, showMusicModal]);
-
   // 監聽查詢參數中的 id，如果存在則打開音樂彈窗
   useEffect(() => {
     const musicId = searchParams.get("id");
@@ -570,12 +439,6 @@ const MusicPage = () => {
               onSelectMusic={(track) => {
                 // ✅ 只打開 Modal，不設置播放器
                 // MusicModal 有自己的播放功能，不應該影響到網站播放器
-                // ✅ 如果點擊的是同一首歌，不重新打開（避免閃爍）
-                if (showMusicModal && selectedMusic?._id === track?._id) {
-                  return;
-                }
-                
-                // ✅ 直接打開新彈窗（React 會自動處理狀態更新）
                 setSelectedMusic(track);
                 setShowMusicModal(true);
               }}
@@ -599,13 +462,15 @@ const MusicPage = () => {
       </div>
 
       {/* 音樂播放 Modal */}
-      {/* ✅ 修復：確保彈窗只在狀態正確時才渲染，避免隱形彈窗 */}
-      {showMusicModal && selectedMusic && selectedMusic._id && (
+      {showMusicModal && selectedMusic && (
         <MusicModal
           music={selectedMusic}
           currentUser={currentUser}
           displayMode="gallery"
-          onClose={handleMusicModalClose}
+          onClose={() => {
+            setShowMusicModal(false);
+            setSelectedMusic(null);
+          }}
           onUserClick={() => {
             const authorId =
               selectedMusic?.author?._id || selectedMusic?.author;
