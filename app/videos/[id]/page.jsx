@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import { dbConnect } from "@/lib/db";
 import Video from "@/models/Video";
 import { getCurrentUser } from "@/lib/serverAuth";
+import VideoDetailClient from "./VideoDetailClient";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.aicreateaworld.com";
 
 export async function generateMetadata({ params }) {
-  const { id } = params || {};
+  const { id } = await params || {};
 
   if (!id || !mongoose.Types.ObjectId.isValid(id)) {
     return {
@@ -110,7 +111,7 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function VideoDetailPage({ params }) {
-  const { id } = params || {};
+  const { id } = await params || {};
 
   if (!id || !mongoose.Types.ObjectId.isValid(id)) {
     notFound();
@@ -146,6 +147,9 @@ export default async function VideoDetailPage({ params }) {
     );
   }
 
+  // Serialize MongoDB ObjectId and other complex objects for client components
+  const sanitized = JSON.parse(JSON.stringify(video));
+
   const thumb =
     video.thumbnailUrl ||
     video.previewUrl ||
@@ -157,6 +161,7 @@ export default async function VideoDetailPage({ params }) {
 
   return (
     <main className="min-h-screen bg-zinc-950 -mt-2 md:-mt-16">
+      {/* Server-rendered content for SEO and no-JS fallback */}
       <section className="max-w-5xl mx-auto px-4 py-10 md:py-14">
         <h1 className="text-xl md:text-2xl font-bold text-white mb-3">
           {video.title || "未命名影片"}
@@ -196,6 +201,12 @@ export default async function VideoDetailPage({ params }) {
           </p>
         )}
       </section>
+
+      {/* JS 啟用時會看到完整的彈窗體驗 */}
+      <VideoDetailClient
+        videoData={sanitized}
+        currentUser={currentUser ? JSON.parse(JSON.stringify(currentUser)) : undefined}
+      />
     </main>
   );
 }

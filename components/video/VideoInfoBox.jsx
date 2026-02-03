@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import PowerCouponButton from "@/components/power-coupon/PowerCouponButton";
 import { getPlatformUrl } from "@/constants/platformUrls";
+import ShareButton from "@/components/common/ShareButton";
 
 export default function VideoInfoBox({ 
   video, 
@@ -85,6 +86,15 @@ export default function VideoInfoBox({
         </div>
         
         <div className="flex items-center gap-2 ml-4">
+          {/* 分享按鈕 */}
+          {video?._id && (
+            <ShareButton
+              url={`${process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "")}/videos/${video._id}`}
+              title={video.title || "AI 影片創作"}
+              variant="default"
+            />
+          )}
+
           {/* 加成券使用按鈕；僅作者可見 */}
           {isOwner && (
             <div onClick={(e) => e.stopPropagation()}>

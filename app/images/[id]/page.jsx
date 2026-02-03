@@ -4,7 +4,7 @@ import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
 import { getCurrentUser } from "@/lib/serverAuth";
 import { stripComfyIfNotAllowed } from "@/lib/sanitizeComfy";
-import ImageModal from "@/components/image/ImageModal";
+import ImageDetailClient from "./ImageDetailClient";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.aicreateaworld.com";
@@ -21,7 +21,7 @@ function resolveImageUrl(image) {
 }
 
 export async function generateMetadata({ params }) {
-  const { id } = params || {};
+  const { id } = await params || {};
 
   if (!id || !mongoose.Types.ObjectId.isValid(id)) {
     return {
@@ -119,7 +119,7 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function ImageDetailPage({ params }) {
-  const { id } = params || {};
+  const { id } = await params || {};
 
   if (!id || !mongoose.Types.ObjectId.isValid(id)) {
     notFound();
@@ -172,6 +172,10 @@ export default async function ImageDetailPage({ params }) {
 
   const publicUrl = resolveImageUrl(sanitized);
 
+  // ✅ 序列化数据，确保 ObjectId 等 MongoDB 对象被正确转换
+  const serializedImage = JSON.parse(JSON.stringify(sanitized));
+  const serializedUser = currentUser ? JSON.parse(JSON.stringify(currentUser)) : undefined;
+
   return (
     <main className="min-h-screen bg-zinc-950 -mt-2 md:-mt-16">
       {/* 簡單的非 JS 版本內容，確保搜尋引擎與無 JS 環境也能看到主要資訊 */}
@@ -204,11 +208,10 @@ export default async function ImageDetailPage({ params }) {
       </section>
 
       {/* JS 啟用時會看到完整的彈窗體驗 */}
-      <ImageModal
-        imageId={sanitized._id.toString()}
-        imageData={sanitized}
-        currentUser={currentUser || undefined}
-        displayMode="gallery"
+      <ImageDetailClient
+        imageId={serializedImage._id}
+        imageData={serializedImage}
+        currentUser={serializedUser}
       />
     </main>
   );

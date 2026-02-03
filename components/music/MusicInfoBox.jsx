@@ -7,6 +7,7 @@ import { notify } from "@/components/common/GlobalNotificationManager";
 import { useRouter } from "next/navigation";
 import PowerCouponButton from "@/components/power-coupon/PowerCouponButton";
 import { getPlatformUrl } from "@/constants/platformUrls";
+import ShareButton from "@/components/common/ShareButton";
 
 export default function MusicInfoBox({
   music,
@@ -219,6 +220,15 @@ export default function MusicInfoBox({
         </div>
 
         <div className="flex items-center gap-2 ml-4">
+          {/* 分享按鈕 */}
+          {music?._id && (
+            <ShareButton
+              url={`${process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "")}/music/${music._id}`}
+              title={music.title || "AI 音樂創作"}
+              variant="default"
+            />
+          )}
+
           {/* 加成券使用按鈕；僅作者可見 */}
           {isOwner && (
             <div onClick={(e) => e.stopPropagation()}>

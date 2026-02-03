@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import { dbConnect } from "@/lib/db";
 import Music from "@/models/Music";
 import { getCurrentUser } from "@/lib/serverAuth";
+import MusicDetailClient from "./MusicDetailClient";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "https://www.aicreateaworld.com";
 
 export async function generateMetadata({ params }) {
-  const { id } = params || {};
+  const { id } = await params || {};
 
   if (!id || !mongoose.Types.ObjectId.isValid(id)) {
     return {
@@ -106,7 +107,7 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function MusicDetailPage({ params }) {
-  const { id } = params || {};
+  const { id } = await params || {};
 
   if (!id || !mongoose.Types.ObjectId.isValid(id)) {
     notFound();
@@ -145,8 +146,13 @@ export default async function MusicDetailPage({ params }) {
   const coverUrl = music.coverImageUrl || "";
   const streamUrl = `/api/music/stream/${music._id}`;
 
+  // ✅ 序列化数据，确保 ObjectId 等 MongoDB 对象被正确转换
+  const serializedMusic = JSON.parse(JSON.stringify(music));
+  const serializedUser = currentUser ? JSON.parse(JSON.stringify(currentUser)) : undefined;
+
   return (
     <main className="min-h-screen bg-zinc-950 -mt-2 md:-mt-16">
+      {/* 簡單的非 JS 版本內容，確保搜尋引擎與無 JS 環境也能看到主要資訊 */}
       <section className="max-w-4xl mx-auto px-4 py-10 md:py-14">
         <h1 className="text-xl md:text-2xl font-bold text-white mb-3">
           {music.title || "未命名音樂"}
@@ -186,6 +192,13 @@ export default async function MusicDetailPage({ params }) {
           </p>
         )}
       </section>
+
+      {/* JS 啟用時會看到完整的彈窗體驗 */}
+      <MusicDetailClient
+        musicId={serializedMusic._id}
+        musicData={serializedMusic}
+        currentUser={serializedUser}
+      />
     </main>
   );
 }

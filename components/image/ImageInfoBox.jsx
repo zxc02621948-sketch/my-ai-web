@@ -3,6 +3,7 @@ import axios from "axios";
 import { X, Trash2, Download, Clipboard, Pencil, AlertTriangle, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import ShareButton from "@/components/common/ShareButton";
 
 // —— JSON 工具：最小化 & 精簡（去私密路徑、移除 base64 影像）——
 function minifyJson(text) {
@@ -454,6 +455,15 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
       <div className="space-y-3 mb-3">
         {/* 按鈕工具列 */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* 分享按鈕 */}
+          {image?._id && (
+            <ShareButton
+              url={`${process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "")}/images/${image._id}`}
+              title={image.title || "AI 圖像創作"}
+              variant="default"
+            />
+          )}
+
           {/* 引用發帖 */}
           <button
             onClick={() => {
