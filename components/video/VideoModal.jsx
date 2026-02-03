@@ -598,6 +598,8 @@ const VideoModal = ({
                   src={videoState?.videoUrl}
                   controls
                   autoPlay
+                  muted
+                  playsInline
                   loop
                   className="w-full h-full max-h-[70vh] object-contain"
                   onError={(e) => {
@@ -610,8 +612,20 @@ const VideoModal = ({
                   }}
                   onCanPlay={() => {
                     console.log('影片可以播放:', videoState?.videoUrl);
+                    // ✅ 尝试自动播放（静音状态下浏览器允许自动播放）
+                    if (videoRef.current && videoRef.current.paused) {
+                      videoRef.current.play().catch((err) => {
+                        if (err.name !== "NotAllowedError") {
+                          console.warn("影片自動播放失敗:", err);
+                        }
+                      });
+                    }
                   }}
                   onPlay={() => {
+                    // ✅ 播放开始时取消静音（如果用户允许）
+                    if (videoRef.current && videoRef.current.muted) {
+                      videoRef.current.muted = false;
+                    }
                     // 事件已在 useEffect 中處理
                   }}
                   onPause={() => {
