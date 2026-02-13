@@ -6,6 +6,7 @@ import Image from "@/models/Image";
 import User from "@/models/User";
 import PointsTransaction from "@/models/PointsTransaction";
 import { uploadToCloudflare } from "@/lib/uploadToCloudflare";
+import { sanitizePostContent, sanitizeTitle } from "@/lib/sanitizeUserContent";
 
 // 获取帖子列表
 export async function GET(req) {
@@ -142,8 +143,11 @@ export async function POST(req) {
       imageIndex++;
     }
     
+    const safeTitle = sanitizeTitle(title);
+    const safeContent = sanitizePostContent(content);
+
     // 验证必填字段
-    if (!title || !content || !category) {
+    if (!safeTitle || !safeContent || !category) {
       return NextResponse.json(
         { success: false, error: "標題、內容和分類都是必填的" },
         { status: 400 }
@@ -278,8 +282,8 @@ export async function POST(req) {
     
     // 创建帖子
     const post = new DiscussionPost({
-      title: title.trim(),
-      content: content.trim(),
+      title: safeTitle,
+      content: safeContent,
       category,
       rating,
       author: currentUser._id,

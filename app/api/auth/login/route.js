@@ -4,8 +4,9 @@ import { generateToken } from "@/lib/serverAuth";
 import User from "@/models/User";
 import PointsTransaction from "@/models/PointsTransaction";
 import { apiError, apiSuccess, withErrorHandling } from "@/lib/errorHandler";
+import { authLimiter, withRateLimit } from "@/lib/rateLimit";
 
-export const POST = withErrorHandling(async (req) => {
+const loginHandler = withErrorHandling(async (req) => {
   const { email, password } = await req.json();
 
   if (!email || !password) {
@@ -75,7 +76,6 @@ export const POST = withErrorHandling(async (req) => {
   }
 
   const responseData = {
-    token,
     user: {
       _id: user._id,
       username: user.username,
@@ -87,7 +87,7 @@ export const POST = withErrorHandling(async (req) => {
 
   // 設置 cookie
   const cookieOptions = {
-    httpOnly: false,
+    httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
@@ -98,3 +98,5 @@ export const POST = withErrorHandling(async (req) => {
   response.cookies.set("token", token, cookieOptions);
   return response;
 });
+
+export const POST = withRateLimit(loginHandler, authLimiter);

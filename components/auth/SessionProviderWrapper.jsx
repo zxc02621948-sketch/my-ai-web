@@ -2,7 +2,42 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
+
+function OAuthSessionBridge() {
+  const { data: session, status } = useSession();
+
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user?.email) return;
+
+    const syncKey = `oauth_jwt_synced:${session.user.email}`;
+    if (sessionStorage.getItem(syncKey) === "1") return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/oauth-callback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email: session.user.email }),
+        });
+        if (!cancelled && res.ok) {
+          sessionStorage.setItem(syncKey, "1");
+        }
+      } catch {
+        // 靜默：不阻塞頁面；下一次 session 變化仍可重試。
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [status, session?.user?.email]);
+
+  return null;
+}
 
 export default function SessionProviderWrapper({ children }) {
   const [isOAuthEnabled, setIsOAuthEnabled] = useState(false);
@@ -36,6 +71,11 @@ export default function SessionProviderWrapper({ children }) {
   }
 
   // ✅ 只有 OAuth 已配置時才使用 SessionProvider
-  return <SessionProvider>{children}</SessionProvider>;
+  return (
+    <SessionProvider>
+      <OAuthSessionBridge />
+      {children}
+    </SessionProvider>
+  );
 }
 

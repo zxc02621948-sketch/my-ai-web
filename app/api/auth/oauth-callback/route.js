@@ -4,20 +4,33 @@ import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 import { generateToken } from "@/lib/serverAuth";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export async function POST(req) {
   try {
-    const { email } = await req.json();
+    const session = await getServerSession(authOptions);
+    const sessionEmail = session?.user?.email;
+    const body = await req.json().catch(() => ({}));
+    const requestedEmail = body?.email;
 
-    if (!email) {
+    if (!sessionEmail) {
       return NextResponse.json(
-        { ok: false, error: "缺少 email 參數" },
-        { status: 400 }
+        { ok: false, error: "OAuth session 無效，請重新登入" },
+        { status: 401 }
+      );
+    }
+
+    // 防止透過偽造 body email 取得他人 token
+    if (requestedEmail && String(requestedEmail).toLowerCase() !== String(sessionEmail).toLowerCase()) {
+      return NextResponse.json(
+        { ok: false, error: "OAuth 驗證失敗" },
+        { status: 403 }
       );
     }
 
     await dbConnect();
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: sessionEmail });
 
     if (!user) {
       return NextResponse.json(
@@ -36,7 +49,6 @@ export async function POST(req) {
     const token = generateToken(payload);
 
     const responseData = {
-      token,
       user: {
         _id: user._id,
         username: user.username,
@@ -49,7 +61,7 @@ export async function POST(req) {
 
     // 設置 cookie
     const cookieOptions = {
-      httpOnly: false,
+      httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",

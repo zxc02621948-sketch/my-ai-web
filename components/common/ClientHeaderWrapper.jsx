@@ -71,15 +71,6 @@ export default function ClientHeaderWrapper({ currentUser, setCurrentUser }) {
     router.push(`/?search=${encoded}`); // ← 統一用 search
   };
 
-  // 取得 token（若存在）
-  const getToken = () => {
-    if (typeof document === "undefined") return null;
-    return document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("token="))
-      ?.split("=")[1] || null;
-  };
-
   // ✅ 登入後載入一次：靜默呼叫每日登入 API（支援 Cookie 與 Authorization）
   useEffect(() => {
     if (!effectiveUser?._id) return;
@@ -94,10 +85,10 @@ export default function ClientHeaderWrapper({ currentUser, setCurrentUser }) {
     (async () => {
       try {
         if (done) return;
-        const token = getToken();
-        if (!token) return; // 沒有 token 就不調用 API
-        const headers = { Authorization: `Bearer ${token}` };
-        const res = await fetch("/api/points/daily-login", { method: "POST", headers, credentials: "include" });
+        const res = await fetch("/api/points/daily-login", {
+          method: "POST",
+          credentials: "include",
+        });
         
         // 靜默處理 401 錯誤（可能是 token 無效，屬於正常情況）
         if (!res.ok && res.status === 401) {
@@ -113,7 +104,6 @@ export default function ClientHeaderWrapper({ currentUser, setCurrentUser }) {
           const meRes = await fetch(`/api/user-info?id=${encodeURIComponent(uid)}`, {
             headers: {
               Accept: "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             credentials: "include",
           });

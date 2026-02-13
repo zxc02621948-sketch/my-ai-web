@@ -6,9 +6,21 @@ import User from "@/models/User";
 
 export async function POST(req) {
   try {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+    }
+
+    const routeSecret = process.env.DEV_CREATE_USER_SECRET?.trim();
+    if (routeSecret) {
+      const provided = req.headers.get("x-dev-create-user-secret")?.trim();
+      if (!provided || provided !== routeSecret) {
+        return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+      }
+    }
+
     await dbConnect();
 
-    const { email, username, password, isAdmin } = await req.json();
+    const { email, username, password } = await req.json();
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -25,7 +37,8 @@ export async function POST(req) {
       username,
       password: hashedPassword,
       isVerified: true,
-      isAdmin: isAdmin === true,
+      // Never trust client-supplied role flags on this utility endpoint.
+      isAdmin: false,
       lastVerificationEmailSentAt: null,
       createdAt: new Date(), // ✅ 加上這行保證時間存在
     });

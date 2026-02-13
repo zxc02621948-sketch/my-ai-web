@@ -144,22 +144,15 @@ export default function DesktopRightPane({
     setFollowLoading(true);
 
     try {
-      const token = document.cookie.match(/token=([^;]+)/)?.[1];
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-
       if (willFollow) {
         await axios.post(
           "/api/follow",
           { userIdToFollow: ownerId },
-          { headers, withCredentials: true }
+          { withCredentials: true }
         );
       } else {
         await axios.delete("/api/follow", {
           data: { userIdToUnfollow: ownerId },
-          headers,
           withCredentials: true,
         });
       }

@@ -5,6 +5,7 @@ import DiscussionPost from "@/models/DiscussionPost";
 import DiscussionComment from "@/models/DiscussionComment";
 import Notification from "@/models/Notification";
 import User from "@/models/User";
+import { sanitizePostContent } from "@/lib/sanitizeUserContent";
 
 // 獲取帖子的所有評論
 export async function GET(req, { params }) {
@@ -68,12 +69,20 @@ export async function POST(req, { params }) {
       );
     }
     
+    const safeContent = sanitizePostContent(content);
+    if (!safeContent) {
+      return NextResponse.json(
+        { success: false, error: "評論內容不能為空" },
+        { status: 400 }
+      );
+    }
+
     // 創建評論
     const comment = new DiscussionComment({
       post: id,
       author: currentUser._id,
       authorName: currentUser.username,
-      content: content.trim(),
+      content: safeContent,
       parentCommentId: parentCommentId || null
     });
     
@@ -104,7 +113,7 @@ export async function POST(req, { params }) {
             userId: mentionedUser._id,
             fromUserId: currentUser._id,
             type: 'discussion_mention',
-            message: `在「${post.title}」中: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`,
+            message: `在「${post.title}」中: ${safeContent.substring(0, 100)}${safeContent.length > 100 ? '...' : ''}`,
             link: `/discussion/${post._id}`,
             commentId: comment._id,
             text: `${currentUser.username} 在討論區提到了你`
@@ -124,7 +133,7 @@ export async function POST(req, { params }) {
           userId: replyToUser._id,
           fromUserId: currentUser._id,
           type: 'discussion_reply',
-          message: `在「${post.title}」中: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`,
+          message: `在「${post.title}」中: ${safeContent.substring(0, 100)}${safeContent.length > 100 ? '...' : ''}`,
           link: `/discussion/${post._id}`,
           commentId: comment._id,
           text: `${currentUser.username} 回覆了你的評論`

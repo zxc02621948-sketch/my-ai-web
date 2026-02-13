@@ -12,6 +12,27 @@ import { spawn } from "child_process";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+function isAllowedVideoUrl(videoUrl) {
+  try {
+    const u = new URL(videoUrl);
+    if (u.protocol !== "https:") return false;
+
+    const allowedHosts = new Set(["media.aicreateaworld.com"]);
+    if (R2_PUBLIC_URL) {
+      try {
+        allowedHosts.add(new URL(R2_PUBLIC_URL).hostname);
+      } catch {
+        // ignore malformed env
+      }
+    }
+
+    const host = u.hostname.toLowerCase();
+    return allowedHosts.has(host) || host.endsWith(".r2.dev");
+  } catch {
+    return false;
+  }
+}
+
 // ✅ 從 URL 下載視頻並生成縮圖（重用 upload-r2-direct 的邏輯）
 async function generateThumbnailFromStreamUrl(videoUrl, key) {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "video-thumb-remote-"));
@@ -110,6 +131,10 @@ export async function POST(request) {
         { error: "Missing videoKey or videoUrl" },
         { status: 400 }
       );
+    }
+
+    if (!isAllowedVideoUrl(videoUrl)) {
+      return NextResponse.json({ error: "Invalid videoUrl" }, { status: 400 });
     }
 
     await dbConnect();

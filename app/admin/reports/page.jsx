@@ -262,9 +262,6 @@ export default function AdminReportsPage() {
 
   // 既有管理 API：/api/delete-image
   async function doModerationAction({ imageId, reportId, action, reasonCode, newCategory, newRating, note = "", notify = true, actionKey }) {
-    const token = document.cookie.match(/token=([^;]+)/)?.[1];
-
-    if (!token) throw new Error("找不到登入憑證（token）");
     // 對應模板 key（與後端 notifTemplates 一致，可依實際需求調整）
     const actionKeyMap = {
       delete: "takedown.nsfw_in_sfw",
@@ -289,10 +286,8 @@ export default function AdminReportsPage() {
 
     const r = await fetch("/api/delete-image", {
       method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-      },
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       cache: "no-store",
       body: JSON.stringify(payload),
     });
@@ -303,11 +298,10 @@ export default function AdminReportsPage() {
 
   // 發警告（Strike）
   async function postWarning({ userId, reasonCode, imageId, reportId, days = 60, note = "" }) {
-    const token = document.cookie.match(/token=([^;]+)/)?.[1];
-    if (!token) throw new Error("找不到登入憑證（token）");
     const r = await fetch("/api/warnings", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ userId, reasonCode, imageId, reportId, days, note, sendMessage: true }),
     });
     const j = await r.json().catch(() => ({}));
@@ -475,9 +469,6 @@ export default function AdminReportsPage() {
       `確定要刪除這則${contentType}嗎？此操作無法復原。`,
       async () => {
         try {
-          const token = document.cookie.match(/token=([^;]+)/)?.[1];
-          if (!token) throw new Error("找不到登入憑證");
-
           let endpoint = '';
           if (report.type === 'discussion_post') {
             endpoint = `/api/discussion/posts/${report.targetId}`;
@@ -489,10 +480,8 @@ export default function AdminReportsPage() {
 
           const r = await fetch(endpoint, {
             method: "DELETE",
-            headers: { 
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}`,
-            },
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
             cache: "no-store"
           });
 

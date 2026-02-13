@@ -60,12 +60,10 @@ export default function AdminModerationBar({ image, onDone }) {
 
     setLoading(true);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const res = await fetch("/api/delete-image", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           imageId: image._id,

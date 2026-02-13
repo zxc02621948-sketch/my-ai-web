@@ -65,6 +65,7 @@ export default function ImageAnalyticsPage() {
     totalViews = 0,
     categoryStats = [],
     interactionStats = [],
+    dbTotals = {},
     timeSpent = {},
   } = data;
 
@@ -113,7 +114,7 @@ export default function ImageAnalyticsPage() {
       <h1 className="text-2xl font-bold mb-6">🖼️ 圖片分析</h1>
 
       {/* 總覽統計 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-zinc-800 p-4 rounded-lg">
           <h3 className="text-lg font-semibold text-blue-400">圖片完整查看率</h3>
           <p className="text-2xl font-bold">
@@ -148,6 +149,18 @@ export default function ImageAnalyticsPage() {
           </p>
           <p className="text-xs text-zinc-500 mt-1">
             圖片在視口中的平均可見比例
+          </p>
+        </div>
+        <div className="bg-zinc-800 p-4 rounded-lg">
+          <h3 className="text-lg font-semibold text-amber-400">DB 瀏覽累計</h3>
+          <p className="text-2xl font-bold">
+            {(dbTotals.totalClicks || 0).toLocaleString()}
+          </p>
+          <p className="text-sm text-zinc-400 mt-1">
+            圖片數: {(dbTotals.totalImages || 0).toLocaleString()}
+          </p>
+          <p className="text-xs text-zinc-500 mt-1">
+            來源: images.clicks（與排序分數連動）
           </p>
         </div>
       </div>
@@ -195,6 +208,7 @@ export default function ImageAnalyticsPage() {
               <tr className="border-b border-zinc-600">
                 <th className="text-left p-2">圖片</th>
                 <th className="text-right p-2">打開次數</th>
+                <th className="text-right p-2">DB 瀏覽</th>
                 <th className="text-right p-2">點讚次數</th>
                 <th className="text-right p-2">轉換率</th>
               </tr>
@@ -210,6 +224,7 @@ export default function ImageAnalyticsPage() {
                       {stat.title || `圖片 ID: ${stat.imageId}`}
                     </td>
                     <td className="text-right p-2">{stat.opens || 0}</td>
+                    <td className="text-right p-2">{stat.dbClicks || stat.dbViewCount || 0}</td>
                     <td className="text-right p-2">{stat.likes || 0}</td>
                     <td className="text-right p-2 font-semibold text-green-400">
                       {stat.likeConversionRate?.toFixed(2) || '0.00'}%
@@ -218,7 +233,7 @@ export default function ImageAnalyticsPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="4" className="p-4 text-center text-gray-400">
+                  <td colSpan="5" className="p-4 text-center text-gray-400">
                     暫無數據
                   </td>
                 </tr>

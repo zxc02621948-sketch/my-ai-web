@@ -174,6 +174,7 @@ export default function ImageModal({
             ? {
                 ...prev,
                 clicks: data.clicks ?? prev.clicks,
+                viewCount: data.viewCount ?? prev.viewCount,
                 likesCount: data.likesCount ?? prev.likesCount,
                 popScore: data.popScore ?? prev.popScore,
               }
@@ -256,23 +257,15 @@ export default function ImageModal({
     setIsFollowing(next);
 
     try {
-      // 帶上認證，和 DesktopRightPane 的做法一致
-      const token = document.cookie.match(/token=([^;]+)/)?.[1];
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-
       if (next) {
         await axios.post(
           "/api/follow",
           { userIdToFollow: ownerId },
-          { headers, withCredentials: true }
+          { withCredentials: true }
         );
       } else {
         await axios.delete("/api/follow", {
           data: { userIdToUnfollow: ownerId },
-          headers,
           withCredentials: true,
         });
       }
@@ -339,11 +332,10 @@ export default function ImageModal({
 
   const toggleLikeOnServer = async () => {
     try {
-      const token = document.cookie.match(/token=([^;]+)/)?.[1];
-      if (!token || !currentUser?._id || !image?._id) return;
+      if (!currentUser?._id || !image?._id) return;
       const res = await fetch(`/api/like-image?id=${image._id}`, {
         method: "PUT",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();

@@ -4,16 +4,18 @@ import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
+    const hasNextAuthSecret = !!process.env.NEXTAUTH_SECRET;
     const hasGoogleConfig =
-      process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
+      hasNextAuthSecret && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
     const hasFacebookConfig =
-      process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET;
+      hasNextAuthSecret && process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET;
 
     // ✅ 只要有一個 OAuth provider 已配置，就顯示 OAuth 按鈕
     const enabled = hasGoogleConfig || hasFacebookConfig;
 
     return NextResponse.json({
       enabled,
+      nextAuthSecretConfigured: hasNextAuthSecret,
       providers: {
         google: hasGoogleConfig,
         facebook: hasFacebookConfig,

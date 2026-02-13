@@ -13,11 +13,71 @@ import NotificationModal from "@/components/common/NotificationModal";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import BackToTopButton from "@/components/common/BackToTopButton";
 import ReactMarkdown from 'react-markdown';
-import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
 
 export default function PostDetailPage() {
+  const isSafeHttpUrl = (value) => {
+    if (!value || typeof value !== "string") return false;
+    try {
+      const u = new URL(value, "https://placeholder.local");
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      return false;
+    }
+  };
+
+  const sanitizeHref = (href) => {
+    if (!href) return "#";
+    if (href.startsWith("#")) return href;
+    return isSafeHttpUrl(href) ? href : "#";
+  };
+
+  // 相容舊資料：部分帖子內容是 HTML 字串（例如 <p>...</p>）
+  // 在不啟用 raw HTML 渲染的前提下，先轉成純文字/Markdown 再交給 ReactMarkdown。
+  const normalizeLegacyContent = (input) => {
+    if (!input || typeof input !== "string") return "";
+    if (!/[<>]/.test(input)) return input;
+
+    let text = input;
+    text = text.replace(/\r\n/g, "\n");
+    text = text.replace(/<br\s*\/?>/gi, "\n");
+
+    // 保留連結資訊，避免只剩下文字
+    text = text.replace(
+      /<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+      (_m, href, label) => {
+        const safeHref = sanitizeHref(String(href || ""));
+        const safeLabel = String(label || "").replace(/<[^>]+>/g, "").trim() || safeHref;
+        return safeHref === "#" ? safeLabel : `[${safeLabel}](${safeHref})`;
+      }
+    );
+
+    // 常見區塊標籤轉行
+    text = text.replace(/<\/p>\s*<p[^>]*>/gi, "\n\n");
+    text = text.replace(/<p[^>]*>/gi, "");
+    text = text.replace(/<\/p>/gi, "\n\n");
+    text = text.replace(/<\/li>\s*<li[^>]*>/gi, "\n- ");
+    text = text.replace(/<li[^>]*>/gi, "- ");
+    text = text.replace(/<\/li>/gi, "\n");
+    text = text.replace(/<\/?(ul|ol|div|section|article|span|strong|em|b|i|u)[^>]*>/gi, "");
+
+    // 其他殘留標籤一律去除
+    text = text.replace(/<[^>]+>/g, "");
+
+    // decode 常見 HTML entity
+    text = text
+      .replace(/&nbsp;/g, " ")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+
+    // 壓縮過多空行，保持閱讀性
+    text = text.replace(/\n{3,}/g, "\n\n").trim();
+    return text;
+  };
   const params = useParams();
   const router = useRouter();
   const { currentUser } = useCurrentUser(); // 使用 Context
@@ -464,7 +524,7 @@ export default function PostDetailPage() {
                     return (
                       <div key={index} className="my-6 flex flex-col items-center">
                         <img
-                          src={image.url}
+                          src={isSafeHttpUrl(image.url) ? image.url : ""}
                           alt={`圖片 ${imageIndex}`}
                           className="rounded-lg border border-zinc-700"
                           style={{ maxWidth: '800px' }}
@@ -486,16 +546,21 @@ export default function PostDetailPage() {
                   return null;
                 }
                 
-                // 使用 ReactMarkdown 渲染 Markdown/HTML
+                const normalizedPart = normalizeLegacyContent(part);
+
+                // 使用 ReactMarkdown 渲染（先經過 legacy HTML 相容轉換）
                 return (
                   <div key={index} className="markdown-content">
                     <ReactMarkdown 
                       remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeRaw, rehypeSlug]}
+                      rehypePlugins={[rehypeSlug]}
                       components={{
                         a: ({ node, ...props }) => (
                           <a 
-                            {...props} 
+                            {...props}
+                            href={sanitizeHref(props.href)}
+                            target={props.href?.startsWith("#") ? undefined : "_blank"}
+                            rel={props.href?.startsWith("#") ? undefined : "noopener noreferrer"}
                             className="text-blue-400 hover:text-blue-300 underline"
                             onClick={(e) => handleAnchorClick(e, props.href)}
                           />
@@ -547,11 +612,15 @@ export default function PostDetailPage() {
                           <blockquote {...props} className="border-l-4 border-blue-500 pl-4 my-4 italic text-gray-400" />
                         ),
                         img: ({ node, ...props }) => (
-                          <img {...props} className="max-w-full rounded-lg my-4" />
+                          <img
+                            {...props}
+                            src={isSafeHttpUrl(props.src) ? props.src : ""}
+                            className="max-w-full rounded-lg my-4"
+                          />
                         ),
                       }}
                     >
-                      {part}
+                      {normalizedPart}
                     </ReactMarkdown>
                   </div>
                 );

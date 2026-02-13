@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import { computePopScore, ensureLikesCount } from "@/utils/score";
 import { creditPoints } from "@/services/pointsService";
+import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,15 @@ function getUserIdFromAuth(req) {
   }
 }
 
+async function getUserId(req) {
+  const fromAuth = getUserIdFromAuth(req);
+  if (fromAuth) return fromAuth;
+
+  // Fallback: 支援 HttpOnly cookie 驗證
+  const user = await getCurrentUserFromRequest(req).catch(() => null);
+  return user?._id ? String(user._id) : null;
+}
+
 export async function PUT(req) {
   try {
     await dbConnect();
@@ -31,7 +41,7 @@ export async function PUT(req) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
-    const userId = getUserIdFromAuth(req);
+    const userId = await getUserId(req);
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     // ✅ 確保 userId 是 ObjectId 類型，用於正確保存到 likes 數組

@@ -28,9 +28,8 @@ export default function LoginPage() {
           sessionStorage.setItem("showRegisterBonus", "true");
         }
         
-        // 設置 token 並刷新頁面
+        // 登入 token 使用 HttpOnly Cookie 儲存，前端不落地保存。
         if (typeof window !== "undefined") {
-          localStorage.setItem("token", data.token);
           window.location.reload();
         }
       } else {

@@ -110,13 +110,11 @@ export default function AdminWarningsPage() {
     }
     try {
       setLoading(true);
-      const token = document.cookie.match(/token=([^;]+)/)?.[1];
-      if (!token) throw new Error("找不到登入憑證（token）");
-
       for (let i = 1; i <= times; i++) {
         const r = await fetch("/api/warnings", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             email: email.trim().toLowerCase(),
             reasonCode,

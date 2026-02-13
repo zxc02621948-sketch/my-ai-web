@@ -142,15 +142,17 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
     setIsFollowing(willFollow); // 樂觀
     setFollowLoading(true);
     try {
-      const token = document.cookie.match(/token=([^;]+)/)?.[1];
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
       if (willFollow) {
-        await axios.post("/api/follow", { userIdToFollow: image.user._id }, { headers });
+        await axios.post(
+          "/api/follow",
+          { userIdToFollow: image.user._id },
+          { withCredentials: true }
+        );
       } else {
-        await axios.delete("/api/follow", { data: { userIdToUnfollow: image.user._id }, headers });
+        await axios.delete("/api/follow", {
+          data: { userIdToUnfollow: image.user._id },
+          withCredentials: true,
+        });
       }
       window.dispatchEvent(
         new CustomEvent("follow-changed", {
@@ -214,19 +216,13 @@ export default function ImageInfoBox({ image, currentUser, displayMode = "galler
       return;
     }
 
-    const token = document.cookie.match(/(?:^|;\s*)token=([^;]+)/)?.[1];
-    if (!token) {
-      notify.warning("提示", "未登入或憑證過期，請先登入。");
-      return;
-    }
-
     try {
       const res = await fetch("/api/delete-image", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({ id: String(image._id) }),
       });
 

@@ -72,14 +72,22 @@ export async function GET(req) {
     await dbConnect();
 
     const url = new URL(req.url);
+    const currentUser = await getCurrentUser().catch(() => null);
+    const isAdmin = !!currentUser?.isAdmin;
 
     // 遷移 / 一鍵補救（原樣保留）
     if (url.searchParams.get("migrate") === "1") {
+      if (!isAdmin) {
+        return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+      }
       const dryRun = bool(url.searchParams.get("dry"));
       const result = await migrateUserIdStringsToObjectIds({ dryRun });
       return NextResponse.json(result);
     }
     if (url.searchParams.get("repairLikes") === "1") {
+      if (!isAdmin) {
+        return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+      }
       const dryRun = url.searchParams.get("dry") === "1";
       let scanned = 0, modified = 0;
 
@@ -574,9 +582,7 @@ export async function GET(req) {
           ]);
         }
 
-        const currentUser = await getCurrentUser().catch(() => null);
         const userId = currentUser?._id || null;
-        const isAdmin = !!currentUser?.isAdmin;
 
         const sanitize = (arr) =>
           arr.map((doc) => {
@@ -630,9 +636,7 @@ export async function GET(req) {
     const docs = await Image.aggregate(pipeline);
 
     // ✅ 在這裡依使用者身分清理 Comfy JSON（遊客只看得到公開）
-    const currentUser = await getCurrentUser().catch(() => null);
     const userId = currentUser?._id || null;
-    const isAdmin = !!currentUser?.isAdmin;
 
     const sanitizedDocs = docs.map((doc) => {
       const ownerId = doc.user?._id || doc.user || doc.userRef || doc.userId || null;

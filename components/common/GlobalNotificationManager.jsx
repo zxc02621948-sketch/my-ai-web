@@ -117,31 +117,16 @@ export default function GlobalNotificationManager() {
       
       // ✅ 檢查用戶是否已經看過這個彈窗（使用 localStorage 持久化記錄）
       try {
-        // 先嘗試從 token 解析用戶 ID（更快，不需要 API 調用）
         let userId = null;
-        const token = localStorage.getItem("token");
-        
-        if (token) {
-          try {
-            // JWT token 格式：header.payload.signature
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            userId = payload.id || payload._id;
-          } catch (e) {
-            // Token 解析失敗，嘗試從 API 獲取
+        // token 已改為 HttpOnly cookie，前端不再讀取 token，直接查 current-user。
+        try {
+          const userRes = await fetch("/api/current-user", { credentials: "include" });
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            userId = userData?._id || userData?.user?._id;
           }
-        }
-        
-        // 如果無法從 token 解析，從 API 獲取當前用戶 ID
-        if (!userId) {
-          try {
-            const userRes = await fetch("/api/current-user", { credentials: "include" });
-            if (userRes.ok) {
-              const userData = await userRes.json();
-              userId = userData?._id || userData?.user?._id;
-            }
-          } catch (e) {
-            // 從 API 獲取失敗，使用 sessionStorage 作為後備方案
-          }
+        } catch (e) {
+          // 從 API 獲取失敗，使用 sessionStorage 作為後備方案
         }
         
         if (userId) {

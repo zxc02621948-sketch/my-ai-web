@@ -3,11 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 
-const getTokenFromCookie = () =>
-  typeof document === "undefined"
-    ? null
-    : document.cookie.match(/token=([^;]+)/)?.[1] ?? null;
-
 const getFollowOverrideMap = () => {
   if (typeof window === "undefined") return null;
   if (!window.__followOverrides) {
@@ -108,12 +103,6 @@ export function useFollowState({
         typeof providedState === "boolean" ? providedState : !previous;
       applyFollowState(nextState);
 
-      const token = getTokenFromCookie();
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-
       try {
         if (typeof onFollowToggle === "function") {
           await onFollowToggle(ownerId, nextState);
@@ -122,12 +111,11 @@ export function useFollowState({
             await axios.post(
               "/api/follow",
               { userIdToFollow: ownerId },
-              { headers, withCredentials: true }
+              { withCredentials: true }
             );
           } else {
             await axios.delete("/api/follow", {
               data: { userIdToUnfollow: ownerId },
-              headers,
               withCredentials: true,
             });
           }

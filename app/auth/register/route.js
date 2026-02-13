@@ -4,8 +4,9 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
+import { authLimiter, withRateLimit } from "@/lib/rateLimit";
 
-export async function POST(req) {
+async function registerHandler(req) {
   try {
     await dbConnect();
     const body = await req.json();
@@ -52,3 +53,5 @@ export async function POST(req) {
     );
   }
 }
+
+export const POST = withRateLimit(registerHandler, authLimiter);

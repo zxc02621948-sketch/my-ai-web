@@ -196,7 +196,21 @@ export async function GET(request) {
           opens: 1,
           likes: 1,
           comments: 1,
+          dbClicks: { $ifNull: ['$image.clicks', 0] },
+          dbViewCount: { $ifNull: ['$image.viewCount', 0] },
           likeConversionRate: { $round: ['$likeConversionRate', 2] },
+        },
+      },
+    ]);
+
+    // 3.5 圖片資料表（DB）內的總瀏覽/點擊數
+    const dbTotals = await Image.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalImages: { $sum: 1 },
+          totalClicks: { $sum: { $ifNull: ['$clicks', 0] } },
+          totalViewCount: { $sum: { $ifNull: ['$viewCount', 0] } },
         },
       },
     ]);
@@ -235,6 +249,11 @@ export async function GET(request) {
         totalViews,
         categoryStats,
         interactionStats,
+        dbTotals: dbTotals[0] || {
+          totalImages: 0,
+          totalClicks: 0,
+          totalViewCount: 0,
+        },
         timeSpent: timeSpentStats[0] || {
           avgTimeSpent: 0,
           maxTimeSpent: 0,

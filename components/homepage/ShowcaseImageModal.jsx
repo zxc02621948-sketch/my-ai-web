@@ -140,10 +140,9 @@ export default function ShowcaseImageModal({
     });
 
     try {
-      const token = document.cookie.match(/token=([^;]+)/)?.[1];
       await fetch(`/api/like-image?id=${image._id}`, {
         method: "PUT",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        credentials: "include",
       });
     } catch (err) {
       console.error("❌ 點讚失敗", err);

@@ -2,6 +2,7 @@ import { dbConnect } from "@/lib/db";
 import Comment from "@/models/Comment";
 import Image from "@/models/Image";
 import { verifyToken } from "@/lib/serverAuth";
+import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { computePopScore } from "@/utils/score";
@@ -13,17 +14,29 @@ export async function DELETE(req, context) {
   try {
     const commentId = (await context.params).commentId;
 
-    const authHeader = req.headers.get("authorization");
+    const authHeader = req.headers.get("authorization") || "";
+    const bearer = authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+    let userId = null;
+    let isAdmin = false;
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ message: "未提供 token" }, { status: 401 });
+    if (bearer) {
+      const decoded = await verifyToken(bearer);
+      if (decoded?.id) {
+        userId = String(decoded.id);
+        isAdmin = decoded.isAdmin === true;
+      }
     }
 
-    const token = authHeader.split(" ")[1];
-    const decoded = await verifyToken(token);
+    if (!userId) {
+      const currentUser = await getCurrentUserFromRequest(req).catch(() => null);
+      if (currentUser?._id) {
+        userId = String(currentUser._id);
+        isAdmin = currentUser.isAdmin === true;
+      }
+    }
 
-    if (!decoded?.id) {
-      return NextResponse.json({ message: "無效的 token" }, { status: 403 });
+    if (!userId) {
+      return NextResponse.json({ message: "未授權" }, { status: 401 });
     }
 
     if (!mongoose.Types.ObjectId.isValid(commentId)) {
@@ -39,8 +52,7 @@ export async function DELETE(req, context) {
     const isOwner =
       comment.userId &&
       comment.userId.toString &&
-      comment.userId.toString() === decoded.id.toString();
-    const isAdmin = decoded.isAdmin === true;
+      comment.userId.toString() === userId;
 
     if (!isOwner && !isAdmin) {
       return NextResponse.json({ message: "沒有刪除權限" }, { status: 403 });

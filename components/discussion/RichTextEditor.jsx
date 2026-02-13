@@ -24,6 +24,32 @@ import {
 import { useState, useEffect } from 'react';
 import { notify } from '@/components/common/GlobalNotificationManager';
 
+const sanitizeAnchorId = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/[^\w\u4e00-\u9fa5-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+
+const isSafeHttpUrl = (value) => {
+  if (!value || typeof value !== "string") return false;
+  try {
+    const u = new URL(value, window.location.origin);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const escapeHtml = (value) =>
+  String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 // 自定义 Anchor Extension
 const AnchorExtension = {
   name: 'anchor',
@@ -240,10 +266,13 @@ export default function RichTextEditor({
 
   const insertAnchor = () => {
     if (!editor) return;
-    const anchorId = prompt('輸入錨點 ID（例如：section1）:');
-    if (anchorId && anchorId.trim()) {
-      editor.chain().focus().insertContent(`<a id="${anchorId.trim()}"></a>`).run();
+    const rawAnchorId = prompt('輸入錨點 ID（例如：section1）:');
+    const anchorId = sanitizeAnchorId(rawAnchorId);
+    if (!anchorId) {
+      notify.warning("提示", "錨點 ID 只允許英數字、中字、底線與連字號");
+      return;
     }
+    editor.chain().focus().insertContent(`<a id="${anchorId}"></a>`).run();
   };
 
   const insertImageTag = (index) => {
@@ -272,15 +301,15 @@ export default function RichTextEditor({
     const tocItems = headings.map((heading, idx) => {
       const level = parseInt(heading.tagName.charAt(1));
       const text = heading.textContent || '';
-      const anchorId = heading.id || `heading-${idx}-${text.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g, '-')}`;
+      const computedId = `heading-${idx}-${text.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g, '-')}`;
+      const anchorId = sanitizeAnchorId(heading.id || computedId) || `heading-${idx}`;
       
       // 为标题添加 ID（如果还没有）
       if (!heading.id) {
         heading.id = anchorId;
       }
       
-      const indent = '&nbsp;&nbsp;'.repeat(level - 1);
-      return `<li style="margin-left: ${(level - 1) * 1.5}rem;"><a href="#${anchorId}" class="text-blue-400 hover:text-blue-300 underline">${text}</a></li>`;
+      return `<li style="margin-left: ${(level - 1) * 1.5}rem;"><a href="#${anchorId}" class="text-blue-400 hover:text-blue-300 underline">${escapeHtml(text)}</a></li>`;
     });
 
     // 更新编辑器内容，包含添加了 ID 的标题
@@ -303,8 +332,14 @@ export default function RichTextEditor({
     if (!editor) return;
     const url = prompt('輸入連結 URL:');
     if (url && url.trim()) {
-      const text = prompt('輸入連結文字（可選，留空使用 URL）:') || url;
-      editor.chain().focus().setLink({ href: url.trim() }).insertContent(text).run();
+      const normalizedUrl = url.trim();
+      if (!isSafeHttpUrl(normalizedUrl)) {
+        notify.warning("提示", "只允許 http/https 連結");
+        return;
+      }
+      const rawText = prompt('輸入連結文字（可選，留空使用 URL）:') || normalizedUrl;
+      const safeText = rawText.replace(/[<>]/g, "");
+      editor.chain().focus().setLink({ href: normalizedUrl }).insertContent(safeText).run();
     }
   };
 

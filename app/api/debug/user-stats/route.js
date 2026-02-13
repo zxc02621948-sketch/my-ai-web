@@ -8,11 +8,21 @@ import Music from "@/models/Music";
 import Video from "@/models/Video";
 import Comment from "@/models/Comment";
 import User from "@/models/User";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req) {
   try {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json({ error: "Not Found" }, { status: 404 });
+    }
+
+    const currentUser = await getCurrentUserFromRequest(req).catch(() => null);
+    if (!currentUser?.isAdmin) {
+      return NextResponse.json({ error: "未授權" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
     const username = searchParams.get("username");

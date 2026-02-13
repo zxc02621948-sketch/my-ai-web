@@ -9,6 +9,7 @@ export default function OAuthButtons({ onSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProvider, setLoadingProvider] = useState(null);
   const [isOAuthEnabled, setIsOAuthEnabled] = useState(false);
+  const [providers, setProviders] = useState({ google: false, facebook: false });
 
   // ✅ 檢查 OAuth 是否已配置（只在客戶端檢查）
   useEffect(() => {
@@ -17,9 +18,14 @@ export default function OAuthButtons({ onSuccess }) {
       .then((res) => res.json())
       .then((data) => {
         setIsOAuthEnabled(data.enabled || false);
+        setProviders({
+          google: !!data?.providers?.google,
+          facebook: !!data?.providers?.facebook,
+        });
       })
       .catch(() => {
         setIsOAuthEnabled(false);
+        setProviders({ google: false, facebook: false });
       });
   }, []);
 
@@ -28,9 +34,8 @@ export default function OAuthButtons({ onSuccess }) {
     setLoadingProvider(provider);
 
     try {
-      // ✅ 使用 NextAuth 的 signIn 函數進行 OAuth 登入
+      // ✅ 使用 NextAuth 標準 OAuth 流程（會跳轉到第三方）
       const result = await signIn(provider, {
-        redirect: false,
         callbackUrl: window.location.href,
       });
 
@@ -41,48 +46,10 @@ export default function OAuthButtons({ onSuccess }) {
         return;
       }
 
+      // 某些情境（popup/測試）可能不跳轉，這裡保底刷新
       if (result?.ok) {
-        // ✅ OAuth 登入成功，從 NextAuth session 取得 email，然後調用我們的 API 生成 JWT token
-        try {
-          // 等待一下讓 NextAuth session 更新
-          await new Promise((resolve) => setTimeout(resolve, 500));
-
-          // 從 NextAuth 取得 session
-          const sessionResponse = await fetch("/api/auth/session");
-          const session = await sessionResponse.json();
-
-          if (session?.user?.email) {
-            // ✅ 調用我們的 OAuth callback API 生成 JWT token
-            const tokenResponse = await fetch("/api/auth/oauth-callback", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ email: session.user.email }),
-            });
-
-            const tokenData = await tokenResponse.json();
-
-            if (tokenResponse.ok && tokenData.token) {
-              // ✅ 保存 token 並重新載入頁面
-              localStorage.setItem("token", tokenData.token);
-              notify.success("登入成功", `使用 ${provider === "google" ? "Google" : "Facebook"} 登入成功！`);
-              
-              if (onSuccess) {
-                onSuccess();
-              } else {
-                window.location.reload();
-              }
-            } else {
-              notify.error("登入失敗", "無法生成登入憑證，請稍後再試。");
-            }
-          } else {
-            notify.error("登入失敗", "無法取得用戶資訊，請稍後再試。");
-          }
-        } catch (err) {
-          console.error("❌ OAuth callback 錯誤:", err);
-          notify.error("登入失敗", "發生錯誤，請稍後再試。");
-        }
+        if (onSuccess) onSuccess();
+        else window.location.reload();
       }
 
       setIsLoading(false);
@@ -111,6 +78,7 @@ export default function OAuthButtons({ onSuccess }) {
         </div>
       </div>
 
+      {providers.google && (
       <button
         onClick={() => handleOAuthLogin("google")}
         disabled={isLoading}
@@ -148,7 +116,9 @@ export default function OAuthButtons({ onSuccess }) {
           </>
         )}
       </button>
+      )}
 
+      {providers.facebook && (
       <button
         onClick={() => handleOAuthLogin("facebook")}
         disabled={isLoading}
@@ -171,6 +141,7 @@ export default function OAuthButtons({ onSuccess }) {
           </>
         )}
       </button>
+      )}
     </div>
   );
 }

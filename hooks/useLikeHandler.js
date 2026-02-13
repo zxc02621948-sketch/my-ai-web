@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import axios from "axios";
-import { getTokenFromCookie } from "@/lib/cookie";
 
 export default function useLikeHandler({
   setUploadedImages,
@@ -11,11 +10,10 @@ export default function useLikeHandler({
 }) {
   const handleToggleLike = useCallback(async (imageId, shouldLike) => {
     try {
-      const token = getTokenFromCookie();
       const res = await axios.put(
         `/api/like-image?id=${imageId}`,
         { shouldLike },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { withCredentials: true }
       );
       const updatedImage = res.data;
       const updateList = (list) =>

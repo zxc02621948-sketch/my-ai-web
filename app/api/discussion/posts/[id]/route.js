@@ -4,6 +4,7 @@ import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import DiscussionPost from "@/models/DiscussionPost";
 import DiscussionComment from "@/models/DiscussionComment";
 import User from "@/models/User";
+import { sanitizePostContent, sanitizeTitle } from "@/lib/sanitizeUserContent";
 
 // 获取单个帖子详情
 export async function GET(req, { params }) {
@@ -171,9 +172,27 @@ export async function PUT(req, { params }) {
       console.log("🔧 [編輯] 跳過空文件上傳");
     }
     
-    // 更新帖子
-    if (title) post.title = title.trim();
-    if (content) post.content = content.trim();
+    // 更新帖子（儲存前清洗）
+    if (typeof title === "string") {
+      const safeTitle = sanitizeTitle(title);
+      if (!safeTitle) {
+        return NextResponse.json(
+          { success: false, error: "標題不可為空" },
+          { status: 400 }
+        );
+      }
+      post.title = safeTitle;
+    }
+    if (typeof content === "string") {
+      const safeContent = sanitizePostContent(content);
+      if (!safeContent) {
+        return NextResponse.json(
+          { success: false, error: "內容不可為空" },
+          { status: 400 }
+        );
+      }
+      post.content = safeContent;
+    }
     if (category) post.category = category;
     if (imageRef !== null) post.imageRef = imageRef; // 允許清除圖片引用
     if (uploadedImageData !== null) post.uploadedImage = uploadedImageData; // 允許清除上傳圖片

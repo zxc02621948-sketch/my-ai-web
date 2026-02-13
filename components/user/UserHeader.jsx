@@ -31,11 +31,6 @@ const idOf = (v) => {
   return String(v?.userId?._id || v?.userId || v?._id || v?.id || "");
 };
 
-const getTokenFromCookie = () => {
-  if (typeof document === "undefined") return null;
-  return document.cookie.split("; ").find(row => row.startsWith("token="))?.split("=")[1] || null;
-};
-
 export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen, onPointsOpen, onPowerCouponOpen, onUserDataUpdate }) {
   // 使用 Context 獲取訂閱狀態
   const { hasValidSubscription } = useCurrentUser();
@@ -290,17 +285,18 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
         suppressAutoSyncRef.current = false;
       }, 1000);
 
-      const token = getTokenFromCookie();
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: token ? `Bearer ${token}` : undefined,
-      };
-
       const willFollow = !isFollowing;
       if (willFollow) {
-        await axios.post("/api/follow", { userIdToFollow: userData._id }, { headers });
+        await axios.post(
+          "/api/follow",
+          { userIdToFollow: userData._id },
+          { withCredentials: true }
+        );
       } else {
-        await axios.delete("/api/follow", { data: { userIdToUnfollow: userData._id }, headers });
+        await axios.delete("/api/follow", {
+          data: { userIdToUnfollow: userData._id },
+          withCredentials: true,
+        });
       }
 
       setIsFollowing(willFollow);

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import pako from "pako";
-import { jwtDecode } from "jwt-decode";
 import CATEGORIES from "@/constants/categories";
 import { civitaiByHash } from "@/lib/civitai";
 import { parseComfyWorkflow } from "@/lib/parseComfyWorkflow";
@@ -1076,12 +1075,6 @@ export default function UploadStep2({
 
     try {
       // ✅ 先檢查每日上傳限制（避免不必要的上傳和流量消耗）
-      const token = document.cookie.match(/token=([^;]+)/)?.[1];
-      if (!token) {
-        // 未登入：直接阻止上傳
-        throw new Error("請先登入後再上傳");
-      }
-      
       try {
         const limitRes = await fetch("/api/upload-limits", {
           credentials: "include",
@@ -1166,10 +1159,9 @@ export default function UploadStep2({
       // ✅ 原圖 URL 來自 R2，壓縮圖 ID 來自 Cloudflare Images
       const uploadedOriginalImageId = uploadResult.originalImageId || null; // R2 不使用 imageId，使用 URL
 
-      // 使用之前聲明的 token（在第840行）
-      const decoded = token ? jwtDecode(token) : null;
-      const userId = decoded?._id || decoded?.id || null;
-      const username = decoded?.username || decoded?.name || null;
+      // token 改為 HttpOnly cookie，前端不再讀取；僅使用目前登入使用者資訊（可選）
+      const userId = currentUser?._id || currentUser?.id || null;
+      const username = currentUser?.username || currentUser?.name || null;
 
       const tagsArray = (tags || "")
         .replace(/#/g, "")

@@ -72,22 +72,18 @@ export default function AuthorCard({
     setIsFollowing(willFollow);
     
     try {
-      const token = document.cookie.match(/token=([^;]+)/)?.[1];
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-
       if (willFollow) {
         await fetch("/api/follow", {
           method: "POST",
-          headers,
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ userIdToFollow: author._id }),
         });
       } else {
         await fetch("/api/follow", {
           method: "DELETE",
-          headers,
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ userIdToUnfollow: author._id }),
         });
       }

@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import { computeCompleteness } from "@/utils/score"; // 👈 新增
 import { creditPoints } from "@/services/pointsService";
 import { getDailyUploadLimit } from "@/utils/pointsLevels";
+import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
 
 // === GET: 列表（也可讓詳情頁取用單筆資料） ===
 export async function GET(req) {
@@ -109,6 +110,11 @@ export async function GET(req) {
 // === POST: 建立作品（上傳後寫入資料） ===
 export async function POST(req) {
   try {
+    const currentUser = await getCurrentUserFromRequest(req);
+    if (!currentUser?._id) {
+      return NextResponse.json({ message: "未授權" }, { status: 401 });
+    }
+
     await dbConnect();
     const body = await req.json();
 
@@ -123,7 +129,6 @@ export async function POST(req) {
       categories,
       description,
       tags,
-      userId,
       modelName,
       loraName,
       modelLink,
@@ -137,7 +142,7 @@ export async function POST(req) {
       height,
       modelHash,
       author,
-      username, // 👈 新增接收
+      username, // 👈 前端可能會傳，後端最終以 session user 為準
       comfy, // ✅ 新增
       modelRef,
       loraHashes,
@@ -145,6 +150,9 @@ export async function POST(req) {
       originalImageId,
       originalImageUrl,
     } = body;
+
+    const effectiveUserId = String(currentUser._id);
+    const effectiveUsername = currentUser.username || username || "";
 
     const rawRating = typeof rating === "string" ? rating.trim().toLowerCase() : "";
     const normalizedRating =
@@ -187,8 +195,8 @@ export async function POST(req) {
     }
 
     // ✅ 檢查每日上傳限制（與等級掛鉤）
-    if (userId) {
-      const user = await User.findById(userId).select('totalEarnedPoints subscriptions').lean();
+    if (effectiveUserId) {
+      const user = await User.findById(effectiveUserId).select('totalEarnedPoints subscriptions').lean();
       if (user) {
         const totalEarnedPoints = user.totalEarnedPoints || 0;
         const baseDailyLimit = getDailyUploadLimit(totalEarnedPoints); // 基礎配額（按等級計算：LV1=5, LV2=6, ...）
@@ -206,7 +214,7 @@ export async function POST(req) {
         tomorrow.setDate(tomorrow.getDate() + 1);
         
         const todayUploads = await Image.countDocuments({
-          userId: userId,
+          userId: effectiveUserId,
           createdAt: {
             $gte: today,
             $lt: tomorrow
@@ -300,12 +308,10 @@ export async function POST(req) {
       width: width ?? null,
       height: height ?? null,
       modelHash: modelHash || "",
-      userId,
+      userId: effectiveUserId,
       // ✅ 確保 user 字段是 ObjectId 類型，用於正確的查詢和 populate
-      user: userId && mongoose.Types.ObjectId.isValid(userId) 
-        ? new mongoose.Types.ObjectId(userId) 
-        : userId,
-      username: username || "", // 若 schema 有支援就能存
+      user: new mongoose.Types.ObjectId(effectiveUserId),
+      username: effectiveUsername, // 若 schema 有支援就能存
       hasMetadata, // ✅ 自動標記
 
       // 參考資訊
@@ -454,16 +460,14 @@ export async function POST(req) {
 
     // ✅ 積分：上傳成功入帳 +5（每日上限 20）
     try {
-      if (userId) {
-        await creditPoints({ userId, type: "upload", sourceId: newImage._id, actorUserId: userId, meta: { imageId: newImage._id } });
-      }
+      await creditPoints({ userId: effectiveUserId, type: "upload", sourceId: newImage._id, actorUserId: effectiveUserId, meta: { imageId: newImage._id } });
     } catch (e) {
       console.warn("[points] 上傳入帳失敗：", e);
     }
 
     // 通知追蹤者（維持原有行為）
-    const followers = await User.find({ "following.userId": new mongoose.Types.ObjectId(userId) });
-    const uploader = await User.findById(userId);
+    const followers = await User.find({ "following.userId": new mongoose.Types.ObjectId(effectiveUserId) });
+    const uploader = await User.findById(effectiveUserId);
 
     await Promise.all(
       followers.map((follower) =>

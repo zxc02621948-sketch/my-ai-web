@@ -416,13 +416,6 @@ export default function UploadVideoModal({
     }
 
     // ✅ 先檢查每日上傳限制（避免不必要的上傳和流量消耗）
-    const token = document.cookie.match(/token=([^;]+)/)?.[1];
-    if (!token) {
-      // 未登入：直接阻止上傳
-      toast.error('請先登入後再上傳');
-      return;
-    }
-    
     try {
       const quotaRes = await fetch("/api/user/daily-video-quota", {
         credentials: "include",

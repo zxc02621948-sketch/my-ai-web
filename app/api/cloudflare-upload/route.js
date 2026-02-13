@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
 
 class CloudflareUploadError extends Error {
   constructor(message, status = 500, extra = {}) {
@@ -11,6 +12,11 @@ class CloudflareUploadError extends Error {
 
 export async function POST(req) {
   try {
+    const user = await getCurrentUserFromRequest(req);
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
     const apiToken = process.env.CLOUDFLARE_API_TOKEN?.trim();
 
@@ -47,13 +53,13 @@ export async function POST(req) {
     const uploadUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`;
     const cleanToken = apiToken.replace(/[\s\uFEFF\u200B-\u200D\u2060]/g, "").trim();
 
-    console.log("🔍 [Cloudflare] Token 診斷：", {
-      originalLength: apiToken.length,
-      cleanedLength: cleanToken.length,
-      tokenPrefix: cleanToken.substring(0, 10) + "...",
-      tokenSuffix: "..." + cleanToken.substring(cleanToken.length - 5),
-      hasSpecialChars: /[^a-zA-Z0-9_-]/.test(cleanToken),
-    });
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔍 [Cloudflare] Token 診斷：", {
+        originalLength: apiToken.length,
+        cleanedLength: cleanToken.length,
+        hasSpecialChars: /[^a-zA-Z0-9_-]/.test(cleanToken),
+      });
+    }
 
     const formData = await req.formData();
     const file = formData.get("file");
