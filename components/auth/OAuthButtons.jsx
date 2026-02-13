@@ -5,6 +5,9 @@ import { signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { notify } from "@/components/common/GlobalNotificationManager";
 
+// 先固定只開 Google；未來要開 Facebook 再改成 true（或改為環境變數控制）。
+const ENABLE_FACEBOOK_OAUTH = false;
+
 export default function OAuthButtons({ onSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProvider, setLoadingProvider] = useState(null);
@@ -118,7 +121,7 @@ export default function OAuthButtons({ onSuccess }) {
       </button>
       )}
 
-      {providers.facebook && (
+      {providers.facebook && ENABLE_FACEBOOK_OAUTH && (
       <button
         onClick={() => handleOAuthLogin("facebook")}
         disabled={isLoading}
