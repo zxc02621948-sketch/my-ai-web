@@ -906,7 +906,13 @@ export default function UploadStep2({
         } catch {
           urlError = { message: `HTTP ${urlRes.status}: ${urlRes.statusText}` };
         }
-        throw new Error(urlError.message || urlError.error || "無法獲取上傳 URL");
+        // Prefer backend-provided detailed error over generic wrapper message.
+        throw new Error(
+          urlError.error ||
+            urlError.details ||
+            urlError.message ||
+            `HTTP ${urlRes.status}: ${urlRes.statusText || "無法獲取上傳 URL"}`
+        );
       }
 
       const urlData = await urlRes.json();
@@ -960,10 +966,11 @@ export default function UploadStep2({
       };
     } catch (error) {
       console.error("[UPLOAD] 直傳錯誤：", error);
-      // ✅ 可選：fallback 到舊流程（如果需要保命功能，可以取消註解）
-      // console.warn("[UPLOAD] 直傳失敗，回退到舊流程");
-      // return await uploadViaVercelApi(imageFile);
-      throw error;
+      // Fallback to legacy server-side upload so users can still publish when
+      // direct upload token/permission has issues.
+      console.warn("[UPLOAD] 直傳失敗，回退到舊流程：", error?.message || error);
+      notify.warning("直傳失敗", `已自動切換到舊上傳流程：${error?.message || "未知錯誤"}`);
+      return await uploadViaVercelApi(imageFile);
     }
   };
 

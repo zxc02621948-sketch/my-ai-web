@@ -15,8 +15,12 @@ export async function POST(req) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
-    const apiToken = process.env.CLOUDFLARE_API_TOKEN?.trim();
+    const accountId =
+      process.env.CLOUDFLARE_ACCOUNT_ID?.trim() ||
+      process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID?.trim();
+    const apiToken =
+      process.env.CLOUDFLARE_API_TOKEN?.trim() ||
+      process.env.CLOUDFLARE_IMAGES_API_TOKEN?.trim();
 
     if (!accountId || !apiToken) {
       console.error("❌ 環境變數缺失：", {
@@ -50,20 +54,20 @@ export async function POST(req) {
     const body = await req.json().catch(() => ({}));
     const metadata = body.metadata || {};
 
-    // ✅ 構建請求 body（expiry 設為 10 分鐘）
-    const requestBody = {
-      expiry: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 分鐘後過期
-      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-    };
+    // Cloudflare direct_upload expects multipart/form-data.
+    const requestForm = new FormData();
+    requestForm.append("expiry", new Date(Date.now() + 10 * 60 * 1000).toISOString()); // 10 分鐘後過期
+    if (Object.keys(metadata).length > 0) {
+      requestForm.append("metadata", JSON.stringify(metadata));
+    }
 
     // ✅ 調用 Cloudflare Direct Upload API
     const response = await fetch(directUploadUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${cleanToken}`,
-        "Content-Type": "application/json",
       },
-      body: JSON.stringify(requestBody),
+      body: requestForm,
     });
 
     if (!response.ok) {
@@ -81,11 +85,21 @@ export async function POST(req) {
         error: errorData,
       });
 
+      const cfPrimaryError =
+        errorData.errors?.[0]?.message ||
+        errorData.error?.message ||
+        errorData.message ||
+        "Unknown error";
+      const cfErrorCodes = Array.isArray(errorData.errors)
+        ? errorData.errors.map((e) => e?.code).filter(Boolean)
+        : [];
+
       return NextResponse.json(
         {
           success: false,
           message: "無法生成上傳 URL",
-          error: errorData.errors?.[0]?.message || errorData.message || "Unknown error",
+          error: cfPrimaryError,
+          details: cfErrorCodes.length ? `Cloudflare error codes: ${cfErrorCodes.join(", ")}` : undefined,
         },
         { status: response.status >= 400 && response.status < 500 ? response.status : 500 }
       );
