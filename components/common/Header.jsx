@@ -24,6 +24,7 @@ import InboxButton from "@/components/common/InboxButton";
 import TutorialMenu from "@/components/common/TutorialMenu";
 import UploadDropdown from "@/components/common/UploadDropdown";
 import ContentMenuButtons from "@/components/common/ContentMenuButtons";
+import { signOut } from "next-auth/react";
 
 export default function Header({
   currentUser,
@@ -606,6 +607,11 @@ export default function Header({
                                 }
                                 
                                 localStorage.clear();
+                                try {
+                                  await signOut({ redirect: false });
+                                } catch (e) {
+                                  // 靜默：若 NextAuth 未啟用，不中斷本站登出流程。
+                                }
                                 await axios.post(
                                   "/api/auth/logout",
                                   {},

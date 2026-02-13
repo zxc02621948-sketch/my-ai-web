@@ -18,6 +18,10 @@ export const CurrentUserProvider = ({ children }) => {
 
   // 獲取訂閱狀態
   const fetchSubscriptions = async () => {
+    if (!currentUser) {
+      setSubscriptions({});
+      return {};
+    }
     if (subscriptionsLoading) return; // 防止重複調用
     setSubscriptionsLoading(true);
     try {
@@ -31,6 +35,12 @@ export const CurrentUserProvider = ({ children }) => {
         return subsMap;
       }
     } catch (error) {
+      const status = error?.response?.status;
+      // 登出或憑證過期時，401/403 是預期結果，不輸出紅色錯誤。
+      if (status === 401 || status === 403) {
+        setSubscriptions({});
+        return {};
+      }
       console.error("🔧 [Context] 獲取訂閱狀態失敗:", error);
     } finally {
       setSubscriptionsLoading(false);

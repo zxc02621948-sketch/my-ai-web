@@ -4,6 +4,8 @@ import { verifyToken } from "@/lib/serverAuth";
 import User from "@/models/User";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export async function GET() {
   await dbConnect();
@@ -17,17 +19,22 @@ export async function GET() {
     .find((c) => c.trim().startsWith("token="))
     ?.split("=")[1];
 
-  if (!token) {
-    return NextResponse.json(null, { status: 200 });
-  }
+  const decoded = token ? verifyToken(token) : null;
+  let userId = decoded?.id || decoded?._id || null;
+  let emailFromOAuth = null;
 
-  const decoded = verifyToken(token);
-  if (!decoded) {
-    return NextResponse.json(null, { status: 200 });
-  }
-
-  const userId = decoded.id || decoded._id; // 支援 id 與 _id
+  // Fallback: 接受 NextAuth session（Google OAuth）
   if (!userId) {
+    try {
+      const session = await getServerSession(authOptions);
+      userId = session?.user?.id || null;
+      emailFromOAuth = session?.user?.email || null;
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!userId && !emailFromOAuth) {
     return NextResponse.json(null, { status: 200 });
   }
 
@@ -36,10 +43,19 @@ export async function GET() {
   const db = mongoose.default.connection.db;
   const usersCollection = db.collection('users');
   
-  const userRaw = await usersCollection.findOne(
-    { _id: new mongoose.default.Types.ObjectId(userId) },
-    { projection: { password: 0 } } // 排除 password 字段
-  );
+  let userRaw = null;
+  if (userId) {
+    userRaw = await usersCollection.findOne(
+      { _id: new mongoose.default.Types.ObjectId(userId) },
+      { projection: { password: 0 } } // 排除 password 字段
+    );
+  }
+  if (!userRaw && emailFromOAuth) {
+    userRaw = await usersCollection.findOne(
+      { email: emailFromOAuth },
+      { projection: { password: 0 } }
+    );
+  }
   
   if (!userRaw) {
     return NextResponse.json(null, { status: 200 });
