@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/serverAuth";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 import PointsTransaction from "@/models/PointsTransaction";
 import { getLevelIndex } from "@/utils/pointsLevels";
+import { sanitizeFrameSettings } from "@/lib/sanitizeFrameSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function POST(req) {
   try {
     await dbConnect();
     
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromRequest(req);
     if (!currentUser) {
       return NextResponse.json({ error: "未登入" }, { status: 401 });
     }
@@ -57,7 +58,8 @@ export async function POST(req) {
     if (!user.frameSettings) {
       user.frameSettings = {};
     }
-    user.frameSettings[frameId] = settings;
+    const safeSettings = sanitizeFrameSettings(settings);
+    user.frameSettings[frameId] = safeSettings;
 
     await user.save();
 
@@ -69,7 +71,7 @@ export async function POST(req) {
       dateKey: new Date().toISOString().split('T')[0],
       meta: {
         frameId: frameId,
-        settings: settings
+        settings: safeSettings
       }
     });
 

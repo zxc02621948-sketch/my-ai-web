@@ -4,6 +4,34 @@ import Link from "next/link";
 
 const VIDEO_PLATFORMS = [
   {
+    id: "sora",
+    name: "SORA",
+    description: "OpenAI 的文字生成影片 AI 模型，可產生高品質、逼真的動態影片。",
+    pricing: "（待補）需透過 OpenAI 產品使用。",
+    guidePoints: [
+      "文字提示詞撰寫技巧（待補）",
+      "影片長度與格式限制（待補）",
+      "風格與構圖控制建議（待補）",
+    ],
+    links: [
+      { label: "官方網站", href: "https://openai.com/sora" },
+    ],
+  },
+  {
+    id: "oiioii",
+    name: "OiiOii",
+    description: "AI 動畫創作平台，支援多代理角色協作，可從提示詞產生完整動畫短片。",
+    pricing: "（待補）目前需邀請碼，可至官方 Discord 領取。",
+    guidePoints: [
+      "劇本與角色設定流程（待補）",
+      "漫畫轉影片、音樂 MV 生成（待補）",
+      "風格學習與參考圖上傳（待補）",
+    ],
+    links: [
+      { label: "官方網站", href: "https://www.oiioii.ai" },
+    ],
+  },
+  {
     id: "runway",
     name: "Runway Gen-2 / Gen-3",
     description: "（待補）影像到影像、文字到影片的指標性平台。",

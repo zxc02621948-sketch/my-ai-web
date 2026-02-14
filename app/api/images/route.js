@@ -17,10 +17,12 @@ const bool = (v) => v === true || v === "1" || v === "true";
 // ---- 與 utils/score.js 對齊的分數常數（可用環境變數覆蓋；保持正數）----
 const toNum = (v, d) => {
   const n = Number(v);
-  return Number.isFinite(n) ? n : d;
+  // 這些權重與時間窗必須為正數，避免 0 或負值造成排序異常
+  return Number.isFinite(n) && n > 0 ? n : d;
 };
 const POP_W_CLICK = toNum(process.env.POP_W_CLICK, 1.0);
 const POP_W_LIKE = toNum(process.env.POP_W_LIKE, 8.0);
+const POP_W_COMMENT = toNum(process.env.POP_W_COMMENT, 2.0);
 const POP_W_COMPLETE = toNum(process.env.POP_W_COMPLETE, 0.25);
 const POP_NEW_WINDOW_HOURS = toNum(process.env.POP_NEW_WINDOW_HOURS, 10);
 
@@ -244,7 +246,7 @@ export async function GET(req) {
       createdAt: 1, likes: 1, likesCount: 1, popScore: 1, imageUrl: 1, imageId: 1, variant: 1, userId: 1, user: 1,
       platform: 1, modelName: 1, modelLink: 1, modelHash: 1, loraName: 1, loraLink: 1, author: 1,
       sampler: 1, steps: 1, cfgScale: 1, seed: 1, clipSkip: 1, width: 1, height: 1,
-      initialBoost: 1, completenessScore: 1, clicks: 1,
+      initialBoost: 1, completenessScore: 1, clicks: 1, commentsCount: 1,
       // ⭐ 權力券相關字段
       powerUsed: 1, powerExpiry: 1, powerType: 1, powerUsedAt: 1,
       // ⭐ 會帶出 comfy 與 raw.comfyWorkflowJson，但回傳前會經 stripComfyIfNotAllowed 清掉不該看的
@@ -324,15 +326,17 @@ export async function GET(req) {
     const base = [{ $match: match }, { $project: projectBase }, ...lookupUser];
     const withSearch = qRegexMatch ? [...base, { $match: qRegexMatch }] : base;
 
+    const likesCountExpr = {
+      $cond: [
+        { $isArray: "$likes" },
+        { $size: { $ifNull: ["$likes", []] } },
+        { $ifNull: ["$likesCount", 0] },
+      ],
+    };
+
     const calcLive = {
       $addFields: {
-        likesCountCalc: {
-          $cond: [
-            { $isArray: "$likes" },
-            { $size: { $ifNull: ["$likes", []] } },
-            { $ifNull: ["$likesCount", 0] },
-          ],
-        },
+        likesCountCalc: likesCountExpr,
         // 計算有效的「上架時間」（權力券會重置這個時間）
         // 只有在權力券未過期時才使用權力券時間
         effectiveCreatedAt: {
@@ -467,7 +471,8 @@ export async function GET(req) {
         baseScore: {
           $add: [
             { $multiply: [{ $ifNull: ["$clicks", 0] }, POP_W_CLICK] },
-            { $multiply: [{ $ifNull: ["$likesCountCalc", 0] }, POP_W_LIKE] },
+            { $multiply: [likesCountExpr, POP_W_LIKE] },
+            { $multiply: [{ $ifNull: ["$commentsCount", 0] }, POP_W_COMMENT] },
             { $multiply: [{ $ifNull: ["$completenessScore", 0] }, POP_W_COMPLETE] },
           ],
         },
@@ -476,7 +481,8 @@ export async function GET(req) {
             {
               $add: [
                 { $multiply: [{ $ifNull: ["$clicks", 0] }, POP_W_CLICK] },
-                { $multiply: [{ $ifNull: ["$likesCountCalc", 0] }, POP_W_LIKE] },
+                { $multiply: [likesCountExpr, POP_W_LIKE] },
+                { $multiply: [{ $ifNull: ["$commentsCount", 0] }, POP_W_COMMENT] },
                 { $multiply: [{ $ifNull: ["$completenessScore", 0] }, POP_W_COMPLETE] },
               ]
             },
@@ -502,8 +508,10 @@ export async function GET(req) {
                                           $cond: [
                                             {
                                               $and: [
-                                                { $eq: ["$powerUsed", true] },
-                                                { $ne: [{ $ifNull: ["$powerUsedAt", null] }, null] }
+                                                { $eq: [{ $ifNull: ["$powerUsed", false] }, true] },
+                                                { $ne: [{ $ifNull: ["$powerUsedAt", null] }, null] },
+                                                { $ne: [{ $ifNull: ["$powerExpiry", null] }, null] },
+                                                { $gt: [{ $ifNull: ["$powerExpiry", null] }, "$$NOW"] }
                                               ]
                                             },
                                             "$powerUsedAt",

@@ -13,6 +13,10 @@ export const PLATFORM_URLS = {
   // 視頻生成平台
   "deevid.ai": "https://deevid.ai",
   "Stable Video Diffusion": "https://github.com/Stability-AI/generative-models",
+  "SORA": "https://openai.com/sora",
+  "OiiOii": "https://www.oiioii.ai",
+  "Runway": "https://runwayml.com",
+  "Pika Labs": "https://pika.art",
   // 即夢AI 沒有官方網站
 };
 

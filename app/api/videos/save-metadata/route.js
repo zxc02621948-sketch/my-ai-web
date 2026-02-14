@@ -1,10 +1,25 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import { dbConnect } from "@/lib/db";
 import Video from "@/models/Video";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+function isAllowedVideoUrl(videoUrl) {
+  try {
+    const url = new URL(String(videoUrl || ""));
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    return (
+      host === "media.aicreateaworld.com" ||
+      host.endsWith(".r2.cloudflarestorage.com") ||
+      host.endsWith(".cloudflarestream.com")
+    );
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(request) {
   try {
@@ -18,6 +33,12 @@ export async function POST(request) {
     if (!videoUrl || !videoKey) {
       return NextResponse.json(
         { error: "Missing videoUrl or videoKey" },
+        { status: 400 }
+      );
+    }
+    if (!isAllowedVideoUrl(videoUrl)) {
+      return NextResponse.json(
+        { error: "Invalid video URL" },
         { status: 400 }
       );
     }

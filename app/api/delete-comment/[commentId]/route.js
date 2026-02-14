@@ -2,7 +2,7 @@ import { dbConnect } from "@/lib/db";
 import Comment from "@/models/Comment";
 import Image from "@/models/Image";
 import { verifyToken } from "@/lib/serverAuth";
-import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { computePopScore } from "@/utils/score";

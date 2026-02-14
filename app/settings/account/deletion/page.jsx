@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import axios from "axios";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function AccountDeletionPage() {
   const router = useRouter();
@@ -48,7 +49,9 @@ export default function AccountDeletionPage() {
         }
       }
     } catch (error) {
-      console.error("載入註銷狀態失敗：", error);
+      if (!isAuthError(error)) {
+        console.error("載入註銷狀態失敗：", error);
+      }
     }
   };
 
@@ -72,10 +75,7 @@ export default function AccountDeletionPage() {
         notify.error("錯誤", res.data.message || "發送驗證碼失敗");
       }
     } catch (error) {
-      notify.error(
-        "錯誤",
-        error.response?.data?.message || "發送驗證碼失敗"
-      );
+      notify.error("錯誤", getApiErrorMessage(error, "發送驗證碼失敗"));
     } finally {
       setLoading(false);
     }
@@ -109,10 +109,7 @@ export default function AccountDeletionPage() {
         notify.error("錯誤", res.data.message || "確認失敗");
       }
     } catch (error) {
-      notify.error(
-        "錯誤",
-        error.response?.data?.message || "確認失敗"
-      );
+      notify.error("錯誤", getApiErrorMessage(error, "確認失敗"));
     } finally {
       setLoading(false);
     }
@@ -142,10 +139,7 @@ export default function AccountDeletionPage() {
         notify.error("錯誤", res.data.message || "取消失敗");
       }
     } catch (error) {
-      notify.error(
-        "錯誤",
-        error.response?.data?.message || "取消失敗"
-      );
+      notify.error("錯誤", getApiErrorMessage(error, "取消失敗"));
     } finally {
       setLoading(false);
     }

@@ -18,6 +18,15 @@ export default function MusicInfoBox({
   canEdit = false,
   onEdit,
 }) {
+  const isSafeHttpUrl = (value) => {
+    if (!value) return false;
+    try {
+      const u = new URL(String(value).trim(), "https://placeholder.local");
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      return false;
+    }
+  };
   // ✅ 使用 Context 中的 currentUser 和 setCurrentUser（如果 prop 沒有提供）
   const contextUser = useCurrentUser();
   const { currentUser: contextCurrentUser, setCurrentUser } = contextUser || {};
@@ -523,14 +532,18 @@ export default function MusicInfoBox({
                 {music.modelLink && (
                   <div className="p-2 bg-zinc-800 rounded">
                     <div className="text-gray-400 mb-1">模型連結</div>
-                    <a
-                      href={music.modelLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 break-all"
-                    >
-                      {music.modelLink}
-                    </a>
+                    {isSafeHttpUrl(music.modelLink) ? (
+                      <a
+                        href={music.modelLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 break-all"
+                      >
+                        {music.modelLink}
+                      </a>
+                    ) : (
+                      <span className="text-zinc-400 break-all">{music.modelLink}</span>
+                    )}
                   </div>
                 )}
               </div>

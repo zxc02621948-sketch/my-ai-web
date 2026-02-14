@@ -11,6 +11,12 @@ function pairCid(a, b) {
 
 export const dynamic = "force-dynamic";
 
+function statusFromAuthError(message) {
+  if (message === "UNAUTH") return 401;
+  if (message === "FORBIDDEN") return 403;
+  return 500;
+}
+
 // 小工具：判斷是否為合法 ObjectId
 function asObjectIdMaybe(v) {
   if (!v || typeof v !== "string") return null;
@@ -67,6 +73,9 @@ export async function POST(req) {
 
     return Response.json({ ok: true, message: msg }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: e.message || "SERVER_ERROR" }), { status: 500 });
+    return new Response(
+      JSON.stringify({ ok: false, error: e.message || "SERVER_ERROR" }),
+      { status: statusFromAuthError(e?.message) }
+    );
   }
 }

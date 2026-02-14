@@ -274,6 +274,8 @@ export default function EditVideoModal({ video, isOpen, onClose, onSuccess }) {
                   onChange={setPlatform}
                   placeholder="請選擇平台"
                   options={[
+                    { value: 'SORA', label: 'SORA' },
+                    { value: 'OiiOii', label: 'OiiOii' },
                     { value: 'SeaArt.ai', label: 'SeaArt.ai' },
                     { value: 'deevid.ai', label: 'deevid.ai' },
                     { value: 'Stable Video Diffusion', label: 'Stable Video Diffusion' },

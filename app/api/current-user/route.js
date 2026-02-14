@@ -1,38 +1,14 @@
 // app/api/current-user/route.js
 import { dbConnect } from "@/lib/db";
-import { verifyToken } from "@/lib/serverAuth";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import User from "@/models/User";
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req) {
   await dbConnect();
-
-  const headersList = await headers();
-  const cookieHeader = headersList.get("cookie") || "";
-  const authHeader = headersList.get("authorization") || headersList.get("Authorization") || "";
-  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  const token = bearerToken || cookieHeader
-    .split(";")
-    .find((c) => c.trim().startsWith("token="))
-    ?.split("=")[1];
-
-  const decoded = token ? verifyToken(token) : null;
-  let userId = decoded?.id || decoded?._id || null;
-  let emailFromOAuth = null;
-
-  // Fallback: 接受 NextAuth session（Google OAuth）
-  if (!userId) {
-    try {
-      const session = await getServerSession(authOptions);
-      userId = session?.user?.id || null;
-      emailFromOAuth = session?.user?.email || null;
-    } catch {
-      // ignore
-    }
-  }
+  const currentUser = await getCurrentUserFromRequest(req).catch(() => null);
+  const userId = currentUser?._id || null;
+  const emailFromOAuth = currentUser?.email || null;
 
   if (!userId && !emailFromOAuth) {
     return NextResponse.json(null, { status: 200 });

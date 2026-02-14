@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function AdAnalyticsPage() {
   const router = useRouter();
@@ -22,8 +23,10 @@ export default function AdAnalyticsPage() {
           setError("無法獲取數據");
         }
       } catch (err) {
-        console.error("獲取廣告收益統計失敗:", err);
-        setError(err.response?.data?.error || err.response?.data?.message || "載入失敗");
+        if (!isAuthError(err)) {
+          console.error("獲取廣告收益統計失敗:", err);
+        }
+        setError(getApiErrorMessage(err, "載入失敗"));
       } finally {
         setLoading(false);
       }

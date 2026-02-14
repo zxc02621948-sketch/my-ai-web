@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
-import { generateR2Key, R2_PUBLIC_URL, uploadToR2 } from "@/lib/r2";
+import { deleteFromR2, generateR2Key, R2_PUBLIC_URL, uploadToR2 } from "@/lib/r2";
 import { dbConnect } from "@/lib/db";
 import Video from "@/models/Video";
 import User from "@/models/User";
@@ -11,6 +11,16 @@ import { spawn } from "child_process";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+async function deleteR2Silently(key, label) {
+  if (!key) return;
+  try {
+    await deleteFromR2(key);
+    console.log(`[VideoUpload] 已回收 ${label}:`, key);
+  } catch (err) {
+    console.warn(`[VideoUpload] 回收 ${label} 失敗:`, key, err);
+  }
+}
 
 function isAllowedVideoUrl(videoUrl) {
   try {
@@ -118,13 +128,18 @@ async function resolveFfmpegPath() {
  * 處理：生成縮圖、寫入數據庫
  */
 export async function POST(request) {
+  let currentUserId = null;
+  let requestVideoKey = null;
+  let uploadedThumbnailKey = null;
   try {
     const user = await getCurrentUserFromRequest(request);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    currentUserId = String(user._id);
 
     const { videoKey, videoUrl, metadata } = await request.json();
+    requestVideoKey = String(videoKey || "").trim();
 
     if (!videoKey || !videoUrl) {
       return NextResponse.json(
@@ -173,6 +188,7 @@ export async function POST(request) {
     let thumbnailUrl = "";
     const thumbnailKey = generateR2Key(user._id.toString(), "videos/thumbnails", "thumbnail.jpg");
     try {
+      uploadedThumbnailKey = thumbnailKey;
       console.log("[VideoUpload] 從 R2 URL 生成縮圖:", videoUrl);
       thumbnailUrl = await generateThumbnailFromStreamUrl(videoUrl, thumbnailKey);
       console.log("[VideoUpload] 縮圖生成成功:", thumbnailUrl);
@@ -181,9 +197,11 @@ export async function POST(request) {
       try {
         // 嘗試使用 fallback key
         const fallbackKey = generateR2Key(user._id.toString(), "videos/thumbnails", "thumbnail-fallback.jpg");
+        uploadedThumbnailKey = fallbackKey;
         thumbnailUrl = await generateThumbnailFromStreamUrl(videoUrl, fallbackKey);
         console.log("[VideoUpload] Fallback 縮圖生成成功:", thumbnailUrl);
       } catch (fallbackErr) {
+        uploadedThumbnailKey = null;
         console.error("影片縮圖備援失敗，改用預設縮圖:", fallbackErr);
         thumbnailUrl = `${R2_PUBLIC_URL}/videos/thumbnails/default-placeholder.jpg`;
       }
@@ -305,6 +323,17 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error("Process after direct upload error:", error);
+
+    // 後處理失敗時回收直傳影片與已上傳的縮圖，避免孤兒檔案
+    const expectedVideoPrefix = currentUserId ? `videos/${currentUserId}/` : null;
+    const expectedThumbPrefix = currentUserId ? `videos/thumbnails/${currentUserId}/` : null;
+    if (requestVideoKey && expectedVideoPrefix && requestVideoKey.startsWith(expectedVideoPrefix)) {
+      await deleteR2Silently(requestVideoKey, "原始影片");
+    }
+    if (uploadedThumbnailKey && expectedThumbPrefix && uploadedThumbnailKey.startsWith(expectedThumbPrefix)) {
+      await deleteR2Silently(uploadedThumbnailKey, "影片縮圖");
+    }
+
     return NextResponse.json(
       { error: "Process failed", details: error.message },
       { status: 500 }

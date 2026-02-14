@@ -23,6 +23,18 @@ const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
+function isSafePageUrl(value) {
+  const s = String(value || "").trim();
+  if (!s) return false;
+  if (s.startsWith("/") && !s.startsWith("//")) return true;
+  try {
+    const u = new URL(s, "https://placeholder.local");
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // ---------- GET：維持你原本格式 { feedbacks } ----------
 export async function GET(req) {
   try {
@@ -52,13 +64,14 @@ async function sendAdminEmail({ type, message, pageUrl, user, docId, testSender 
   if (!from) return { ok:false, stage:"config", error:"RESEND_FROM missing" };
   if (!ADMIN_EMAILS.length) return { ok:false, stage:"config", error:"ADMIN_EMAILS empty" };
 
+  const safePageUrl = isSafePageUrl(pageUrl) ? String(pageUrl).trim().slice(0, 2000) : "";
   const subject = `🔔 新回報：${type || "未分類"}`;
   const manageLink = BASE_URL ? `${BASE_URL}/admin/feedback/${docId}` : "";
   const html = `
     <div style="font:14px/1.6,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto">
       <p><b>類型：</b>${esc(type || "未分類")}</p>
       <p><b>內容：</b><br/>${esc(message).replace(/\n/g,"<br/>")}</p>
-      <p><b>頁面：</b>${pageUrl ? `<a href="${esc(pageUrl)}">${esc(pageUrl)}</a>` : "(未指定)"}</p>
+      <p><b>頁面：</b>${safePageUrl ? `<a href="${esc(safePageUrl)}">${esc(safePageUrl)}</a>` : "(未指定)"}</p>
       <p><b>使用者：</b>${esc(user?.username || "匿名")} (${user?._id || "-"})</p>
       ${manageLink ? `<hr/><p>查看後台：<a href="${manageLink}">${manageLink}</a></p>` : ""}
     </div>
@@ -102,6 +115,7 @@ export async function POST(req) {
 
     const currentUser = await getCurrentUserFromRequest(req).catch(() => null);
     const userId = currentUser?._id || null;
+    const safePageUrl = isSafePageUrl(pageUrl) ? String(pageUrl).trim().slice(0, 2000) : "";
 
     // ✅ 先做節流查詢（找舊紀錄，避免新建的自己把自己節流掉）
     let hasRecent = false;
@@ -109,18 +123,28 @@ export async function POST(req) {
       const since = new Date(Date.now() - THROTTLE_MS);
       const throttleQuery = userId
         ? { userId, createdAt: { $gte: since } }
-        : { pageUrl, createdAt: { $gte: since } };
+        : { pageUrl: safePageUrl, createdAt: { $gte: since } };
       hasRecent = !!(await Feedback.findOne(throttleQuery).sort({ createdAt: -1 }).lean());
     }
 
     // 再寫入 DB（保持你原本行為與回傳結構）
-    const newFeedback = await Feedback.create({ type, message, pageUrl, userId });
+    const newFeedback = await Feedback.create({
+      type,
+      message: String(message).trim().slice(0, 5000),
+      pageUrl: safePageUrl,
+      userId,
+    });
 
     // 視需要寄信
     let mail = { skipped:false };
     if (debug || !hasRecent) {
       mail = await sendAdminEmail({
-        type, message, pageUrl, user: currentUser, docId: newFeedback._id, testSender: testsndr,
+        type,
+        message,
+        pageUrl: safePageUrl,
+        user: currentUser,
+        docId: newFeedback._id,
+        testSender: testsndr,
       });
     } else {
       mail = { skipped:true, reason:"throttled" };

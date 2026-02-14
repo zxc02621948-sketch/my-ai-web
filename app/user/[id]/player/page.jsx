@@ -13,6 +13,7 @@ import PlayerSkinSettings from "@/components/player/PlayerSkinSettings";
 import CatHeadphoneCanvas from "@/components/player/CatHeadphoneCanvas";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import { warmupAudioBatch } from "@/utils/audioWarmup";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function UserPlayerPage() {
   const { id } = useParams();
@@ -139,8 +140,10 @@ export default function UserPlayerPage() {
 
       notify.success(next ? "已允許訪客隨機播放歌單" : "已禁止訪客隨機播放歌單");
     } catch (error) {
-      console.error("更新隨機播放權限失敗:", error);
-      notify.error("更新隨機播放權限失敗", error.response?.data?.error || error.message);
+      if (!isAuthError(error)) {
+        console.error("更新隨機播放權限失敗:", error);
+      }
+      notify.error("更新隨機播放權限失敗", getApiErrorMessage(error, "更新失敗，請稍後再試"));
     } finally {
       setUpdatingShufflePermission(false);
     }
@@ -218,7 +221,9 @@ export default function UserPlayerPage() {
           if (error.name === 'CanceledError' || error.message === 'canceled' || abortController.signal.aborted) {
             return; // 請求被取消，直接返回，不處理錯誤
           }
-          console.error("獲取用戶資料失敗:", error.message);
+          if (!isAuthError(error)) {
+            console.error("獲取用戶資料失敗:", error.message);
+          }
           userDataFetched = {}; // 使用空物件作為備用
         }
         
@@ -385,7 +390,9 @@ export default function UserPlayerPage() {
         if (error.name === 'CanceledError' || error.message === 'canceled' || error.code === 'ERR_CANCELED') {
           return; // 請求被取消，直接返回，不處理錯誤
         }
-        console.error("刷新用戶數據失敗:", error);
+        if (!isAuthError(error)) {
+          console.error("刷新用戶數據失敗:", error);
+        }
       } finally {
         // ✅ 清理引用
         if (pointsUpdateAbortControllerRef.current === abortController) {
@@ -425,7 +432,9 @@ export default function UserPlayerPage() {
           setCurrentUser(currentUserInfo.data);
         }
       } catch (error) {
-        console.error("更新用戶數據失敗:", error);
+        if (!isAuthError(error)) {
+          console.error("更新用戶數據失敗:", error);
+        }
       }
     };
     window.addEventListener("user-data-updated", onUserDataUpdated);
@@ -1017,9 +1026,7 @@ export default function UserPlayerPage() {
                           window.dispatchEvent(new CustomEvent('playlistChanged'));
                         }
                       } catch (error) {
-                        if (error.response?.status !== 401) {
-                          notify("保存播放清單失敗: " + (error.response?.data?.message || error.message), "error");
-                        }
+                        notify("保存播放清單失敗: " + getApiErrorMessage(error, "請稍後再試"), "error");
                       } finally {
                         savingRef.current = false;
                         
@@ -1095,9 +1102,7 @@ export default function UserPlayerPage() {
                   notify("保存播放清單失敗: " + (response.data.message || "未知錯誤"), "error");
                 }
               } catch (error) {
-                if (error.response?.status !== 401) {
-                  notify("保存播放清單失敗: " + (error.response?.data?.message || error.message), "error");
-                }
+                notify("保存播放清單失敗: " + getApiErrorMessage(error, "請稍後再試"), "error");
               } finally {
                 savingRef.current = false;
                 

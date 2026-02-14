@@ -41,7 +41,8 @@ export function computeCompleteness(img = {}) {
 
 const toNum = (v, d) => {
   const n = Number(v);
-  return Number.isFinite(n) ? n : d;
+  // Popular 權重與時間窗都要求正數，避免 0/負值把排行權重關掉
+  return Number.isFinite(n) && n > 0 ? n : d;
 };
 
 // 互動權重（可用環境變數覆寫）

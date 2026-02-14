@@ -6,6 +6,7 @@ import { Bell } from "lucide-react";
 import NotificationList from "./NotificationList";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function NotificationBell() {
   const { currentUser, unreadCounts, fetchUnreadCounts, updateUnreadCount } = useCurrentUser();
@@ -34,21 +35,35 @@ export default function NotificationBell() {
 
   // ✅ 點開鈴鐺後載入完整通知列表
   useEffect(() => {
-    if (open) {
-      axios.get("/api/notifications").then((res) => {
-        const list = res.data.notifications || [];
-        setNotifications(list);
-        const hasUnread = list.some((n) => !n.isRead);
-        updateUnreadCount('notifications', hasUnread ? 1 : 0);
-      });
-    } else if (!open && notifications.length > 0) {
-      // ✅ 關閉鈴鐺時才標記為已讀（只執行一次）
-      axios.post("/api/notifications/mark-all-read").then(() => {
-        updateUnreadCount('notifications', 0);
-        setNotifications([]); // 清空通知列表，避免重複觸發
-      });
-    }
-  }, [open, updateUnreadCount]);
+    const syncNotificationPanel = async () => {
+      if (open) {
+        try {
+          const res = await axios.get("/api/notifications");
+          const list = res.data.notifications || [];
+          setNotifications(list);
+          const hasUnread = list.some((n) => !n.isRead);
+          updateUnreadCount("notifications", hasUnread ? 1 : 0);
+        } catch (error) {
+          if (!isAuthError(error)) {
+            console.warn("載入通知列表失敗:", error);
+            notify.warning("提示", getApiErrorMessage(error, "載入通知失敗，請稍後再試"));
+          }
+        }
+      } else if (notifications.length > 0) {
+        // ✅ 關閉鈴鐺時才標記為已讀（只執行一次）
+        try {
+          await axios.post("/api/notifications/mark-all-read");
+          updateUnreadCount("notifications", 0);
+          setNotifications([]); // 清空通知列表，避免重複觸發
+        } catch (error) {
+          if (!isAuthError(error)) {
+            console.warn("標記通知已讀失敗:", error);
+          }
+        }
+      }
+    };
+    syncNotificationPanel();
+  }, [open, notifications.length, updateUnreadCount]);
 
   // 點外部關閉彈窗
   useEffect(() => {
@@ -78,8 +93,10 @@ export default function NotificationBell() {
         throw new Error("圖片不存在");
       }
     } catch (err) {
-      console.warn("⚠️ 找不到該圖片，可能已被刪除");
-      notify.warning("提示", "找不到該圖片，可能已被刪除");
+      if (!isAuthError(err)) {
+        console.warn("⚠️ 找不到該圖片，可能已被刪除");
+      }
+      notify.warning("提示", getApiErrorMessage(err, "找不到該圖片，可能已被刪除"));
     }
   };
 

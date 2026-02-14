@@ -53,6 +53,7 @@ export default function ImagesPage() {
     levelFilters,
     categoryFilters,
     viewMode,
+    resetFilters,
   } = useFilterContext();
 
   // 本地狀態
@@ -60,6 +61,7 @@ export default function ImagesPage() {
 
   // ✅ 記住用戶偏好（避免 hydration 錯誤）
   const [displayMode, setDisplayMode] = useState("gallery");
+  const [modeInitialized, setModeInitialized] = useState(false);
 
   // ✅ 首次訪問引導（避免 hydration 錯誤）
   const [showGuide, setShowGuide] = useState(false);
@@ -72,11 +74,12 @@ export default function ImagesPage() {
 
   useEffect(() => {
     setIsClient(true);
-    // 從 localStorage 讀取偏好
+    // 從 localStorage 讀取偏好（初始化後才套用，避免 hydration mismatch）
     const savedMode = localStorage.getItem("galleryMode");
-    if (savedMode) {
+    if (savedMode === "gallery" || savedMode === "collection") {
       setDisplayMode(savedMode);
     }
+    setModeInitialized(true);
     // 檢查是否顯示引導
     const guideShown = localStorage.getItem("galleryGuideShown");
     if (!guideShown) {
@@ -91,10 +94,10 @@ export default function ImagesPage() {
 
   // 保存模式偏好
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && modeInitialized) {
       localStorage.setItem("galleryMode", displayMode);
     }
-  }, [displayMode]);
+  }, [displayMode, modeInitialized]);
 
   // 計算衍生狀態（使用 useMemo 避免無限循環）
   const selectedCategories = useMemo(() => categoryFilters, [categoryFilters]);
@@ -117,6 +120,20 @@ export default function ImagesPage() {
     const v = (s || "").toLowerCase();
     return v === "likes" || v === "mostlikes" ? "mostlikes" : v;
   };
+
+  const resetToBaselineRanking = useCallback(() => {
+    resetFilters();
+    setSort("popular");
+    setDisplayMode("gallery");
+    if (typeof window !== "undefined") {
+      localStorage.setItem("galleryMode", "gallery");
+      localStorage.setItem("levelFilters", JSON.stringify(["一般圖片", "15+ 圖片"]));
+      localStorage.setItem("categoryFilters", JSON.stringify([]));
+      // 一併清掉 URL 上殘留的搜尋參數，避免「看起來沒篩選但其實有 search」
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    notify.success("已重置條件", "已回到：熱門 + 作品展示 + 預設分級");
+  }, [resetFilters]);
 
   const filtersReady = selectedRatings.length > 0;
   const searchQuery = useMemo(
@@ -142,6 +159,11 @@ export default function ImagesPage() {
         limit: String(PAGE_SIZE),
         sort: mapSortForApi(sort),
       });
+
+      // 熱門排序改用即時分數（包含 initialBoost 衰減），避免 DB 快取分數造成新圖長時間卡前排。
+      if (mapSortForApi(sort) === "popular") {
+        params.set("live", "1");
+      }
 
       if (selectedCategories.length) {
         params.set("categories", selectedCategories.join(","));
@@ -213,7 +235,7 @@ export default function ImagesPage() {
   } = usePaginatedResource({
     fetchPage: fetchImagesPage,
     deps: paginationDeps,
-    enabled: filtersReady,
+    enabled: filtersReady && modeInitialized,
   });
 
   // —— 追蹤狀態同步（父層處理器，提供給 ImageModal） ——
@@ -399,7 +421,7 @@ export default function ImagesPage() {
   const isLikedByCurrentUser = (img) => {
     if (!currentUser || !img?.likes) return false;
     const uid = currentUser._id || currentUser.id;
-    return img.likes.includes(uid);
+    return img.likes.some((id) => String(id) === String(uid));
   };
 
   // ImageModal 導航
@@ -492,6 +514,13 @@ export default function ImagesPage() {
             <div className="flex-shrink-0">
               <SortSelect value={sort} onChange={setSort} />
             </div>
+            <button
+              onClick={resetToBaselineRanking}
+              className="inline-flex items-center rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3 py-2 text-xs sm:text-sm text-gray-100 transition whitespace-nowrap"
+              title="重置排序與篩選條件"
+            >
+              重置條件
+            </button>
             <a
               href="/images/create"
               className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500/90 to-teal-500/90 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 hover:from-emerald-500 hover:to-teal-500 transition whitespace-nowrap flex-shrink-0"
@@ -503,6 +532,16 @@ export default function ImagesPage() {
               <span className="sm:hidden">創作</span>
             </a>
           </div>
+        </div>
+
+        {/* 實際生效條件（除錯用） */}
+        <div className="mt-2 text-[11px] text-zinc-400 text-center sm:text-left">
+          條件：sort={mapSortForApi(sort)}
+          {mapSortForApi(sort) === "popular" ? " | live=1" : ""}
+          {" | mode="}{displayMode}
+          {" | ratings="}{selectedRatings.join(",") || "(none)"}
+          {" | categories="}{selectedCategories.join(",") || "(none)"}
+          {" | search="}{searchQuery || "(none)"}
         </div>
 
 
@@ -558,7 +597,7 @@ export default function ImagesPage() {
         currentUser={currentUser}
         isLikedByCurrentUser={isLikedByCurrentUser}
         onToggleLike={handleToggleLike}
-        onLocalLikeChange={(updated) => onLikeUpdateHook(updated)}
+        onLikeUpdate={onLikeUpdateHook}
       />
 
       {/* sentinel：啟用錨點捲動錨定 */}

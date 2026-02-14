@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 /**
  * 通用加成券按鈕組件
@@ -50,7 +51,9 @@ export default function PowerCouponButton({
       }
       return [];
     } catch (error) {
-      console.error("獲取加成券失敗:", error);
+      if (!isAuthError(error)) {
+        console.error("獲取加成券失敗:", error);
+      }
       return [];
     }
   };
@@ -107,8 +110,10 @@ export default function PowerCouponButton({
         notify.error("使用失敗", response.data.message || "請稍後再試");
       }
     } catch (error) {
-      console.error("使用加成券失敗:", error);
-      notify.error("使用失敗", error.response?.data?.message || "請稍後再試");
+      if (!isAuthError(error)) {
+        console.error("使用加成券失敗:", error);
+      }
+      notify.error("使用失敗", getApiErrorMessage(error, "請稍後再試"));
     } finally {
       setIsUsingCoupon(false);
     }

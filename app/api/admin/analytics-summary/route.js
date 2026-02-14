@@ -6,9 +6,33 @@ import Image from "@/models/Image";
 import Video from "@/models/Video";
 import Music from "@/models/Music";
 import Comment from "@/models/Comment";
-import LikeLog from "@/models/LikeLog";
 import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import { NextResponse } from "next/server";
+
+async function getNetLikesByCreatedDate(model, start, end) {
+  const result = await model.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: start, $lte: end },
+      },
+    },
+    {
+      $project: {
+        netLikeCount: {
+          $ifNull: ["$likesCount", { $size: { $ifNull: ["$likes", []] } }],
+        },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalNetLikes: { $sum: "$netLikeCount" },
+      },
+    },
+  ]);
+
+  return result[0]?.totalNetLikes || 0;
+}
 
 export async function GET(req) {
   try {
@@ -48,7 +72,7 @@ export async function GET(req) {
     const start = new Date(localStart.getTime());
     const end = new Date(localEnd.getTime());
 
-    const [uniqueUsersResult, totalVisitsResult, newUsers, imageUploads, videoUploads, musicUploads, likes, comments] = await Promise.all([
+    const [uniqueUsersResult, totalVisitsResult, newUsers, imageUploads, videoUploads, musicUploads, imageNetLikes, videoNetLikes, musicNetLikes, comments] = await Promise.all([
       // 計算獨立用戶數（混合識別：已登錄用戶按 userId，匿名用戶按 IP+UserAgent）
       VisitorLog.aggregate([
         {
@@ -91,7 +115,9 @@ export async function GET(req) {
       Image.countDocuments({ createdAt: { $gte: start, $lte: end } }),
       Video.countDocuments({ createdAt: { $gte: start, $lte: end } }),
       Music.countDocuments({ createdAt: { $gte: start, $lte: end } }),
-      LikeLog.countDocuments({ createdAt: { $gte: start, $lte: end } }),
+      getNetLikesByCreatedDate(Image, start, end),
+      getNetLikesByCreatedDate(Video, start, end),
+      getNetLikesByCreatedDate(Music, start, end),
       Comment.countDocuments({ createdAt: { $gte: start, $lte: end } }),
     ]);
 
@@ -104,7 +130,8 @@ export async function GET(req) {
       videosUploaded: videoUploads,
       musicUploaded: musicUploads,
       totalUploads: imageUploads + videoUploads + musicUploads, // 總上傳數
-      likesGiven: likes,
+      // 最終淨讚數：該日期上傳內容（圖/影/音）目前實際讚數總和
+      netLikes: (imageNetLikes || 0) + (videoNetLikes || 0) + (musicNetLikes || 0),
       commentsPosted: comments,
     });
   }

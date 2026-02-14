@@ -11,6 +11,7 @@ import PlayerTutorialModal from "@/components/player/PlayerTutorialModal";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import axios from "axios";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 import {
   readPinnedPlayerCache,
   writePinnedPlayerCache,
@@ -1011,7 +1012,9 @@ export default function MiniPlayer() {
               }
               setIsLoadingPlaylist(false);
             } catch (error) {
-              console.error("載入自己的播放清單失敗，使用釘選記錄:", error);
+              if (!isAuthError(error)) {
+                console.error("載入自己的播放清單失敗，使用釘選記錄:", error);
+              }
               if (playerRef.current) {
                 playerRef.current.setPlayerOwner?.({
                   userId: pinned.userId,
@@ -1140,7 +1143,9 @@ export default function MiniPlayer() {
         }
       }
     } catch (error) {
-      console.error("載入釘選播放器失敗:", error);
+      if (!isAuthError(error)) {
+        console.error("載入釘選播放器失敗:", error);
+      }
       setIsLoadingPlaylist(false);
     } finally {
       isLoadingRef.current = false;
@@ -1507,8 +1512,10 @@ export default function MiniPlayer() {
                       detail: { isPinned: false } 
                     }));
                   } catch (error) {
-                    console.error('解除釘選失敗:', error);
-                    notify.error("解除釘選失敗", "解除釘選播放器時發生錯誤");
+                    if (!isAuthError(error)) {
+                      console.error('解除釘選失敗:', error);
+                    }
+                    notify.error("解除釘選失敗", getApiErrorMessage(error, "解除釘選播放器時發生錯誤"));
                   }
                 }
               }}

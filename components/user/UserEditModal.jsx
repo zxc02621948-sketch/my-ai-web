@@ -6,6 +6,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import Modal from "@/components/common/Modal";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 const UserEditModal = ({ isOpen, onClose, currentUser, onUpdate }) => {
   const router = useRouter();
@@ -39,8 +40,10 @@ const UserEditModal = ({ isOpen, onClose, currentUser, onUpdate }) => {
         }, 100);
       }
     } catch (err) {
-      console.error("更新失敗：", err);
-      notify.error("更新失敗", err.response?.data?.message || err.message);
+      if (!isAuthError(err)) {
+        console.error("更新失敗：", err);
+      }
+      notify.error("更新失敗", getApiErrorMessage(err, "更新失敗，請稍後再試"));
     }
   };
 

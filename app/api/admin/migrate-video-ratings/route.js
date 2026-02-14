@@ -4,18 +4,14 @@
 import { dbConnect } from "@/lib/db";
 import Video from "@/models/Video";
 import { NextResponse } from "next/server";
-import { verifyToken } from "@/lib/serverAuth";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 
 export async function POST(req) {
   try {
     await dbConnect();
     
-    // 檢查管理員權限
-    const cookie = req.headers.get("cookie");
-    const token = cookie?.match(/token=([^;]+)/)?.[1];
-    const tokenData = token ? verifyToken(token) : null;
-    
-    if (!tokenData?.isAdmin) {
+    const currentUser = await getCurrentUserFromRequest(req).catch(() => null);
+    if (!currentUser?.isAdmin) {
       return NextResponse.json({ error: "需要管理員權限" }, { status: 403 });
     }
     

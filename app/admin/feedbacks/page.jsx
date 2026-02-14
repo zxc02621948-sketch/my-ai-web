@@ -9,6 +9,17 @@ export default function FeedbackListPage() {
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const isSafeHref = (value) => {
+    const s = String(value || "").trim();
+    if (!s) return false;
+    if (s.startsWith("/") && !s.startsWith("//")) return true;
+    try {
+      const u = new URL(s, "https://placeholder.local");
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      return false;
+    }
+  };
 
   const fetchFeedbacks = async () => {
     try {
@@ -86,7 +97,7 @@ export default function FeedbackListPage() {
                   <div className="text-sm text-gray-500">
                     🔗 來源頁面：{" "}
                     <Link
-                      href={fb.pageUrl || "#"}
+                      href={isSafeHref(fb.pageUrl) ? fb.pageUrl : "#"}
                       target="_blank"
                       className="underline break-all"
                     >

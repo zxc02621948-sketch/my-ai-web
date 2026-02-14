@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { useCurrentUser } from '@/contexts/CurrentUserContext';
 import { notify } from '@/components/common/GlobalNotificationManager';
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targetUsername }) {
   const router = useRouter();
@@ -47,7 +48,9 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
                 detail: { isPinned: false } 
               }));
             } catch (error) {
-              console.error('自動解除過期釘選失敗:', error);
+              if (!isAuthError(error)) {
+                console.error('自動解除過期釘選失敗:', error);
+              }
             }
           }
         }
@@ -81,7 +84,9 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         
         
       } catch (error) {
-        console.error('檢查釘選狀態失敗:', error);
+        if (!isAuthError(error)) {
+          console.error('檢查釘選狀態失敗:', error);
+        }
       }
     };
 
@@ -172,7 +177,9 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         
       }
     } catch (error) {
-      console.error('❌ [PinButton] 釘選失敗:', error);
+      if (!isAuthError(error)) {
+        console.error('❌ [PinButton] 釘選失敗:', error);
+      }
       
       // 檢查是否需要訂閱
       if (error.response?.data?.needSubscription) {
@@ -199,7 +206,7 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         }
       } 
       else {
-        notify.error("釘選失敗", error.response?.data?.error || '釘選失敗，請稍後再試');
+        notify.error("釘選失敗", getApiErrorMessage(error, "釘選失敗，請稍後再試"));
       }
     } finally {
       setLoading(false);
@@ -236,8 +243,10 @@ export default function PinPlayerButton({ targetUserId, targetUserPlaylist, targ
         }));
       }
     } catch (error) {
-      console.error('解除釘選失敗:', error);
-      notify.error("解除釘選失敗", error.response?.data?.error || '解除釘選失敗，請稍後再試');
+      if (!isAuthError(error)) {
+        console.error('解除釘選失敗:', error);
+      }
+      notify.error("解除釘選失敗", getApiErrorMessage(error, "解除釘選失敗，請稍後再試"));
     } finally {
       setLoading(false);
     }

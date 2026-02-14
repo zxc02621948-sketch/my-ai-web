@@ -1,7 +1,7 @@
 'use client';
 
 import { Dialog } from '@headlessui/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { notify } from '@/components/common/GlobalNotificationManager';
@@ -49,6 +49,7 @@ export default function UploadVideoModal({
   
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const submittingRef = useRef(false);
   const [confirmAdult, setConfirmAdult] = useState(false);
 
   // 每日上傳配額
@@ -91,7 +92,9 @@ export default function UploadVideoModal({
       
       // 獲取當前每日配額
       try {
-        const response = await fetch('/api/user/daily-video-quota');
+        const response = await fetch('/api/user/daily-video-quota', {
+          credentials: "include",
+        });
         const data = await response.json();
         if (data.success) {
           setDailyQuota({
@@ -386,6 +389,7 @@ export default function UploadVideoModal({
   };
 
   const handleUpload = async () => {
+    if (submittingRef.current) return;
     if (!file) {
       toast.error('請選擇影片檔案');
       return;
@@ -446,7 +450,10 @@ export default function UploadVideoModal({
       console.warn("⚠️ 上傳限制檢查失敗（繼續上傳）：", quotaErr);
     }
 
+    submittingRef.current = true;
     setUploading(true);
+    let uploadedVideoKey = null;
+    let uploadedVideoUrl = null;
 
     try {
       // ✅ 使用新的 R2 API Token 方法：直接上傳到後端
@@ -489,6 +496,8 @@ export default function UploadVideoModal({
         // 直傳模式：先直接上傳到 R2，然後處理縮圖和 DB
         console.log('🚀 開始直傳流程...');
         const uploadResult = await uploadDirect(file, metadata);
+        uploadedVideoKey = uploadResult?.key || null;
+        uploadedVideoUrl = uploadResult?.publicUrl || null;
         
         // 直傳成功後，調用 API 處理縮圖生成和數據庫寫入
         const processRes = await fetch('/api/videos/process-after-direct-upload', {
@@ -570,8 +579,35 @@ export default function UploadVideoModal({
     } catch (error) {
       console.error('影片上傳失敗:', error);
       toast.error('❌ 上傳失敗：' + error.message);
+
+      // 直傳模式下若後處理失敗，清理已上傳到 R2 的原始影片，避免孤兒檔案
+      if (IS_DIRECT_UPLOAD && (uploadedVideoKey || uploadedVideoUrl)) {
+        console.warn('⚠️ 嘗試清理已上傳的 R2 影片：', uploadedVideoKey || uploadedVideoUrl);
+        try {
+          const cleanupRes = await fetch('/api/videos/delete-original-r2', {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              videoKey: uploadedVideoKey,
+              videoUrl: uploadedVideoUrl,
+            }),
+          });
+
+          if (cleanupRes.ok) {
+            console.log('✅ 已清理上傳失敗的 R2 影片：', uploadedVideoKey || uploadedVideoUrl);
+          } else {
+            console.warn('⚠️ 清理 R2 影片失敗：', cleanupRes.status);
+          }
+        } catch (cleanupErr) {
+          console.error('❌ 清理 R2 影片異常：', cleanupErr);
+        }
+      }
     } finally {
       setUploading(false);
+      submittingRef.current = false;
     }
   };
 
@@ -849,6 +885,8 @@ export default function UploadVideoModal({
                     invalid={!platform}
                     placeholder="請選擇平台"
                     options={[
+                      { value: 'SORA', label: 'SORA' },
+                      { value: 'OiiOii', label: 'OiiOii' },
                       { value: 'SeaArt.ai', label: 'SeaArt.ai' },
                       { value: 'deevid.ai', label: 'deevid.ai' },
                       { value: 'Stable Video Diffusion', label: 'Stable Video Diffusion' },

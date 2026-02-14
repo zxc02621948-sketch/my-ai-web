@@ -1,15 +1,9 @@
-import jwt from "jsonwebtoken";
-import User from "@/models/User";
-import { dbConnect } from "../lib/db";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 
 export async function requireUser(req) {
-  await dbConnect(); // 先確保 Mongo 已連線
-  const token = req.cookies?.get?.("token")?.value;
-  if (!token) throw new Error("UNAUTH");
-  const data = jwt.decode(token);
-  const u = await User.findById(data?._id || data?.id).lean();
-  if (!u) throw new Error("UNAUTH");
-  return u;
+  const user = await getCurrentUserFromRequest(req).catch(() => null);
+  if (!user) throw new Error("UNAUTH");
+  return user;
 }
 
 export async function requireAdmin(req) {

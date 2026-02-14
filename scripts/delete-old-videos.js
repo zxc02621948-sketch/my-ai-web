@@ -1,6 +1,22 @@
 const mongoose = require('mongoose');
 require('dotenv').config({ path: '.env.local' });
 
+const args = process.argv.slice(2);
+const isConfirmed = args.includes('--confirm');
+const allowProduction = args.includes('--allow-production');
+
+if (!isConfirmed) {
+  console.error('❌ 安全中止：此腳本會刪除影片資料。');
+  console.error('   請加上 --confirm 才能執行。');
+  process.exit(1);
+}
+
+if (process.env.NODE_ENV === 'production' && !allowProduction) {
+  console.error('❌ 安全中止：目前是 production，預設禁止執行。');
+  console.error('   若你非常確定，請額外加上 --allow-production。');
+  process.exit(1);
+}
+
 const VideoSchema = new mongoose.Schema({
   title: String,
   videoUrl: String,

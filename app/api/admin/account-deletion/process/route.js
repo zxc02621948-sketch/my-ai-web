@@ -13,38 +13,25 @@ import PointsTransaction from "@/models/PointsTransaction";
 import VisitorLog from "@/models/VisitorLog";
 import AdVisitorLog from "@/models/AdVisitorLog";
 import DiscussionPost from "@/models/DiscussionPost";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 
 export async function POST(req) {
   try {
-    // 驗證管理員權限
-    const token = req.cookies.get("token")?.value;
-    if (!token) {
+    const currentUser = await getCurrentUserFromRequest(req).catch(() => null);
+    if (!currentUser?._id) {
       return NextResponse.json(
         { success: false, message: "請先登入" },
         { status: 401 }
       );
     }
-
-    await dbConnect();
-
-    const jwt = require("jsonwebtoken");
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (error) {
-      return NextResponse.json(
-        { success: false, message: "無效的登入狀態" },
-        { status: 401 }
-      );
-    }
-
-    const admin = await User.findById(decoded.id);
-    if (!admin || !admin.isAdmin) {
+    if (!currentUser.isAdmin) {
       return NextResponse.json(
         { success: false, message: "權限不足" },
         { status: 403 }
       );
     }
+
+    await dbConnect();
 
     const { userId } = await req.json();
     if (!userId) {

@@ -5,6 +5,9 @@ import { SessionProvider } from "next-auth/react";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 
+const OAUTH_SYNC_MAX_RETRIES = 3;
+const OAUTH_SYNC_RETRY_COOLDOWN_MS = 60 * 1000;
+
 function OAuthSessionBridge() {
   const { data: session, status } = useSession();
 
@@ -12,7 +15,30 @@ function OAuthSessionBridge() {
     if (status !== "authenticated" || !session?.user?.email) return;
 
     const syncKey = `oauth_jwt_synced:${session.user.email}`;
+    const failKey = `oauth_jwt_sync_failed_meta:${session.user.email}`;
     if (sessionStorage.getItem(syncKey) === "1") return;
+
+    let failMeta = { count: 0, lastTs: 0 };
+    try {
+      const raw = sessionStorage.getItem(failKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (
+          parsed &&
+          Number.isFinite(parsed.count) &&
+          Number.isFinite(parsed.lastTs)
+        ) {
+          failMeta = parsed;
+        }
+      }
+    } catch {
+      // ignore parse failure
+    }
+
+    // 避免無限重試：達上限後本次 session 不再嘗試
+    if (failMeta.count >= OAUTH_SYNC_MAX_RETRIES) return;
+    // 失敗後短時間冷卻，避免連續打 callback API
+    if (Date.now() - failMeta.lastTs < OAUTH_SYNC_RETRY_COOLDOWN_MS) return;
 
     let cancelled = false;
     (async () => {
@@ -25,9 +51,21 @@ function OAuthSessionBridge() {
         });
         if (!cancelled && res.ok) {
           sessionStorage.setItem(syncKey, "1");
+          sessionStorage.removeItem(failKey); // 成功後清除失敗紀錄
+          window.dispatchEvent(new CustomEvent("oauth-jwt-synced"));
+        } else if (!cancelled) {
+          sessionStorage.setItem(
+            failKey,
+            JSON.stringify({ count: failMeta.count + 1, lastTs: Date.now() })
+          );
         }
       } catch {
-        // 靜默：不阻塞頁面；下一次 session 變化仍可重試。
+        if (!cancelled) {
+          sessionStorage.setItem(
+            failKey,
+            JSON.stringify({ count: failMeta.count + 1, lastTs: Date.now() })
+          );
+        }
       }
     })();
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getApiErrorMessage, isAuthError } from '@/lib/clientAuthError';
 
 export default function MusicAnalyticsPage() {
   const router = useRouter();
@@ -23,8 +24,10 @@ export default function MusicAnalyticsPage() {
           setError('無法獲取數據');
         }
       } catch (err) {
-        console.error('獲取音樂分析數據失敗:', err);
-        setError(err.response?.data?.error || '載入失敗');
+        if (!isAuthError(err)) {
+          console.error('獲取音樂分析數據失敗:', err);
+        }
+        setError(getApiErrorMessage(err, '載入失敗'));
       } finally {
         setLoading(false);
       }

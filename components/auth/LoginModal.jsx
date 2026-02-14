@@ -7,6 +7,7 @@ import axios from "axios";
 import ForgotPasswordModal from "./ForgotPasswordModal";
 import OAuthButtons from "./OAuthButtons";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function LoginModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -69,7 +70,7 @@ export default function LoginModal() {
       }
     } catch (err) {
       // ✅ API 返回的錯誤訊息在 error 欄位，不是 message
-      const message = err.response?.data?.error || err.response?.data?.message || "登入失敗，請稍後再試。";
+      const message = getApiErrorMessage(err, "登入失敗，請稍後再試。");
       setError(message);
       if (message.includes("尚未驗證")) {
         setShowResendButton(true);
@@ -85,7 +86,10 @@ export default function LoginModal() {
       notify.success("成功", "驗證信已重新寄出，請至信箱確認。");
       setCooldown(60); // 開始冷卻倒數
     } catch (err) {
-      notify.error("失敗", `重新寄送驗證信失敗，請稍後再試。\n錯誤訊息：${err.response?.data?.message || "未知錯誤"}`);
+      if (!isAuthError(err)) {
+        console.warn("重新寄送驗證信失敗:", err);
+      }
+      notify.error("失敗", getApiErrorMessage(err, "重新寄送驗證信失敗，請稍後再試。"));
     }
   };
 

@@ -7,7 +7,7 @@ import ImageViewer from "./ImageViewer";
 import MobileImageSheet from "@/components/image/MobileImageSheet";
 import DesktopRightPane from "@/components/image/DesktopRightPane";
 import axios from "axios";
-import { getLikesFromCache } from "@/lib/likeSync";
+import { getLikesFromCache, updateLikeCacheAndBroadcast } from "@/lib/likeSync";
 import EditImageModal from "@/components/image/EditImageModal"; // ← 你的編輯彈窗
 import { notify } from "@/components/common/GlobalNotificationManager";
 import { trackEvent } from "@/utils/analyticsQueue";
@@ -50,6 +50,7 @@ export default function ImageModal({
   const [error, setError] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isLikeProcessing, setIsLikeProcessing] = useState(false);
 
   // 由已載入的 image 為主，否則回退到 props
   const currentId = image?._id ?? imageId ?? imageData?._id ?? null;
@@ -170,7 +171,7 @@ export default function ImageModal({
         if (!data?.ok) return;
         // 把 server 更新後的 clicks / likesCount / popScore 回寫到當前 image
         setImage((prev) =>
-          prev && prev._id === currentId
+          prev && String(prev._id) === String(currentId)
             ? {
                 ...prev,
                 clicks: data.clicks ?? prev.clicks,
@@ -201,7 +202,7 @@ export default function ImageModal({
         prev ? { ...prev, likes: cached, likesCount: cached.length } : prev
       );
     }
-  }, [image?._id, imageId, imageData]);
+  }, [image?._id, imageId, imageData?._id]);
 
   // ✅ 優化：若 user 是字串 → 補抓作者物件
   // 只在必要時調用 API，避免重複請求
@@ -327,12 +328,14 @@ export default function ImageModal({
   // Like
   const isLikedByCurrent =
     Array.isArray(image?.likes) && currentUser?._id
-      ? image.likes.includes(currentUser._id)
+      ? image.likes.some((id) => String(id) === String(currentUser._id))
       : false;
 
   const toggleLikeOnServer = async () => {
     try {
+      if (isLikeProcessing) return;
       if (!currentUser?._id || !image?._id) return;
+      setIsLikeProcessing(true);
       const res = await fetch(`/api/like-image?id=${image._id}`, {
         method: "PUT",
         credentials: "include",
@@ -343,6 +346,7 @@ export default function ImageModal({
         const updated = { ...image, likes: likesArr, likesCount: likesArr.length };
         setImage(updated);
         onLikeUpdate?.(updated);
+        updateLikeCacheAndBroadcast(updated);
         // 廣播目前登入者積分（若後端有提供）
         const balance = data?.currentUserPointsBalance;
         const uid = currentUser?._id || currentUser?.id;
@@ -353,6 +357,9 @@ export default function ImageModal({
     } catch (err) {
       console.error("❌ 點讚失敗", err);
       notify.error("操作失敗", "點讚失敗，請稍後再試");
+    } finally {
+      // 與縮圖一致：保留 1 秒防連點冷卻
+      setTimeout(() => setIsLikeProcessing(false), 1000);
     }
   };
 

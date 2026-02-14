@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function AnalyticsPage() {
   const router = useRouter();
@@ -33,8 +34,10 @@ export default function AnalyticsPage() {
         // apiSuccess 返回格式是 { ok: true, logs }
         setLogs(logsRes.data.logs || []);
       } catch (err) {
-        console.error("獲取流量統計失敗:", err);
-        setError(err.response?.data?.error || "獲取數據失敗，請稍後再試");
+        if (!isAuthError(err)) {
+          console.error("獲取流量統計失敗:", err);
+        }
+        setError(getApiErrorMessage(err, "獲取數據失敗，請稍後再試"));
         setSummary([]);
         setLogs([]);
       } finally {
@@ -81,7 +84,7 @@ export default function AnalyticsPage() {
                   <th className="border px-2 py-1">🎬 影片</th>
                   <th className="border px-2 py-1">🎵 音樂</th>
                   <th className="border px-2 py-1">📊 總上傳</th>
-                  <th className="border px-2 py-1">❤️ 愛心</th>
+                  <th className="border px-2 py-1">❤️ 淨讚數</th>
                   <th className="border px-2 py-1">💬 留言</th>
                   <th className="border px-2 py-1">👁️ 人數</th>
                   <th className="border px-2 py-1">👁️ 次數</th>
@@ -103,7 +106,7 @@ export default function AnalyticsPage() {
                       <td className="border px-2 py-1">{row.videosUploaded ?? 0}</td>
                       <td className="border px-2 py-1">{row.musicUploaded ?? 0}</td>
                       <td className="border px-2 py-1 font-semibold">{row.totalUploads ?? 0}</td>
-                      <td className="border px-2 py-1">{row.likesGiven ?? 0}</td>
+                      <td className="border px-2 py-1">{row.netLikes ?? row.likesGiven ?? 0}</td>
                       <td className="border px-2 py-1">{row.commentsPosted ?? 0}</td>
                       <td className="border px-2 py-1">{row.uniqueUsers ?? 0}</td>
                       <td className="border px-2 py-1">{row.totalVisits ?? 0}</td>

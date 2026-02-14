@@ -1,7 +1,7 @@
 "use client";
 
 import { Dialog } from "@headlessui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import {
@@ -59,6 +59,7 @@ export default function UploadMusicModal() {
 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const submittingRef = useRef(false);
   const [confirmAdult, setConfirmAdult] = useState(false);
 
   // 每日上傳配額
@@ -160,11 +161,11 @@ export default function UploadMusicModal() {
       return;
     }
 
-    // 驗證檔案大小（20MB）
-    const maxSize = 20 * 1024 * 1024;
+    // 驗證檔案大小（10MB，需與後端一致）
+    const maxSize = 10 * 1024 * 1024;
     if (selectedFile.size > maxSize) {
       toast.error(
-        `❌ 檔案過大！最大 20MB，當前：${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
+        `❌ 檔案過大！最大 10MB，當前：${(selectedFile.size / 1024 / 1024).toFixed(2)}MB`,
       );
       e.target.value = "";
       return;
@@ -294,6 +295,7 @@ export default function UploadMusicModal() {
   }, [isDragging, coverPreview]);
 
   const handleUpload = async () => {
+    if (submittingRef.current) return;
     if (!file) {
       toast.error("請選擇音樂檔案");
       return;
@@ -364,6 +366,7 @@ export default function UploadMusicModal() {
       console.warn("⚠️ 上傳限制檢查失敗（繼續上傳）：", quotaErr);
     }
 
+    submittingRef.current = true;
     setUploading(true);
 
     try {
@@ -452,6 +455,7 @@ export default function UploadMusicModal() {
       toast.error("上傳失敗，請重試");
     } finally {
       setUploading(false);
+      submittingRef.current = false;
     }
   };
 
@@ -484,7 +488,7 @@ export default function UploadMusicModal() {
               <div className="text-center flex-1">
                 <div className="text-lg font-semibold">上傳音樂 +10／每日上限 {dailyQuota.limit}</div>
                 <div className="text-xs text-zinc-400 mt-1">
-                  最大 20MB，建議 2-5 分鐘
+                  最大 10MB，建議 2-5 分鐘
                 </div>
                 <div className="text-xs mt-2">
                   <span className={`font-medium ${dailyQuota.remaining > 0 ? 'text-green-400' : 'text-red-400'}`}>

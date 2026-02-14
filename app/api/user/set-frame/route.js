@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth/getCurrentUser";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import User from "@/models/User";
-import PointsTransaction from "@/models/PointsTransaction";
+import { sanitizeFrameSettings } from "@/lib/sanitizeFrameSettings";
 
 const VALID_FRAMES = [
   "default", "ai-generated", "animals", "leaves", "magic-circle", "military", "nature"
@@ -13,7 +13,7 @@ export async function POST(req) {
     console.log("🔧 收到設置頭像框請求");
     await dbConnect();
     
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromRequest(req);
     console.log("🔧 getCurrentUser 結果:", currentUser ? "找到用戶" : "未找到用戶");
     if (!currentUser) {
       console.log("❌ 設置頭像框失敗: 用戶未登入");
@@ -42,9 +42,10 @@ export async function POST(req) {
     // 更新用戶的當前頭像框和設定
     const updateData = { currentFrame: frameId };
     if (settings) {
+      const safeSettings = sanitizeFrameSettings(settings);
       updateData.frameSettings = {
         ...(currentUser.frameSettings || {}),
-        [frameId]: settings
+        [frameId]: safeSettings
       };
     }
     

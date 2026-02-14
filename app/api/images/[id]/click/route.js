@@ -8,6 +8,11 @@ import { getIdentifier, strictLimiter } from "@/lib/rateLimit";
 import { computePopScore, ensureLikesCount } from "@/utils/score";
 
 export const dynamic = "force-dynamic";
+const CLICK_COOLDOWN_SECONDS = Math.max(
+  1,
+  Number(process.env.CLICK_COOLDOWN_SECONDS || 10)
+);
+const CLICK_COOLDOWN_MS = CLICK_COOLDOWN_SECONDS * 1000;
 
 function buildThrottleKey(req, userId) {
   if (userId) return `u:${String(userId)}`;
@@ -47,11 +52,34 @@ export async function POST(req, ctx) {
     ).lean();
     if (!doc) return NextResponse.json({ ok: false }, { status: 404 });
 
-    // 同圖 + 同來源 30 秒內只計一次，防止 popScore 被機器人灌高
+    // 同圖 + 同來源 冷卻內只計一次（預設 10 秒，可用 env 覆蓋）
     const throttleKey = buildThrottleKey(req, currentUser?._id);
+    const now = Date.now();
+    const throttleDoc = await ClickThrottle.findOne(
+      { imageId: id, key: throttleKey },
+      { createdAt: 1 }
+    ).lean();
+
+    const lastAt = throttleDoc?.createdAt ? new Date(throttleDoc.createdAt).getTime() : 0;
+    if (lastAt && now - lastAt < CLICK_COOLDOWN_MS) {
+      return NextResponse.json({
+        ok: true,
+        throttled: true,
+        _id: id,
+        clicks: doc.clicks || 0,
+        likesCount: ensureLikesCount(doc),
+        popScore: doc.popScore || 0,
+      });
+    }
+
     try {
-      await ClickThrottle.create({ imageId: id, key: throttleKey });
+      await ClickThrottle.updateOne(
+        { imageId: id, key: throttleKey },
+        { $set: { createdAt: new Date(now) } },
+        { upsert: true }
+      );
     } catch (error) {
+      // 併發情況下若 upsert 撞到唯一索引，視為本次已被節流即可
       if (error?.code === 11000) {
         return NextResponse.json({
           ok: true,

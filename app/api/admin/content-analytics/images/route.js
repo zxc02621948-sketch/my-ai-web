@@ -6,6 +6,12 @@ import { getCurrentUserFromRequest } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
+
 async function checkAdmin(request) {
   const currentUser = await getCurrentUserFromRequest(request);
   if (!currentUser || !currentUser.isAdmin) {
@@ -18,7 +24,7 @@ export async function GET(request) {
   try {
     const admin = await checkAdmin(request);
     if (!admin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403, headers: NO_STORE_HEADERS });
     }
 
     await dbConnect();
@@ -235,43 +241,46 @@ export async function GET(request) {
       },
     ]);
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        scrollDepth: scrollDepthStats[0] || {
-          avgScrollDepth: 0,
-          maxScrollDepth: 0,
-          minScrollDepth: 0,
-          totalEvents: 0,
-          fullyViewedCount: 0,
-        },
-        completeViewRate: Math.round(completeViewRate * 100) / 100, // 保留2位小數
-        totalViews,
-        categoryStats,
-        interactionStats,
-        dbTotals: dbTotals[0] || {
-          totalImages: 0,
-          totalClicks: 0,
-          totalViewCount: 0,
-        },
-        timeSpent: timeSpentStats[0] || {
-          avgTimeSpent: 0,
-          maxTimeSpent: 0,
-          minTimeSpent: 0,
-          totalExits: 0,
-        },
-        period: {
-          days,
-          startDate: startDate.toISOString(),
-          endDate: new Date().toISOString(),
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          scrollDepth: scrollDepthStats[0] || {
+            avgScrollDepth: 0,
+            maxScrollDepth: 0,
+            minScrollDepth: 0,
+            totalEvents: 0,
+            fullyViewedCount: 0,
+          },
+          completeViewRate: Math.round(completeViewRate * 100) / 100, // 保留2位小數
+          totalViews,
+          categoryStats,
+          interactionStats,
+          dbTotals: dbTotals[0] || {
+            totalImages: 0,
+            totalClicks: 0,
+            totalViewCount: 0,
+          },
+          timeSpent: timeSpentStats[0] || {
+            avgTimeSpent: 0,
+            maxTimeSpent: 0,
+            minTimeSpent: 0,
+            totalExits: 0,
+          },
+          period: {
+            days,
+            startDate: startDate.toISOString(),
+            endDate: new Date().toISOString(),
+          },
         },
       },
-    });
+      { headers: NO_STORE_HEADERS }
+    );
   } catch (error) {
     console.error('[ImageAnalytics] Error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch image analytics' },
-      { status: 500 }
+      { status: 500, headers: NO_STORE_HEADERS }
     );
   }
 }

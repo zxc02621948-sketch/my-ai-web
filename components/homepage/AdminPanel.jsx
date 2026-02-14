@@ -35,20 +35,21 @@ export default function AdminPanel() {
   const [promptResolve, setPromptResolve] = useState(null);
 
   const handleCreateTestUser = async () => {
+    const tempPassword = `T${Math.random().toString(36).slice(2, 10)}!9a`;
     const res = await fetch("/api/dev-create-user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: "tester2@example.com",
         username: "tester2",
-        password: "123456",
+        password: tempPassword,
         isAdmin: false,
       }),
     });
 
     const data = await res.json();
     if (data.success) {
-      notify.success("成功", `建立成功：${data.user.email}`);
+      notify.success("成功", `建立成功：${data.user.email}（密碼：${tempPassword}）`);
     } else {
       notify.error("失敗", data.message || data.error);
     }

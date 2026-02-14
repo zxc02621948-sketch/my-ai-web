@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
 import axios from "axios";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function AccountDeletionAdminPage() {
   const router = useRouter();
@@ -44,8 +45,10 @@ export default function AccountDeletionAdminPage() {
         setPendingDeletions(res.data.users || []);
       }
     } catch (error) {
-      console.error("載入待刪除帳號失敗：", error);
-      notify.error("錯誤", "載入失敗");
+      if (!isAuthError(error)) {
+        console.error("載入待刪除帳號失敗：", error);
+      }
+      notify.error("錯誤", getApiErrorMessage(error, "載入失敗"));
     } finally {
       setLoading(false);
     }
@@ -94,10 +97,7 @@ export default function AccountDeletionAdminPage() {
         notify.error("錯誤", res.data.message || "刪除失敗");
       }
     } catch (error) {
-      notify.error(
-        "錯誤",
-        error.response?.data?.message || "刪除失敗"
-      );
+      notify.error("錯誤", getApiErrorMessage(error, "刪除失敗"));
     } finally {
       setProcessing(false);
     }
@@ -127,10 +127,7 @@ export default function AccountDeletionAdminPage() {
         notify.error("錯誤", res.data.message || "調整失敗");
       }
     } catch (error) {
-      notify.error(
-        "錯誤",
-        error.response?.data?.message || "調整失敗"
-      );
+      notify.error("錯誤", getApiErrorMessage(error, "調整失敗"));
     } finally {
       setProcessing(false);
     }

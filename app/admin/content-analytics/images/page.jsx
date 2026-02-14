@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getApiErrorMessage, isAuthError } from '@/lib/clientAuthError';
 
 export default function ImageAnalyticsPage() {
   const router = useRouter();
@@ -11,13 +12,27 @@ export default function ImageAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [days, setDays] = useState(7);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true);
+        setError(null);
+        if (!data) {
+          setLoading(true);
+        } else {
+          setRefreshing(true);
+        }
         const response = await axios.get(
-          `/api/admin/content-analytics/images?days=${days}`
+          `/api/admin/content-analytics/images`,
+          {
+            params: { days, _t: Date.now() },
+            headers: {
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
+            },
+          }
         );
         if (response.data.success && response.data.data) {
           setData(response.data.data);
@@ -25,15 +40,25 @@ export default function ImageAnalyticsPage() {
           setError('無法獲取數據');
         }
       } catch (err) {
-        console.error('獲取圖片分析數據失敗:', err);
-        setError(err.response?.data?.error || '載入失敗');
+        if (!isAuthError(err)) {
+          console.error('獲取圖片分析數據失敗:', err);
+        }
+        setError(getApiErrorMessage(err, '載入失敗'));
       } finally {
         setLoading(false);
+        setRefreshing(false);
       }
     };
 
     fetchData();
-  }, [days]);
+  }, [days, refreshKey]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setRefreshKey((k) => k + 1);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   if (loading) {
     return (
@@ -98,6 +123,17 @@ export default function ImageAnalyticsPage() {
           🎬 影片分析
         </Link>
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setRefreshKey((k) => k + 1)}
+            disabled={refreshing}
+            className={`px-3 py-1 rounded font-semibold ${
+              refreshing
+                ? 'bg-zinc-600 text-zinc-300 cursor-not-allowed'
+                : 'bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer'
+            }`}
+          >
+            {refreshing ? '刷新中...' : '立即刷新'}
+          </button>
           <label className="text-sm">時間範圍：</label>
           <select
             value={days}

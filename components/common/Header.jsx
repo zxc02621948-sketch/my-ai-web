@@ -25,6 +25,7 @@ import TutorialMenu from "@/components/common/TutorialMenu";
 import UploadDropdown from "@/components/common/UploadDropdown";
 import ContentMenuButtons from "@/components/common/ContentMenuButtons";
 import { signOut } from "next-auth/react";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function Header({
   currentUser,
@@ -481,7 +482,7 @@ export default function Header({
                   <>
                     <button
                       onClick={() => setUserMenuOpen((prev) => !prev)}
-                      className="px-3 md:px-4 py-2 bg-zinc-800 text白 rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[40px] md:min-w-[140px] max-w-[160px] truncate text-left"
+                      className="px-3 md:px-4 py-2 bg-zinc-800 text-white rounded-full hover:bg-zinc-700 text-sm font-medium min-w-[40px] md:min-w-[140px] max-w-[160px] truncate text-left"
                       aria-haspopup="menu"
                       aria-expanded={userMenuOpen}
                       title={currentUser?.username || "登入 / 註冊"}
@@ -498,7 +499,7 @@ export default function Header({
 
                     {userMenuOpen && (
                       <div
-                        className="absolute right-0 mt-2 w-48 bg-zinc-800 text白 rounded shadow-md py-1 z-50"
+                        className="absolute right-0 mt-2 w-48 bg-zinc-800 text-white rounded shadow-md py-1 z-50"
                         role="menu"
                       >
                         {currentUser?.username ? (
@@ -612,11 +613,17 @@ export default function Header({
                                 } catch (e) {
                                   // 靜默：若 NextAuth 未啟用，不中斷本站登出流程。
                                 }
-                                await axios.post(
-                                  "/api/auth/logout",
-                                  {},
-                                  { withCredentials: true },
-                                );
+                                try {
+                                  await axios.post(
+                                    "/api/auth/logout",
+                                    {},
+                                    { withCredentials: true },
+                                  );
+                                } catch (error) {
+                                  if (!isAuthError(error)) {
+                                    toast.error(getApiErrorMessage(error, "登出同步失敗，將直接重新整理"));
+                                  }
+                                }
                                 
                                 // ✅ 再次確保清理（在 reload 前）
                                 document.body.style.overflow = "";

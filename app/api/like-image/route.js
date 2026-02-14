@@ -4,31 +4,13 @@ import { dbConnect } from "@/lib/db";
 import Image from "@/models/Image";
 import User from "@/models/User";
 import mongoose from "mongoose";
-import jwt from "jsonwebtoken";
 import { computePopScore, ensureLikesCount } from "@/utils/score";
 import { creditPoints } from "@/services/pointsService";
-import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
-function getUserIdFromAuth(req) {
-  const auth = req.headers.get("authorization") || "";
-  const m = auth.match(/^Bearer\s+(.+)$/i);
-  const token = m?.[1];
-  if (!token) return null;
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    return decoded?.id || decoded?._id || null;
-  } catch {
-    return null;
-  }
-}
-
 async function getUserId(req) {
-  const fromAuth = getUserIdFromAuth(req);
-  if (fromAuth) return fromAuth;
-
-  // Fallback: 支援 HttpOnly cookie 驗證
   const user = await getCurrentUserFromRequest(req).catch(() => null);
   return user?._id ? String(user._id) : null;
 }
@@ -52,6 +34,17 @@ export async function PUT(req) {
     const img = await Image.findById(id);
     if (!img) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    // 可選：明確指定最終狀態（true=一定要讚、false=一定取消）
+    let shouldLike = null;
+    try {
+      const body = await req.json();
+      if (typeof body?.shouldLike === "boolean") {
+        shouldLike = body.shouldLike;
+      }
+    } catch {
+      // 兼容舊客戶端：無 body 時走 toggle 模式
+    }
+
     // ✅ 檢查時同時比較 ObjectId 和字符串格式，確保能找到所有情況
     const had = (img.likes || []).some((x) => {
       const xStr = String(x);
@@ -60,7 +53,11 @@ export async function PUT(req) {
       return xStr === userIdStr || xStr === userIdObjectIdStr;
     });
     
-    if (had) {
+    const targetLikeState = shouldLike === null ? !had : shouldLike;
+    const didAdd = !had && targetLikeState;
+    const didRemove = had && !targetLikeState;
+
+    if (didRemove) {
       // ✅ 移除時同時過濾 ObjectId 和字符串格式
       img.likes = (img.likes || []).filter((x) => {
         const xStr = String(x);
@@ -68,12 +65,14 @@ export async function PUT(req) {
         const userIdObjectIdStr = userIdObjectId.toString();
         return xStr !== userIdStr && xStr !== userIdObjectIdStr;
       });
-    } else {
+    } else if (didAdd) {
       // ✅ 保存時使用 ObjectId，確保類型匹配
       img.likes = [...(img.likes || []), userIdObjectId];
     }
     
-    console.log(`[like-image] 用戶 ${userId} ${had ? '取消' : '添加'}收藏圖片 ${id}，當前 likes 數量: ${img.likes.length}`);
+    console.log(
+      `[like-image] 用戶 ${userId} ${didAdd ? "添加" : didRemove ? "取消" : "維持"}收藏圖片 ${id}，當前 likes 數量: ${img.likes.length}`
+    );
 
     img.likesCount = ensureLikesCount(img);
     img.popScore = computePopScore(img);
@@ -82,7 +81,7 @@ export async function PUT(req) {
     await img.save({ validateBeforeSave: false });
     
     // ✅ 如果添加收藏，使用原生 MongoDB 操作確保保存成功
-    if (!had) {
+    if (didAdd) {
       try {
         // 使用原生 MongoDB $addToSet 確保添加成功（避免重複）
         const updateResult = await Image.collection.updateOne(
@@ -116,7 +115,7 @@ export async function PUT(req) {
       imageId: id,
       userId,
       userIdObjectId: userIdObjectId.toString(),
-      action: had ? '取消收藏' : '添加收藏',
+      action: didRemove ? '取消收藏' : didAdd ? '添加收藏' : '維持原狀',
       savedLikesCount: savedLikes.length,
       hasUserIdInLikes,
       savedLikes: savedLikes.map(l => ({
@@ -126,7 +125,7 @@ export async function PUT(req) {
       }))
     });
     
-    if (!had && !hasUserIdInLikes) {
+    if (didAdd && !hasUserIdInLikes) {
       console.error(`[like-image] 錯誤：添加收藏後驗證失敗，userId 不在 likes 中！`);
       // ✅ 如果驗證失敗，再次嘗試使用原生 MongoDB 強制添加
       try {
@@ -152,7 +151,7 @@ export async function PUT(req) {
 
     // ✅ 积分：新增讚時入帳（作者 like_received、按讚者 like_given），自讚不計
     try {
-      if (!had) {
+      if (didAdd) {
         const authorId = img.user || img.userId; // 模型欄位兼容
         if (authorId && String(authorId) !== String(userId)) {
           // 作者獲得 like_received

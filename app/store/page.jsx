@@ -7,6 +7,7 @@ import axios from "axios";
 import { getLevelInfo } from "@/utils/pointsLevels";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 const STORE_CATEGORIES = [
   {
@@ -68,7 +69,7 @@ export default function StorePage() {
       }
     } catch (error) {
       // 未登入或授權失敗時忽略
-      if (error?.response?.status !== 401) {
+      if (!isAuthError(error)) {
         console.warn("檢查權力券限購狀態失敗:", error?.message || error);
       }
     }
@@ -108,14 +109,16 @@ export default function StorePage() {
               setUserOwnedFrames(framesResponse.data.data || []);
             }
           } catch (err) {
-            if (err?.response?.status !== 401) {
+            if (!isAuthError(err)) {
               console.warn("獲取已擁有頭像框失敗:", err?.message || err);
             }
           }
         }
         
       } catch (error) {
-        console.error("獲取用戶信息失敗:", error);
+        if (!isAuthError(error)) {
+          console.error("獲取用戶信息失敗:", error);
+        }
       } finally {
         setIsLoadingUserInfo(false);
       }
@@ -218,7 +221,7 @@ export default function StorePage() {
           setPurchaseModalContent({
             type: 'error',
             title: '❌ 擴充失敗',
-            message: error.response?.data?.error || "擴充失敗，請檢查積分是否足夠"
+            message: getApiErrorMessage(error, "擴充失敗，請檢查積分是否足夠")
           });
           setShowPurchaseModal(true);
         }
@@ -355,13 +358,7 @@ export default function StorePage() {
               autoRenew // ✅ 傳遞自動續訂選項
             });
           } catch (error) {
-            // ✅ 處理 API 錯誤（例如積分不足）
-            if (error.response?.status === 400) {
-              const errorMessage = error.response?.data?.error || "訂閱失敗";
-              notify.error("訂閱失敗", errorMessage);
-            } else {
-              notify.error("訂閱失敗", error.response?.data?.error || "訂閱失敗，請稍後再試");
-            }
+            notify.error("訂閱失敗", getApiErrorMessage(error, "訂閱失敗，請稍後再試"));
             setLoading(false);
             setPurchaseStatus(prev => ({ ...prev, [productId]: false }));
             return;
@@ -600,7 +597,10 @@ export default function StorePage() {
       // 其他商品的購買邏輯...
       
     } catch (error) {
-      console.error("Purchase failed:", error);
+      if (!isAuthError(error)) {
+        console.error("Purchase failed:", error);
+      }
+      notify.error("購買失敗", getApiErrorMessage(error, "購買失敗，請稍後再試"));
     } finally {
       setLoading(false);
     }

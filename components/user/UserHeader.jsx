@@ -21,6 +21,7 @@ import PointsEarningModal from "./PointsEarningModal";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 const cloudflarePrefix = "https://imagedelivery.net/qQdazZfBAN4654_waTSV7A/";
 
@@ -213,7 +214,9 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
           setCouponCount(activeCoupons.length);
         }
       } catch (error) {
-        console.error('獲取加成券數量失敗:', error);
+        if (!isAuthError(error)) {
+          console.error('獲取加成券數量失敗:', error);
+        }
         couponCountLoadedRef.current = false; // 載入失敗時重置，允許重試
       }
     };
@@ -243,7 +246,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       }
     } catch (error) {
       console.error("❌ 頭像框設置失敗:", error);
-      notify.error("設置失敗", error.response?.data?.error || "設置頭像框失敗，請重試");
+      notify.error("設置失敗", getApiErrorMessage(error, "設置頭像框失敗，請重試"));
       throw error;
     }
   };
@@ -322,7 +325,7 @@ export default function UserHeader({ userData, currentUser, onUpdate, onEditOpen
       if (error?.response?.status === 401) {
         window.dispatchEvent(new CustomEvent("openLoginModal"));
       } else {
-        notify.error("操作失敗", "操作失敗，請稍後再試");
+        notify.error("操作失敗", getApiErrorMessage(error, "操作失敗，請稍後再試"));
       }
     } finally {
       setFollowLoading(false);

@@ -1,29 +1,38 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { sanitizeHexColor, sanitizeFrameSize } from "@/lib/sanitizeFrameSettings";
 
 export default function FrameEditor({ frame, onClose, onConfirm }) {
-  const [colors, setColors] = useState(frame.defaultColors || ["#3B82F6", "#8B5CF6", "#EC4899"]);
+  const [colors, setColors] = useState(
+    (Array.isArray(frame.defaultColors) ? frame.defaultColors : ["#3B82F6", "#8B5CF6", "#EC4899"])
+      .slice(0, 3)
+      .map((c, idx) => sanitizeHexColor(c, ["#3B82F6", "#8B5CF6", "#EC4899"][idx]))
+  );
   const [style, setStyle] = useState(frame.defaultStyle || "geometric");
-  const [size, setSize] = useState(100);
+  const [size, setSize] = useState(sanitizeFrameSize(100));
   const [previewSvg, setPreviewSvg] = useState("");
 
   // 生成 SVG 預覽
   const generatePreview = () => {
+    const safeColors = colors.map((c, idx) =>
+      sanitizeHexColor(c, ["#3B82F6", "#8B5CF6", "#EC4899"][idx] || "#3B82F6")
+    );
+    const safeSize = sanitizeFrameSize(size);
     let svgContent = "";
     
     switch (style) {
       case "geometric":
-        svgContent = generateGeometricFrame(colors, size);
+        svgContent = generateGeometricFrame(safeColors, safeSize);
         break;
       case "floral":
-        svgContent = generateFloralFrame(colors, size);
+        svgContent = generateFloralFrame(safeColors, safeSize);
         break;
       case "abstract":
-        svgContent = generateAbstractFrame(colors, size);
+        svgContent = generateAbstractFrame(safeColors, safeSize);
         break;
       default:
-        svgContent = generateGeometricFrame(colors, size);
+        svgContent = generateGeometricFrame(safeColors, safeSize);
     }
     
     setPreviewSvg(svgContent);
@@ -109,16 +118,18 @@ export default function FrameEditor({ frame, onClose, onConfirm }) {
 
   const handleColorChange = (index, newColor) => {
     const newColors = [...colors];
-    newColors[index] = newColor;
+    newColors[index] = sanitizeHexColor(newColor, newColors[index] || "#3B82F6");
     setColors(newColors);
   };
 
   const handleConfirm = () => {
     const editedFrameData = {
       ...frame,
-      customColors: colors,
+      customColors: colors.map((c, idx) =>
+        sanitizeHexColor(c, ["#3B82F6", "#8B5CF6", "#EC4899"][idx] || "#3B82F6")
+      ),
       customStyle: style,
-      customSize: size,
+      customSize: sanitizeFrameSize(size),
       svgContent: previewSvg
     };
     onConfirm(editedFrameData);
@@ -227,7 +238,7 @@ export default function FrameEditor({ frame, onClose, onConfirm }) {
               min="80"
               max="120"
               value={size}
-              onChange={(e) => setSize(parseInt(e.target.value))}
+              onChange={(e) => setSize(sanitizeFrameSize(e.target.value))}
               className="w-full h-2 bg-zinc-600 rounded-lg appearance-none cursor-pointer slider"
             />
           </div>

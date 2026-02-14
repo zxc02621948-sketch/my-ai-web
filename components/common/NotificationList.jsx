@@ -5,6 +5,7 @@ import axios from "axios";
 import { Trash2 } from "lucide-react";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function NotificationList({
   notifications,
@@ -12,33 +13,51 @@ export default function NotificationList({
   onNotificationClick,
 }) {
   const { updateUnreadCount } = useCurrentUser();
+  const isSafeInternalLink = (value) => {
+    const link = String(value || "");
+    return link.startsWith("/") && !link.startsWith("//");
+  };
 
   const handleMarkRead = async (id) => {
-    await axios.patch(`/api/notifications/mark-read/${id}`);
-    const updated = notifications.map((n) =>
-      n._id === id ? { ...n, isRead: true } : n
-    );
-    setNotifications(updated);
-    const hasUnread = updated.some((n) => !n.isRead);
-    updateUnreadCount('notifications', hasUnread ? 1 : 0);
+    try {
+      await axios.patch(`/api/notifications/mark-read/${id}`);
+      const updated = notifications.map((n) =>
+        n._id === id ? { ...n, isRead: true } : n
+      );
+      setNotifications(updated);
+      const hasUnread = updated.some((n) => !n.isRead);
+      updateUnreadCount("notifications", hasUnread ? 1 : 0);
+    } catch (error) {
+      if (!isAuthError(error)) {
+        console.warn("標記通知已讀失敗:", error);
+      }
+    }
   };
 
   const handleDelete = async (id) => {
-    await axios.delete(`/api/notifications/${id}`);
-    const updated = notifications.filter((n) => n._id !== id);
-    setNotifications(updated);
-    const hasUnread = updated.some((n) => !n.isRead);
-    updateUnreadCount('notifications', hasUnread ? 1 : 0);
+    try {
+      await axios.delete(`/api/notifications/${id}`);
+      const updated = notifications.filter((n) => n._id !== id);
+      setNotifications(updated);
+      const hasUnread = updated.some((n) => !n.isRead);
+      updateUnreadCount("notifications", hasUnread ? 1 : 0);
+    } catch (error) {
+      notify.error("刪除失敗", getApiErrorMessage(error, "刪除通知失敗，請稍後再試"));
+    }
   };
 
   const handleDeleteRead = async () => {
     const confirmed = await notify.confirm("確認刪除", "確定要刪除所有已讀通知嗎？");
     if (!confirmed) return;
-    await axios.delete("/api/notifications/delete-read");
-    const updated = notifications.filter((n) => !n.isRead);
-    setNotifications(updated);
-    const hasUnread = updated.some((n) => !n.isRead);
-    updateUnreadCount('notifications', hasUnread ? 1 : 0);
+    try {
+      await axios.delete("/api/notifications/delete-read");
+      const updated = notifications.filter((n) => !n.isRead);
+      setNotifications(updated);
+      const hasUnread = updated.some((n) => !n.isRead);
+      updateUnreadCount("notifications", hasUnread ? 1 : 0);
+    } catch (error) {
+      notify.error("刪除失敗", getApiErrorMessage(error, "刪除已讀通知失敗，請稍後再試"));
+    }
   };
 
   if (notifications.length === 0) {
@@ -66,7 +85,9 @@ export default function NotificationList({
             handleMarkRead(n._id);
             // 系統通知跳轉到指定鏈接
             if (!n.fromUserId && n.link) {
-              window.location.href = n.link;
+              if (isSafeInternalLink(n.link)) {
+                window.location.href = n.link;
+              }
             } else if (n.imageId) {
               onNotificationClick?.(n.imageId);
             }

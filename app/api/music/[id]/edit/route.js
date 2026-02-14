@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import Music from "@/models/Music";
-import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import { computeMusicCompleteness } from "@/utils/scoreMusic";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { s3Client, R2_BUCKET_NAME, R2_PUBLIC_URL } from "@/lib/r2";
@@ -19,6 +19,17 @@ function toNumOrNull(v) {
   if (v === "" || v === null || typeof v === "undefined") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function sanitizeHttpUrl(value) {
+  const s = String(value || "").trim().slice(0, 2000);
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    return u.protocol === "http:" || u.protocol === "https:" ? s : "";
+  } catch {
+    return "";
+  }
 }
 
 // 允許的可更新欄位
@@ -174,6 +185,9 @@ export async function PATCH(req, { params }) {
       if (k in updates) {
         updates[k] = String(updates[k] || "").trim();
       }
+    }
+    if ("modelLink" in updates) {
+      updates.modelLink = sanitizeHttpUrl(updates.modelLink);
     }
 
     // 處理封面圖片上傳（如果有新封面）

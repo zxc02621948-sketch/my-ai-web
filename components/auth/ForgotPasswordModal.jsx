@@ -4,6 +4,7 @@ import { Dialog } from "@headlessui/react";
 import { useState } from "react";
 import { X } from "lucide-react";
 import axios from "axios";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function ForgotPasswordModal({ isOpen, onClose }) {
   const [email, setEmail] = useState("");
@@ -18,12 +19,14 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
     setMessage(null);
 
     try {
-      const response = await axios.post("/api/auth/forgot-password", { email });
+      await axios.post("/api/auth/forgot-password", { email });
       setMessage("📨 重設密碼信已寄出，請查看您的信箱");
       setEmail("");
     } catch (err) {
-      console.error("重設密碼發送錯誤：", err);
-      setError("發送失敗：" + (err?.response?.data?.error || "請稍後再試"));
+      if (!isAuthError(err)) {
+        console.error("重設密碼發送錯誤：", err);
+      }
+      setError("發送失敗：" + getApiErrorMessage(err, "請稍後再試"));
     } finally {
       setLoading(false);
     }

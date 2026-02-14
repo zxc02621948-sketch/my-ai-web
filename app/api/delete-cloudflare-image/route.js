@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 
 export async function DELETE(req) {
+  const currentUser = await getCurrentUserFromRequest(req).catch(() => null);
+  if (!currentUser?._id) {
+    return NextResponse.json({ success: false, message: "未授權" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const imageId = searchParams.get("id");
 

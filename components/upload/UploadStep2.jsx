@@ -117,6 +117,7 @@ export default function UploadStep2({
   // AI自動分類相關
   const workflowInputRef = useRef(null);
   const scrollAreaRef = useRef(null);
+  const submittingRef = useRef(false);
 
   // ✅ 即時判斷元數據質量（用於更智能的分類）
   const getCurrentMetadataQuality = useMemo(() => {
@@ -984,6 +985,7 @@ export default function UploadStep2({
     const serverRes = await fetch("/api/cloudflare-upload", {
       method: "POST",
       body: serverFormData,
+      credentials: "include",
     });
     
     if (!serverRes.ok) {
@@ -1018,6 +1020,7 @@ export default function UploadStep2({
   };
 
   const handleUpload = async () => {
+    if (submittingRef.current) return;
     if (!imageFile) {
       notify.warning("提示", "請先選擇圖片檔");
       return;
@@ -1057,6 +1060,7 @@ export default function UploadStep2({
       return;
     }
 
+    submittingRef.current = true;
     setIsUploading(true);
 
     let wNum = Number(width);
@@ -1072,6 +1076,8 @@ export default function UploadStep2({
     }
 
     let imageId = null;
+    let originalImageKey = null;
+    let uploadedOriginalImageUrl = null;
 
     try {
       // ✅ 先檢查每日上傳限制（避免不必要的上傳和流量消耗）
@@ -1141,13 +1147,14 @@ export default function UploadStep2({
         throw new Error("原圖上傳失敗：未獲取到原圖 URL");
       }
       
-      const uploadedOriginalImageUrl = originalData.originalImageUrl;
+      uploadedOriginalImageUrl = originalData.originalImageUrl;
+      originalImageKey = originalData.originalImageKey || null;
       console.log("✅ R2 原圖上傳成功:", uploadedOriginalImageUrl);
       
       // ✅ Step 1: 分流層 - 根據環境變數選擇上傳方式
       let uploadResult;
       if (IS_DIRECT_UPLOAD) {
-        // 直傳模式（未實作）
+        // 直傳模式（已實作）
         uploadResult = await uploadDirect(imageFile, uploadedOriginalImageUrl);
       } else {
         // 舊流程（Vercel API 路由）
@@ -1286,6 +1293,7 @@ export default function UploadStep2({
         method: "POST",
         body: JSON.stringify(metadata),
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
       });
       
       // ✅ 解析響應數據
@@ -1422,7 +1430,10 @@ export default function UploadStep2({
       if (imageId) {
         console.warn("⚠️ 嘗試清理已上傳的圖片：", imageId);
         try {
-          const deleteRes = await fetch(`/api/delete-cloudflare-image?id=${imageId}`, { method: "DELETE" });
+          const deleteRes = await fetch(`/api/delete-cloudflare-image?id=${imageId}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
           if (deleteRes.ok) {
             console.log("✅ 已清理上傳失敗的圖片：", imageId);
           } else {
@@ -1432,8 +1443,32 @@ export default function UploadStep2({
           console.error("❌ 清理圖片異常：", delErr);
         }
       }
+
+      // ✅ metadata 失敗時，同步清理已上傳的 R2 原圖，避免孤兒檔案
+      if (originalImageKey || uploadedOriginalImageUrl) {
+        console.warn("⚠️ 嘗試清理已上傳的 R2 原圖：", originalImageKey || uploadedOriginalImageUrl);
+        try {
+          const deleteOriginalRes = await fetch("/api/images/delete-original-r2", {
+            method: "DELETE",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              originalImageKey,
+              originalImageUrl: uploadedOriginalImageUrl,
+            }),
+          });
+          if (deleteOriginalRes.ok) {
+            console.log("✅ 已清理上傳失敗的 R2 原圖：", originalImageKey || uploadedOriginalImageUrl);
+          } else {
+            console.warn("⚠️ 清理 R2 原圖失敗：", deleteOriginalRes.status);
+          }
+        } catch (delOriginalErr) {
+          console.error("❌ 清理 R2 原圖異常：", delOriginalErr);
+        }
+      }
     } finally {
       setIsUploading(false);
+      submittingRef.current = false;
     }
   };
 

@@ -5,12 +5,12 @@ import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 import { sendAccountDeletionCancelledEmail } from "@/lib/email";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 
 export async function POST(req) {
   try {
-    // 從 cookie 獲取用戶信息
-    const token = req.cookies.get("token")?.value;
-    if (!token) {
+    const currentUser = await getCurrentUserFromRequest(req).catch(() => null);
+    if (!currentUser?._id) {
       return NextResponse.json(
         { success: false, message: "請先登入" },
         { status: 401 }
@@ -18,20 +18,7 @@ export async function POST(req) {
     }
 
     await dbConnect();
-
-    // 驗證 token 並獲取用戶
-    const jwt = require("jsonwebtoken");
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (error) {
-      return NextResponse.json(
-        { success: false, message: "無效的登入狀態" },
-        { status: 401 }
-      );
-    }
-
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(currentUser._id);
     if (!user) {
       return NextResponse.json(
         { success: false, message: "找不到用戶" },

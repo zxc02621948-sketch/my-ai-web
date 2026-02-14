@@ -64,11 +64,13 @@ export default function ImageCard({
   useEffect(() => {
     const onLiked = (e) => {
       const updated = e.detail;
-      if (!updated || updated._id !== img?._id) return;
+      if (!updated || String(updated._id) !== String(img?._id)) return;
 
       // 依事件內容對齊
       const likesArr = Array.isArray(updated.likes) ? updated.likes : [];
-      const meLiked = currentUser?._id ? likesArr.includes(currentUser._id) : false;
+      const meLiked = currentUser?._id
+        ? likesArr.some((id) => String(id) === String(currentUser._id))
+        : false;
 
       setIsLikedLocal(meLiked);
       setLikeCountLocal(likesArr.length);
@@ -103,7 +105,7 @@ export default function ImageCard({
 
     try {
       // 告知父層 + 🔊 廣播給其他視圖（大圖/其他縮圖）
-      onLocalLikeChange?.(img?._id, newLiked);
+      onLocalLikeChange?.(updatedImage);
       onLikeUpdate?.(updatedImage);
       updateLikeCacheAndBroadcast(updatedImage);
 

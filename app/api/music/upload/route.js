@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { s3Client, R2_BUCKET_NAME, R2_PUBLIC_URL } from "@/lib/r2";
-import { getCurrentUserFromRequest } from "@/lib/auth/getCurrentUserFromRequest";
+import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import { dbConnect } from "@/lib/db";
 import Music from "@/models/Music";
 import User from "@/models/User";
@@ -15,6 +15,17 @@ import {
   ensureMusicLikesCount,
 } from "@/utils/scoreMusic";
 import { parseBuffer } from "music-metadata";
+
+function sanitizeHttpUrl(value) {
+  const s = String(value || "").trim().slice(0, 2000);
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    return u.protocol === "http:" || u.protocol === "https:" ? s : "";
+  } catch {
+    return "";
+  }
+}
 
 export async function POST(request) {
   try {
@@ -72,7 +83,7 @@ export async function POST(request) {
     const platform = formData.get("platform") || "";
     const prompt = formData.get("prompt") || "";
     const modelName = formData.get("modelName") || "";
-    const modelLink = formData.get("modelLink") || "";
+    const modelLink = sanitizeHttpUrl(formData.get("modelLink"));
 
     // ✅ 音樂屬性
     // 處理 genres 陣列（從 'genres[]' 獲取所有值）

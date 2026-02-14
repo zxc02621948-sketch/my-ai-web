@@ -5,6 +5,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import Modal from "@/components/common/Modal";
 import { notify } from "@/components/common/GlobalNotificationManager";
+import { getApiErrorMessage, isAuthError } from "@/lib/clientAuthError";
 
 export default function PlaylistModal({
   isOpen,
@@ -97,8 +98,10 @@ export default function PlaylistModal({
         notify.error("上傳失敗", response.data.error || "請稍後再試");
       }
     } catch (error) {
-      console.error("上傳失敗:", error);
-      notify.error("上傳失敗", error.response?.data?.error || "請重試");
+      if (!isAuthError(error)) {
+        console.error("上傳失敗:", error);
+      }
+      notify.error("上傳失敗", getApiErrorMessage(error, "請重試"));
     } finally {
       setUploading(false);
     }
