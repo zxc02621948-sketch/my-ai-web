@@ -460,15 +460,16 @@ export default function UploadStep2({
     }
   }
 
-  function applyParsed(parsed) {
+  function applyParsed(parsed, options = {}) {
+    const { fillPrompts = true } = options;
     if (!parsed) return;
     // ✅ 兼容多种格式：ComfyUI 使用 positive/negative，A1111 使用 prompt/negative
     const positiveText = parsed.positive ?? parsed.prompt;
     const negativeText = parsed.negative;
-    if (typeof positiveText === "string" && positiveText.trim()) {
+    if (fillPrompts && typeof positiveText === "string" && positiveText.trim()) {
       setPositivePrompt(positiveText);
     }
-    if (typeof negativeText === "string" && negativeText.trim()) {
+    if (fillPrompts && typeof negativeText === "string" && negativeText.trim()) {
       setNegativePrompt(negativeText);
     }
     
@@ -867,10 +868,11 @@ export default function UploadStep2({
       }
 
       setPlatform("ComfyUI");
-      applyParsed(comfyParsed);
+      // Workflow JSON 常是「模板」，遇到隨機節點時不代表本次實際生成詞，故不自動覆蓋正負提詞。
+      applyParsed(comfyParsed, { fillPrompts: false });
       setShowAdvanced(true);
 
-      notify.success("解析成功", "已解析 workflow 並填入參數！");
+      notify.success("解析成功", "已解析 workflow 並填入參數（不覆蓋正負提詞）。");
       scrollAreaRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       console.error("workflow parse error", e);

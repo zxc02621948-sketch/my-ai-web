@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(nslookup _mongodb._tcp.cluster0.9ugvdto.mongodb.net)",
+      "Bash(nslookup:*)",
+      "Bash(xargs grep:*)"
+    ]
+  }
+}

@@ -11,7 +11,44 @@ git pull同步鏡像改動檔案
 
 更新網站用
 git add .
-git commit -m "v0.8.86"
+git commit -m "v0.1"
 git push
 
 aicreateaworld.com
+
+
+n8n啟動指令 使用cmd小黑窗啟動
+npx n8n
+
+claude啟動指令
+claude
+
+
+富立傑官網
+# 1. 把所有改動過的檔案（新圖片、新代碼）全部抓進「預備區」
+git add .
+
+# 2. 給這次更新貼個標籤（紀錄你改了什麼）
+git commit -m "v0.4 - 首頁補全"
+
+# 3. 噴上雲端（這一推，Render 就會自動感應並幫你換掉舊網站）
+git push
+
+
+# 1. 初始化
+git init
+
+# 2. 把所有檔案加入預備區
+git add .
+
+# 3. 提交紀錄
+git commit -m "v0.1 - 富立傑官網補全"
+
+# 4. 建立分支
+git branch -M main
+
+# 5. 連結雲端倉庫 (網址請複製 GitHub 頁面上給你的那串)
+git remote add origin https://github.com/zxc02621948-sketch/fullyjet-web.git
+
+# 6. 正式噴上去
+git push -u origin main
