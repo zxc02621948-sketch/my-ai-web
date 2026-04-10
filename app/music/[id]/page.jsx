@@ -152,6 +152,26 @@ export default async function MusicDetailPage({ params }) {
 
   return (
     <main className="min-h-screen bg-zinc-950 -mt-2 md:-mt-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "MusicRecording",
+            name: music.title || "未命名音樂",
+            description: music.description || music.prompt || "AI 生成的音樂創作",
+            image: coverUrl || undefined,
+            url: `${BASE_URL}/music/${id}`,
+            byArtist: (music.authorName || music.author?.username)
+              ? { "@type": "Person", name: music.authorName || music.author?.username }
+              : undefined,
+            genre: Array.isArray(music.genre) && music.genre.length
+              ? music.genre
+              : undefined,
+            datePublished: music.createdAt,
+          }).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026"),
+        }}
+      />
       {/* 簡單的非 JS 版本內容，確保搜尋引擎與無 JS 環境也能看到主要資訊 */}
       <section className="max-w-4xl mx-auto px-4 py-10 md:py-14">
         <h1 className="text-xl md:text-2xl font-bold text-white mb-3">

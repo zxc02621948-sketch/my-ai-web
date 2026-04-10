@@ -178,6 +178,26 @@ export default async function ImageDetailPage({ params }) {
 
   return (
     <main className="min-h-screen bg-zinc-950 -mt-2 md:-mt-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ImageObject",
+            name: sanitized.title || "未命名圖片",
+            description: sanitized.description || sanitized.positivePrompt || "AI 生成的圖像創作",
+            contentUrl: publicUrl || undefined,
+            url: `${BASE_URL}/images/${id}`,
+            author: sanitized.user?.username
+              ? { "@type": "Person", name: sanitized.user.username }
+              : undefined,
+            datePublished: sanitized.createdAt,
+            keywords: Array.isArray(sanitized.tags) && sanitized.tags.length
+              ? sanitized.tags.join(", ")
+              : undefined,
+          }).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026"),
+        }}
+      />
       {/* 簡單的非 JS 版本內容，確保搜尋引擎與無 JS 環境也能看到主要資訊 */}
       <section className="max-w-5xl mx-auto px-4 py-10 md:py-14">
         <h1 className="text-xl md:text-2xl font-bold text-white mb-3">

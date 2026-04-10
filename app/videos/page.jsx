@@ -71,7 +71,7 @@ export async function generateMetadata({ searchParams }) {
         type: "video.other",
         title: video.title || "未命名影片",
         description,
-        url: `${BASE_URL}/videos?video=${videoId}`,
+        url: `${BASE_URL}/videos/${videoId}`,
         siteName: "AI 創界",
         authors: video.author?.username ? [video.author.username] : undefined,
         publishedTime: video.createdAt ? new Date(video.createdAt).toISOString() : undefined,
@@ -107,7 +107,7 @@ export async function generateMetadata({ searchParams }) {
         },
       },
       alternates: {
-        canonical: `${BASE_URL}/videos?video=${videoId}`,
+        canonical: `${BASE_URL}/videos/${videoId}`,
       },
     };
   } catch (error) {

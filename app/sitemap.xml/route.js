@@ -33,8 +33,8 @@ export async function GET() {
       .limit(1000)
       .lean();
 
-    // 獲取最新的公開視頻（18+ 仍會存在，但 metadata 會標記為 noindex）
-    const recentVideos = await Video.find({ isPublic: true })
+    // 獲取最新的公開視頻（排除 18+ 內容）
+    const recentVideos = await Video.find({ isPublic: true, rating: { $ne: "18" } })
       .select("_id updatedAt createdAt")
       .sort({ createdAt: -1 })
       .limit(500)

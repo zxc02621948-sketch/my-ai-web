@@ -161,6 +161,23 @@ export default async function VideoDetailPage({ params }) {
 
   return (
     <main className="min-h-screen bg-zinc-950 -mt-2 md:-mt-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "VideoObject",
+            name: video.title || "未命名影片",
+            description: video.description || "AI 生成的影片創作",
+            thumbnailUrl: thumb || undefined,
+            uploadDate: video.createdAt,
+            url: `${BASE_URL}/videos/${id}`,
+            author: (video.authorName || video.author?.username)
+              ? { "@type": "Person", name: video.authorName || video.author?.username }
+              : undefined,
+          }).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026"),
+        }}
+      />
       {/* Server-rendered content for SEO and no-JS fallback */}
       <section className="max-w-5xl mx-auto px-4 py-10 md:py-14">
         <h1 className="text-xl md:text-2xl font-bold text-white mb-3">
