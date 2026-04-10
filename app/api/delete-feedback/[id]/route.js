@@ -1,6 +1,6 @@
 // app/api/delete-feedback/[id]/route.js
 import { dbConnect } from "@/lib/db";
-import { Feedback } from "@/models/Feedback";
+import Feedback from "@/models/Feedback";
 import { getCurrentUserFromRequest } from "@/lib/serverAuth";
 import { NextResponse } from "next/server";
 
